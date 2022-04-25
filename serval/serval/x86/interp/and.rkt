@@ -23,6 +23,14 @@
   (cpu-pf+zf+sf-set! cpu result)
   (cpu-flag-clear! cpu 'CF 'OF 'AF))
 
+; 80 /4 ib
+(define-insn and-r/m8-imm8 (dst imm8)
+  #:decode [((byte #x80) (/4 r/m) i0)
+            (list (gpr8-no-rex r/m) (decode-imm i0))]
+  #:encode (list (byte #x80) (/4 dst) (encode-imm imm8))
+  (lambda (cpu dst imm8)
+    (interpret-and cpu dst imm8)))
+
 ; 24 ib
 (define-insn and-al-imm8 (imm8)
   #:decode [((byte #x24) i0)

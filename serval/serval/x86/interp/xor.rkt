@@ -16,12 +16,25 @@
   xor-r64-r/m64)
 
 
+
+
 (define (interpret-xor cpu dst v2)
   (define v1 (cpu-gpr-ref cpu dst))
   (define result (bvxor v1 v2))
   (cpu-gpr-set! cpu dst result)
   (cpu-pf+zf+sf-set! cpu result)
   (cpu-flag-clear! cpu 'CF 'OF 'AF))
+
+; 48 33 4d d8                  	xorq	-40(%rbp), %rcx
+; REX.W + 33 /r
+
+; 80 /6 ib
+(define-insn xor-r/m8-imm8 (dst imm8)
+  #:decode [((byte #x80) (/6 r/m) i0)
+            (list (gpr8-no-rex r/m) (decode-imm i0))]
+  #:encode (list (byte #x80) (/6 dst) (encode-imm imm8))
+  (lambda (cpu dst imm8)
+    (interpret-xor cpu dst imm8)))
 
 ; 35 id
 (define-insn xor-eax-imm32 (imm32)

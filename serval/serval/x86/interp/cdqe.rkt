@@ -13,4 +13,6 @@
             (cdqe)]
   #:encode (list (rex.w (bv 0 1) (bv 0 1) (bv 0 1)) (byte #x98))
   (lambda (cpu)
-    empty))
+    (define eax-contents (cpu-gpr-ref cpu eax))
+    (define sign-extended (sign-extend eax-contents (bitvector 64)))
+    (cpu-gpr-set! cpu rax sign-extended)))

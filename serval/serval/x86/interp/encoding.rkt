@@ -149,10 +149,13 @@
 (define-match-expander rex.w
   (syntax-rules ()
     [(_ r x b)
-     (rex (== (bv #b1 1)) r x b)])
+     (rex (== (bv #b1 1)) r x b)]
+    [(_) (rex.w (== (bv #b0 1)) (== (bv #b0 1)) (== (bv #b0 1)))])
   (syntax-rules ()
     [(_ r x b)
-     (rex (bv #b1 1) r x b)]))
+     (rex (bv #b1 1) r x b)]
+    [(_)
+     (rex.w (bv #b0 1) (bv #b0 1) (bv #b0 1))]))
 
 (define-match-expander rex.w/r
   (syntax-rules ()
