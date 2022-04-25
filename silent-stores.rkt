@@ -23,6 +23,7 @@
   (take func-start func-end))
 
 (define (text-line->serval-insn text-line)
+  (displayln (format "Insn line is: ~a" text-line))
   (define regexp-result (regexp-match* #px"^([a-f0-9]+):(\\s[a-f0-9]{2})+" text-line))
   (when (empty? regexp-result)
       (displayln (format "Couldn't match insn line regex for text line: ~a" text-line)))

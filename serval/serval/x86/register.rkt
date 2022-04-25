@@ -12,9 +12,10 @@
   gpr8 gpr8-no-rex
   gprs64 symbol->gpr64
   symbol->gpr32
+  symbol->gpr8
   rax rcx rdx rbx rsp rbp rsi rdi r8 r9 r10 r11 r12 r13 r14 r15
   eax ecx edx ebx esp ebp esi edi
-  cl
+  al cl
   register-indirect)
 
 
@@ -213,6 +214,7 @@
 (define edi (symbol->gpr32 'edi))
 
 (define cl (symbol->gpr8 'cl))
+(define al (symbol->gpr8 'al))
 
 
 ; displacement
