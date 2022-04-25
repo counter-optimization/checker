@@ -72,10 +72,21 @@
 (define-insn cmp-r/m64-imm8 (src1 imm8)
   #:decode [((rex.w/r b) (byte #x83) (/7 r/m) i0)
             (list (gpr64 b r/m) i0)]
-           ;48 83 7d f0 01 -- cmpq	$1, -16(%rbp) (modr/m.01 (== (bv #b111 3)) r/m)
-           [((rex.w r x b) (byte #x83) (app bitvector->modr/m (list (== (bv #b01 2)) (== (bv #b111 3)) r/m)) disp8 imm8)
-            (list (register-indirect (gpr64 b r/m) disp8 64) imm8)]
   #:encode (list (rex.w/r src1) (byte #x83) (/7 src1) (encode-imm imm8))
+  (lambda (cpu src1 imm32)
+    (interpret-cmp cpu src1 (sign-extend imm8 (bitvector 64)))))
+
+; TODO, merge this iwth cmp-r/m64-imm8
+; 48 83 7d f0 01 -- cmpq	$1, -16(%rbp) (modr/m.01 (== (bv #b111 3)) r/m)
+(define-insn cmp-m64-imm8 (src1 imm8)
+  #:decode [((rex.w r x b) (byte #x83) (app bitvector->modr/m (list (== (bv #b01 2)) (== (bv #b111 3)) r/m)) disp8 imm8)
+            (list (register-indirect (gpr64 b r/m) disp8 64) imm8)]
+  #:encode (match-let ([(list ext mod num disp) (register-encode src1)])
+             (list (rex.w (bv 0 1) (bv 0 1) ext)
+                   (byte #x83)
+                   (modr/m (bv #b01 2) (bv #b111 3) num)
+                   disp
+                   (encode-imm imm8)))
   (lambda (cpu src1 imm32)
     (interpret-cmp cpu src1 (sign-extend imm8 (bitvector 64)))))
 
