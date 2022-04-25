@@ -76,6 +76,11 @@
   (syntax-rules () [(_ x) (== (bv x 8))])
   (syntax-rules () [(_ x) (bv x 8)]))
 
+; bit
+
+;(define-match-expander bit
+;  (syntax-rules () [(_ x) (== (bv x 1))])
+;  (syntax-rules () [(_ x) (bv x 1)]))
 
 ; ModR/M: mod (2 bits) + reg (3 bits) + r/m (3 bits)
 
@@ -87,6 +92,14 @@
     [(_ mod reg r/m)
      (concat mod (encode-gpr-modr/m reg) (encode-gpr-modr/m r/m))]))
 
+; ModR/M with mod = 01
+(define-match-expander modr/m.01
+  (syntax-rules ()
+    [(_ reg r/m)
+     (modr/m (== (bv #b01 2)) reg r/m)])
+  (syntax-rules ()
+    [(_ reg r/m) (modr/m (bv #b01 2) reg r/m)]))
+    
 ; /r: ModR/M with mod = 11
 (define-match-expander /r
   (syntax-rules ()
