@@ -13,10 +13,8 @@
   xor-r/m32-r32
   xor-r/m64-r64
   xor-r32-r/m32
-  xor-r64-r/m64)
-
-
-
+  xor-r64-r/m64
+  xor-r64-m64)
 
 (define (interpret-xor cpu dst v2)
   (define v1 (cpu-gpr-ref cpu dst))
@@ -24,9 +22,6 @@
   (cpu-gpr-set! cpu dst result)
   (cpu-pf+zf+sf-set! cpu result)
   (cpu-flag-clear! cpu 'CF 'OF 'AF))
-
-; 48 33 4d d8                  	xorq	-40(%rbp), %rcx
-; REX.W + 33 /r
 
 ; 80 /6 ib
 (define-insn xor-r/m8-imm8 (dst imm8)
@@ -123,3 +118,21 @@
   #:encode (list (rex.w/r dst src) (byte #x33) (/r dst src))
   (lambda (cpu dst src)
     (interpret-xor cpu dst (cpu-gpr-ref cpu src))))
+
+; 48 33 4d d8                  	xorq	-40(%rbp), %rcx
+; REX.W + 33 /r
+; TODO: this needs to be merged with the one above
+(define-insn xor-r64-m64 (dst src)
+  #:decode [((rex.w r (== (bv #b0 1)) b) (byte #x33) (app bitvector->modr/m (list (== (bv #b01 2)) reg r/m)) disp8)
+            (list
+             (gpr64 r reg)
+             (register-indirect (gpr64 b r/m) disp8 64))]
+  #:encode (match-let ([(list ext mod num disp) (register-encode src)])
+             (list
+              (rex.w src (bv 0 1) dst)
+              (byte #x33)
+              (modr/m.01 dst num)
+              disp))
+  (lambda (cpu dst src)
+    (interpret-xor cpu dst (cpu-gpr-ref cpu src))))
+                  

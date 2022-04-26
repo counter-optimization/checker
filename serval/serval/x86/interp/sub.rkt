@@ -118,6 +118,14 @@
 (define-insn sub-r64-r/m64 (dst src)
   #:decode [((rex.w/r r b) (byte #x2B) (/r reg r/m))
             (list (gpr64 r reg) (gpr64 b r/m))]
-  #:encode (list (rex.w/r dst src) (byte #x2B) (/r dst src))
+           [((rex.w r (== (bv #b0 1)) b) (byte #x2B) (modr/m.01 reg r/m) disp8)
+            (list (gpr64 r reg) (register-indirect (gpr64 b r/m) disp8 64))]
+  #:encode (if (register-indirect? src)
+               (match-let ([(list ext mod num disp) (register-encode src)])
+                 (list (rex.w dst (bv #b0 1) src)
+                       (byte #x2b)
+                       (modr/m.01 dst num)
+                       disp))
+               (list (rex.w/r dst src) (byte #x2B) (/r dst src)))
   (lambda (cpu dst src)
     (interpret-sub cpu dst (cpu-gpr-ref cpu src))))
