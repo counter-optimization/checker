@@ -5,6 +5,10 @@
 
 (require "mblock.rkt" "mregion.rkt" "manager.rkt" "../debug.rkt" "../bvarith.rkt")
 
+(provide
+  make-typed-bv-memmgr
+  (struct-out typed-bv-memmgr))
+
 (define (get-block-and-path memmgr addr off size)
   (define regions (typed-bv-memmgr-regions memmgr))
 
@@ -60,6 +64,3 @@
    (define (memmgr-bitwidth b) (target-pointer-bitwidth))
    (define memmgr-invariants (lambda (mm) #t))])
 
-(provide
-  make-typed-bv-memmgr
-  (struct-out typed-bv-memmgr))

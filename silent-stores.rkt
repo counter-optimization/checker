@@ -1,7 +1,13 @@
 #lang rosette
 
-(require "serval/serval/x86.rkt"
-         "serval/serval/x86/interp/encoding.rkt")
+(require
+  "serval/serval/x86.rkt"
+  "serval/serval/x86/interp/encoding.rkt"
+  (prefix-in core: "serval/serval/x86/interp/common.rkt")
+  (prefix-in core: "serval/serval/lib/memmgr.rkt")
+  (prefix-in core: "serval/serval/lib/memory/manager.rkt")
+  (prefix-in core: "serval/serval/lib/memory/flat.rkt")
+  "serval/serval/x86/base.rkt")
 
 (provide (all-defined-out))
 
@@ -23,7 +29,6 @@
   (take func-start func-end))
 
 (define (text-line->serval-insn text-line)
-  (displayln (format "Insn line is: ~a" text-line))
   (define regexp-result (regexp-match* #px"^([a-f0-9]+):(\\s[a-f0-9]{2})+" text-line))
   (when (empty? regexp-result)
       (displayln (format "Couldn't match insn line regex for text line: ~a" text-line)))
@@ -33,9 +38,7 @@
   (define bytes (string-split (cadr normalized-results)))
   (define insn-bytes-list (for/list ([byte-string bytes])
                             (bv (string->number byte-string 16) 8)))
-  (displayln (format "insn bytes are: ~a" insn-bytes-list))
   (define serval-insn (decode insn-bytes-list))
-  (displayln serval-insn)
   serval-insn)
 
 
@@ -44,4 +47,16 @@
 (define is-convert-from-int64-definition-line? (lambda (insn-line)
                                                  (! (is-func-definition-line? insn-line sample-function))))
 (define only-insn-lines (filter is-convert-from-int64-definition-line? insn-lines))
-(map text-line->serval-insn only-insn-lines)
+(define serval-insns (flatten (map text-line->serval-insn only-insn-lines)))
+(for ([insn serval-insns])
+  (displayln (format "insn: ~a" insn)))
+
+; test concrete execution on straightline code
+(define mm (core:make-flat-memmgr #:bitwidth 64))
+(define cpu (init-cpu mm))
+(cpu-gpr-set! cpu rdi (bv 0 64)) ; first arg 0
+(displayln (~a (cpu-memmgr cpu)))
+(displayln (~a (core:memmgr? (cpu-memmgr cpu))))
+(displayln (~a (core:memmgr? mm)))
+(for ([insn serval-insns])
+  (interpret-insn cpu insn))

@@ -8,6 +8,8 @@
 
 (define (interpret-push cpu src)
   (define mm (cpu-memmgr cpu))
+  ;(displayln (format "in push: memmgr? ~a" (memmgr? mm)))
+  ;(displayln (format "in push: core:memmgr? ~a" (core:memmgr? mm)))
   (define n (core:memmgr-bitwidth mm))
   (define size (bv (quotient n 8) n))
   (define v (trunc n (cpu-gpr-ref cpu src)))

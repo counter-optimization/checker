@@ -17,7 +17,6 @@
     "encoding.rkt"
     serval/lib/core))
 
-
 ; The main macro for defining instructions.
 
 (define-syntax (define-insn stx)
