@@ -4,11 +4,10 @@
   "common.rkt")
 
 (provide
- set-ge-r8
- set-l-r8)
+ (all-defined-out))
 
 (define (interp-setcc cpu dst-reg cond)
-  (cpu-gpr-set! cpu dst-reg (bool->bitvector cond)))
+  (cpu-gpr-set! cpu dst-reg (zero-extend (bool->bitvector cond) (bitvector 8))))
 
 ; 0f 9d c0
 (define-insn set-ge-r8 (dst-reg)

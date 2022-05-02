@@ -2,12 +2,8 @@
 
 (require
   "serval/serval/x86.rkt"
-  "serval/serval/x86/interp/encoding.rkt"
-  (prefix-in core: "serval/serval/x86/interp/common.rkt")
-  (prefix-in core: "serval/serval/lib/memmgr.rkt")
-  (prefix-in core: "serval/serval/lib/memory/manager.rkt")
-  (prefix-in core: "serval/serval/lib/memory/flat.rkt")
-  "serval/serval/x86/base.rkt")
+  "serval/serval/x86/base.rkt"
+  (prefix-in core: "serval/serval/lib/core.rkt"))
 
 (provide (all-defined-out))
 
@@ -55,8 +51,6 @@
 (define mm (core:make-flat-memmgr #:bitwidth 64))
 (define cpu (init-cpu mm))
 (cpu-gpr-set! cpu rdi (bv 0 64)) ; first arg 0
-(displayln (~a (cpu-memmgr cpu)))
-(displayln (~a (core:memmgr? (cpu-memmgr cpu))))
-(displayln (~a (core:memmgr? mm)))
 (for ([insn serval-insns])
+  (displayln (format "interpreting insn: ~a" insn))
   (interpret-insn cpu insn))
