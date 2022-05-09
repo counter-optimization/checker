@@ -3,7 +3,8 @@
 (require
   "serval/serval/x86.rkt"
   "serval/serval/x86/base.rkt"
-  (prefix-in core: "serval/serval/lib/core.rkt"))
+  (prefix-in core: "serval/serval/lib/core.rkt")
+  rosette/lib/value-browser)
 
 (provide (all-defined-out))
 
@@ -44,13 +45,14 @@
                                                  (! (is-func-definition-line? insn-line sample-function))))
 (define only-insn-lines (filter is-convert-from-int64-definition-line? insn-lines))
 (define serval-insns (flatten (map text-line->serval-insn only-insn-lines)))
-(for ([insn serval-insns])
-  (displayln (format "insn: ~a" insn)))
+;(for ([insn serval-insns])
+;  (displayln (format "insn: ~a" insn)))
 
 ; test concrete execution on straightline code
 (define mm (core:make-flat-memmgr #:bitwidth 64))
 (define cpu (init-cpu mm))
 (cpu-gpr-set! cpu rdi (bv 0 64)) ; first arg 0
 (for ([insn serval-insns])
-  (displayln (format "interpreting insn: ~a" insn))
+  ;(displayln (format "interpreting insn: ~a" insn))
   (interpret-insn cpu insn))
+(render-value/window (cpu-gpr-ref cpu rax))
