@@ -6,10 +6,10 @@
   "base.rkt")
 
 (provide
-  gpr64 gpr64-no-rex
-  gpr32 gpr32-no-rex
-  gpr16 gpr16-no-rex
-  gpr8 gpr8-no-rex
+  gpr64 gpr64-no-rex (struct-out gpr64) (struct-out gpr64-no-rex)
+  gpr32 gpr32-no-rex (struct-out gpr32) (struct-out gpr32-no-rex)
+  gpr16 gpr16-no-rex (struct-out gpr16) (struct-out gpr16-no-rex)
+  gpr8 gpr8-no-rex (struct-out gpr8) (struct-out gpr8-no-rex)
   gprs64 symbol->gpr64
   symbol->gpr32
   symbol->gpr8

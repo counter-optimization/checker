@@ -4,7 +4,14 @@
   "common.rkt")
 
 (provide
-  push-r push-r64)
+  push-r push-r64 get-push-dst)
+
+(define (get-push-dst cpu)
+  (define mm (cpu-memmgr cpu))
+  (define n (core:memmgr-bitwidth mm))
+  (define size (bv (quotient n 8) n))
+  (define sp (zero-extend (bvsub (trunc n (cpu-gpr-ref cpu rsp)) size) (bitvector 64)))
+  sp)
 
 (define (interpret-push cpu src)
   (define mm (cpu-memmgr cpu))

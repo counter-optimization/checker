@@ -60,13 +60,15 @@
   (define vector-insn (struct->vector insn))
   (define name (symbol->string (vector-ref vector-insn 0)))
   (or (is-special-name? name special-store-name-prefixes)
-      (match (struct->vector insn)
-        ; 2 or more operands
-        [(vector name dst src others ...) (register-indirect? dst)]
-        ; 1 operand
-        [(vector name dst) (register-indirect? dst)]
-        ; no operands
-        [(vector name) #f])))
+      (and 
+       (! (string-contains? name "cmp"))
+       (match (struct->vector insn)
+         ; 2 or more operands
+         [(vector name dst src others ...) (register-indirect? dst)]
+         ; 1 operand
+         [(vector name dst) (register-indirect? dst)]
+         ; no operands
+         [(vector name) #f]))))
 
 (define (is-load-insn? insn)
   (define vector-insn (struct->vector insn))
@@ -92,20 +94,17 @@
 (define on-alu-checkers empty)
 
 (define (add-checker-to-store c store)
-  (set! store (cons c store)))
-
-(define (event-name-to-store event-name)
-  (match event-name
-    ['store on-store-checkers]
-    ['load on-load-checkers]
-    ['alu on-alu-checkers]))
+  (define new (cons c store))
+  (set! store new))
 
 (define (add-checker #:checker c #:events es)
-  (define add-checker-to-events (map event-name-to-store (remove-duplicates es)))
-  (for ([event add-checker-to-events])
-    (add-checker-to-store c event)))
+  (for ([e es])
+    (match e
+      ['store (set! on-store-checkers (cons c on-store-checkers))]
+      ['load (set! on-load-checkers (cons c on-load-checkers))]
+      ['alu (set! on-alu-checkers (cons c on-alu-checkers))])))
 
-(define (set-up-cpu args ...)
+(define (set-up-cpu)
   (define mm (core:make-flat-memmgr #:bitwidth 64))
   (define cpu (init-cpu mm))
   cpu)
@@ -115,13 +114,56 @@
     (c insn cpu)))
 
 ;; First, run all the checkers, then run the base interpreter.
-(define (run-interpreters insn cpu #:base base-interp)
+(define (run-insn insn cpu #:base base-interp)
   (begin
     (cond
       [(is-store-insn? insn) (run-all-checkers-on-insn insn cpu on-store-checkers)]
       [(is-load-insn? insn) (run-all-checkers-on-insn insn cpu on-load-checkers)]
       [(is-alu-insn? insn) (run-all-checkers-on-insn insn cpu on-alu-checkers)])
     (base-interp insn cpu)))
+
+(define (base-interpreter insn cpu)
+  (displayln (format "Running insn: ~a" insn))
+  (interpret-insn cpu insn))
+
+(define (sequential-execution insns cpu #:base base-interp)
+  (for ([insn insns])
+    (run-insn insn cpu #:base base-interp)))
+
+;; tracks the last address and last value stored
+;; silent store activation condition:
+;; given the current store addr and last stored value,
+;;   ensure that the last stored value and address could not be the same
+;; running this on the sequential base interpreter 
+(struct ss-state (last-addr last-val) #:transparent #:mutable)
+(define current-ss-state #f)
+(define (ss-checker insn cpu)
+  (displayln (format "Running ss-checker on insn: ~a" insn))
+  (define (is-push? name-sym)
+    (is-special-name? (symbol->string name-sym) special-store-name-prefixes))
+  (define mm (cpu-memmgr cpu))
+  (match (struct->vector insn)
+    [(vector name dst src rst ...)
+     (begin
+       (define store-size (match src
+                            [(or (? gpr64?) (? gpr64-no-rex?)) 8]
+                            [(or (? gpr32?) (? gpr32-no-rex?)) 4]
+                            [(or (? gpr16?) (? gpr16-no-rex?)) 2]
+                            [(or (? gpr8?) (? gpr8-no-rex?)) 1]))
+       (define size-in-bytes (bv store-size 64))
+       (define offset (bv 0 64)) ; TODO
+       (define addr (cpu-gpr-ref cpu dst))
+       (displayln (format "Reading from addr ~a, offset: ~a, size: ~a" addr offset size-in-bytes))
+       (define old-val (core:memmgr-load mm addr offset size-in-bytes))
+       (define new-val (cpu-gpr-ref cpu src))
+       (assert (! (bveq new-val old-val))))]
+    [(vector (? is-push?) src)
+     (begin
+       (define addr (get-push-dst cpu))
+       (define old-val (core:memmgr-load mm addr (bv 0 64) (bv 8 64)))
+       (define new-val (cpu-gpr-ref cpu src))
+       (assert (! (bveq old-val new-val))))]))
+(add-checker #:checker ss-checker #:events '(store))
                           
 ;; main visitor and interpreter
 (clear-vc!) ; It feels like there is a bug somewhere that this is necessary.
@@ -131,18 +173,25 @@
                                                  (! (is-func-definition-line? insn-line sample-function))))
 (define only-insn-lines (filter is-convert-from-int64-definition-line? insn-lines))
 (define serval-insns (flatten (map text-line->serval-insn only-insn-lines)))
-;(for ([insn serval-insns])
-;  (displayln (format "insn: ~a" insn)))
+
+(displayln (format "Number of store checkers: ~a" (length on-store-checkers)))
+(displayln (format "Number of load checkers: ~a" (length on-load-checkers)))
+(displayln (format "Number of alu checkers: ~a" (length on-alu-checkers)))
+
+(define cpu (set-up-cpu))
+(cpu-gpr-set! cpu rdi (bv 0 64)) ; first arg 0
+(sequential-execution serval-insns cpu #:base base-interpreter)
+(displayln (vc))
 
 ; test concrete execution on straightline code
 ;(cpu-gpr-set! cpu rdi (bv 0 64)) ; first arg 0
-(for ([insn serval-insns])
-  (displayln (format "interpreting insn: ~a" insn))
-  (let ([is-store (is-store-insn? insn)]
-        [is-load (is-load-insn? insn)])
-    (displayln (format "is-store-insn? ~a" is-store))
-    (displayln (format "is-load-insn? ~a" is-load))
-    (when (and is-store is-load)
-      (raise "insn cannot be both load and store"))))
+;(for ([insn serval-insns])
+;  (displayln (format "interpreting insn: ~a" insn))
+;  (let ([is-store (is-store-insn? insn)]
+;        [is-load (is-load-insn? insn)])
+;    (displayln (format "is-store-insn? ~a" is-store))
+;    (displayln (format "is-load-insn? ~a" is-load))
+;    (when (and is-store is-load)
+;      (raise "insn cannot be both load and store"))))
   ;(interpret-insn cpu insn))
 ; (render-value/window (cpu-gpr-ref cpu rax))
