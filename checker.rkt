@@ -40,50 +40,45 @@
   (define serval-insn (decode insn-bytes-list))
   serval-insn)
 
+;; Helpers for defining events/hooks for the extending interpreters/checkers
 
-;; For defining hook functions for the uarch interpreters
-;; This will really need to be changed to extending the define-insn
-;; macros in the long term.
-(define x86-insn-defs-module-path "serval/serval/x86/interp.rkt")
+(define (is-special-name? name special-name-prefixes)
+  (ormap (lambda (prefix) (string-contains? name prefix))
+         special-name-prefixes))
 
-(define (filter-exported-insn-names f module-path)
-  (define-values (funcs-and-consts macros)
-    (module->exports module-path))
-  (define insn-export-names (cdr (car macros)))
-  (define get-insn-name car)
-  (filter f (map get-insn-name insn-export-names)))
+;; x86 insns in serval are in intel syntax--i.e., dst comes before src
+;; => to tell if the insn is a store, check if dst operand is register-indirect?
+;; => to tell if an insn is a load, check if src operand is register-indirect?
+;; some insns are implicit load/store (push/pop) with operands encoded in opcode,
+;;   those are handled specially
 
-(define (contains-r/m? x) (string-contains? x "r/m"))
+;; these are prefixes
+(define special-store-name-prefixes (list "push"))
+(define special-load-name-prefixes (list "leave" "pop"))
 
-(define (is-store-insn? insn-name)
-  (match (string-split (symbol->string insn-name) "-")
-    [(list opcode (? contains-r/m?) src) #t]
-    [(list "push" rst ...) #t]
-    [_ #f]))
+(define (is-store-insn? insn)
+  (define vector-insn (struct->vector insn))
+  (define name (symbol->string (vector-ref vector-insn 0)))
+  (or (is-special-name? name special-store-name-prefixes)
+      (match (struct->vector insn)
+        ; 2 or more operands
+        [(vector name dst src others ...) (register-indirect? dst)]
+        ; 1 operand
+        [(vector name dst) (register-indirect? dst)]
+        ; no operands
+        [(vector name) #f])))
 
-(define (is-load-insn? insn-name)
-  (match (string-split (symbol->string insn-name) "-")
-    [(list opcode dst (? contains-r/m?)) #t]
-    [(list (or "pop" "leave") rst ...) #t]
-    [_ #f]))
-
-(define (struct-name->pred name)
-  (define str (symbol->string name))
-  (define pred (string->symbol (string-append str "?")))
-  (eval pred))
-
-(define (get-store-insns module-path)
-  (filter-exported-insn-names is-store-insn? module-path))
-
-(define (get-load-insns module-path)
-  (filter-exported-insn-names is-load-insn? module-path))
-
-(define (to-be-handled)
-  (define found
-    (append (get-store-insns x86-insn-defs-module-path)
-            (get-load-insns x86-insn-defs-module-path)))
-  (define all-insns (filter-exported-insn-names identity x86-insn-defs-module-path))
-  (filter (lambda (insn) (not (member insn found))) all-insns))
+(define (is-load-insn? insn)
+  (define vector-insn (struct->vector insn))
+  (define name (symbol->string (vector-ref vector-insn 0)))
+  (or (is-special-name? name special-load-name-prefixes)
+      (match (struct->vector insn)
+        ; 2 or more operands
+        [(vector name dst src others ...) (register-indirect? src)]
+        ; 1 operand
+        [(vector name src) (register-indirect? src)]
+        ; no operands
+        [(vector name) #f])))
 
 ;; extending interpreters -- for activation condition checkers
 ;; `checkers' contains all checkers
@@ -91,8 +86,6 @@
 (define on-store-checkers empty)
 (define on-load-checkers empty)
 (define on-alu-checkers empty)
-(define store-insns (get-load-insns x86-insn-defs-module-path))
-(define load-insns (get-load-insns x86-insn-defs-module-path))
 
 (define (add-checker-to-store c store)
   (set! store (cons c store)))
@@ -127,6 +120,12 @@
 ; test concrete execution on straightline code
 ;(cpu-gpr-set! cpu rdi (bv 0 64)) ; first arg 0
 (for ([insn serval-insns])
-  (displayln (format "interpreting insn: ~a" insn)))
+  (displayln (format "interpreting insn: ~a" insn))
+  (let ([is-store (is-store-insn? insn)]
+        [is-load (is-load-insn? insn)])
+    (displayln (format "is-store-insn? ~a" is-store))
+    (displayln (format "is-load-insn? ~a" is-load))
+    (when (and is-store is-load)
+      (raise "insn cannot be both load and store"))))
   ;(interpret-insn cpu insn))
 ; (render-value/window (cpu-gpr-ref cpu rax))
