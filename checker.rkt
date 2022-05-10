@@ -42,6 +42,8 @@
 
 
 ;; For defining hook functions for the uarch interpreters
+;; This will really need to be changed to extending the define-insn
+;; macros in the long term.
 (define x86-insn-defs-module-path "serval/serval/x86/interp.rkt")
 
 (define (filter-exported-insn-names f module-path)
@@ -53,7 +55,6 @@
 
 (define (contains-r/m? x) (string-contains? x "r/m"))
 
-;; TODO: these should really be added to the define-insn macros
 (define (is-store-insn? insn-name)
   (match (string-split (symbol->string insn-name) "-")
     [(list opcode (? contains-r/m?) src) #t]
@@ -65,6 +66,11 @@
     [(list opcode dst (? contains-r/m?)) #t]
     [(list (or "pop" "leave") rst ...) #t]
     [_ #f]))
+
+(define (struct-name->pred name)
+  (define str (symbol->string name))
+  (define pred (string->symbol (string-append str "?")))
+  (eval pred))
 
 (define (get-store-insns module-path)
   (filter-exported-insn-names is-store-insn? module-path))
@@ -78,10 +84,38 @@
             (get-load-insns x86-insn-defs-module-path)))
   (define all-insns (filter-exported-insn-names identity x86-insn-defs-module-path))
   (filter (lambda (insn) (not (member insn found))) all-insns))
-  
-;; main visitor and interpreter stuff
 
-(clear-vc!)
+;; extending interpreters -- for activation condition checkers
+;; `checkers' contains all checkers
+(define checkers empty)
+(define on-store-checkers empty)
+(define on-load-checkers empty)
+(define on-alu-checkers empty)
+(define store-insns (get-load-insns x86-insn-defs-module-path))
+(define load-insns (get-load-insns x86-insn-defs-module-path))
+
+(define (add-checker-to-store c store)
+  (set! store (cons c store)))
+
+(define (event-name-to-store event-name)
+  (match event-name
+    ['store on-store-checkers]
+    ['load on-load-checkers]
+    ['alu on-alu-checkers]))
+
+(define (add-checker #:checker c #:events es)
+  (define add-checker-to-events (map event-name-to-store (remove-duplicates es)))
+  (for ([event add-checker-to-events])
+    (add-checker-to-store c event)))
+
+(define (set-up-cpu args ...)
+  (define mm (core:make-flat-memmgr #:bitwidth 64))
+  (define cpu (init-cpu mm))
+  cpu)
+
+;; main visitor and interpreter
+(clear-vc!) ; It feels like there is a bug somewhere that this is necessary.
+
 (define insn-lines (objdump-file->insn-lines ftfp-obj-file sample-function))
 (define is-convert-from-int64-definition-line? (lambda (insn-line)
                                                  (! (is-func-definition-line? insn-line sample-function))))
@@ -91,10 +125,8 @@
 ;  (displayln (format "insn: ~a" insn)))
 
 ; test concrete execution on straightline code
-(define mm (core:make-flat-memmgr #:bitwidth 64))
-(define cpu (init-cpu mm))
-(cpu-gpr-set! cpu rdi (bv 0 64)) ; first arg 0
+;(cpu-gpr-set! cpu rdi (bv 0 64)) ; first arg 0
 (for ([insn serval-insns])
-  ;(displayln (format "interpreting insn: ~a" insn))
-  (interpret-insn cpu insn))
+  (displayln (format "interpreting insn: ~a" insn)))
+  ;(interpret-insn cpu insn))
 ; (render-value/window (cpu-gpr-ref cpu rax))
