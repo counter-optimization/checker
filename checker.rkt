@@ -80,6 +80,10 @@
         ; no operands
         [(vector name) #f])))
 
+;; TBD: for computation simplification stuff
+(define (is-alu-insn? insn)
+  #f)
+
 ;; extending interpreters -- for activation condition checkers
 ;; `checkers' contains all checkers
 (define checkers empty)
@@ -106,6 +110,19 @@
   (define cpu (init-cpu mm))
   cpu)
 
+(define (run-all-checkers-on-insn insn cpu checkers)
+  (for ([c checkers])
+    (c insn cpu)))
+
+;; First, run all the checkers, then run the base interpreter.
+(define (run-interpreters insn cpu #:base base-interp)
+  (begin
+    (cond
+      [(is-store-insn? insn) (run-all-checkers-on-insn insn cpu on-store-checkers)]
+      [(is-load-insn? insn) (run-all-checkers-on-insn insn cpu on-load-checkers)]
+      [(is-alu-insn? insn) (run-all-checkers-on-insn insn cpu on-alu-checkers)])
+    (base-interp insn cpu)))
+                          
 ;; main visitor and interpreter
 (clear-vc!) ; It feels like there is a bug somewhere that this is necessary.
 
