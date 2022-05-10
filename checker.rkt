@@ -8,6 +8,8 @@
 
 (provide (all-defined-out))
 
+;; handling obj files
+
 (define ftfp-obj-file "ftfp.o.txt")
 (define sample-function "_fix_convert_from_int64")
 
@@ -39,6 +41,46 @@
   serval-insn)
 
 
+;; For defining hook functions for the uarch interpreters
+(define x86-insn-defs-module-path "serval/serval/x86/interp.rkt")
+
+(define (filter-exported-insn-names f module-path)
+  (define-values (funcs-and-consts macros)
+    (module->exports module-path))
+  (define insn-export-names (cdr (car macros)))
+  (define get-insn-name car)
+  (filter f (map get-insn-name insn-export-names)))
+
+(define (contains-r/m? x) (string-contains? x "r/m"))
+
+;; TODO: these should really be added to the define-insn macros
+(define (is-store-insn? insn-name)
+  (match (string-split (symbol->string insn-name) "-")
+    [(list opcode (? contains-r/m?) src) #t]
+    [(list "push" rst ...) #t]
+    [_ #f]))
+
+(define (is-load-insn? insn-name)
+  (match (string-split (symbol->string insn-name) "-")
+    [(list opcode dst (? contains-r/m?)) #t]
+    [(list (or "pop" "leave") rst ...) #t]
+    [_ #f]))
+
+(define (get-store-insns module-path)
+  (filter-exported-insn-names is-store-insn? module-path))
+
+(define (get-load-insns module-path)
+  (filter-exported-insn-names is-load-insn? module-path))
+
+(define (to-be-handled)
+  (define found
+    (append (get-store-insns x86-insn-defs-module-path)
+            (get-load-insns x86-insn-defs-module-path)))
+  (define all-insns (filter-exported-insn-names identity x86-insn-defs-module-path))
+  (filter (lambda (insn) (not (member insn found))) all-insns))
+  
+;; main visitor and interpreter stuff
+
 (clear-vc!)
 (define insn-lines (objdump-file->insn-lines ftfp-obj-file sample-function))
 (define is-convert-from-int64-definition-line? (lambda (insn-line)
@@ -55,4 +97,4 @@
 (for ([insn serval-insns])
   ;(displayln (format "interpreting insn: ~a" insn))
   (interpret-insn cpu insn))
-(render-value/window (cpu-gpr-ref cpu rax))
+; (render-value/window (cpu-gpr-ref cpu rax))
