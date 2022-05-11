@@ -3,6 +3,7 @@
 (require
   "serval/serval/x86.rkt"
   "serval/serval/x86/base.rkt"
+  "serval/serval/lib/bvarith.rkt"
   (prefix-in core: "serval/serval/lib/core.rkt")
   rosette/lib/value-browser)
 
@@ -12,6 +13,7 @@
 
 (define ftfp-obj-file "ftfp.o.txt")
 (define sample-function "_fix_convert_from_int64")
+;(define sample-function "_fix_abs")
 
 ;; Hard coding in how llvm's objdump dumps out disassembly of an object file
 (define (is-func-definition-line? insn-line funcname)
@@ -135,8 +137,6 @@
 ;; given the current store addr and last stored value,
 ;;   ensure that the last stored value and address could not be the same
 ;; running this on the sequential base interpreter 
-(struct ss-state (last-addr last-val) #:transparent #:mutable)
-(define current-ss-state #f)
 (define (ss-checker insn cpu)
   (displayln (format "Running ss-checker on insn: ~a" insn))
   (define (is-push? name-sym)
@@ -149,13 +149,19 @@
                             [(or (? gpr64?) (? gpr64-no-rex?)) 8]
                             [(or (? gpr32?) (? gpr32-no-rex?)) 4]
                             [(or (? gpr16?) (? gpr16-no-rex?)) 2]
-                            [(or (? gpr8?) (? gpr8-no-rex?)) 1]))
+                            [(or (? gpr8?) (? gpr8-no-rex?)) 1]
+                            [(? bv?) (quotient (bv-size src) 8)]))
        (define size-in-bytes (bv store-size 64))
        (define offset (bv 0 64)) ; TODO
-       (define addr (cpu-gpr-ref cpu dst))
+       (define addr (zero-extend (cpu-gpr-ref cpu dst) i64))
+       (displayln (format "sizeof addr: ~a, sizeof offset: ~a" (bv-size addr) (bv-size offset)))
        (displayln (format "Reading from addr ~a, offset: ~a, size: ~a" addr offset size-in-bytes))
        (define old-val (core:memmgr-load mm addr offset size-in-bytes))
-       (define new-val (cpu-gpr-ref cpu src))
+       (define new-val (cond
+                         [(bv? src) src]
+                         [else (cpu-gpr-ref cpu src)]))
+       (displayln (format "old-val is ~a" old-val))
+       (displayln (format "new-val is ~a" new-val))
        (assert (! (bveq new-val old-val))))]
     [(vector (? is-push?) src)
      (begin
@@ -163,7 +169,6 @@
        (define old-val (core:memmgr-load mm addr (bv 0 64) (bv 8 64)))
        (define new-val (cpu-gpr-ref cpu src))
        (assert (! (bveq old-val new-val))))]))
-(add-checker #:checker ss-checker #:events '(store))
                           
 ;; main visitor and interpreter
 (clear-vc!) ; It feels like there is a bug somewhere that this is necessary.
@@ -174,24 +179,14 @@
 (define only-insn-lines (filter is-convert-from-int64-definition-line? insn-lines))
 (define serval-insns (flatten (map text-line->serval-insn only-insn-lines)))
 
+(add-checker #:checker ss-checker #:events '(store))
 (displayln (format "Number of store checkers: ~a" (length on-store-checkers)))
 (displayln (format "Number of load checkers: ~a" (length on-load-checkers)))
 (displayln (format "Number of alu checkers: ~a" (length on-alu-checkers)))
 
 (define cpu (set-up-cpu))
-(cpu-gpr-set! cpu rdi (bv 0 64)) ; first arg 0
+;(cpu-gpr-set! cpu rdi (bv 0 64)) ; first arg 0
 (sequential-execution serval-insns cpu #:base base-interpreter)
 (displayln (vc))
-
-; test concrete execution on straightline code
-;(cpu-gpr-set! cpu rdi (bv 0 64)) ; first arg 0
-;(for ([insn serval-insns])
-;  (displayln (format "interpreting insn: ~a" insn))
-;  (let ([is-store (is-store-insn? insn)]
-;        [is-load (is-load-insn? insn)])
-;    (displayln (format "is-store-insn? ~a" is-store))
-;    (displayln (format "is-load-insn? ~a" is-load))
-;    (when (and is-store is-load)
-;      (raise "insn cannot be both load and store"))))
-  ;(interpret-insn cpu insn))
-; (render-value/window (cpu-gpr-ref cpu rax))
+(verify (vc))
+;(render-value/window (vc))
