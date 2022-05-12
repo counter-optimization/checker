@@ -182,16 +182,12 @@
   (match-let ([(vector name-sym dst src rst ...) (struct->vector insn)])
     ; Check for mul,add identities
     (define ident-val (if (is-mul? name-sym) 1 0))
-    (define left (cpu-gpr-ref cpu dst))
     (define right (cond
                     [(bv? src) src]
                     [else (cpu-gpr-ref cpu src)]))
-    (define left-bitwidth (bv-size left))
     (define right-bitwidth (bv-size right))
-    (define lefts-ident (bv ident-val left-bitwidth))
     (define rights-ident (bv ident-val right-bitwidth))
-    (assert (&& (! (bveq left lefts-ident))
-                (! (bveq right rights-ident))))))
+    (assert (! (bveq right rights-ident)))))
 
 ;  (match (struct->vector insn)
 ;    [(vector (? is-mul?) dst src rst ...)
