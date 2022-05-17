@@ -222,4 +222,4 @@
 (sequential-execution serval-insns cpu #:base base-interpreter)
 (displayln (vc))
 (verify (vc))
-;(render-value/window (vc))
+(render-value/window (vc))
