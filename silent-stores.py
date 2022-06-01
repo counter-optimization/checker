@@ -3,12 +3,14 @@ import logging
 from abc import ABC, abstractmethod
 import typing
 from typing import List
+import re
 
 import angr
+import pyvex
 import claripy
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 class Checker(ABC):
     vulnerable_states: List[angr.sim_state.SimState] = NotImplemented
@@ -17,13 +19,18 @@ class Checker(ABC):
     @staticmethod
     @abstractmethod
     def check(state: angr.sim_state.SimState) -> bool:
+        """
+        Takes a state, adds state to CheckerSubClass.vulnerable_states if
+        vulnerable, and returns True if the Checker subclass flags this
+        state as vulnerable/important
+        """
         raise NotImplemented
 
 class SilentStoreChecker(Checker):
     vulnerable_states = []
 
      # how does this checker affect symbolic state
-    effects = ['mem_read', 'mem_write']
+    effects = ['mem_read']
 
     @staticmethod
     def check(state: angr.sim_state.SimState) -> bool:
@@ -53,15 +60,61 @@ class SilentStoreChecker(Checker):
         if result:
             SilentStoreChecker.vulnerable_states.append(state)
             logger.warning(f"Found state {state} with a silent store")
+        else:
+            logger.debug(f"No silent store possible in state {state}")
         
         logger.debug(f"Values could be the same: {result}")
         logger.debug(f"Leaving before mem write at state: {state}")
 
         return result
 
+class CompSimpDataRecord():
+    def __init__(self, expr: pyvex.expr.IRExpr, state: angr.sim_state.SimState):
+        pass
+
+class CompSimpDataCollectionChecker(Checker):
+    """
+    INFO    | 2022-05-31 23:01:36,166 | __main__ | expr Shl64(t349,0x01) (<class 'pyvex.expr.Binop'>) is binop
+    INFO    | 2022-05-31 23:01:36,166 | __main__ | expr Shl64(t349,0x01) op: Iop_Shl64. tag: Iex_Binop
+    INFO    | 2022-05-31 23:01:36,184 | __main__ | expr And64(t440,t157) (<class 'pyvex.expr.Binop'>) is binop
+    INFO    | 2022-05-31 23:01:36,184 | __main__ | expr And64(t440,t157) op: Iop_And64. tag: Iex_Binop
+    """
+    vulnerable_states = []
+    effects = []
+
+    filtered_ops = ['Add', 'Or', 'Mul', 'Sub', 'Xor', 'And', 'Mod',
+                    'DivS', 'DivU', 'Shl', 'Shr', 'Sar']
+    finders = []
+
+    @staticmethod
+    def binOpNameFinderForMnemonicPrefix(pre: str):
+        def finder(e: pyvex.expr.IRExpr) -> bool:
+            regex_str = r"Iop_{}\d+".format(pre)
+            if re.match(regex_str, e.op, re.IGNORECASE):
+                logger.debug(f"Found expr with op: {regex_str}")
+                return True
+            return False
+        return finder
+
+    @staticmethod
+    def check(state: angr.sim_state.SimState) -> bool:
+        expr = state.inspect.expr
+
+        if not CompSimpDataCollectionChecker.finders:
+            CompSimpDataCollectionChecker.finders = list(map(CompSimpDataCollectionChecker.binOpNameFinderForMnemonicPrefix, CompSimpDataCollectionChecker.filtered_ops))
+        
+        if isinstance(expr, pyvex.expr.Binop):
+            logger.debug(f"expr {expr} ({type(expr)}) is binop")
+            logger.debug(f"expr {expr} op: {expr.op}. tag: {expr.tag}")
+
+            for finder in CompSimpDataCollectionChecker.finders:
+                finder(expr)
+            
+        return False
+
 class ComputationSimplificationChecker(Checker):
     vulnerable_states = []
-    effects = ['mem_read']
+    effects = []
 
     @staticmethod
     def check(state: angr.sim_state.SimState) -> bool:
@@ -78,13 +131,12 @@ class DMPChecker(Checker):
     
 if '__main__' == __name__:
     expected_num_args = 2
-    assert(len(sys.argv) == expected_num_args + 1)
+    assert(len(sys.argv) - 1 == expected_num_args)
     
     filename = sys.argv[1]
     funcname = sys.argv[2]
 
     proj = angr.Project(filename)
-
     func_symbol = proj.loader.find_symbol(funcname)
     print(f"Found symbol: {func_symbol}")
 
@@ -100,6 +152,10 @@ if '__main__' == __name__:
     state.inspect.b('mem_write',
                     when=angr.BP_BEFORE,
                     action=SilentStoreChecker.check)
+
+    state.inspect.b('expr',
+                    when=angr.BP_BEFORE,
+                    action=CompSimpDataCollectionChecker.check)
 
     simgr = proj.factory.simgr(state)
     simgr.run()
