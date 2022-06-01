@@ -70,7 +70,38 @@ class SilentStoreChecker(Checker):
 
 class CompSimpDataRecord():
     def __init__(self, expr: pyvex.expr.IRExpr, state: angr.sim_state.SimState):
-        pass
+        self.state = state
+        self.expr = expr
+        
+        self.numConstantOperands = 0
+        self.firstOperandConst = False
+        self.secOperandConst = False
+        
+        self.numPowerOfTwoOperands = 0
+        self.firstOperandPowerOfTwo = False
+        self.secondOperandPowerOfTwo = False
+
+        self.numIdentityOperands = 0
+        self.firstOperandIdentity = False
+        self.secOperandIdentity = False
+
+        self.zeroElementOperands = 0
+        self.firstOperandZeroElem = False
+        self.secOperandZeroElem = False
+
+        self.numPossibleFirstOperand = 0
+        self.numPossibleSecondOperand = 0
+
+        self.serializedLeftOperandFormula = False
+        self.serializedRightOperandFormula = False
+        
+        if type(self.expr) == pyvex.expr.Binop):
+            self.handleBinOp()
+
+    def handleBinOp(self):
+        assert(type(expr) == pyvex.expr.Binop)
+        
+        
 
 class CompSimpDataCollectionChecker(Checker):
     """
