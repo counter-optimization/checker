@@ -2,15 +2,17 @@ import sys
 import logging
 from abc import ABC, abstractmethod
 import typing
-from typing import List
+from typing import List, Optional, Union
 import re
+import base64
+from pathlib import Path
 
 import angr
 import pyvex
 import claripy
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 class Checker(ABC):
     vulnerable_states: List[angr.sim_state.SimState] = NotImplemented
@@ -69,42 +71,191 @@ class SilentStoreChecker(Checker):
         return result
 
 class CompSimpDataRecord():
+    func_identifier = f"{Path(sys.argv[1]).name}-{sys.argv[2]}"
+    
     def __init__(self, expr: pyvex.expr.IRExpr, state: angr.sim_state.SimState):
         self.state = state
         self.expr = expr
+
+        self.operation = ""
+        self.bitwidth = 0
         
         self.numConstantOperands = 0
-        self.firstOperandConst = False
-        self.secOperandConst = False
-        
-        self.numPowerOfTwoOperands = 0
-        self.firstOperandPowerOfTwo = False
-        self.secondOperandPowerOfTwo = False
+        self.firstOperandConst = None
+        self.secOperandConst = None
 
+        self.powerOfTwoSignificant = False
+        self.numPowerOfTwoOperands = 0
+        self.firstOperandPowerOfTwo = None
+        self.secondOperandPowerOfTwo = None
+
+        self.hasLeftIdentity = False
+        self.hasRightIdentity = False
         self.numIdentityOperands = 0
         self.firstOperandIdentity = False
         self.secOperandIdentity = False
 
+        self.hasLeftZero = False
+        self.hasRightZero = False
         self.zeroElementOperands = 0
         self.firstOperandZeroElem = False
         self.secOperandZeroElem = False
 
-        self.numPossibleFirstOperand = 0
-        self.numPossibleSecondOperand = 0
+        self.numPossibleFirstOperand = None
+        self.numPossibleSecondOperand = None
 
-        self.serializedLeftOperandFormula = False
-        self.serializedRightOperandFormula = False
-        
-        if type(self.expr) == pyvex.expr.Binop):
+        # base64 encoded for shoving into csv
+        self.serializedFirstOperandFormula = ""
+        self.serializedSecondOperandFormula = ""
+
+        self.writeInsns()
+
+        if type(self.expr) == pyvex.expr.Binop:
             self.handleBinOp()
 
-    def handleBinOp(self):
-        assert(type(expr) == pyvex.expr.Binop)
-        
-        
+    def operandIsConst(self, expr):
+        return type(expr) == pyvex.expr.Const
 
+    def isTmpVar(self, expr) -> bool:
+        return type(expr) == pyvex.expr.RdTmp
+
+    def getTmpSymbolicValue(self, expr):
+        assert(self.isTmpVar(expr))
+        return self.state.scratch.temps[expr.tmp]
+
+    def isPowerOfTwo(self, symval) -> bool:
+        # symval != 0 and ((symval & (symval - 1)) == 0)
+        # https://stackoverflow.com/questions/600293/how-to-check-if-a-number-is-a-power-of-2
+        return False
+
+    def handleBinOp(self):
+        assert(type(self.expr) == pyvex.expr.Binop)
+        # in two-address, firstOperand is dst
+        # e.g., in angr, addq rax, rbx is:
+        # $tmpXXX = Add64(RdTmp($tmpXXX), RdTmp($tmpYYY))
+        firstOperand = self.expr.args[0]
+        secondOperand = self.expr.args[1]
+        operation = self.expr.op
+        logger.debug(f"In handleBinOp: firstOperand is: {firstOperand}")
+        logger.debug(f"In handleBinOp: secondOperand is: {secondOperand}")
+
+        firstOperandSymVal = None
+        secondOperandSymVal = None
+
+        if self.isTmpVar(firstOperand):
+            firstOperandSymVal = self.getTmpSymbolicValue(firstOperand)
+
+        if self.isTmpVar(secondOperand):
+            secondOperandSymVal = self.getTmpSymbolicValue(secondOperand)
+
+        self.operation = operation
+
+        if self.operandIsConst(firstOperand):
+            self.firstOperandConst = firstOperand.con.value
+            self.numConstantOperands += 1
+
+        if self.operandIsConst(secondOperand):
+            self.secOperandConst = secondOperand.con.value
+            self.numConstantOperands += 1
+
+        if self.powerOfTwoSignificant:
+            pass
+
+        if self.hasLeftIdentity:
+            pass
+
+        if self.hasRightIdentity:
+            pass
+
+        if self.hasLeftZero:
+            pass
+
+        if self.hasRightZero:
+            pass
+
+    def writeInsns(self):
+        logger.debug(f"Writing insns to {CompSimpDataRecord.func_identifier}")
+        insns_file = Path.cwd() / Path(f"{CompSimpDataRecord.func_identifier}.insns")
+        if not insns_file.exists():
+            with insns_file.open(mode='w') as f:
+                block = state.project.factory.block(self.state.addr)
+                block.pp()
+                f.write(str(block))
+                f.write(str(block.vex))
+
+    def address(self) -> str:
+        return hex(self.state.addr)
+
+    def expression(self) -> str:
+        return str(self.expr)
+
+    def getCSVHeader(self) -> List[str]:
+        cols = ['address',
+                'expression',
+                'operation',
+                'bitwidth',
+                'numConstantOperands',
+                'firstOperandConst',
+                'secOperandConst',
+                'numPowerOfTwoOperands',
+                'firstOperandPowerOfTwo',
+                'secondOperandPowerOfTwo',
+                'numIdentityOperands',
+                'firstOperandIdentity',
+                'secOperandIdentity',
+                'zeroElementOperands',
+                'firstOperandZeroElem',
+                'secOperandZeroElem',
+                'numPossibleFirstOperand',
+                'numPossibleSecondOperand',
+                'serializedFirstOperandFormula',
+                'serializedSecondOperandFormula']
+        return cols
+
+    def getAttributeResult(self, attrname: str) -> str:
+        intermediate_result = getattr(self, attrname)
+        if callable(intermediate_result):
+            return str(intermediate_result())
+        else:
+            return str(intermediate_result)
+
+    def getCSVRow(self) -> str:
+        values = map(lambda x: self.getAttributeResult(x),
+                     self.getCSVHeader())
+        return ','.join(values)
+
+class AddDataRecord(CompSimpDataRecord):
+    def __init__(self, expr, state):
+        super().__init__(expr, state)
+        self.hasRightIdentity = True
+        self.hasLeftIdentity = True
+        self.hasRightZero = False
+        self.hasLeftZero = False
+        self.rightIdentity = claripy.BVV(0, self.bitwidth)
+        self.leftIdentity = claripy.BVV(0, self.bitwidth)
+        self.powerOfTwoSignificant = False
+
+class MulDataRecord(CompSimpDataRecord):
+   def __init__(self, expr, state):
+        super().__init__(expr, state)
+        self.hasRightIdentity = True
+        self.hasLeftIdentity = True
+        self.hasRightZero = True
+        self.hasLeftZero = True
+        self.rightIdentity = claripy.BVV(1, self.bitwidth)
+        self.leftIdentity = claripy.BVV(1, self.bitwidth)
+        self.rightZero = claripy.BVV(0, self.bitwidth)
+        self.leftZero = claripy.BVV(0, self.bitwidth)
+        self.powerOfTwoSignificant = True
+                
 class CompSimpDataCollectionChecker(Checker):
     """
+    Driver class for finding insn expressions of interest
+    In charge of filtering out insns, passing the state and expr
+    to some class that processes these, and then outputting a CSV
+    of all the processes states and exprs.
+
+    Examples of some states and exprs
     INFO    | 2022-05-31 23:01:36,166 | __main__ | expr Shl64(t349,0x01) (<class 'pyvex.expr.Binop'>) is binop
     INFO    | 2022-05-31 23:01:36,166 | __main__ | expr Shl64(t349,0x01) op: Iop_Shl64. tag: Iex_Binop
     INFO    | 2022-05-31 23:01:36,184 | __main__ | expr And64(t440,t157) (<class 'pyvex.expr.Binop'>) is binop
@@ -119,12 +270,17 @@ class CompSimpDataCollectionChecker(Checker):
 
     @staticmethod
     def binOpNameFinderForMnemonicPrefix(pre: str):
-        def finder(e: pyvex.expr.IRExpr) -> bool:
+        def finder(e: pyvex.expr.IRExpr) -> Optional[CompSimpDataRecord]:
             regex_str = r"Iop_{}\d+".format(pre)
             if re.match(regex_str, e.op, re.IGNORECASE):
                 logger.debug(f"Found expr with op: {regex_str}")
-                return True
-            return False
+                if pre == 'Add':
+                    return AddDataRecord
+                elif pre == 'Mul':
+                    return MulDataRecord
+                else:
+                    return None
+            return None
         return finder
 
     @staticmethod
@@ -139,7 +295,10 @@ class CompSimpDataCollectionChecker(Checker):
             logger.debug(f"expr {expr} op: {expr.op}. tag: {expr.tag}")
 
             for finder in CompSimpDataCollectionChecker.finders:
-                finder(expr)
+                dataRecordingClass = finder(expr)
+                if dataRecordingClass:
+                    record = dataRecordingClass(expr, state)
+                    logger.debug(record.getCSVRow())
             
         return False
 
