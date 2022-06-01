@@ -57,18 +57,18 @@ class SilentStoreChecker(Checker):
 
         solver = claripy.Solver()
         solver.add(expr == prev_val)
-        result = solver.satisfiable() # True if SAT, False if UNSAT/UNKNOWN
+        is_sat = solver.satisfiable() # True if SAT, False if UNSAT/UNKNOWN
         
-        if result:
+        if is_sat:
             SilentStoreChecker.vulnerable_states.append(state)
             logger.warning(f"Found state {state} with a silent store")
         else:
             logger.debug(f"No silent store possible in state {state}")
         
-        logger.debug(f"Values could be the same: {result}")
+        logger.debug(f"Values could be the same: {is_sat}")
         logger.debug(f"Leaving before mem write at state: {state}")
 
-        return result
+        return is_sat
 
 class CompSimpDataRecord():
     func_identifier = f"{Path(sys.argv[1]).name}-{sys.argv[2]}"
@@ -78,7 +78,7 @@ class CompSimpDataRecord():
         self.expr = expr
 
         self.operation = ""
-        self.bitwidth = 0
+        self.bitwidth = pyvex.get_type_size(expr.result_type(state.scratch.tyenv))
         
         self.numConstantOperands = 0
         self.firstOperandConst = None
@@ -86,8 +86,8 @@ class CompSimpDataRecord():
 
         self.powerOfTwoSignificant = False
         self.numPowerOfTwoOperands = 0
-        self.firstOperandPowerOfTwo = None
-        self.secondOperandPowerOfTwo = None
+        self.firstOperandPowerOfTwo = False
+        self.secondOperandPowerOfTwo = False
 
         self.hasLeftIdentity = False
         self.hasRightIdentity = False
@@ -123,10 +123,35 @@ class CompSimpDataRecord():
         assert(self.isTmpVar(expr))
         return self.state.scratch.temps[expr.tmp]
 
-    def isPowerOfTwo(self, symval) -> bool:
+    def couldBePowerOfTwo(self, symval) -> bool:
         # symval != 0 and ((symval & (symval - 1)) == 0)
         # https://stackoverflow.com/questions/600293/how-to-check-if-a-number-is-a-power-of-2
-        return False
+        if not symval:
+            return False
+        
+        one = claripy.BVV(1, self.bitwidth)
+        zero = claripy.BVV(0, self.bitwidth)
+        solver = claripy.Solver()
+        solver.add(symval != zero)
+        solver.add((symval & (symval - one)) == zero)
+        is_sat = solver.satisfiable()
+        return is_sat
+
+    def couldBeRightIdentity(self, expr) -> bool:
+        if not expr:
+            return False
+        solver = claripy.Solver()
+        solver.add(expr == self.rightIdentity)
+        is_sat = solver.satisfiable()
+        return is_sat
+
+    def couldBeLeftIdentity(self, expr) -> bool:
+        if not expr:
+            return False
+        solver = claripy.Solver()
+        solver.add(expr == self.leftIdentity)
+        is_sat = solver.satisfiable()
+        return is_sat
 
     def handleBinOp(self):
         assert(type(self.expr) == pyvex.expr.Binop)
@@ -139,6 +164,8 @@ class CompSimpDataRecord():
         logger.debug(f"In handleBinOp: firstOperand is: {firstOperand}")
         logger.debug(f"In handleBinOp: secondOperand is: {secondOperand}")
 
+        # TODO: so this symval should be handled at least for expr: RdTmp,
+        # expr: Const, expr: Reg(?) in addition to just tmp vars
         firstOperandSymVal = None
         secondOperandSymVal = None
 
@@ -159,13 +186,22 @@ class CompSimpDataRecord():
             self.numConstantOperands += 1
 
         if self.powerOfTwoSignificant:
-            pass
-
+            if self.couldBePowerOfTwo(firstOperandSymVal):
+                self.numPowerOfTwoOperands += 1
+                self.firstOperandPowerOfTwo = True
+            if self.couldBePowerOfTwo(secondOperandSymVal):
+                self.numPowerOfTwoOperands += 1
+                self.secOperandPowerOfTwo = True
+                
         if self.hasLeftIdentity:
-            pass
+            if self.couldBeLeftIdentity(firstOperandSymVal):
+                self.numIdentityOperands += 1
+                self.firstOperandIdentity = True
 
         if self.hasRightIdentity:
-            pass
+            if self.couldBeRightIdentity(firstOperandSymVal):
+                self.numIdentityOperands += 1
+                self.secOperandIdentity = True
 
         if self.hasLeftZero:
             pass
