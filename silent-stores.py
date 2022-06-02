@@ -119,6 +119,9 @@ class CompSimpDataRecord():
     def isTmpVar(self, expr) -> bool:
         return type(expr) == pyvex.expr.RdTmp
 
+    def isSupportedOperandType(self, expr) -> bool:
+        return self.isTmpVar(expr) or self.operandIsConst(expr)
+
     def getTmpSymbolicValue(self, expr):
         assert(self.isTmpVar(expr))
         return self.state.scratch.temps[expr.tmp]
@@ -137,6 +140,12 @@ class CompSimpDataRecord():
         is_sat = solver.satisfiable()
         return is_sat
 
+    def couldBePowerOfTwoConcrete(self, concval) -> bool:
+        assert(concval)
+        cond = concval != 0
+        cond = cond and ((concval & (concval - 1)) == 0)
+        return cond
+
     def couldBeRightIdentity(self, expr) -> bool:
         if not expr:
             return False
@@ -144,6 +153,10 @@ class CompSimpDataRecord():
         solver.add(expr == self.rightIdentity)
         is_sat = solver.satisfiable()
         return is_sat
+
+    def couldBeRightIdentityConcrete(self, expr) -> bool:
+        assert(expr)
+        return expr == self.rightIdentity
 
     def couldBeLeftIdentity(self, expr) -> bool:
         if not expr:
@@ -153,6 +166,54 @@ class CompSimpDataRecord():
         is_sat = solver.satisfiable()
         return is_sat
 
+    def couldBeLeftIdentityConcrete(self, expr) -> bool:
+        assert(expr)
+        return expr == self.leftIdentity
+
+    def checkForSpecialValues(self, expr, isLeft: bool):
+        if self.powerOfTwoSignificant:
+            if self.couldBePowerOfTwo(expr):
+                self.numPowerOfTwoOperands += 1
+                self.firstOperandPowerOfTwo = True
+
+        if isLeft:
+            if self.hasLeftIdentity:
+                if self.couldBeLeftIdentity(expr):
+                    self.numIdentityOperands += 1
+                    self.firstOperandIdentity = True
+
+            if self.hasLeftZero:
+                pass
+        else:
+            if self.hasRightIdentity:
+                if self.couldBeRightIdentity(expr):
+                    self.numIdentityOperands += 1
+                    self.secOperandIdentity = True
+            if self.hasRightZero:
+                pass
+
+    def checkForSpecialValuesConcrete(self, expr, isLeft: bool):
+        if self.powerOfTwoSignificant:
+            if self.couldBePowerOfTwoConcrete(expr):
+                self.numPowerOfTwoOperands += 1
+                self.firstOperandPowerOfTwo = True
+
+        if isLeft:
+            if self.hasLeftIdentity:
+                if self.couldBeLeftIdentityConcrete(expr):
+                    self.numIdentityOperands += 1
+                    self.firstOperandIdentity = True
+
+            if self.hasLeftZero:
+                pass
+        else:
+            if self.hasRightIdentity:
+                if self.couldBeRightIdentityConcrete(expr):
+                    self.numIdentityOperands += 1
+                    self.secOperandIdentity = True
+            if self.hasRightZero:
+                pass
+
     def handleBinOp(self):
         assert(type(self.expr) == pyvex.expr.Binop)
         # in two-address, firstOperand is dst
@@ -161,8 +222,25 @@ class CompSimpDataRecord():
         firstOperand = self.expr.args[0]
         secondOperand = self.expr.args[1]
         operation = self.expr.op
+        self.operation = operation
         logger.debug(f"In handleBinOp: firstOperand is: {firstOperand}")
         logger.debug(f"In handleBinOp: secondOperand is: {secondOperand}")
+
+        if not self.isSupportedOperandType(firstOperand):
+            warn_str = "In handlBinOp: unsupported operand type for operand: "
+            warn_str.append(str(firstOperand))
+            warn_str.append(" with type: ")
+            warn_str.append(type(firstOperand))
+            logger.critical(warn_str)
+            raise RuntimeError(warn_str)
+
+        if not self.isSupportedOperandType(secondOperand):
+            warn_str = "In handlBinOp: unsupported operand type for operand: "
+            warn_str.append(str(secondOperand))
+            warn_str.append(" with type: ")
+            warn_str.append(type(secondOperand))
+            logger.critical(warn_str)
+            raise RuntimeError(warn_str)
 
         # TODO: so this symval should be handled at least for expr: RdTmp,
         # expr: Const, expr: Reg(?) in addition to just tmp vars
@@ -175,39 +253,23 @@ class CompSimpDataRecord():
         if self.isTmpVar(secondOperand):
             secondOperandSymVal = self.getTmpSymbolicValue(secondOperand)
 
-        self.operation = operation
-
         if self.operandIsConst(firstOperand):
             self.firstOperandConst = firstOperand.con.value
             self.numConstantOperands += 1
+            self.checkForSpecialValuesConcrete(firstOperand, isLeft=True)
+        elif self.isTmpVar(firstOperand):
+            self.checkForSpecialValues(firstOperandSymVal, isLeft=True)
+        else:
+            raise RuntimeError(f"Unsupported operand type, firstOperand: {firstOperand}")
 
         if self.operandIsConst(secondOperand):
             self.secOperandConst = secondOperand.con.value
             self.numConstantOperands += 1
-
-        if self.powerOfTwoSignificant:
-            if self.couldBePowerOfTwo(firstOperandSymVal):
-                self.numPowerOfTwoOperands += 1
-                self.firstOperandPowerOfTwo = True
-            if self.couldBePowerOfTwo(secondOperandSymVal):
-                self.numPowerOfTwoOperands += 1
-                self.secOperandPowerOfTwo = True
-                
-        if self.hasLeftIdentity:
-            if self.couldBeLeftIdentity(firstOperandSymVal):
-                self.numIdentityOperands += 1
-                self.firstOperandIdentity = True
-
-        if self.hasRightIdentity:
-            if self.couldBeRightIdentity(firstOperandSymVal):
-                self.numIdentityOperands += 1
-                self.secOperandIdentity = True
-
-        if self.hasLeftZero:
-            pass
-
-        if self.hasRightZero:
-            pass
+            self.checkForSpecialValuesConcrete(secondOperand, isLeft=False)
+        elif self.isTmpVar(secondOperand):
+            self.checkForSpecialValues(secondOperandSymVal, isLeft=False)
+        else:
+            raise RuntimeError(f"Unsupported operand type, secondOperand: {secondOperand}")
 
     def writeInsns(self):
         logger.debug(f"Writing insns to {CompSimpDataRecord.func_identifier}")
@@ -225,7 +287,8 @@ class CompSimpDataRecord():
     def expression(self) -> str:
         return str(self.expr)
 
-    def getCSVHeader(self) -> List[str]:
+    @staticmethod
+    def getCSVHeaderColNames() -> List[str]:
         cols = ['address',
                 'expression',
                 'operation',
@@ -257,7 +320,7 @@ class CompSimpDataRecord():
 
     def getCSVRow(self) -> str:
         values = map(lambda x: self.getAttributeResult(x),
-                     self.getCSVHeader())
+                     CompSimpDataRecord.getCSVHeaderColNames())
         return ','.join(values)
 
 class AddDataRecord(CompSimpDataRecord):
@@ -292,10 +355,10 @@ class CompSimpDataCollectionChecker(Checker):
     of all the processes states and exprs.
 
     Examples of some states and exprs
-    INFO    | 2022-05-31 23:01:36,166 | __main__ | expr Shl64(t349,0x01) (<class 'pyvex.expr.Binop'>) is binop
-    INFO    | 2022-05-31 23:01:36,166 | __main__ | expr Shl64(t349,0x01) op: Iop_Shl64. tag: Iex_Binop
-    INFO    | 2022-05-31 23:01:36,184 | __main__ | expr And64(t440,t157) (<class 'pyvex.expr.Binop'>) is binop
-    INFO    | 2022-05-31 23:01:36,184 | __main__ | expr And64(t440,t157) op: Iop_And64. tag: Iex_Binop
+    expr Shl64(t349,0x01) (<class 'pyvex.expr.Binop'>) is binop
+    expr Shl64(t349,0x01) op: Iop_Shl64. tag: Iex_Binop
+    expr And64(t440,t157) (<class 'pyvex.expr.Binop'>) is binop
+    expr And64(t440,t157) op: Iop_And64. tag: Iex_Binop
     """
     vulnerable_states = []
     effects = []
@@ -321,20 +384,39 @@ class CompSimpDataCollectionChecker(Checker):
 
     @staticmethod
     def check(state: angr.sim_state.SimState) -> bool:
+        records = []
+        
         expr = state.inspect.expr
 
         if not CompSimpDataCollectionChecker.finders:
-            CompSimpDataCollectionChecker.finders = list(map(CompSimpDataCollectionChecker.binOpNameFinderForMnemonicPrefix, CompSimpDataCollectionChecker.filtered_ops))
+            CompSimpDataCollectionChecker.finders = list(map(CompSimpDataCollectionChecker.binOpNameFinderForMnemonicPrefix,
+                                                             CompSimpDataCollectionChecker.filtered_ops))
         
         if isinstance(expr, pyvex.expr.Binop):
-            logger.debug(f"expr {expr} ({type(expr)}) is binop")
-            logger.debug(f"expr {expr} op: {expr.op}. tag: {expr.tag}")
-
             for finder in CompSimpDataCollectionChecker.finders:
+                if not finder:
+                    pass
                 dataRecordingClass = finder(expr)
                 if dataRecordingClass:
                     record = dataRecordingClass(expr, state)
                     logger.debug(record.getCSVRow())
+                    records.append(record)
+                    logger.debug(f"Records are: {records}")
+
+        # TODO
+        csv_file_name = Path(f"{Path(sys.argv[1]).name}-{sys.argv[2]}.csv")
+
+        with csv_file_name.open(mode="w") as f:
+            header_cols = CompSimpDataRecord.getCSVHeaderColNames()
+            header = ','.join(header_cols)
+            header += '\n'
+            f.write(header)
+            for record in records:
+                logger.debug(f"Writing record: {record}")
+                csv_row = record.getCSVRow()
+                csv_row += '\n'
+                logger.debug(f"Writing csv_row: {csv_row}")
+                f.write(csv_row)
             
         return False
 
