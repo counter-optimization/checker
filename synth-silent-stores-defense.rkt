@@ -4,13 +4,18 @@
 
 (define-grammar (all-bv-ops x y)
   [expr
-   (choose x y (?? (bitvector 8))     
-           ((bop) (expr) (expr)))]
+   (choose x y (?? (bitvector 8)) (?? (bitvector 16))     
+           ((bop) (expr) (expr))
+           ((uop) (expr))
+           (extract (?? integer?) (?? integer?) (expr)))]
            ;(bvnot (expr)))]
   [bop
-   (choose
-           bvand
-           bvor)]
+   (choose bvand
+           bvor
+           bvxor
+           bvshl
+           bvlshr
+           concat)]
 ;           bvslt
 ;           bvult
 ;           bvsle
@@ -39,7 +44,8 @@
 
 (define (is-correct? impl x y)
   (define result (impl x y))
-  (assert (&& (! (bveq result x))
+  (assert (&& (equal? 8 (length (bitvector->bits result)))
+              (! (bveq result x))
               (! (bveq result y)))))
 
 (define (current-impl x y)
@@ -72,6 +78,49 @@
 (define-symbolic x (bitvector 8))
 (define-symbolic y (bitvector 8))
 
+(define (mov-8m-8r x y)
+  (define changed-x (all-bv-ops x y #:depth 1))
+  (define v1 (zero-extend changed-x (bitvector 16)))
+  (define v2 (bvshl v1 (bv 8 16)))
+
+  (define changed-y (all-bv-ops x y #:depth 1))
+  (define v3 (zero-extend y (bitvector 16)))
+  (define v4 (bvor v2 v3))
+  
+  (define v5 (bvlshr v4 (bv 4 16)))
+  
+  (define v6 (extract 7 0 v5))
+  (define changed-result (all-bv-ops v6 v6 #:depth 1))
+  ;(bvnot v6))
+  changed-result)
+
+(define (in-place-mem-change x)
+  (bvnot (bvand x (bv #xF0 8))))
+
+(define in-place-sol (verify (assert (! (bveq (in-place-mem-change x) x)))))
+(displayln in-place-sol)
+
+;(define solution
+;  (synthesize
+;    #:forall (list x y)
+;    #:guarantee (is-correct? mov-8m-8r x y)))
+
+;(if (sat? solution)
+;    (print-forms solution)
+;    (displayln "No solution."))
+
+(exit)
+
+(define result (mov-8m-8r x y))
+(displayln "Checking result...")
+(define sol (verify (assert (&& (! (bveq result x))
+	                        (! (bveq result y))))))
+(displayln (format "Solution: ~a" sol))
+(unless (unsat? sol)
+  (displayln (evaluate (list x y) sol)))
+
+(displayln (bvlshr (bv #xF0F0 16) (bv 4 16)))
+
 ;(define solution
 ;  (synthesize
 ;   #:forall (list x y)
@@ -80,6 +129,8 @@
 ;(if (sat? solution)
 ;    (print-forms solution)
 ;    (displayln "No solution."))
+
+(exit)
 
 
 (require "serval/serval/x86/base.rkt"
@@ -153,14 +204,14 @@
 (define myrdi (cpu-gpr-ref cpu rdi))
 (define myrsi (cpu-gpr-ref cpu rsi))
 
-(define solution
-  (synthesize
-   #:forall (list myrdi myrsi)
-   #:guarantee (x86-impl-is-correct? myrdi myrsi cpu)))
-
-(if (sat? solution)
-    (print-forms solution)
-    (displayln "No solution."))
+;(define solution
+;  (synthesize
+;   #:forall (list myrdi myrsi)
+;   #:guarantee (x86-impl-is-correct? myrdi myrsi cpu)))
+;
+;(if (sat? solution)
+;    (print-forms solution)
+;    (displayln "No solution."))
 
   
 
