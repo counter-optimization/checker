@@ -322,7 +322,6 @@ class CompSimpDataRecord():
     def getCSVRow(self) -> str:
         values = map(lambda x: self.getAttributeResult(x),
                      CompSimpDataRecord.getCSVHeaderColNames())
-        # return ','.join(values)
         return list(values)
 
 class AddDataRecord(CompSimpDataRecord):
@@ -364,10 +363,10 @@ class CompSimpDataCollectionChecker(Checker):
     """
     vulnerable_states = []
     effects = []
-
     filtered_ops = ['Add', 'Or', 'Mul', 'Sub', 'Xor', 'And', 'Mod',
                     'DivS', 'DivU', 'Shl', 'Shr', 'Sar']
     finders = []
+    records = []
 
     @staticmethod
     def binOpNameFinderForMnemonicPrefix(pre: str):
@@ -386,8 +385,6 @@ class CompSimpDataCollectionChecker(Checker):
 
     @staticmethod
     def check(state: angr.sim_state.SimState) -> bool:
-        records = []
-        
         expr = state.inspect.expr
 
         if not CompSimpDataCollectionChecker.finders:
@@ -401,24 +398,25 @@ class CompSimpDataCollectionChecker(Checker):
                 dataRecordingClass = finder(expr)
                 if dataRecordingClass:
                     record = dataRecordingClass(expr, state)
-                    logger.debug(record.getCSVRow())
-                    records.append(record)
-                    logger.debug(f"Records are: {records}")
+                    CompSimpDataCollectionChecker.records.append(record)
 
-        # TODO
-        csv_file_path = Path(f"{Path(sys.argv[1]).name}-{sys.argv[2]}.csv")
+        return False
+
+    @staticmethod
+    def write_records_to_csv(csv_file_name: str):
+        csv_file_path = Path(csv_file_name)
         if csv_file_path.exists():
+            logger.debug(f"csv file {csv_file_path} exists, unlinking...")
             csv_file_path.unlink()
-       
+
         csv_file = csv.writer(csv_file_path.open(mode="a"))
 
         header_cols = CompSimpDataRecord.getCSVHeaderColNames()
-        csv_file.writerow(header)
+        csv_file.writerow(header_cols)
 
-        csv_rows = map(lambda rec: rec.getCSVRow(), records)
+        csv_rows = map(lambda rec: rec.getCSVRow(),
+                       CompSimpDataCollectionChecker.records)
         csv_file.writerows(csv_rows)
-
-        return False
 
 class ComputationSimplificationChecker(Checker):
     vulnerable_states = []
@@ -470,3 +468,6 @@ if '__main__' == __name__:
 
     simgr = proj.factory.simgr(state)
     simgr.run()
+
+    comp_simp_record_csv_file_name = f"{Path(sys.argv[1]).name}-{sys.argv[2]}.csv"
+    CompSimpDataCollectionChecker.write_records_to_csv(comp_simp_record_csv_file_name)
