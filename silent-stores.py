@@ -6,6 +6,7 @@ from typing import List, Optional, Union
 import re
 import base64
 from pathlib import Path
+import csv
 
 import angr
 import pyvex
@@ -321,7 +322,8 @@ class CompSimpDataRecord():
     def getCSVRow(self) -> str:
         values = map(lambda x: self.getAttributeResult(x),
                      CompSimpDataRecord.getCSVHeaderColNames())
-        return ','.join(values)
+        # return ','.join(values)
+        return list(values)
 
 class AddDataRecord(CompSimpDataRecord):
     def __init__(self, expr, state):
@@ -404,20 +406,18 @@ class CompSimpDataCollectionChecker(Checker):
                     logger.debug(f"Records are: {records}")
 
         # TODO
-        csv_file_name = Path(f"{Path(sys.argv[1]).name}-{sys.argv[2]}.csv")
+        csv_file_path = Path(f"{Path(sys.argv[1]).name}-{sys.argv[2]}.csv")
+        if csv_file_path.exists():
+            csv_file_path.unlink()
+       
+        csv_file = csv.writer(csv_file_path.open(mode="a"))
 
-        with csv_file_name.open(mode="w") as f:
-            header_cols = CompSimpDataRecord.getCSVHeaderColNames()
-            header = ','.join(header_cols)
-            header += '\n'
-            f.write(header)
-            for record in records:
-                logger.debug(f"Writing record: {record}")
-                csv_row = record.getCSVRow()
-                csv_row += '\n'
-                logger.debug(f"Writing csv_row: {csv_row}")
-                f.write(csv_row)
-            
+        header_cols = CompSimpDataRecord.getCSVHeaderColNames()
+        csv_file.writerow(header)
+
+        csv_rows = map(lambda rec: rec.getCSVRow(), records)
+        csv_file.writerows(csv_rows)
+
         return False
 
 class ComputationSimplificationChecker(Checker):
@@ -446,7 +446,10 @@ if '__main__' == __name__:
 
     proj = angr.Project(filename)
     func_symbol = proj.loader.find_symbol(funcname)
-    print(f"Found symbol: {func_symbol}")
+    if func_symbol:
+        print(f"Found symbol: {func_symbol}")
+    else:
+        print(f"Couldn't find symbol for funcname: {funcname}")
 
     state = proj.factory.entry_state(addr=func_symbol.rebased_addr)
     state.options.add(angr.options.SYMBOL_FILL_UNCONSTRAINED_MEMORY)
