@@ -366,7 +366,7 @@ class CompSimpDataCollectionChecker(Checker):
     filtered_ops = ['Add', 'Or', 'Mul', 'Sub', 'Xor', 'And', 'Mod',
                     'DivS', 'DivU', 'Shl', 'Shr', 'Sar']
     finders = []
-    records = []
+    csv_records = []
 
     @staticmethod
     def binOpNameFinderForMnemonicPrefix(pre: str):
@@ -399,7 +399,7 @@ class CompSimpDataCollectionChecker(Checker):
                 if dataRecordingClass:
                     record = dataRecordingClass(expr, state)
                     csv_record = record.getCSVRow()
-                    CompSimpDataCollectionChecker.records.append(csv_record)
+                    CompSimpDataCollectionChecker.csv_records.append(csv_record)
 
         return False
 
@@ -415,9 +415,7 @@ class CompSimpDataCollectionChecker(Checker):
         header_cols = CompSimpDataRecord.getCSVHeaderColNames()
         csv_file.writerow(header_cols)
 
-        csv_rows = map(lambda rec: rec.getCSVRow(),
-                       CompSimpDataCollectionChecker.records)
-        csv_file.writerows(csv_rows)
+        csv_file.writerows(CompSimpDataCollectionChecker.csv_records)
 
 class ComputationSimplificationChecker(Checker):
     vulnerable_states = []
