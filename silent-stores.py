@@ -398,7 +398,8 @@ class CompSimpDataCollectionChecker(Checker):
                 dataRecordingClass = finder(expr)
                 if dataRecordingClass:
                     record = dataRecordingClass(expr, state)
-                    CompSimpDataCollectionChecker.records.append(record)
+                    csv_record = record.getCSVRow()
+                    CompSimpDataCollectionChecker.records.append(csv_record)
 
         return False
 
