@@ -433,6 +433,36 @@ class DMPChecker(Checker):
     def check(state: angr.sim_state.SimState) -> bool:
         return False
 
+# here, p is a pythonic definition of the point type from HACL*:
+# p is a list of 20 uint64_t types. this list is broke down into field
+# elements of 5 uint64_t types or 5 51-bit limbs.
+# 
+# the precondition in HACL* looks like:
+# 
+# let mul_inv_t (f:felem5) =
+#   let (o0, o1, o2, o3, o4) = f in
+#   if v o1 >= pow2 51 then
+#     felem_fits5 f (1, 2, 1, 1, 1) /\ v o1 % pow2 51 < 8192
+#   else felem_fits5 f (1, 1, 1, 1, 1)
+# 
+# with
+# 
+# let felem_fits1 (x:uint64) (m:scale64) =
+#   uint_v x <= m * max51
+
+# so for (p0, p1, p2, p3, p4):
+
+# let felem_fits5 (f:felem5) (m:scale64_5) =
+#   let (x1,x2,x3,x4,x5) = f in
+#   let (m1,m2,m3,m4,m5) = m in
+#   felem_fits1 x1 m1 /\
+#   felem_fits1 x2 m2 /\
+#   felem_fits1 x3 m3 /\
+#   felem_fits1 x4 m4 /\
+#   felem_fits1 x5 m5
+def ed25519_point_addition_predicate(point):
+    pass
+    
 def setup_symbolic_state_for_ed25519_point_addition(proj, init_state):
     """
     1. generate two points using claripy                                  │
