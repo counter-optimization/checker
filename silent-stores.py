@@ -13,7 +13,7 @@ import pyvex
 import claripy
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 class Checker(ABC):
     vulnerable_states: List[angr.sim_state.SimState] = NotImplemented
@@ -433,7 +433,19 @@ class DMPChecker(Checker):
     def check(state: angr.sim_state.SimState) -> bool:
         return False
 
-    
+def setup_symbolic_state_for_ed25519_point_addition(proj, init_state):
+    """
+    1. generate two points using claripy                                  │
+    2. add the preconditions to the points                                │
+    3. using cle, find some memory that is not being used                 │
+    4. put the three points (p, q, out) there, and for now,               │
+       keep them disjoint                                                 │
+    5. at the start state of running symbolic execution on the point      │
+       addition, set the argument registers to the memory addresses of the│
+       three points                                                       │
+    """
+    pass
+
 if '__main__' == __name__:
     expected_num_args = 2
     assert(len(sys.argv) - 1 == expected_num_args)
