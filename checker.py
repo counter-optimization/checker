@@ -72,7 +72,11 @@ class SilentStoreChecker(Checker):
         return is_sat
 
 class CompSimpDataRecord():
-    func_identifier = f"{Path(sys.argv[1]).name}-{sys.argv[2]}"
+    func_identifier = "" 
+
+    @staticmethod
+    def set_func_identifier(name: str):
+        CompSimpDataRecord.func_identifier = name
     
     def __init__(self, expr: pyvex.expr.IRExpr, state: angr.sim_state.SimState):
         self.state = state
@@ -583,15 +587,10 @@ def setup_symbolic_state_for_ed25519_point_addition(proj, init_state):
     logger.debug(f"for init_state ({init_state}), rdi holds {init_state.regs.rdi}")
     logger.debug(f"for init_state ({init_state}), rsi holds {init_state.regs.rsi}")
     logger.debug(f"for init_state ({init_state}), rdx holds {init_state.regs.rdx}")
-    
-if '__main__' == __name__:
-    expected_num_args = 2
-    assert(len(sys.argv) - 1 == expected_num_args)
-    
-    filename = sys.argv[1]
-    funcname = sys.argv[2]
 
+def run(filename: str, funcname: str):
     proj = angr.Project(filename)
+    
     func_symbol = proj.loader.find_symbol(funcname)
     if func_symbol:
         print(f"Found symbol: {func_symbol}")
@@ -606,6 +605,9 @@ if '__main__' == __name__:
     # to later figure out how to output problematic states for a checker
     # in a way that is debuggable
     proj.factory.block(state.addr).pp()
+
+    compsimp_file_name = f"{Path(filename).name}-{funcname}"
+    CompSimpDataRecord.set_func_identifier(compsimp_file_name)
     
     state.inspect.b('mem_write',
                     when=angr.BP_BEFORE,
@@ -620,5 +622,14 @@ if '__main__' == __name__:
     simgr = proj.factory.simgr(state)
     simgr.run()
 
-    comp_simp_record_csv_file_name = f"{Path(sys.argv[1]).name}-{sys.argv[2]}.csv"
+    comp_simp_record_csv_file_name = f"{compsimp_file_name}.csv"
     CompSimpDataCollectionChecker.write_records_to_csv(comp_simp_record_csv_file_name)
+
+if '__main__' == __name__:
+    expected_num_args = 2
+    assert(len(sys.argv) - 1 == expected_num_args)
+    
+    filename = sys.argv[1]
+    funcname = sys.argv[2]
+    
+    run(filename, funcname)
