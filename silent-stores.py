@@ -13,7 +13,7 @@ import pyvex
 import claripy
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 class Checker(ABC):
     vulnerable_states: List[angr.sim_state.SimState] = NotImplemented
@@ -460,13 +460,62 @@ class DMPChecker(Checker):
 #   felem_fits1 x3 m3 /\
 #   felem_fits1 x4 m4 /\
 #   felem_fits1 x5 m5
-def ed25519_point_addition_predicate(point):
-    pass
+def ed25519_point_addition_predicate(point, state):
+    pow2_51 = claripy.BVV(1 << 51, 64)
+    # (2 ** 51) - 1 and 64 bits wide
+    max51 = claripy.BVV((1 << 51) - 1, 64)
+    
+    
+    one = claripy.BVV(1, 64)
+    two = claripy.BVV(2, 64)
+
+    all_ones = [one, one, one, one, one]
+    with_a_two = [one, two, one, one, one]
+    
+    def felem_fits1(x, m):
+        return claripy.ULE(x, m * max51)
+
+    def felem_fits5(x, scale):
+        x1, x2, x3, x4, x5 = x
+        m1, m2, m3, m4, m5 = scale
+        return claripy.And(
+            felem_fits1(x1, m1),
+            felem_fits1(x2, m2),
+            felem_fits1(x3, m3),
+            felem_fits1(x4, m4),
+            felem_fits1(x5, m5)
+        )
+
+    def mul_inv_t(felem):
+        f1, f2, f3, f4, f5 = felem
+        state.solver.add(
+            claripy.If(
+                claripy.UGE(f2, pow2_51),
+                claripy.And(
+                    felem_fits5(felem,
+                                with_a_two),
+                    claripy.ULT(claripy.SMod(f2, pow2_51),
+                                claripy.BVV(8192, 64))
+                    
+                ),
+                felem_fits5(felem, all_ones)
+            )
+        )
+        
+    x = point[0:5]
+    y = point[5:10]
+    z = point[10:15]
+    t = point[15:20]
+
+    mul_inv_t(x)
+    mul_inv_t(y)
+    mul_inv_t(z)
+    mul_inv_t(t)
     
 def setup_symbolic_state_for_ed25519_point_addition(proj, init_state):
     """
-    1. generate two points using claripy                                  │
-    2. add the preconditions to the points                                │
+    1. generate three points using claripy                                  │
+    2. add the preconditions to the two input points                                │
     3. using cle, find some memory that is not being used                 │
     4. put the three points (p, q, out) there, and for now,               │
        keep them disjoint                                                 │
@@ -474,8 +523,67 @@ def setup_symbolic_state_for_ed25519_point_addition(proj, init_state):
        addition, set the argument registers to the memory addresses of the│
        three points                                                       │
     """
-    pass
 
+    # in case i forget to comment this out for later
+    if "hacl" not in sys.argv[2].lower():
+        return
+    else:
+        logger.warn("Setting up symbolic state for ed25519 comp simp checking")
+
+    # 1. generate three points
+    point1 = [claripy.BVS(f"x{n}", 64) for n in range(1, 21)]
+    point2 = [claripy.BVS(f"y{n}", 64) for n in range(1, 21)]
+    out = [claripy.BVS(f"out{n}", 64) for n in range(1, 21)]
+
+    # 2. add preconditions to input points
+    logger.debug("Adding preconditions...")
+    ed25519_point_addition_predicate(point1, init_state)
+    ed25519_point_addition_predicate(point2, init_state)
+    logger.debug("Done adding preconditions.")
+
+    # 3. use some current stack memory and ensure it is aligned
+    # i think on X86_64, rsp + 8 has to be 16 byte aligned.
+    # we need sizeof(uint64_t) * 20 = 160 bytes for each limb, so
+    # allocate 160 bytes per point on the stack,
+    size_of_point = claripy.BVV(160, 64)
+    
+    init_state.regs.rsp = init_state.regs.rsp - size_of_point
+    point1_addr = init_state.regs.rsp
+    
+    init_state.regs.rsp = init_state.regs.rsp - size_of_point
+    point2_addr = init_state.regs.rsp
+
+    init_state.regs.rsp = init_state.regs.rsp - size_of_point
+    out_addr = init_state.regs.rsp
+
+    init_state.regs.rsp = init_state.regs.rsp - claripy.BVV(8, 64)
+    logger.debug(f"point1_addr: {point1_addr}")
+    logger.debug(f"point2_addr: {point2_addr}")
+    logger.debug(f"out_addr: {out_addr}")
+
+    # 4. put the points in their addresses!
+    def store_point_at_addr(point, addr):
+        sizeof_uint64_t = claripy.BVV(8, 64)
+        cur_addr = addr
+        for limb in point:
+            logger.debug(f"Storing limb {limb} to addr {cur_addr")
+            init_state.mem[cur_addr].uint64_t = limb
+            cur_addr += sizeof_uint64_t
+
+    store_point_at_addr(point1, point1_addr)
+    store_point_at_addr(point2, point2_addr)
+
+    # 5. set rdi, rsi, rdx for first three arguments
+    # rdi is u64* out
+    # rsi is u64* p
+    # rdx is u64* q
+    init_state.regs.rdi = out_addr
+    init_state.regs.rsi = point1_addr
+    init_state.regs.rdx = point2_addr
+    logger.debug(f"for init_state ({init_state}), rdi holds {init_state.regs.rdi}")
+    logger.debug(f"for init_state ({init_state}), rsi holds {init_state.regs.rsi}")
+    logger.debug(f"for init_state ({init_state}), rdx holds {init_state.regs.rdx}")
+    
 if '__main__' == __name__:
     expected_num_args = 2
     assert(len(sys.argv) - 1 == expected_num_args)
