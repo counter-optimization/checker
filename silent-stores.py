@@ -615,6 +615,8 @@ if '__main__' == __name__:
                     when=angr.BP_BEFORE,
                     action=CompSimpDataCollectionChecker.check)
 
+    setup_symbolic_state_for_ed25519_point_addition(proj, state)
+
     simgr = proj.factory.simgr(state)
     simgr.run()
 
