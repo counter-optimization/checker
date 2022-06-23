@@ -566,7 +566,7 @@ def setup_symbolic_state_for_ed25519_point_addition(proj, init_state):
         sizeof_uint64_t = claripy.BVV(8, 64)
         cur_addr = addr
         for limb in point:
-            logger.debug(f"Storing limb {limb} to addr {cur_addr")
+            logger.debug(f"Storing limb {limb} to addr {cur_addr}")
             init_state.mem[cur_addr].uint64_t = limb
             cur_addr += sizeof_uint64_t
 
