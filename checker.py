@@ -516,7 +516,7 @@ def ed25519_point_addition_predicate(point, state):
     mul_inv_t(z)
     mul_inv_t(t)
     
-def setup_symbolic_state_for_ed25519_point_addition(proj, init_state):
+def setup_symbolic_state_for_ed25519_point_addition(proj, init_state, fn_name):
     """
     1. generate three points using claripy                                  │
     2. add the preconditions to the two input points                                │
@@ -529,7 +529,7 @@ def setup_symbolic_state_for_ed25519_point_addition(proj, init_state):
     """
 
     # in case i forget to comment this out for later
-    if "hacl" not in sys.argv[2].lower():
+    if "hacl" not in fn_name.lower():
         return
     else:
         logger.warn("Setting up symbolic state for ed25519 comp simp checking")
@@ -617,7 +617,7 @@ def run(filename: str, funcname: str):
                     when=angr.BP_BEFORE,
                     action=CompSimpDataCollectionChecker.check)
 
-    setup_symbolic_state_for_ed25519_point_addition(proj, state)
+    setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
 
     simgr = proj.factory.simgr(state)
     simgr.run()
