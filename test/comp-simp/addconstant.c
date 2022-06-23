@@ -1,5 +1,3 @@
-#include <stdlib.h>
-
-void addconstant(int x) {
+int addconstant(int x) {
   return x + 14;
 }
