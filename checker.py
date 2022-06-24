@@ -113,11 +113,6 @@ class CompSimpDataRecord():
         self.serializedFirstOperandFormula = ""
         self.serializedSecondOperandFormula = ""
 
-        self.writeInsns()
-
-        if type(self.expr) == pyvex.expr.Binop:
-            self.handleBinOp()
-
     def operandIsConst(self, expr):
         return type(expr) == pyvex.expr.Const
 
@@ -129,7 +124,11 @@ class CompSimpDataRecord():
 
     def getTmpSymbolicValue(self, expr):
         assert(self.isTmpVar(expr))
-        return self.state.scratch.temps[expr.tmp]
+        logger.debug(f"in getTmpSymbolicValue, expr.tmp is {expr.tmp}")
+        tmp_expr = self.state.scratch.tmp_expr(expr.tmp)
+        logger.debug(f"tmp_expr returns: {tmp_expr}")
+        # return self.state.scratch.temps[expr.tmp]
+        return tmp_expr
 
     def couldBePowerOfTwo(self, symval) -> bool:
         # symval != 0 and ((symval & (symval - 1)) == 0)
@@ -176,36 +175,46 @@ class CompSimpDataRecord():
         return expr == self.leftIdentity
 
     def checkForSpecialValues(self, expr, isLeft: bool):
+        logger.debug(f"Checking {expr} for special values")
         if self.powerOfTwoSignificant:
             if self.couldBePowerOfTwo(expr):
+                logger.debug(f"{expr} could be power of two")
                 self.numPowerOfTwoOperands += 1
                 self.firstOperandPowerOfTwo = True
 
         if isLeft:
             if self.hasLeftIdentity:
+                logger.debug("Expr has left identity")
                 if self.couldBeLeftIdentity(expr):
+                    logger.debug(f"{expr} could be left ident")
                     self.numIdentityOperands += 1
                     self.firstOperandIdentity = True
-
             if self.hasLeftZero:
+                # TODO
                 pass
         else:
             if self.hasRightIdentity:
+                logger.debug("Expr has right identity")
                 if self.couldBeRightIdentity(expr):
+                    logger.debug(f"{expr} could be right ident")
                     self.numIdentityOperands += 1
                     self.secOperandIdentity = True
             if self.hasRightZero:
+                # TODO
                 pass
 
     def checkForSpecialValuesConcrete(self, expr, isLeft: bool):
+        logger.debug(f"Checking {expr} for special values concrete")
         if self.powerOfTwoSignificant:
             if self.couldBePowerOfTwoConcrete(expr):
+                logger.debug(f"{expr} could be power of two")
                 self.numPowerOfTwoOperands += 1
                 self.firstOperandPowerOfTwo = True
 
         if isLeft:
             if self.hasLeftIdentity:
                 if self.couldBeLeftIdentityConcrete(expr):
+                    logger.debug(f"{expr} could be left ident")
                     self.numIdentityOperands += 1
                     self.firstOperandIdentity = True
 
@@ -214,16 +223,19 @@ class CompSimpDataRecord():
         else:
             if self.hasRightIdentity:
                 if self.couldBeRightIdentityConcrete(expr):
+                    logger.debug(f"{expr} could be right ident")
                     self.numIdentityOperands += 1
                     self.secOperandIdentity = True
             if self.hasRightZero:
                 pass
 
     def handleBinOp(self):
+        """
+        in two-address, firstOperand is dst
+        e.g., in angr, addq rax, rbx is:
+        $tmpXXX = Add64(RdTmp($tmpXXX), RdTmp($tmpYYY))
+        """
         assert(type(self.expr) == pyvex.expr.Binop)
-        # in two-address, firstOperand is dst
-        # e.g., in angr, addq rax, rbx is:
-        # $tmpXXX = Add64(RdTmp($tmpXXX), RdTmp($tmpYYY))
         firstOperand = self.expr.args[0]
         secondOperand = self.expr.args[1]
         operation = self.expr.op
@@ -253,10 +265,15 @@ class CompSimpDataRecord():
         secondOperandSymVal = None
 
         if self.isTmpVar(firstOperand):
+            logger.debug("first operand is tmp var")
             firstOperandSymVal = self.getTmpSymbolicValue(firstOperand)
 
         if self.isTmpVar(secondOperand):
+            logger.debug("second operand is tmp var")
             secondOperandSymVal = self.getTmpSymbolicValue(secondOperand)
+
+        logger.debug(f"firstOperandSymVal: {firstOperandSymVal}")
+        logger.debug(f"secondOperandSymVal: {secondOperandSymVal}")
 
         if self.operandIsConst(firstOperand):
             self.firstOperandConst = firstOperand.con.value
@@ -338,6 +355,8 @@ class AddDataRecord(CompSimpDataRecord):
         self.rightIdentity = claripy.BVV(0, self.bitwidth)
         self.leftIdentity = claripy.BVV(0, self.bitwidth)
         self.powerOfTwoSignificant = False
+        if type(self.expr) == pyvex.expr.Binop:
+            self.handleBinOp()
 
 class MulDataRecord(CompSimpDataRecord):
    def __init__(self, expr, state):
@@ -351,6 +370,8 @@ class MulDataRecord(CompSimpDataRecord):
         self.rightZero = claripy.BVV(0, self.bitwidth)
         self.leftZero = claripy.BVV(0, self.bitwidth)
         self.powerOfTwoSignificant = True
+        if type(self.expr) == pyvex.expr.Binop:
+            self.handleBinOp()
                 
 class CompSimpDataCollectionChecker(Checker):
     """
@@ -377,7 +398,7 @@ class CompSimpDataCollectionChecker(Checker):
         def finder(e: pyvex.expr.IRExpr) -> Optional[CompSimpDataRecord]:
             regex_str = r"Iop_{}\d+".format(pre)
             if re.match(regex_str, e.op, re.IGNORECASE):
-                logger.debug(f"Found expr with op: {regex_str}")
+                logger.debug(f"Found expr with op: {e.op} ({regex_str})")
                 if pre == 'Add':
                     return AddDataRecord
                 elif pre == 'Mul':
@@ -597,7 +618,7 @@ def run(filename: str, funcname: str):
     else:
         print(f"Couldn't find symbol for funcname: {funcname}")
 
-    state = proj.factory.entry_state(addr=func_symbol.rebased_addr)
+    state = proj.factory.blank_state(addr=func_symbol.rebased_addr)
     state.options.add(angr.options.SYMBOL_FILL_UNCONSTRAINED_MEMORY)
     state.options.add(angr.options.SYMBOL_FILL_UNCONSTRAINED_REGISTERS)
 
@@ -605,13 +626,14 @@ def run(filename: str, funcname: str):
     # to later figure out how to output problematic states for a checker
     # in a way that is debuggable
     proj.factory.block(state.addr).pp()
+    proj.factory.block(state.addr).vex.pp()
 
     compsimp_file_name = f"{Path(filename).name}-{funcname}"
     CompSimpDataRecord.set_func_identifier(compsimp_file_name)
     
-    state.inspect.b('mem_write',
-                    when=angr.BP_BEFORE,
-                    action=SilentStoreChecker.check)
+    # state.inspect.b('mem_write',
+    #                 when=angr.BP_BEFORE,
+    #                 action=SilentStoreChecker.check)
 
     state.inspect.b('expr',
                     when=angr.BP_BEFORE,
