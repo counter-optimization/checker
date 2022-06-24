@@ -19,21 +19,27 @@ class CompSimpTestCases(unittest.TestCase):
         csv_file = Path(csv_file_name)
         self.assertTrue(csv_file.exists())
 
+        num_rows_selected = 0
+
         with csv_file.open() as f:
             reader = csv.reader(f)
             for row in reader:
                 if row_select(row):
+                    num_rows_selected += 1
                     for col_name, exp_value in expected.items():
                         actual = test_common.get_csv_value_from_col_name(col_name, row)
                         self.assertIsNotNone(actual)
                         self.assertEqual(exp_value, actual)
-        
+
+        # so this doesn't fail open if no row is found
+        self.assertEqual(num_rows_selected, 1,
+                         msg="Probably couldn't find the row of interest in csv file")
         
     def test_addident(self):
         filename = test_common.COMP_SIMP_TEST_DIR / "addident.o"
         funcname = "addident"
         addr_of_interest = "0x40000d"
-        expr_of_interest = "\"Add32(t31,t6)\""
+        expr_of_interest = "Add32(t31,t6)"
         expected_values = {"numIdentityOperands": "2",
                            "firstOperandIdentity": "True",
                            "secOperandIdentity": "True"}
@@ -42,6 +48,25 @@ class CompSimpTestCases(unittest.TestCase):
 
         row_select = lambda row: expr_of_interest in row and \
             addr_of_interest in row
+        
+        self.check_csv_for_expected_values(filename=filename,
+                                           funcname=funcname,
+                                           row_select=row_select,
+                                           expected=expected_values)
+
+    def test_mulident(self):
+        addr_of_interest = "0x40000d"
+        expr_of_interest = "Mul32(t5,t29)"
+        filename = test_common.COMP_SIMP_TEST_DIR / "mulident.o"
+        funcname = "mulident"
+        expected_values = {"numIdentityOperands": "2",
+                           "firstOperandIdentity": "True",
+                           "secOperandIdentity": "True"}
+
+        test_common.run_checker(filename=filename, funcname=funcname)
+
+        row_select = lambda row: expr_of_interest in row and \
+        addr_of_interest in row
         
         self.check_csv_for_expected_values(filename=filename,
                                            funcname=funcname,
