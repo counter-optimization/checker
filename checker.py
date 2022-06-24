@@ -135,9 +135,6 @@ class CompSimpDataRecord():
     def couldBePowerOfTwo(self, symval) -> bool:
         # symval != 0 and ((symval & (symval - 1)) == 0)
         # https://stackoverflow.com/questions/600293/how-to-check-if-a-number-is-a-power-of-2
-        if not symval:
-            return False
-        
         one = claripy.BVV(1, self.bitwidth)
         zero = claripy.BVV(0, self.bitwidth)
         solver = claripy.Solver()
@@ -147,33 +144,26 @@ class CompSimpDataRecord():
         return is_sat
 
     def couldBePowerOfTwoConcrete(self, concval) -> bool:
-        assert(concval)
         cond = concval != 0
         cond = cond and ((concval & (concval - 1)) == 0)
         return cond
 
     def couldBeRightIdentity(self, expr) -> bool:
-        if not expr:
-            return False
         solver = claripy.Solver()
         solver.add(expr == self.rightIdentity)
         is_sat = solver.satisfiable()
         return is_sat
 
     def couldBeRightIdentityConcrete(self, expr) -> bool:
-        assert(expr)
         return expr == self.rightIdentity
 
     def couldBeLeftIdentity(self, expr) -> bool:
-        if not expr:
-            return False
         solver = claripy.Solver()
         solver.add(expr == self.leftIdentity)
         is_sat = solver.satisfiable()
         return is_sat
 
     def couldBeLeftIdentityConcrete(self, expr) -> bool:
-        assert(expr)
         return expr == self.leftIdentity
 
     def checkForSpecialValues(self, expr, isLeft: bool):
@@ -402,7 +392,6 @@ class CompSimpDataCollectionChecker(Checker):
     @staticmethod
     def check(state: angr.sim_state.SimState) -> bool:
         expr = state.inspect.expr
-        print(f"{expr}")
         checkers = CompSimpDataCollectionChecker.checkers
         
         # only pyvex.expr.Binop has `.op` attribute
