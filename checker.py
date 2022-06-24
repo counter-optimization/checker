@@ -430,12 +430,13 @@ class CompSimpDataCollectionChecker(Checker):
             logger.debug(f"csv file {csv_file_path} exists, unlinking...")
             csv_file_path.unlink()
 
-        csv_file = csv.writer(csv_file_path.open(mode="a"))
+        with csv_file_path.open(mode="a") as f:
+            csv_file = csv.writer(f)
 
-        header_cols = CompSimpDataRecord.getCSVHeaderColNames()
-        csv_file.writerow(header_cols)
-        logger.debug(f"Writing {len(CompSimpDataCollectionChecker.csv_records)} csv records")
-        csv_file.writerows(CompSimpDataCollectionChecker.csv_records)
+            header_cols = CompSimpDataRecord.getCSVHeaderColNames()
+            csv_file.writerow(header_cols)
+            logger.debug(f"Writing {len(CompSimpDataCollectionChecker.csv_records)} csv records")
+            csv_file.writerows(CompSimpDataCollectionChecker.csv_records)
 
 class ComputationSimplificationChecker(Checker):
     """
@@ -610,6 +611,13 @@ def setup_symbolic_state_for_ed25519_point_addition(proj, init_state, fn_name):
     logger.debug(f"for init_state ({init_state}), rsi holds {init_state.regs.rsi}")
     logger.debug(f"for init_state ({init_state}), rdx holds {init_state.regs.rdx}")
 
+def output_filename_stem(target_filename: str, target_funcname: str) -> str:
+    """
+    pulled this out into a function since testing relies on this to check
+    compsimpDatacollectionChecker's csv file output
+    """
+    return f"{Path(target_filename).name}-{target_funcname}"
+
 def run(filename: str, funcname: str):
     proj = angr.Project(filename)
     
@@ -631,7 +639,7 @@ def run(filename: str, funcname: str):
     proj.factory.block(state.addr).pp()
     proj.factory.block(state.addr).vex.pp()
 
-    compsimp_file_name = f"{Path(filename).name}-{funcname}"
+    compsimp_file_name = output_filename_stem(filename, funcname)
     CompSimpDataRecord.set_func_identifier(compsimp_file_name)
     
     # state.inspect.b('mem_write',
