@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 class Checker(ABC):
-    vulnerable_states: List[angr.sim_state.SimState] = NotImplemented
-    effects: List[str] = NotImplemented
+    vulnerable_states: List[angr.sim_state.SimState] | 'NotImplemented'  = NotImplemented
+    effects: List[str] | 'NotImplemented' = NotImplemented
 
     @staticmethod
     @abstractmethod
@@ -99,6 +99,8 @@ class CompSimpDataRecord():
         self.numIdentityOperands = 0
         self.firstOperandIdentity = False
         self.secOperandIdentity = False
+        self.rightIdentity = NotImplemented
+        self.leftIdentity = NotImplemented
 
         self.hasLeftZero = False
         self.hasRightZero = False
@@ -184,7 +186,6 @@ class CompSimpDataRecord():
 
         if isLeft:
             if self.hasLeftIdentity:
-                logger.debug("Expr has left identity")
                 if self.couldBeLeftIdentity(expr):
                     logger.debug(f"{expr} could be left ident")
                     self.numIdentityOperands += 1
@@ -194,7 +195,6 @@ class CompSimpDataRecord():
                 pass
         else:
             if self.hasRightIdentity:
-                logger.debug("Expr has right identity")
                 if self.couldBeRightIdentity(expr):
                     logger.debug(f"{expr} could be right ident")
                     self.numIdentityOperands += 1
@@ -245,17 +245,17 @@ class CompSimpDataRecord():
 
         if not self.isSupportedOperandType(firstOperand):
             warn_str = "In handlBinOp: unsupported operand type for operand: "
-            warn_str.append(str(firstOperand))
-            warn_str.append(" with type: ")
-            warn_str.append(type(firstOperand))
+            warn_str += (str(firstOperand))
+            warn_str += (" with type: ")
+            warn_str += (type(firstOperand))
             logger.critical(warn_str)
             raise RuntimeError(warn_str)
 
         if not self.isSupportedOperandType(secondOperand):
             warn_str = "In handlBinOp: unsupported operand type for operand: "
-            warn_str.append(str(secondOperand))
-            warn_str.append(" with type: ")
-            warn_str.append(type(secondOperand))
+            warn_str += (str(secondOperand))
+            warn_str += (" with type: ")
+            warn_str += (type(secondOperand))
             logger.critical(warn_str)
             raise RuntimeError(warn_str)
 
@@ -298,7 +298,7 @@ class CompSimpDataRecord():
         insns_file = Path.cwd() / Path(f"{CompSimpDataRecord.func_identifier}.insns")
         if not insns_file.exists():
             with insns_file.open(mode='w') as f:
-                block = state.project.factory.block(self.state.addr)
+                block = self.state.project.factory.block(self.state.addr)
                 block.pp()
                 f.write(str(block))
                 f.write(str(block.vex))
@@ -340,7 +340,7 @@ class CompSimpDataRecord():
         else:
             return str(intermediate_result)
 
-    def getCSVRow(self) -> str:
+    def getCSVRow(self) -> List[str] :
         values = map(lambda x: self.getAttributeResult(x),
                      CompSimpDataRecord.getCSVHeaderColNames())
         return list(values)
@@ -402,17 +402,35 @@ class CompSimpDataCollectionChecker(Checker):
     @staticmethod
     def check(state: angr.sim_state.SimState) -> bool:
         expr = state.inspect.expr
+        print(f"{expr}")
         checkers = CompSimpDataCollectionChecker.checkers
+        
+        # only pyvex.expr.Binop has `.op` attribute
+        if not isinstance(expr, pyvex.expr.Binop):
+            return False
+
         logger.debug(f"Checking expr: {expr}")
 
-        for op_kw in checkers:
-            # only pyvex.expr.Binop has `.op` attribute
-            if isinstance(expr, pyvex.expr.Binop) and op_kw in expr.op.lower():
-                checker = checkers[op_kw]
-                logger.debug(f"Using {checker} to check {expr}")
-                filled_out_record = checker(expr, state)
-                csv_record = filled_out_record.getCSVRow()
-                CompSimpDataCollectionChecker.csv_records.append(csv_record)
+        try:
+            for op_kw in checkers.keys():
+                if  op_kw in expr.op.lower():
+                    logger.debug(f"{expr} is going to be recorded")
+                    checker = checkers[op_kw]
+                    logger.debug(f"Using {checker} to check {expr}")
+                    filled_out_record = checker(expr, state)
+                    csv_record = filled_out_record.getCSVRow()
+                    CompSimpDataCollectionChecker.csv_records.append(csv_record)
+        except Exception as err:
+            # unfortunately, exceptions are not being propagated when running this
+            # from the command line... putting this here to catch anything since
+            # any exceptions in the checking here are very important.
+            exception_type, exception_object, exception_traceback = sys.exc_info()
+            import traceback
+            filename = exception_traceback.tb_frame.f_code.co_filename
+            line_number = exception_traceback.tb_lineno
+            logger.critical(f"ERROR in {filename} at L{line_number}! ({err})")
+            traceback.print_tb(exception_traceback)
+            sys.exit(-1)
 
         return False
 
@@ -431,6 +449,12 @@ class CompSimpDataCollectionChecker(Checker):
         csv_file.writerows(CompSimpDataCollectionChecker.csv_records)
 
 class ComputationSimplificationChecker(Checker):
+    """
+    TODO
+    Wrapper class around the csv recording CompSimpDataCollectionChecker.
+    The CompSimpDataCollectionChecker writes a csv, this one gives alerts
+    if an insn is actually simplifiable/bypassable.
+    """
     vulnerable_states = []
     effects = []
 
@@ -607,8 +631,10 @@ def run(filename: str, funcname: str):
         print(f"Couldn't find symbol for funcname: {funcname}")
 
     state = proj.factory.blank_state(addr=func_symbol.rebased_addr)
-    state.options.add(angr.options.SYMBOL_FILL_UNCONSTRAINED_MEMORY)
-    state.options.add(angr.options.SYMBOL_FILL_UNCONSTRAINED_REGISTERS)
+    # state.options.add(angr.options.SYMBOL_FILL_UNCONSTRAINED_MEMORY)
+    # state.options.add(angr.options.SYMBOL_FILL_UNCONSTRAINED_REGISTERS)
+    state.options.add(angr.options.SYMBOLIC_INITIAL_VALUES)
+    state.options.add(angr.options.UNDER_CONSTRAINED_SYMEXEC)
 
     # For now, just print the code before running checkers. TODO: need
     # to later figure out how to output problematic states for a checker
@@ -623,8 +649,12 @@ def run(filename: str, funcname: str):
     #                 when=angr.BP_BEFORE,
     #                 action=SilentStoreChecker.check)
 
+    def debug_print(state: angr.sim_state.SimState):
+        print(f"{state.inspect.expr}")
+
     state.inspect.b('expr',
                     when=angr.BP_BEFORE,
+                    #action=debug_print)
                     action=CompSimpDataCollectionChecker.check)
 
     setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
