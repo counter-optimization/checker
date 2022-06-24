@@ -385,46 +385,34 @@ class CompSimpDataCollectionChecker(Checker):
     expr Shl64(t349,0x01) op: Iop_Shl64. tag: Iex_Binop
     expr And64(t440,t157) (<class 'pyvex.expr.Binop'>) is binop
     expr And64(t440,t157) op: Iop_And64. tag: Iex_Binop
+
+    Ops left to handle:
+    'Or', 'Sub', 'Xor', 'And', 'Mod',
+    'DivS', 'DivU', 'Shl', 'Shr', 'Sar'
     """
     vulnerable_states = []
     effects = []
-    filtered_ops = ['Add', 'Or', 'Mul', 'Sub', 'Xor', 'And', 'Mod',
-                    'DivS', 'DivU', 'Shl', 'Shr', 'Sar']
     finders = []
     csv_records = []
 
-    @staticmethod
-    def binOpNameFinderForMnemonicPrefix(pre: str):
-        def finder(e: pyvex.expr.IRExpr) -> Optional[CompSimpDataRecord]:
-            regex_str = r"Iop_{}\d+".format(pre)
-            if re.match(regex_str, e.op, re.IGNORECASE):
-                logger.debug(f"Found expr with op: {e.op} ({regex_str})")
-                if pre == 'Add':
-                    return AddDataRecord
-                elif pre == 'Mul':
-                    return MulDataRecord
-                else:
-                    return None
-            return None
-        return finder
+    # maps substring of pyvex binop expr names to their checking class
+    checkers = {'add': AddDataRecord,
+                'mul': MulDataRecord}
 
     @staticmethod
     def check(state: angr.sim_state.SimState) -> bool:
         expr = state.inspect.expr
+        checkers = CompSimpDataCollectionChecker.checkers
+        logger.debug(f"Checking expr: {expr}")
 
-        if not CompSimpDataCollectionChecker.finders:
-            CompSimpDataCollectionChecker.finders = list(map(CompSimpDataCollectionChecker.binOpNameFinderForMnemonicPrefix,
-                                                             CompSimpDataCollectionChecker.filtered_ops))
-        
-        if isinstance(expr, pyvex.expr.Binop):
-            for finder in CompSimpDataCollectionChecker.finders:
-                if not finder:
-                    pass
-                dataRecordingClass = finder(expr)
-                if dataRecordingClass:
-                    record = dataRecordingClass(expr, state)
-                    csv_record = record.getCSVRow()
-                    CompSimpDataCollectionChecker.csv_records.append(csv_record)
+        for op_kw in checkers:
+            # only pyvex.expr.Binop has `.op` attribute
+            if isinstance(expr, pyvex.expr.Binop) and op_kw in expr.op.lower():
+                checker = checkers[op_kw]
+                logger.debug(f"Using {checker} to check {expr}")
+                filled_out_record = checker(expr, state)
+                csv_record = filled_out_record.getCSVRow()
+                CompSimpDataCollectionChecker.csv_records.append(csv_record)
 
         return False
 
@@ -439,7 +427,7 @@ class CompSimpDataCollectionChecker(Checker):
 
         header_cols = CompSimpDataRecord.getCSVHeaderColNames()
         csv_file.writerow(header_cols)
-
+        logger.debug(f"Writing {len(CompSimpDataCollectionChecker.csv_records)} csv records")
         csv_file.writerows(CompSimpDataCollectionChecker.csv_records)
 
 class ComputationSimplificationChecker(Checker):
