@@ -198,8 +198,8 @@ class CompSimpDataRecord():
             if self.hasLeftZero:
                 if self.couldBeLeftZero(expr):
                     logger.debug(f"{expr} could be left zero")
-                    self.num
-                pass
+                    self.numZeroElementOperands += 1
+                    self.firstOperandZeroElem = True
         else:
             if self.hasRightIdentity:
                 if self.couldBeRightIdentity(expr):
@@ -207,8 +207,10 @@ class CompSimpDataRecord():
                     self.numIdentityOperands += 1
                     self.secondOperandIdentity = True
             if self.hasRightZero:
-                # TODO
-                pass
+                if self.couldBeRightZero(expr):
+                    logger.debug(f"{expr} could be right zero")
+                    self.numZeroElementOperands += 1
+                    self.secondOperandZeroElem = True
 
     def checkForSpecialValuesConcrete(self, expr, isLeft: bool):
         logger.debug(f"Checking {expr} for special values concrete")
@@ -444,19 +446,27 @@ class CompSimpDataCollectionChecker(Checker):
         return False
 
     @staticmethod
+    def get_unique_csv_records():
+        unique_rows = []
+        [unique_rows.append(rec) for rec in \
+         CompSimpDataCollectionChecker.csv_records if rec not in unique_rows]
+        return unique_rows
+
+    @staticmethod
     def write_records_to_csv(csv_file_name: str):
         csv_file_path = Path(csv_file_name)
         if csv_file_path.exists():
             logger.debug(f"csv file {csv_file_path} exists, unlinking...")
             csv_file_path.unlink()
 
-        with csv_file_path.open(mode="a") as f:
+        with csv_file_path.open(mode="w") as f:
             csv_file = csv.writer(f)
 
             header_cols = CompSimpDataRecord.getCSVHeaderColNames()
             csv_file.writerow(header_cols)
-            logger.debug(f"Writing {len(CompSimpDataCollectionChecker.csv_records)} csv records")
-            csv_file.writerows(CompSimpDataCollectionChecker.csv_records)
+            csv_rows = CompSimpDataCollectionChecker.get_unique_csv_records()
+            logger.debug(f"Writing {len(csv_rows)} csv records")
+            csv_file.writerows(csv_rows)
 
 class ComputationSimplificationChecker(Checker):
     """
