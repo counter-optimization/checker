@@ -104,7 +104,7 @@ class CompSimpDataRecord():
 
         self.hasLeftZero = False
         self.hasRightZero = False
-        self.zeroElementOperands = 0
+        self.numZeroElementOperands = 0
         self.firstOperandZeroElem = False
         self.secondOperandZeroElem = False
 
@@ -166,6 +166,18 @@ class CompSimpDataRecord():
     def couldBeLeftIdentityConcrete(self, expr) -> bool:
         return expr == self.leftIdentity
 
+    def couldBeLeftZero(self, expr) -> bool:
+        solver = claripy.Solver()
+        solver.add(expr == self.leftZero)
+        is_sat = solver.satisfiable()
+        return is_sat
+
+    def couldBeRightZero(self, expr) -> bool:
+        solver = claripy.Solver()
+        solver.add(expr == self.rightZero)
+        is_sat = solver.satisfiable()
+        return is_sat
+
     def checkForSpecialValues(self, expr, isLeft: bool):
         logger.debug(f"Checking {expr} for special values")
         if self.powerOfTwoSignificant:
@@ -184,7 +196,9 @@ class CompSimpDataRecord():
                     self.numIdentityOperands += 1
                     self.firstOperandIdentity = True
             if self.hasLeftZero:
-                # TODO
+                if self.couldBeLeftZero(expr):
+                    logger.debug(f"{expr} could be left zero")
+                    self.num
                 pass
         else:
             if self.hasRightIdentity:
@@ -320,7 +334,7 @@ class CompSimpDataRecord():
                 'numIdentityOperands',
                 'firstOperandIdentity',
                 'secondOperandIdentity',
-                'zeroElementOperands',
+                'numZeroElementOperands',
                 'firstOperandZeroElem',
                 'secondOperandZeroElem',
                 'numPossibleFirstOperand',

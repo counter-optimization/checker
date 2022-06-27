@@ -137,7 +137,7 @@ class CompSimpTestCaseRunner(unittest.TestCase):
         mulzero_test_case.expr_of_interest = "Mul32(t5,t29)"
         mulzero_test_case.filename = test_common.COMP_SIMP_TEST_DIR / "mulzero.o"
         mulzero_test_case.funcname = "mulzero"
-        mulzero_test_case.set_expected_csv_value(col_name="zeroElementOperands",
+        mulzero_test_case.set_expected_csv_value(col_name="numZeroElementOperands",
                                                      exp_value="2")
         mulzero_test_case.set_expected_csv_value(col_name="firstOperandZeroElem",
                                                      exp_value="True")
