@@ -81,7 +81,7 @@ class CompSimpTestCaseRunner(unittest.TestCase):
                                                   exp_value="2")
         addident_test_case.set_expected_csv_value(col_name="firstOperandIdentity",
                                                   exp_value="True")
-        addident_test_case.set_expected_csv_value(col_name="secOperandIdentity",
+        addident_test_case.set_expected_csv_value(col_name="secondOperandIdentity",
                                                   exp_value="True")
         addident_test_case.run_checker()
         self.check_csv_for_expected_values(testcase=addident_test_case)
@@ -96,7 +96,7 @@ class CompSimpTestCaseRunner(unittest.TestCase):
                                                   exp_value="2")
         mulident_test_case.set_expected_csv_value(col_name="firstOperandIdentity",
                                                   exp_value="True")
-        mulident_test_case.set_expected_csv_value(col_name="secOperandIdentity",
+        mulident_test_case.set_expected_csv_value(col_name="secondOperandIdentity",
                                                   exp_value="True")
         mulident_test_case.run_checker()
         self.check_csv_for_expected_values(testcase=mulident_test_case)
@@ -111,7 +111,7 @@ class CompSimpTestCaseRunner(unittest.TestCase):
                                                      exp_value="1")
         addconstant_test_case.set_expected_csv_value(col_name="firstOperandConst",
                                                      exp_value="None")
-        addconstant_test_case.set_expected_csv_value(col_name="secOperandConst",
+        addconstant_test_case.set_expected_csv_value(col_name="secondOperandConst",
                                                      exp_value="14")
         addconstant_test_case.run_checker()
         self.check_csv_for_expected_values(testcase=addconstant_test_case)
@@ -130,6 +130,21 @@ class CompSimpTestCaseRunner(unittest.TestCase):
                                                      exp_value="True")
         mulpowtwo_test_case.run_checker()
         self.check_csv_for_expected_values(testcase=mulpowtwo_test_case)
+
+    def test_mulzero(self):
+        mulzero_test_case = CompSimpTestCase()
+        mulzero_test_case.addr_of_interest = "0x40000d"
+        mulzero_test_case.expr_of_interest = "Mul32(t5,t29)"
+        mulzero_test_case.filename = test_common.COMP_SIMP_TEST_DIR / "mulzero.o"
+        mulzero_test_case.funcname = "mulzero"
+        mulzero_test_case.set_expected_csv_value(col_name="zeroElementOperands",
+                                                     exp_value="2")
+        mulzero_test_case.set_expected_csv_value(col_name="firstOperandZeroElem",
+                                                     exp_value="True")
+        mulzero_test_case.set_expected_csv_value(col_name="secondOperandZeroElem",
+                                                     exp_value="True")
+        mulzero_test_case.run_checker()
+        self.check_csv_for_expected_values(testcase=mulzero_test_case)
 
 if '__main__' == __name__:
     unittest.main()

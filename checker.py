@@ -87,7 +87,7 @@ class CompSimpDataRecord():
         
         self.numConstantOperands = 0
         self.firstOperandConst = None
-        self.secOperandConst = None
+        self.secondOperandConst = None
 
         self.powerOfTwoSignificant = False
         self.numPowerOfTwoOperands = 0
@@ -98,7 +98,7 @@ class CompSimpDataRecord():
         self.hasRightIdentity = False
         self.numIdentityOperands = 0
         self.firstOperandIdentity = False
-        self.secOperandIdentity = False
+        self.secondOperandIdentity = False
         self.rightIdentity = NotImplemented
         self.leftIdentity = NotImplemented
 
@@ -106,7 +106,7 @@ class CompSimpDataRecord():
         self.hasRightZero = False
         self.zeroElementOperands = 0
         self.firstOperandZeroElem = False
-        self.secOperandZeroElem = False
+        self.secondOperandZeroElem = False
 
         self.numPossibleFirstOperand = None
         self.numPossibleSecondOperand = None
@@ -191,7 +191,7 @@ class CompSimpDataRecord():
                 if self.couldBeRightIdentity(expr):
                     logger.debug(f"{expr} could be right ident")
                     self.numIdentityOperands += 1
-                    self.secOperandIdentity = True
+                    self.secondOperandIdentity = True
             if self.hasRightZero:
                 # TODO
                 pass
@@ -221,7 +221,7 @@ class CompSimpDataRecord():
                 if self.couldBeRightIdentityConcrete(expr):
                     logger.debug(f"{expr} could be right ident")
                     self.numIdentityOperands += 1
-                    self.secOperandIdentity = True
+                    self.secondOperandIdentity = True
             if self.hasRightZero:
                 pass
 
@@ -281,7 +281,7 @@ class CompSimpDataRecord():
             raise RuntimeError(f"Unsupported operand type, firstOperand: {firstOperand}")
 
         if self.operandIsConst(secondOperand):
-            self.secOperandConst = secondOperand.con.value
+            self.secondOperandConst = secondOperand.con.value
             self.numConstantOperands += 1
             self.checkForSpecialValuesConcrete(secondOperand, isLeft=False)
         elif self.isTmpVar(secondOperand):
@@ -313,16 +313,16 @@ class CompSimpDataRecord():
                 'bitwidth',
                 'numConstantOperands',
                 'firstOperandConst',
-                'secOperandConst',
+                'secondOperandConst',
                 'numPowerOfTwoOperands',
                 'firstOperandPowerOfTwo',
                 'secondOperandPowerOfTwo',
                 'numIdentityOperands',
                 'firstOperandIdentity',
-                'secOperandIdentity',
+                'secondOperandIdentity',
                 'zeroElementOperands',
                 'firstOperandZeroElem',
-                'secOperandZeroElem',
+                'secondOperandZeroElem',
                 'numPossibleFirstOperand',
                 'numPossibleSecondOperand',
                 'serializedFirstOperandFormula',
