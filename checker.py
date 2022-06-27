@@ -172,7 +172,10 @@ class CompSimpDataRecord():
             if self.couldBePowerOfTwo(expr):
                 logger.debug(f"{expr} could be power of two")
                 self.numPowerOfTwoOperands += 1
-                self.firstOperandPowerOfTwo = True
+                if isLeft:
+                    self.firstOperandPowerOfTwo = True
+                else:
+                    self.secondOperandPowerOfTwo = True
 
         if isLeft:
             if self.hasLeftIdentity:
@@ -199,7 +202,10 @@ class CompSimpDataRecord():
             if self.couldBePowerOfTwoConcrete(expr):
                 logger.debug(f"{expr} could be power of two")
                 self.numPowerOfTwoOperands += 1
-                self.firstOperandPowerOfTwo = True
+                if isLeft:
+                    self.firstOperandPowerOfTwo = True
+                else:
+                    self.secondOperandPowerOfTwo = True
 
         if isLeft:
             if self.hasLeftIdentity:

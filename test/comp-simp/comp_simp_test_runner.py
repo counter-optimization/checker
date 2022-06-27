@@ -19,6 +19,12 @@ class CompSimpTestCase:
     def run_checker(self):
         if not self.filename or not self.funcname:
             sys.exit(1)
+
+        # if the file already exists, unlink it
+        checker_csv_file_output = Path(self.get_csv_file_name())
+        if checker_csv_file_output.exists():
+            checker_csv_file_output.unlink()
+            
         test_common.run_checker(filename=self.filename,
                                 funcname=self.funcname)
 
@@ -32,12 +38,20 @@ class CompSimpTestCase:
     def set_expected_csv_value(self, col_name: str, exp_value: Any):
         self.expected_values[col_name] = str(exp_value)
 
+    def get_output_file_stem(self) -> str:
+        if not self.filename or not self.funcname:
+            sys.exit(1)
+        return checker.output_filename_stem(target_filename=self.filename,
+                                            target_funcname=self.funcname)
+
+    # gets the name of the csv file generated for this testcase by the
+    # checker
+    def get_csv_file_name(self) -> str:
+        return self.get_output_file_stem() + ".csv"
+
 class CompSimpTestCaseRunner(unittest.TestCase):
     def check_csv_for_expected_values(self, testcase: CompSimpTestCase):
-        output_file_stem = checker.output_filename_stem(target_filename=testcase.filename,
-                                                        target_funcname=testcase.funcname)
-        csv_file_name = output_file_stem + ".csv"
-        csv_file = Path(csv_file_name)
+        csv_file = Path(testcase.get_csv_file_name())
         self.assertTrue(csv_file.exists())
 
         # so this doesn't fail open if no row is found
@@ -101,6 +115,21 @@ class CompSimpTestCaseRunner(unittest.TestCase):
                                                      exp_value="14")
         addconstant_test_case.run_checker()
         self.check_csv_for_expected_values(testcase=addconstant_test_case)
+
+    def test_mulpowtwo(self):
+        mulpowtwo_test_case = CompSimpTestCase()
+        mulpowtwo_test_case.addr_of_interest = "0x40000d"
+        mulpowtwo_test_case.expr_of_interest = "Mul32(t5,t29)"
+        mulpowtwo_test_case.filename = test_common.COMP_SIMP_TEST_DIR / "mulpowtwo.o"
+        mulpowtwo_test_case.funcname = "mulpowtwo"
+        mulpowtwo_test_case.set_expected_csv_value(col_name="numPowerOfTwoOperands",
+                                                     exp_value="2")
+        mulpowtwo_test_case.set_expected_csv_value(col_name="firstOperandPowerOfTwo",
+                                                     exp_value="True")
+        mulpowtwo_test_case.set_expected_csv_value(col_name="secondOperandPowerOfTwo",
+                                                     exp_value="True")
+        mulpowtwo_test_case.run_checker()
+        self.check_csv_for_expected_values(testcase=mulpowtwo_test_case)
 
 if '__main__' == __name__:
     unittest.main()
