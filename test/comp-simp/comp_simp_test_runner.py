@@ -65,7 +65,8 @@ class CompSimpTestCaseRunner(unittest.TestCase):
                     for col_name, exp_value in testcase.expected_values.items():
                         actual = test_common.get_csv_value_from_col_name(col_name, row)
                         self.assertIsNotNone(actual)
-                        self.assertEqual(exp_value, actual)
+                        self.assertEqual(exp_value, actual,
+                                         msg=f"Non matching value for col: {col_name}")
 
         # so this doesn't fail open if no row is found
         self.assertEqual(num_rows_selected, 1,
@@ -145,6 +146,88 @@ class CompSimpTestCaseRunner(unittest.TestCase):
                                                      exp_value="True")
         mulzero_test_case.run_checker()
         self.check_csv_for_expected_values(testcase=mulzero_test_case)
+
+    def test_mulnospecialvalues(self):
+        mulnospecialvalues_test_case = CompSimpTestCase()
+        mulnospecialvalues_test_case.addr_of_interest = "0x400015"
+        mulnospecialvalues_test_case.expr_of_interest = "Mul32(t5,t25)"
+        mulnospecialvalues_test_case.filename = test_common.COMP_SIMP_TEST_DIR / "mulnospecialvalues.o"
+        mulnospecialvalues_test_case.funcname = "mulnospecialvalues"
+        # check no zero elements
+        mulnospecialvalues_test_case.set_expected_csv_value(col_name="numZeroElementOperands",
+                                                     exp_value="0")
+        mulnospecialvalues_test_case.set_expected_csv_value(col_name="firstOperandZeroElem",
+                                                     exp_value="False")
+        mulnospecialvalues_test_case.set_expected_csv_value(col_name="secondOperandZeroElem",
+                                                     exp_value="False")
+
+        # check no constant operands (in the sense of the insn doesn't use an immediate)
+        mulnospecialvalues_test_case.set_expected_csv_value(col_name="numConstantOperands",
+                                                     exp_value="0")
+        mulnospecialvalues_test_case.set_expected_csv_value(col_name="firstOperandConst",
+                                                     exp_value="None")
+        mulnospecialvalues_test_case.set_expected_csv_value(col_name="secondOperandConst",
+                                                     exp_value="None")
+
+        # check no identity elements
+        mulnospecialvalues_test_case.set_expected_csv_value(col_name="numIdentityOperands",
+                                                     exp_value="0")
+        mulnospecialvalues_test_case.set_expected_csv_value(col_name="firstOperandIdentity",
+                                                     exp_value="False")
+        mulnospecialvalues_test_case.set_expected_csv_value(col_name="secondOperandIdentity",
+                                                     exp_value="False")
+
+        # check no power of two elements
+        mulnospecialvalues_test_case.set_expected_csv_value(col_name="numPowerOfTwoOperands",
+                                                     exp_value="0")
+        mulnospecialvalues_test_case.set_expected_csv_value(col_name="firstOperandPowerOfTwo",
+                                                     exp_value="False")
+        mulnospecialvalues_test_case.set_expected_csv_value(col_name="secondOperandPowerOfTwo",
+                                                     exp_value="False")
+        
+        mulnospecialvalues_test_case.run_checker()
+        self.check_csv_for_expected_values(testcase=mulnospecialvalues_test_case)
+
+    def test_addnospecialvalues(self):
+        addnospecialvalues_test_case = CompSimpTestCase()
+        addnospecialvalues_test_case.addr_of_interest = "0x400015"
+        addnospecialvalues_test_case.expr_of_interest = "Add32(t27,t6)"
+        addnospecialvalues_test_case.filename = test_common.COMP_SIMP_TEST_DIR / "addnospecialvalues.o"
+        addnospecialvalues_test_case.funcname = "addnospecialvalues"
+        # check no zero elements
+        addnospecialvalues_test_case.set_expected_csv_value(col_name="numZeroElementOperands",
+                                                     exp_value="0")
+        addnospecialvalues_test_case.set_expected_csv_value(col_name="firstOperandZeroElem",
+                                                     exp_value="False")
+        addnospecialvalues_test_case.set_expected_csv_value(col_name="secondOperandZeroElem",
+                                                     exp_value="False")
+
+        # check no constant operands (in the sense of the insn doesn't use an immediate)
+        addnospecialvalues_test_case.set_expected_csv_value(col_name="numConstantOperands",
+                                                     exp_value="0")
+        addnospecialvalues_test_case.set_expected_csv_value(col_name="firstOperandConst",
+                                                     exp_value="None")
+        addnospecialvalues_test_case.set_expected_csv_value(col_name="secondOperandConst",
+                                                     exp_value="None")
+
+        # check no identity elements
+        addnospecialvalues_test_case.set_expected_csv_value(col_name="numIdentityOperands",
+                                                     exp_value="0")
+        addnospecialvalues_test_case.set_expected_csv_value(col_name="firstOperandIdentity",
+                                                     exp_value="False")
+        addnospecialvalues_test_case.set_expected_csv_value(col_name="secondOperandIdentity",
+                                                     exp_value="False")
+
+        # check no power of two elements
+        addnospecialvalues_test_case.set_expected_csv_value(col_name="numPowerOfTwoOperands",
+                                                     exp_value="0")
+        addnospecialvalues_test_case.set_expected_csv_value(col_name="firstOperandPowerOfTwo",
+                                                     exp_value="False")
+        addnospecialvalues_test_case.set_expected_csv_value(col_name="secondOperandPowerOfTwo",
+                                                     exp_value="False")
+        
+        addnospecialvalues_test_case.run_checker()
+        self.check_csv_for_expected_values(testcase=addnospecialvalues_test_case)
 
 if '__main__' == __name__:
     unittest.main()
