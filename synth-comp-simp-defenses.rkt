@@ -85,7 +85,7 @@
                  esp ebp esi edi
                  r8d r9d r10d r11d
                  r12d r13d r14d r15d)]
-  [imm32 (?? (bitvector 32))])
+  [imm32 (encode-imm (?? (bitvector 32)))])
 
 (define (generate-add-r/m32-r32-insns #:num-insns num-insns)
   (for/list ([i num-insns])
