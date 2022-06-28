@@ -12,10 +12,12 @@
   gprs8 gpr8 gpr8-no-rex (struct-out gpr8) (struct-out gpr8-no-rex)
   symbol->gpr64
   symbol->gpr32
+  symbol->gpr16
   symbol->gpr8
   rax rcx rdx rbx rsp rbp rsi rdi r8 r9 r10 r11 r12 r13 r14 r15
   eax ecx edx ebx esp ebp esi edi r8d r9d r10d r11d r12d r13d r14d r15d
-  al cl 
+  ax
+  al cl
   register-indirect register-indirect?)
 
 
@@ -182,6 +184,9 @@
 (define (symbol->gpr32 sym)
   (integer->gpr (index-of gprs32 sym) gpr32))
 
+(define (symbol->gpr16 sym)
+  (integer->gpr (index-of gprs16 sym) gpr16))
+
 (define (symbol->gpr8 sym)
   (integer->gpr (index-of gprs8 sym) gpr8))
 
@@ -220,6 +225,8 @@
 (define r13d (symbol->gpr32 'r13d))
 (define r14d (symbol->gpr32 'r14d))
 (define r15d (symbol->gpr32 'r15d))
+
+(define ax (symbol->gpr16 'ax))
 
 (define cl (symbol->gpr8 'cl))
 (define al (symbol->gpr8 'al))
