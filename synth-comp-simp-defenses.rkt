@@ -18,19 +18,7 @@
 
 ;; Addition
 
-; Add r/m32, r32 (01 /r)
-;; (define-insn add-r/m32-r32 (dst src)
-;;   #:decode [((byte #x01) (/r reg r/m))
-;;             (list (gpr32-no-rex r/m) (gpr32-no-rex reg))]
-;;            [((rex/r r b) (byte #x01) (/r reg r/m))
-;;             (list (gpr32 b r/m) (gpr32 r reg))]
-;;   #:encode (list (rex/r src dst) (byte #x01) (/r src dst))
-;;   (lambda (cpu dst src)
-;;     (interpret-add cpu dst (cpu-gpr-ref cpu src))))
-
-;; of all add instructions, does not add identity elem as either operand
-
-;; General utility
+; General utility
 (define (assert-bvs-equiv bvs1 bvs2)
   (for ([b1 bvs1]
         [b2 bvs2])
@@ -41,7 +29,7 @@
         [b2 bvs2])
     (assume (bveq b1 b2))))
 
-;; (E)FLAG comparison functions
+; (E)FLAG comparison functions
 (define flag-symbols '(CF PF AF ZF SF OF))
 (displayln (format "flag-symbols: ~a" flag-symbols))
 
@@ -52,12 +40,7 @@
 (define assert-flags-equiv assert-bvs-equiv)
 (define assume-flags-equiv assume-bvs-equiv)
 
-;; GPR comparison functions
-(define (is-not-rax-subreg reg)
-  (define reg-string (symbol->string reg))
-  (not (string-contains? reg-string "a")))
-
-;; (define all-regs (filter is-not-rax-subreg (append gprs64 gprs32 gprs16 gprs8)))
+; GPR comparison functions
 (define all-regs-but-raxes (list rcx rdx rbx
                                  rsp rbp rsi rdi
                                  r8 r9 r10 r11
@@ -81,42 +64,45 @@
 (define assert-regs-equiv assert-bvs-equiv)
 (define assume-regs-equiv assume-bvs-equiv)
 
-;; Synthesis impl and spec for adding eax and ecx
+; Synthesis impl and spec for adding eax and ecx
 ; Adding eax <- eax + ecx
 (define (add-r/m32-r32-conc-impl)
   (define add (add-r/m32-r32 eax ecx))
   (list add))
 
 (define-grammar (x86-64-arith-insn-list)
-  [insn-list (choose empty (cons (bin-exp) (insn-list)))]
-  [bin-exp ((bin-op) (reg32) (reg32))]
-  [bin-op (choose add-r/m32-r32)]
+  [insn (choose (bin-insn) (un-insn))] ; depth 3
+  [bin-insn ((bin-op) (reg32) (reg32))] ; depth 2
+  [un-insn ((un-op) (reg32))] ; depth 2
+  
+  [bin-op (choose (bin-op-rr) (bin-op-ri))]
+  [bin-op-rr (choose add-r/m32-r32)]
+  [bin-op-ri (choose add-r/m32-imm32)]
+
+  [un-op (choose mul-r/m32)]
+  
   [reg32 (choose eax ecx edx ebx
                  esp ebp esi edi
                  r8d r9d r10d r11d
-                 r12d r13d r14d r15d)])
+                 r12d r13d r14d r15d)]
+  [imm32 (?? (bitvector 32))])
 
-(define-grammar (triv-add-synth)
-  [expr (add-r/m32-r32 (reg) (reg))]
-  [reg (choose eax ecx edx ebx esp ebp esi edi)])
-
-(define (generate-add-r/m32-r32-insns)
-  ;; (x86-64-arith-insn-list #:depth 6))
-  (list (triv-add-synth #:depth 2)))
+(define (generate-add-r/m32-r32-insns #:num-insns num-insns)
+  (for/list ([i num-insns])
+    (x86-64-arith-insn-list #:depth 4)))
 
 (displayln (format "Current grammar depth: ~a" (current-grammar-depth)))
 (error-print-width 4096)
 (displayln (format "Current error-print-width: ~a" (error-print-width)))
 
-(define (add-r/m32-r32-spec #:spec-cpu spec-cpu #:impl-cpu impl-cpu)
+(define (add-r/m32-r32-spec #:spec-cpu spec-cpu
+                            #:impl-cpu impl-cpu
+                            #:num-insns num-insns)
   ;; (define spec-cpu (make-x86-64-cpu))
   (define spec-insns (add-r/m32-r32-conc-impl))
   
   ;; (define impl-cpu (make-x86-64-cpu))
-  (define impl-insns (generate-add-r/m32-r32-insns))
-
-  ;; (displayln (format "spec-cpu: ~a" spec-cpu))
-  ;; (displayln (format "impl-cpu: ~a" impl-cpu))
+  (define impl-insns (generate-add-r/m32-r32-insns #:num-insns num-insns))
 
   ; 1. assume starting in the same state
   (define spec-reg-state-before (get-all-regs-but-raxes #:cpu spec-cpu))
@@ -153,10 +139,8 @@
   (define impl-eax (cpu-gpr-ref impl-cpu eax))
   (assert (bveq spec-eax impl-eax)))
 
-;; (clear-vc!)
-;; (define cex (verify (add-r/m32-r32-spec)))
-;; (displayln cex)
-;; (render-value/window cex)
+(define num-insns (string->number (vector-ref (current-command-line-arguments) 0)))
+(displayln (format "num-insns: ~a" num-insns))
 
 (define impl-cpu (make-x86-64-cpu))
 (define spec-cpu (make-x86-64-cpu))
@@ -167,24 +151,12 @@
                     (vector->list (cpu-flags impl-cpu))
                     (vector->list (cpu-gprs spec-cpu))
                     (vector->list (cpu-flags spec-cpu)))
-   #:guarantee (add-r/m32-r32-spec #:spec-cpu spec-cpu #:impl-cpu impl-cpu)))
+   #:guarantee (add-r/m32-r32-spec #:spec-cpu spec-cpu
+                                   #:impl-cpu impl-cpu
+                                   #:num-insns num-insns)))
 
 (if (sat? solution)
     (begin
-      (displayln "Solution found:")
+      (displayln (format "Solution found for ~a insns:" num-insns))
       (print-forms solution))
     (displayln "No solution."))
-
-;; (define base-cpu (make-x86-64-cpu))
-;; (cpu-gpr-set! base-cpu eax (bv 1 32))
-;; (cpu-gpr-set! base-cpu ecx (bv 2 32))
-;; (define impl-insns (add-r/m32-r32-conc-impl #:cpu base-cpu))
-;; (run-x86-64-impl #:insns impl-insns #:cpu base-cpu)
-;; (define eax-final-val (cpu-gpr-ref base-cpu eax))
-;; (displayln eax-final-val)
-;; (displayln (get-all-flags #:cpu base-cpu))
-
-;; Multiplication
-
-
-
