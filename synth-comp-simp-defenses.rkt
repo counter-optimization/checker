@@ -90,7 +90,9 @@
   [bin-insn-ri (choose
                 ((bin-op-ri) (reg32) (imm32))
                 ((bin-op-r64i32) (reg64) (imm32)))]
-  [un-insn-r ((un-op-r) (reg32))]
+  [un-insn-r (choose
+              ((un-op-r32) (reg32))
+              ((un-op-r64) (reg64)))]
   [un-insn-i ((un-op-i) (imm32))]
   
   [bin-op-rr32 (choose add-r/m32-r32
@@ -129,10 +131,11 @@
                    (sbb-r/m32-imm8 (reg32) (imm8))
                    (sbb-r/m64-imm8 (reg64) (imm8)))]
   
-  [un-op-r (choose mul-r/m32
-                   div-r/m32
-                   bswap-r32
-                   neg-r/m32)]
+  [un-op-r32 (choose mul-r/m32
+                     div-r/m32
+                     bswap-r32
+                     neg-r/m32)]
+  [un-op-r64 (choose neg-r/m64)]
   [un-op-i (choose add-eax-imm32
                    and-eax-imm32
                    and-rax-imm32
@@ -146,8 +149,6 @@
                    test-rax-imm32
                    xor-eax-imm32
                    xor-rax-imm32)]
-  [un-op-special (choose
-                  (neg-r/m64 (reg64)))]
 
   [reg64 (choose rax rcx rdx rbx
                  rsp rbp rsi rdi
