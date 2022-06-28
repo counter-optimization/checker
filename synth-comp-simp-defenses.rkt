@@ -238,5 +238,8 @@
 (if (sat? solution)
     (begin
       (displayln (format "Solution found for ~a insns:" num-insns))
-      (print-forms solution))
-    (displayln "No solution."))
+      (print-forms solution)
+      (exit 0))
+    (begin
+      (displayln "No solution.")
+      (exit 1)))
