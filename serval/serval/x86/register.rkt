@@ -6,16 +6,16 @@
   "base.rkt")
 
 (provide
-  gpr64 gpr64-no-rex (struct-out gpr64) (struct-out gpr64-no-rex)
-  gpr32 gpr32-no-rex (struct-out gpr32) (struct-out gpr32-no-rex)
-  gpr16 gpr16-no-rex (struct-out gpr16) (struct-out gpr16-no-rex)
-  gpr8 gpr8-no-rex (struct-out gpr8) (struct-out gpr8-no-rex)
-  gprs64 symbol->gpr64
+  gprs64 gpr64 gpr64-no-rex (struct-out gpr64) (struct-out gpr64-no-rex)
+  gprs32 gpr32 gpr32-no-rex (struct-out gpr32) (struct-out gpr32-no-rex)
+  gprs16 gpr16 gpr16-no-rex (struct-out gpr16) (struct-out gpr16-no-rex)
+  gprs8 gpr8 gpr8-no-rex (struct-out gpr8) (struct-out gpr8-no-rex)
+  symbol->gpr64
   symbol->gpr32
   symbol->gpr8
   rax rcx rdx rbx rsp rbp rsi rdi r8 r9 r10 r11 r12 r13 r14 r15
-  eax ecx edx ebx esp ebp esi edi
-  al cl
+  eax ecx edx ebx esp ebp esi edi r8d r9d r10d r11d r12d r13d r14d r15d
+  al cl 
   register-indirect register-indirect?)
 
 
@@ -212,6 +212,14 @@
 (define ebp (symbol->gpr32 'ebp))
 (define esi (symbol->gpr32 'esi))
 (define edi (symbol->gpr32 'edi))
+(define r8d (symbol->gpr32 'r8d))
+(define r9d (symbol->gpr32 'r9d))
+(define r10d (symbol->gpr32 'r10d))
+(define r11d (symbol->gpr32 'r11d))
+(define r12d (symbol->gpr32 'r12d))
+(define r13d (symbol->gpr32 'r13d))
+(define r14d (symbol->gpr32 'r14d))
+(define r15d (symbol->gpr32 'r15d))
 
 (define cl (symbol->gpr8 'cl))
 (define al (symbol->gpr8 'al))

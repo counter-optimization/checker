@@ -97,40 +97,7 @@
 (define (in-place-mem-change x)
   (bvnot (bvand x (bv #xF0 8))))
 
-(define in-place-sol (verify (assert (! (bveq (in-place-mem-change x) x)))))
-(displayln in-place-sol)
-
-;(define solution
-;  (synthesize
-;    #:forall (list x y)
-;    #:guarantee (is-correct? mov-8m-8r x y)))
-
-;(if (sat? solution)
-;    (print-forms solution)
-;    (displayln "No solution."))
-
-(exit)
-
 (define result (mov-8m-8r x y))
-(displayln "Checking result...")
-(define sol (verify (assert (&& (! (bveq result x))
-	                        (! (bveq result y))))))
-(displayln (format "Solution: ~a" sol))
-(unless (unsat? sol)
-  (displayln (evaluate (list x y) sol)))
-
-(displayln (bvlshr (bv #xF0F0 16) (bv 4 16)))
-
-;(define solution
-;  (synthesize
-;   #:forall (list x y)
-;   #:guarantee (is-correct? impl x y)))
-;
-;(if (sat? solution)
-;    (print-forms solution)
-;    (displayln "No solution."))
-
-(exit)
 
 
 (require "serval/serval/x86/base.rkt"
