@@ -2,12 +2,14 @@
 
 (require "x86/base.rkt"
          "x86/decode.rkt"
+         "x86/interp/encoding.rkt"
          "x86/interp.rkt"
          "x86/register.rkt")
 
 (provide
   (all-from-out
-    "x86/base.rkt"
-    "x86/decode.rkt"
-    "x86/interp.rkt"
-    "x86/register.rkt"))
+   "x86/base.rkt"
+   "x86/interp/encoding.rkt"
+   "x86/decode.rkt"
+   "x86/interp.rkt"
+   "x86/register.rkt"))

@@ -16,7 +16,7 @@
   symbol->gpr8
   rax rcx rdx rbx rsp rbp rsi rdi r8 r9 r10 r11 r12 r13 r14 r15
   eax ecx edx ebx esp ebp esi edi r8d r9d r10d r11d r12d r13d r14d r15d
-  ax
+  ax cx dx bx sp bp si di r8w r9w r10w r11w r12w r13w r14w r15w
   al cl
   register-indirect register-indirect?)
 
@@ -227,6 +227,22 @@
 (define r15d (symbol->gpr32 'r15d))
 
 (define ax (symbol->gpr16 'ax))
+(define cx (symbol->gpr16 'cx))
+(define dx (symbol->gpr16 'dx))
+(define bx (symbol->gpr16 'bx))
+(define sp (symbol->gpr16 'sp))
+(define bp (symbol->gpr16 'bp))
+(define si (symbol->gpr16 'si))
+(define di (symbol->gpr16 'di))
+(define r8w (symbol->gpr16 'r8w))
+(define r9w (symbol->gpr16 'r9w))
+(define r10w (symbol->gpr16 'r10w))
+(define r11w (symbol->gpr16 'r11w))
+(define r12w (symbol->gpr16 'r12w))
+(define r13w (symbol->gpr16 'r13w))
+(define r14w (symbol->gpr16 'r14w))
+(define r15w (symbol->gpr16 'r15w))
+
 
 (define cl (symbol->gpr8 'cl))
 (define al (symbol->gpr8 'al))

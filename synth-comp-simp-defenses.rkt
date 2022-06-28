@@ -70,32 +70,66 @@
   (define add (add-r/m32-r32 eax ecx))
   (list add))
 
-(define-grammar (x86-64-arith-insn-list)
+(define-grammar (x86-64-arith-insn)
   [insn (choose (bin-insn-rr)
                 (bin-insn-ri)
                 (un-insn-r)
-                (un-insn-i))] ; depth 3
+                (un-insn-i))]
   
-  [bin-insn-rr ((bin-op-rr) (reg32) (reg32))] ; depth 2
+  [bin-insn-rr ((bin-op-rr) (reg32) (reg32))]
   [bin-insn-ri ((bin-op-ri) (reg32) (imm32))]
-  [un-insn-r ((un-op-r) (reg32))] ; depth 2
+  [un-insn-r ((un-op-r) (reg32))]
   [un-insn-i ((un-op-i) (imm32))]
   
-  [bin-op-rr (choose add-r/m32-r32)]
-  [bin-op-ri (choose add-r/m32-imm32)]
+  [bin-op-rr (choose add-r/m32-r32
+                     and-r/m32-r32
+                     adc-r/m32-r32
+                     cmp-r/m32-r32
+                     mov-r/m32-r32
+                     or-r/m32-r32)]
+  [bin-op-ri (choose add-r/m32-imm32
+                     and-r/m32-imm32
+                     cmp-r/m32-imm32
+                     mov-r/m32-imm32
+                     or-r/m32-imm32)]
+  [bin-op-special (choose
+                   (movsxd-r/m32-r64 (reg32) (reg64))
+                   (movzx-r32-r/m16 (reg32) (reg16))
+                   (movzx-r64-r/m16 (reg32) (reg16))
+                   (or-r/m64-imm32 (reg64) (imm32))
+                   (or-r/m64-r64 (reg64) (reg64)))]
   
-  [un-op-r (choose mul-r/m32)]
-  [un-op-i (choose add-eax-imm32)]
-  
+  [un-op-r (choose mul-r/m32
+                   div-r/m32
+                   bswap-r32
+                   neg-r/m32)]
+  [un-op-i (choose add-eax-imm32
+                   and-eax-imm32
+                   and-rax-imm32
+                   cmp-eax-imm32
+                   cmp-rax-imm32
+                   or-eax-imm32
+                   or-rax-imm32)]
+  [un-op-special (choose
+                  (neg-r/m64 (reg64)))]
+
+  [reg64 (choose rax rcx rdx rbx
+                 rsp rbp rsi rdi
+                 r8 r9 r10 r11
+                 r12 r13 r14 r15)]
   [reg32 (choose eax ecx edx ebx
                  esp ebp esi edi
                  r8d r9d r10d r11d
                  r12d r13d r14d r15d)]
+  [reg16 (choose ax cx dx bx
+                 sp bp si di
+                 r8w r9w r10w r11w
+                 r12w r13w r14w r15w)]
   [imm32 (encode-imm (?? (bitvector 32)))])
 
 (define (generate-add-r/m32-r32-insns #:num-insns num-insns)
   (for/list ([i num-insns])
-    (x86-64-arith-insn-list #:depth 4)))
+    (x86-64-arith-insn #:depth 12)))
 
 (displayln (format "Current grammar depth: ~a" (current-grammar-depth)))
 (error-print-width 4096)
