@@ -71,15 +71,21 @@
   (list add))
 
 (define-grammar (x86-64-arith-insn-list)
-  [insn (choose (bin-insn) (un-insn))] ; depth 3
-  [bin-insn ((bin-op) (reg32) (reg32))] ; depth 2
-  [un-insn ((un-op) (reg32))] ; depth 2
+  [insn (choose (bin-insn-rr)
+                (bin-insn-ri)
+                (un-insn-r)
+                (un-insn-i))] ; depth 3
   
-  [bin-op (choose (bin-op-rr) (bin-op-ri))]
+  [bin-insn-rr ((bin-op-rr) (reg32) (reg32))] ; depth 2
+  [bin-insn-ri ((bin-op-ri) (reg32) (imm32))]
+  [un-insn-r ((un-op-r) (reg32))] ; depth 2
+  [un-insn-i ((un-op-i) (imm32))]
+  
   [bin-op-rr (choose add-r/m32-r32)]
   [bin-op-ri (choose add-r/m32-imm32)]
-
-  [un-op (choose mul-r/m32)]
+  
+  [un-op-r (choose mul-r/m32)]
+  [un-op-i (choose add-eax-imm32)]
   
   [reg32 (choose eax ecx edx ebx
                  esp ebp esi edi
