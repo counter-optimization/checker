@@ -66,6 +66,14 @@
 
 ; Synthesis impl and spec for adding eax and ecx
 ; Adding eax <- eax + ecx
+; TODO:
+;   - get the rest of the imm8/reg16/reg8 opcodes
+;   - handle the special cases, i think someone said in slack
+;     that choose and structs do not go well together
+;   - handle rotate.rkt
+;   - handle setcc.rkt
+;     - needs gprs8 exported from registers.rkt
+;   - handle shift.rkt, shld.rkt, shrd.rkt
 (define (add-r/m32-r32-conc-impl)
   (define add (add-r/m32-r32 eax ecx))
   (list add))
@@ -76,28 +84,50 @@
                 (un-insn-r)
                 (un-insn-i))]
   
-  [bin-insn-rr ((bin-op-rr) (reg32) (reg32))]
-  [bin-insn-ri ((bin-op-ri) (reg32) (imm32))]
+  [bin-insn-rr (choose
+                ((bin-op-rr32) (reg32) (reg32))
+                ((bin-op-rr64) (reg64) (reg64)))]
+  [bin-insn-ri (choose
+                ((bin-op-ri) (reg32) (imm32))
+                ((bin-op-r64i32) (reg64) (imm32)))]
   [un-insn-r ((un-op-r) (reg32))]
   [un-insn-i ((un-op-i) (imm32))]
   
-  [bin-op-rr (choose add-r/m32-r32
-                     and-r/m32-r32
-                     adc-r/m32-r32
-                     cmp-r/m32-r32
-                     mov-r/m32-r32
-                     or-r/m32-r32)]
+  [bin-op-rr32 (choose add-r/m32-r32
+                       and-r/m32-r32
+                       adc-r/m32-r32
+                       cmp-r/m32-r32
+                       mov-r/m32-r32
+                       or-r/m32-r32
+                       sbb-r/m32-r32
+                       sub-r/m32-r32
+                       test-r/m32-r32
+                       xchg-r/m32-r32
+                       xor-r/m32-r32)]
+  [bin-op-rr64 (choose or-r/m64-r64
+                       sbb-r/m64-r64
+                       sub-r/m64-r64
+                       test-r/m64-r64
+                       xchg-r/m64-r64
+                       xor-r/m64-r64)]
+  [bin-op-r64i32 (choose or-r/m64-imm32
+                         sub-r/m64-imm32
+                         test-r/m64-imm32
+                         xor-r/m64-imm32)]
   [bin-op-ri (choose add-r/m32-imm32
                      and-r/m32-imm32
                      cmp-r/m32-imm32
                      mov-r/m32-imm32
-                     or-r/m32-imm32)]
+                     or-r/m32-imm32
+                     sub-r/m32-imm32
+                     test-r/m32-imm32
+                     xor-r/m32-imm32)]
   [bin-op-special (choose
                    (movsxd-r/m32-r64 (reg32) (reg64))
                    (movzx-r32-r/m16 (reg32) (reg16))
                    (movzx-r64-r/m16 (reg32) (reg16))
-                   (or-r/m64-imm32 (reg64) (imm32))
-                   (or-r/m64-r64 (reg64) (reg64)))]
+                   (sbb-r/m32-imm8 (reg32) (imm8))
+                   (sbb-r/m64-imm8 (reg64) (imm8)))]
   
   [un-op-r (choose mul-r/m32
                    div-r/m32
@@ -109,7 +139,13 @@
                    cmp-eax-imm32
                    cmp-rax-imm32
                    or-eax-imm32
-                   or-rax-imm32)]
+                   or-rax-imm32
+                   sub-eax-imm32
+                   sub-rax-imm32
+                   test-eax-imm32
+                   test-rax-imm32
+                   xor-eax-imm32
+                   xor-rax-imm32)]
   [un-op-special (choose
                   (neg-r/m64 (reg64)))]
 
@@ -125,7 +161,10 @@
                  sp bp si di
                  r8w r9w r10w r11w
                  r12w r13w r14w r15w)]
-  [imm32 (encode-imm (?? (bitvector 32)))])
+  
+  [imm32 (encode-imm (?? (bitvector 32)))]
+  [imm16 (encode-imm (?? (bitvector 16)))]
+  [imm8 (encode-imm (?? (bitvector 8)))])
 
 (define (generate-add-r/m32-r32-insns #:num-insns num-insns)
   (for/list ([i num-insns])
