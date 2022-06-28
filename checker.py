@@ -656,6 +656,7 @@ def run(filename: str, funcname: str):
         print(f"Found symbol: {func_symbol}")
     else:
         print(f"Couldn't find symbol for funcname: {funcname}")
+        sys.exit(1)
 
     state = proj.factory.blank_state(addr=func_symbol.rebased_addr)
     # state.options.add(angr.options.SYMBOL_FILL_UNCONSTRAINED_MEMORY)
@@ -676,12 +677,8 @@ def run(filename: str, funcname: str):
     #                 when=angr.BP_BEFORE,
     #                 action=SilentStoreChecker.check)
 
-    def debug_print(state: angr.sim_state.SimState):
-        print(f"{state.inspect.expr}")
-
     state.inspect.b('expr',
                     when=angr.BP_BEFORE,
-                    #action=debug_print)
                     action=CompSimpDataCollectionChecker.check)
 
     setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
