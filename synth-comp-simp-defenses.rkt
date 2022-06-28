@@ -1,6 +1,7 @@
 #lang rosette
 
-(require rosette/lib/synthax)
+(require rosette/lib/synthax
+         rosette/lib/value-browser)
 
 (require "serval/serval/x86.rkt"
          (prefix-in core: "serval/serval/lib/core.rkt"))
@@ -12,6 +13,7 @@
   (init-cpu mm))
 
 (define (run-x86-64-impl #:insns insns #:cpu cpu)
+  (displayln (format "Running x86-64-impl: (~a)" insns))
   (for ([i insns])
     (interpret-insn cpu i)))
 
@@ -81,22 +83,34 @@
                  r8d r9d r10d r11d
                  r12d r13d r14d r15d)])
 
-(define (generate-add-r/m32-r32-insns)
-  (x86-64-arith-insn-list #:depth 2))
+(define-grammar (triv-add-synth)
+  [expr (add-r/m32-r32 eax ecx)]
+  [reg (choose eax ecx edx ebx esp ebp esi edi)])
 
-(define (add-r/m32-r32-spec #:spec-insns spec-insns)
-  (define impl-cpu (make-x86-64-cpu))
+(define (generate-add-r/m32-r32-insns)
+  ;; (x86-64-arith-insn-list #:depth 6))
+  (list (triv-add-synth)))
+
+(displayln (format "Current grammar depth: ~a" (current-grammar-depth)))
+
+(define (add-r/m32-r32-spec)
   (define spec-cpu (make-x86-64-cpu))
-  (define impl-insns (generate-add-r/m32-r32-insns))
+  (define spec-insns (add-r/m32-r32-conc-impl))
+  (define impl-cpu (make-x86-64-cpu))
+  (define impl-insns (list (add-r/m32-r32 eax ecx))) ;(generate-add-r/m32-r32-insns))
 
   ; 1. assume starting in the same state
-  (define spec-reg-state-before (get-all-regs #:cpu spec-cpu))
-  (define impl-reg-state-before (get-all-regs #:cpu impl-cpu))
-  (assume-regs-equiv spec-reg-state-before impl-reg-state-before)
+  ;; (define spec-reg-state-before (get-all-regs #:cpu spec-cpu))
+  ;; (define impl-reg-state-before (get-all-regs #:cpu impl-cpu))
+  ;; (assume-regs-equiv spec-reg-state-before impl-reg-state-before)
 
-  (define spec-flag-state-before (get-all-flags #:cpu spec-cpu))
-  (define impl-flag-state-before (get-all-flags #:cpu impl-cpu))
-  (assume-flags-equiv spec-flag-state-before impl-flag-state-before)
+  ;; (define spec-flag-state-before (get-all-flags #:cpu spec-cpu))
+  ;; (define impl-flag-state-before (get-all-flags #:cpu impl-cpu))
+  ;; (assume-flags-equiv spec-flag-state-before impl-flag-state-before)
+
+  (displayln (format "vc-assumes (~a), vc-asserts (~a)"
+                     (vc-assumes (vc))
+                     (vc-asserts (vc))))
   
   ; 2. for all add insns in impl-insns, no operand can be identity
   ; TODO
@@ -106,28 +120,37 @@
   (run-x86-64-impl #:insns impl-insns #:cpu impl-cpu)
   
   ; 4. preserves all registers but the dest reg
-  (define spec-reg-state-after (get-all-flags #:cpu spec-cpu))
-  (define impl-reg-state-after (get-all-flags #:cpu impl-cpu))
-  (assert-regs-equiv spec-reg-state-after impl-reg-state-after)
+  ;; (define spec-reg-state-after (get-all-flags #:cpu spec-cpu))
+  ;; (define impl-reg-state-after (get-all-flags #:cpu impl-cpu))
+  ;; (assert-regs-equiv spec-reg-state-after impl-reg-state-after)
   
-  ; 5. sets all flags to expected values
-  (define spec-flag-state-after (get-all-flags #:cpu spec-cpu))
-  (define impl-flag-state-after (get-all-flags #:cpu impl-cpu))
-  (assert-flags-equiv spec-flag-state-after impl-flag-state-after)
+  ;; ; 5. sets all flags to expected values
+  ;; (define spec-flag-state-after (get-all-flags #:cpu spec-cpu))
+  ;; (define impl-flag-state-after (get-all-flags #:cpu impl-cpu))
+  ;; (assert-flags-equiv spec-flag-state-after impl-flag-state-after)
   
   ; 6. computes the add of eax and ecx into eax
   (define spec-eax (cpu-gpr-ref spec-cpu eax))
   (define impl-eax (cpu-gpr-ref impl-cpu eax))
-  (assert (bveq spec-eax impl-eax)))
+  (displayln (format "spec-eax (~a); impl-eax (~a)" spec-eax impl-eax))
+  (assert (bveq spec-eax impl-eax))
+  (displayln (format "vc-assumes (~a), vc-asserts (~a)"
+                     (vc-assumes (vc))
+                     (vc-asserts (vc)))))
 
-(define solution
-  (synthesize
-   #:forall empty
-   #:guarantee (add-r/m32-r32-spec #:spec-insns (add-r/m32-r32-conc-impl))))
+(clear-vc!)
+(define cex (verify (add-r/m32-r32-spec)))
+(displayln cex)
+(render-value/window cex)
 
-(if (sat? solution)
-    (print-forms solution)
-    (displayln "No solution."))
+;; (define solution
+;;   (synthesize
+;;    #:forall empty
+;;    #:guarantee (add-r/m32-r32-spec #:spec-insns (add-r/m32-r32-conc-impl))))
+
+;; (if (sat? solution)
+;;     (print-forms solution)
+;;     (displayln "No solution."))
 
 ;; (define base-cpu (make-x86-64-cpu))
 ;; (cpu-gpr-set! base-cpu eax (bv 1 32))
