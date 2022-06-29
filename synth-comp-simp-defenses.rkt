@@ -1,7 +1,8 @@
 #lang rosette
 
 (require rosette/lib/synthax
-         rosette/lib/value-browser)
+         rosette/lib/value-browser
+         rosette/lib/angelic)
 
 (require "serval/serval/x86.rkt"
          (prefix-in core: "serval/serval/lib/core.rkt"))
@@ -80,9 +81,9 @@
 
 (define-grammar (x86-64-arith-insn)
   [insn (choose (bin-insn-rr)
-                (bin-insn-ri)
-                (un-insn-r)
-                (un-insn-i))]
+                 (bin-insn-ri)
+                 (un-insn-r)
+                 (un-insn-i))]
   
   [bin-insn-rr (choose
                 ((bin-op-rr32) (reg32) (reg32))
@@ -96,34 +97,34 @@
   [un-insn-i ((un-op-i) (imm32))]
   
   [bin-op-rr32 (choose add-r/m32-r32
-                       and-r/m32-r32
-                       adc-r/m32-r32
-                       cmp-r/m32-r32
-                       mov-r/m32-r32
-                       or-r/m32-r32
-                       sbb-r/m32-r32
-                       sub-r/m32-r32
-                       test-r/m32-r32
-                       xchg-r/m32-r32
-                       xor-r/m32-r32)]
+                        and-r/m32-r32
+                        adc-r/m32-r32
+                        cmp-r/m32-r32
+                        mov-r/m32-r32
+                        or-r/m32-r32
+                        sbb-r/m32-r32
+                        sub-r/m32-r32
+                        test-r/m32-r32
+                        xchg-r/m32-r32
+                        xor-r/m32-r32)]
   [bin-op-rr64 (choose or-r/m64-r64
-                       sbb-r/m64-r64
-                       sub-r/m64-r64
-                       test-r/m64-r64
-                       xchg-r/m64-r64
-                       xor-r/m64-r64)]
+                        sbb-r/m64-r64
+                        sub-r/m64-r64
+                        test-r/m64-r64
+                        xchg-r/m64-r64
+                        xor-r/m64-r64)]
   [bin-op-r64i32 (choose or-r/m64-imm32
-                         sub-r/m64-imm32
-                         test-r/m64-imm32
-                         xor-r/m64-imm32)]
+                          sub-r/m64-imm32
+                          test-r/m64-imm32
+                          xor-r/m64-imm32)]
   [bin-op-ri (choose add-r/m32-imm32
-                     and-r/m32-imm32
-                     cmp-r/m32-imm32
-                     mov-r/m32-imm32
-                     or-r/m32-imm32
-                     sub-r/m32-imm32
-                     test-r/m32-imm32
-                     xor-r/m32-imm32)]
+                      and-r/m32-imm32
+                      cmp-r/m32-imm32
+                      mov-r/m32-imm32
+                      or-r/m32-imm32
+                      sub-r/m32-imm32
+                      test-r/m32-imm32
+                      xor-r/m32-imm32)]
   [bin-op-special (choose
                    (movsxd-r/m32-r64 (reg32) (reg64))
                    (movzx-r32-r/m16 (reg32) (reg16))
@@ -132,36 +133,36 @@
                    (sbb-r/m64-imm8 (reg64) (imm8)))]
   
   [un-op-r32 (choose mul-r/m32
-                     div-r/m32
-                     bswap-r32
-                     neg-r/m32)]
+                      div-r/m32
+                      bswap-r32
+                      neg-r/m32)]
   [un-op-r64 (choose neg-r/m64)]
   [un-op-i (choose add-eax-imm32
-                   and-eax-imm32
-                   and-rax-imm32
-                   cmp-eax-imm32
-                   cmp-rax-imm32
-                   or-eax-imm32
-                   or-rax-imm32
-                   sub-eax-imm32
-                   sub-rax-imm32
-                   test-eax-imm32
-                   test-rax-imm32
-                   xor-eax-imm32
-                   xor-rax-imm32)]
+                    and-eax-imm32
+                    and-rax-imm32
+                    cmp-eax-imm32
+                    cmp-rax-imm32
+                    or-eax-imm32
+                    or-rax-imm32
+                    sub-eax-imm32
+                    sub-rax-imm32
+                    test-eax-imm32
+                    test-rax-imm32
+                    xor-eax-imm32
+                    xor-rax-imm32)]
 
   [reg64 (choose rax rcx rdx rbx
-                 rsp rbp rsi rdi
-                 r8 r9 r10 r11
-                 r12 r13 r14 r15)]
+                  rsp rbp rsi rdi
+                  r8 r9 r10 r11
+                  r12 r13 r14 r15)]
   [reg32 (choose eax ecx edx ebx
-                 esp ebp esi edi
-                 r8d r9d r10d r11d
-                 r12d r13d r14d r15d)]
+                  esp ebp esi edi
+                  r8d r9d r10d r11d
+                  r12d r13d r14d r15d)]
   [reg16 (choose ax cx dx bx
-                 sp bp si di
-                 r8w r9w r10w r11w
-                 r12w r13w r14w r15w)]
+                  sp bp si di
+                  r8w r9w r10w r11w
+                  r12w r13w r14w r15w)]
   
   [imm32 (encode-imm (?? (bitvector 32)))]
   [imm16 (encode-imm (?? (bitvector 16)))]
@@ -175,13 +176,34 @@
 (error-print-width 4096)
 (displayln (format "Current error-print-width: ~a" (error-print-width)))
 
+(define (comp-simp-asserter #:insn insn #:cpu cpu)
+  (match insn
+    [(add-r/m32-r32 op1 op2)
+     (begin
+       (let ([op1val (cpu-gpr-ref cpu op1)]
+             [op2val (cpu-gpr-ref cpu op2)])
+         (printf "\t\t op1: ~a\n" op1)
+         (printf "\t\t\t\t op1 reg val: ~a\n" op1val)
+         (printf "\t\t op2: ~a\n" op2)
+         (printf "\t\t\t\t op2 reg val: ~a\n" op2val)))]))
+
+(define (apply-insn-specific-asserts #:insns insns
+                                     #:asserter asserter
+                                     #:cpu cpu)
+  (displayln "Instructions are:")
+  (for ([i insns])
+    (printf "----------\n")
+    (displayln i)
+    (for/all ([val i #:exhaustive])
+      (asserter #:insn val #:cpu cpu))
+    (printf "----------\n")))
+
 (define (add-r/m32-r32-spec #:spec-cpu spec-cpu
                             #:impl-cpu impl-cpu
                             #:num-insns num-insns)
-  ;; (define spec-cpu (make-x86-64-cpu))
   (define spec-insns (add-r/m32-r32-conc-impl))
-  
-  ;; (define impl-cpu (make-x86-64-cpu))
+
+  ; these are the synthesis candidate instructions
   (define impl-insns (generate-add-r/m32-r32-insns #:num-insns num-insns))
 
   ; 1. assume starting in the same state
@@ -197,8 +219,10 @@
   (define impl-flag-state-before (get-all-flags #:cpu impl-cpu))
   (assume-flags-equiv spec-flag-state-before impl-flag-state-before)
 
-  ; 2. for all add insns in impl-insns, no operand can be identity
-  ; TODO
+  ; 2. for all add insns in impl-insns, no comp simp can take place.
+  (apply-insn-specific-asserts #:insns impl-insns
+                               #:asserter comp-simp-asserter
+                               #:cpu impl-cpu)
 
   ; 3. run the impl and the spec
   (run-x86-64-impl #:insns spec-insns #:cpu spec-cpu)
@@ -237,9 +261,9 @@
 
 (if (sat? solution)
     (begin
-      (displayln (format "Solution found for ~a insns:" num-insns))
+      (printf "Solution found for ~a insns.\n" num-insns)
       (print-forms solution)
       (exit 0))
     (begin
-      (displayln "No solution.")
+      (printf "No solution.\n")
       (exit 1)))
