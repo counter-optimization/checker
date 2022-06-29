@@ -177,15 +177,17 @@
 (displayln (format "Current error-print-width: ~a" (error-print-width)))
 
 (define (comp-simp-asserter #:insn insn #:cpu cpu)
+  (define add-ident (λ (bw) (bv 0 bw)))
+  (define mul-ident (λ (bw) (bv 1 bw)))
+  (define mul-zero (λ (bw) (bv 0 bw)))
   (match insn
     [(add-r/m32-r32 op1 op2)
      (begin
-       (let ([op1val (cpu-gpr-ref cpu op1)]
-             [op2val (cpu-gpr-ref cpu op2)])
-         (printf "\t\t op1: ~a\n" op1)
-         (printf "\t\t\t\t op1 reg val: ~a\n" op1val)
-         (printf "\t\t op2: ~a\n" op2)
-         (printf "\t\t\t\t op2 reg val: ~a\n" op2val)))]))
+       (define op1val (cpu-gpr-ref cpu op1))
+       (define op2val (cpu-gpr-ref cpu op2))
+       (define add-ident-32 (add-ident 32))
+       (assert (&& (! (bveq op1val add-ident-32))
+                   (! (bveq op2val add-ident-32)))))]))
 
 (define (apply-insn-specific-asserts #:insns insns
                                      #:asserter asserter
@@ -220,6 +222,7 @@
   (assume-flags-equiv spec-flag-state-before impl-flag-state-before)
 
   ; 2. for all add insns in impl-insns, no comp simp can take place.
+  ; TODO
   (apply-insn-specific-asserts #:insns impl-insns
                                #:asserter comp-simp-asserter
                                #:cpu impl-cpu)
