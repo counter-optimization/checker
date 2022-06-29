@@ -1,7 +1,7 @@
 #lang rosette
 
 (require rosette/lib/synthax
-         rosette/lib/value-browser
+         ;rosette/lib/value-browser
          rosette/lib/angelic)
 
 (require "serval/serval/x86.rkt"
@@ -176,18 +176,50 @@
 (error-print-width 4096)
 (displayln (format "Current error-print-width: ~a" (error-print-width)))
 
+(define zero-for-bw (λ (bw) (bv 0 bw)))
+(define one-for-bw (λ (bw) (bv 1 bw)))
+
+(define addident-for-bw zero-for-bw)
+(define mulident-for-bw one-for-bw)
+(define mulzero-for-bw zero-for-bw)
+
+; gets bitwidth of operand as bitvector
+(define (bitwidth-getter operand)
+  (match operand
+    [(struct gpr32 _) 32]
+    [(struct gpr64 _) 64]
+    [(struct gpr16 _) 16]
+    [(struct gpr8 _) 8]
+    ; probably an immediate
+    [(? list?) (length operand)]))
+
+; returns the bitvector value behind the operand
+(define (operand-decoder operand cpu)
+  (match operand
+    [(or (struct gpr32 _)
+         (struct gpr64 _)
+         (struct gpr16 _)
+         (struct gpr8 _)) (cpu-gpr-ref cpu operand)]
+    ; probably an immediate
+    [(? list?) (decode-imm operand)]))
+
+(define (assert-operand-is-not-special operand special-for-bw cpu)
+  (define operand-bw (bitwidth-getter operand))
+  (define operand-val (operand-decoder operand cpu))
+  (define special (special-for-bw operand-bw))
+  (assert (! (bveq special operand-val))))
+
 (define (comp-simp-asserter #:insn insn #:cpu cpu)
-  (define add-ident (λ (bw) (bv 0 bw)))
-  (define mul-ident (λ (bw) (bv 1 bw)))
-  (define mul-zero (λ (bw) (bv 0 bw)))
   (match insn
     [(add-r/m32-r32 op1 op2)
      (begin
+;       (assert-operand-is-not-special op1 addident-for-bw cpu)
+;       (assert-operand-is-not-special op2 addident-for-bw cpu)
        (define op1val (cpu-gpr-ref cpu op1))
        (define op2val (cpu-gpr-ref cpu op2))
-       (define add-ident-32 (add-ident 32))
+       (define add-ident-32 (bv 0 32))
        (assert (&& (! (bveq op1val add-ident-32))
-                   (! (bveq op2val add-ident-32)))))]))
+       (! (bveq op2val add-ident-32)))))]))
 
 (define (apply-insn-specific-asserts #:insns insns
                                      #:asserter asserter
