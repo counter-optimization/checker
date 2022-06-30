@@ -210,17 +210,23 @@
   (assert (! (bveq special operand-val))))
 
 (define (comp-simp-asserter #:insn insn #:cpu cpu)
+  (define addident-checker
+    (λ (op) (assert-operand-is-not-special op addident-for-bw cpu)))
+  (define mulident-checker
+    (λ (op) (assert-operand-is-not-special op mulident-for-bw cpu)))
+  (define mulzero-checker
+    (λ (op) (assert-operand-is-not-special op mulzero-for-bw cpu)))
+  
   (match insn
-    [(add-r/m32-r32 op1 op2)
+    [(or (add-r/m32-r32 op1 op2)
+         (add-r/m32-imm32 op1 op2))
      (begin
-;       (assert-operand-is-not-special op1 addident-for-bw cpu)
-;       (assert-operand-is-not-special op2 addident-for-bw cpu)
-       (define op1val (cpu-gpr-ref cpu op1))
-       (define op2val (cpu-gpr-ref cpu op2))
-       (define add-ident-32 (bv 0 32))
-       (assert (&& (! (bveq op1val add-ident-32))
-       (! (bveq op2val add-ident-32)))))]))
-
+       (addident-checker op1)
+       (addident-checker op2))]
+    [(or (add-eax-imm32 op1))
+     (begin
+       (addident-checker op1))]))
+  
 (define (apply-insn-specific-asserts #:insns insns
                                      #:asserter asserter
                                      #:cpu cpu)
@@ -252,6 +258,9 @@
   (define spec-flag-state-before (get-all-flags #:cpu spec-cpu))
   (define impl-flag-state-before (get-all-flags #:cpu impl-cpu))
   (assume-flags-equiv spec-flag-state-before impl-flag-state-before)
+
+  ;; (assume (&& (! (bveq (cpu-gpr-ref impl-cpu eax) (bv 0 32)))
+  ;;             (! (bveq (cpu-gpr-ref impl-cpu ecx) (bv 0 32)))))
 
   ; 2. for all add insns in impl-insns, no comp simp can take place.
   ; TODO
