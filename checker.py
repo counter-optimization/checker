@@ -13,7 +13,7 @@ import pyvex
 import claripy
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.DEBUG)
 
 class Checker(ABC):
     vulnerable_states: List[angr.sim_state.SimState] | 'NotImplemented'  = NotImplemented
@@ -150,7 +150,6 @@ class CompSimpDataRecord():
         return is_sat
 
     def couldBePowerOfTwoConcrete(self, concval: pyvex.expr.Const) -> bool:
-        logger.info(f"concval is {concval}, class is: {concval.__class__}")
         value = concval.con.value
         cond = value != 0
         cond = cond and ((value & (value - 1)) == 0)
@@ -158,39 +157,43 @@ class CompSimpDataRecord():
 
     def couldBeRightIdentity(self, expr) -> bool:
         solver = claripy.Solver()
-        solver.add(expr == self.rightIdentity)
+        solver.add(expr == self.rightIdentity(expr.length))
         is_sat = solver.satisfiable()
         return is_sat
 
     def couldBeRightIdentityConcrete(self, expr: pyvex.expr.Const) -> bool:
-        return (expr.con.value == self.rightIdentity).is_true()
+        # just default to largest bitwidth
+        return (expr.con.value == self.rightIdentity(64)).is_true()
 
     def couldBeLeftIdentity(self, expr) -> bool:
         solver = claripy.Solver()
-        solver.add(expr == self.leftIdentity)
+        solver.add(expr == self.leftIdentity(expr.length))
         is_sat = solver.satisfiable()
         return is_sat
 
     def couldBeLeftIdentityConcrete(self, expr: pyvex.expr.Const) -> bool:
-        return (expr.con.value == self.leftIdentity).is_true()
+        # just default to largest bitwidth
+        return (expr.con.value == self.leftIdentity(64)).is_true()
 
     def couldBeLeftZero(self, expr) -> bool:
         solver = claripy.Solver()
-        solver.add(expr == self.leftZero)
+        solver.add(expr == self.leftZero(expr.length))
         is_sat = solver.satisfiable()
         return is_sat
 
     def couldBeRightZero(self, expr) -> bool:
         solver = claripy.Solver()
-        solver.add(expr == self.rightZero)
+        solver.add(expr == self.rightZero(expr.length))
         is_sat = solver.satisfiable()
         return is_sat
 
     def couldBeRightZeroConcrete(self, expr: pyvex.expr.Const) -> bool:
-        return (expr.con.value == self.rightZero).is_true()
+        # just default to largest bitwidth
+        return (expr.con.value == self.rightZero(64)).is_true()
 
     def couldBeLeftZeroConcrete(self, expr: pyvex.expr.Const) -> bool:
-        return (expr.con.value == self.leftZero).is_true()
+        # just default to largest bitwidth
+        return (expr.con.value == self.leftZero(64)).is_true()
 
     def checkForSpecialValues(self, expr, isLeft: bool):
         logger.debug(f"Checking {expr} for special values")
@@ -392,8 +395,21 @@ class AddDataRecord(CompSimpDataRecord):
         self.hasLeftIdentity = True
         self.hasRightZero = False
         self.hasLeftZero = False
-        self.rightIdentity = claripy.BVV(0, self.bitwidth)
-        self.leftIdentity = claripy.BVV(0, self.bitwidth)
+        self.rightIdentity = lambda bw: claripy.BVV(0, bw)
+        self.leftIdentity = lambda bw: claripy.BVV(0, bw)
+        self.powerOfTwoSignificant = False
+        if type(self.expr) == pyvex.expr.Binop:
+            self.handleBinOp()
+
+class ShiftDataRecord(CompSimpDataRecord):
+    def __init__(self, expr, state):
+        super().__init__(expr, state)
+        self.hasRightIdentity = True
+        self.hasLeftIdentity = False
+        self.hasRightZero = False
+        self.hasLeftZero = True
+        self.rightIdentity = lambda bw: claripy.BVV(0, bw)
+        self.leftZero = lambda bw: claripy.BVV(0, bw)
         self.powerOfTwoSignificant = False
         if type(self.expr) == pyvex.expr.Binop:
             self.handleBinOp()
@@ -405,7 +421,7 @@ class SubDataRecord(CompSimpDataRecord):
         self.hasLeftIdentity = False
         self.hasRightZero = False
         self.hasLeftZero = False
-        self.rightIdentity = claripy.BVV(0, self.bitwidth)
+        self.rightIdentity = lambda bw: claripy.BVV(0, bw)
         self.powerOfTwoSignificant = False
         if type(self.expr) == pyvex.expr.Binop:
             self.handleBinOp()
@@ -417,9 +433,9 @@ class AndDataRecord(CompSimpDataRecord):
         self.hasLeftIdentity = True
         self.hasRightZero = True
         self.hasLeftZero = True
-        self.rightIdentity = ~claripy.BVV(0, self.bitwidth)
+        self.rightIdentity = lambda bw: ~claripy.BVV(0, bw)
         self.leftIdentity = self.rightIdentity
-        self.rightZero = claripy.BVV(0, self.bitwidth)
+        self.rightZero = lambda bw: claripy.BVV(0, bw)
         self.leftZero = self.rightZero
         self.powerOfTwoSignificant = False
         if type(self.expr) == pyvex.expr.Binop:
@@ -432,7 +448,7 @@ class OrDataRecord(CompSimpDataRecord):
         self.hasLeftIdentity = True
         self.hasRightZero = False
         self.hasLeftZero = False
-        self.rightIdentity = claripy.BVV(0, self.bitwidth)
+        self.rightIdentity = lambda bw: claripy.BVV(0, bw)
         self.leftIdentity = self.rightIdentity
         self.powerOfTwoSignificant = False
         if type(self.expr) == pyvex.expr.Binop:
@@ -445,7 +461,7 @@ class XorDataRecord(CompSimpDataRecord):
         self.hasLeftIdentity = True
         self.hasRightZero = False
         self.hasLeftZero = False
-        self.rightIdentity = claripy.BVV(0, self.bitwidth)
+        self.rightIdentity = lambda bw: claripy.BVV(0, bw)
         self.leftIdentity = self.rightIdentity
         self.powerOfTwoSignificant = False
         if type(self.expr) == pyvex.expr.Binop:
@@ -458,10 +474,10 @@ class MulDataRecord(CompSimpDataRecord):
         self.hasLeftIdentity = True
         self.hasRightZero = True
         self.hasLeftZero = True
-        self.rightIdentity = claripy.BVV(1, self.bitwidth)
-        self.leftIdentity = claripy.BVV(1, self.bitwidth)
-        self.rightZero = claripy.BVV(0, self.bitwidth)
-        self.leftZero = claripy.BVV(0, self.bitwidth)
+        self.rightIdentity = lambda bw: claripy.BVV(1, bw)
+        self.leftIdentity = lambda bw: claripy.BVV(1, bw)
+        self.rightZero = lambda bw: claripy.BVV(0, bw)
+        self.leftZero = lambda bw: claripy.BVV(0, bw)
         self.powerOfTwoSignificant = True
         if type(self.expr) == pyvex.expr.Binop:
             self.handleBinOp()
@@ -473,8 +489,8 @@ class DivDataRecord(CompSimpDataRecord):
         self.hasLeftIdentity = False
         self.hasRightZero = False
         self.hasLeftZero = True
-        self.rightIdentity = claripy.BVV(1, self.bitwidth)
-        self.leftZero = claripy.BVV(0, self.bitwidth)
+        self.rightIdentity = lambda bw: claripy.BVV(1, bw)
+        self.leftZero = lambda bw: claripy.BVV(0, bw)
         self.powerOfTwoSignificant = True
         if type(self.expr) == pyvex.expr.Binop:
             self.handleBinOp()
@@ -491,10 +507,6 @@ class CompSimpDataCollectionChecker(Checker):
     expr Shl64(t349,0x01) op: Iop_Shl64. tag: Iex_Binop
     expr And64(t440,t157) (<class 'pyvex.expr.Binop'>) is binop
     expr And64(t440,t157) op: Iop_And64. tag: Iex_Binop
-
-    Ops left to handle:
-    'Mod',
-    'Shl', 'Shr', 'Sar'
     """
     vulnerable_states = []
     effects = []
@@ -504,7 +516,9 @@ class CompSimpDataCollectionChecker(Checker):
     # maps substring of pyvex binop expr names to their checking class
     checkers = {'add': AddDataRecord,
                 'mul': MulDataRecord,
-                #'div': DivDataRecord,
+                'div': DivDataRecord,
+                'sh': ShiftDataRecord,
+                'sa': ShiftDataRecord,
                 'sub': SubDataRecord,
                 'and': AndDataRecord,
                 'or': OrDataRecord,
@@ -523,7 +537,7 @@ class CompSimpDataCollectionChecker(Checker):
 
         try:
             for op_kw in checkers.keys():
-                if  op_kw in expr.op.lower():
+                if op_kw in expr.op.lower():
                     logger.debug(f"{expr} is going to be recorded")
                     checker = checkers[op_kw]
                     logger.debug(f"Using {checker} to check {expr}")

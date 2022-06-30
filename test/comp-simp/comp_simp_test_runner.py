@@ -91,16 +91,24 @@ class CompSimpTestCaseRunner(unittest.TestCase):
         # so this doesn't fail open if no row is found
         num_rows_selected = 0
 
+        selected_rows = []
+
         with csv_file.open() as f:
             reader = csv.reader(f)
             for row in reader:
                 if testcase.is_row_of_interest(row):
+                    selected_rows.append(row)
                     num_rows_selected += 1
                     for col_name, exp_value in testcase.expected_values.items():
                         actual = test_common.get_csv_value_from_col_name(col_name, row)
                         self.assertIsNotNone(actual)
                         self.assertEqual(exp_value, actual,
                                          msg=f"Non matching value for col: {col_name}")
+
+        if testcase.funcname == 'xorident':
+            with open('xorident.log', mode='w') as f:
+                writer = csv.writer(f)
+                writer.writerows(selected_rows)
 
         # so this doesn't fail open if no row is found
         self.assertEqual(num_rows_selected, 1,
@@ -124,6 +132,36 @@ class CompSimpTestCaseRunner(unittest.TestCase):
                                                            exp_value=self.int_to_bv_str(34))
         ornospecialvalues_test_case.run_checker()
         self.check_csv_for_expected_values(testcase=ornospecialvalues_test_case)
+
+    def test_shlident(self):
+        shlident_test_case = CompSimpTestCase()
+        shlident_test_case.filename = test_common.COMP_SIMP_TEST_DIR / "shlident.o"
+        shlident_test_case.funcname = "shlident"
+        shlident_test_case.addr_of_interest = "0x400010"
+        shlident_test_case.expr_of_interest = "Shl64(t8,t43)"
+        shlident_test_case.set_expected_csv_value(col_name="numIdentityOperands",
+                                                  exp_value="1")
+        shlident_test_case.set_expected_csv_value(col_name="firstOperandIdentity",
+                                                  exp_value="False")
+        shlident_test_case.set_expected_csv_value(col_name="secondOperandIdentity",
+                                                  exp_value="True")
+        shlident_test_case.run_checker()
+        self.check_csv_for_expected_values(testcase=shlident_test_case)
+
+    def test_shrident(self):
+        shrident_test_case = CompSimpTestCase()
+        shrident_test_case.filename = test_common.COMP_SIMP_TEST_DIR / "shrident.o"
+        shrident_test_case.funcname = "shrident"
+        shrident_test_case.addr_of_interest = "0x400010"
+        shrident_test_case.expr_of_interest = "Sar64(t8,t11)"
+        shrident_test_case.set_expected_csv_value(col_name="numIdentityOperands",
+                                                  exp_value="1")
+        shrident_test_case.set_expected_csv_value(col_name="firstOperandIdentity",
+                                                  exp_value="False")
+        shrident_test_case.set_expected_csv_value(col_name="secondOperandIdentity",
+                                                  exp_value="True")
+        shrident_test_case.run_checker()
+        self.check_csv_for_expected_values(testcase=shrident_test_case)
 
     def test_orident(self):
         orident_test_case = CompSimpTestCase()
@@ -278,6 +316,36 @@ class CompSimpTestCaseRunner(unittest.TestCase):
         mulident_test_case.run_checker()
         self.check_csv_for_expected_values(testcase=mulident_test_case)
 
+    def test_divident(self):
+        divident_test_case = CompSimpTestCase()
+        divident_test_case.addr_of_interest = "0x40000e"
+        divident_test_case.expr_of_interest = "DivModS64to32(t8,t7)"
+        divident_test_case.filename = test_common.COMP_SIMP_TEST_DIR / "divident.o"
+        divident_test_case.funcname = "divident"
+        divident_test_case.set_expected_csv_value(col_name="numIdentityOperands",
+                                                  exp_value="1")
+        divident_test_case.set_expected_csv_value(col_name="firstOperandIdentity",
+                                                  exp_value="False")
+        divident_test_case.set_expected_csv_value(col_name="secondOperandIdentity",
+                                                  exp_value="True")
+        divident_test_case.run_checker()
+        self.check_csv_for_expected_values(testcase=divident_test_case)
+
+    def test_udivident(self):
+        udivident_test_case = CompSimpTestCase()
+        udivident_test_case.addr_of_interest = "0x40000f"
+        udivident_test_case.expr_of_interest = "DivModU64to32(t11,t10)"
+        udivident_test_case.filename = test_common.COMP_SIMP_TEST_DIR / "udivident.o"
+        udivident_test_case.funcname = "udivident"
+        udivident_test_case.set_expected_csv_value(col_name="numIdentityOperands",
+                                                  exp_value="1")
+        udivident_test_case.set_expected_csv_value(col_name="firstOperandIdentity",
+                                                  exp_value="False")
+        udivident_test_case.set_expected_csv_value(col_name="secondOperandIdentity",
+                                                  exp_value="True")
+        udivident_test_case.run_checker()
+        self.check_csv_for_expected_values(testcase=udivident_test_case)
+
     def test_addconstant(self):
         addconstant_test_case = CompSimpTestCase()
         addconstant_test_case.addr_of_interest = "0x40000a"
@@ -308,6 +376,21 @@ class CompSimpTestCaseRunner(unittest.TestCase):
         mulpowtwo_test_case.run_checker()
         self.check_csv_for_expected_values(testcase=mulpowtwo_test_case)
 
+    def test_divpowtwo(self):
+        divpowtwo_test_case = CompSimpTestCase()
+        divpowtwo_test_case.addr_of_interest = "0x40000e"
+        divpowtwo_test_case.expr_of_interest = "DivModS64to32(t8,t7)"
+        divpowtwo_test_case.filename = test_common.COMP_SIMP_TEST_DIR / "divpowtwo.o"
+        divpowtwo_test_case.funcname = "divpowtwo"
+        divpowtwo_test_case.set_expected_csv_value(col_name="numPowerOfTwoOperands",
+                                                     exp_value="2")
+        divpowtwo_test_case.set_expected_csv_value(col_name="firstOperandPowerOfTwo",
+                                                     exp_value="True")
+        divpowtwo_test_case.set_expected_csv_value(col_name="secondOperandPowerOfTwo",
+                                                     exp_value="True")
+        divpowtwo_test_case.run_checker()
+        self.check_csv_for_expected_values(testcase=divpowtwo_test_case)
+
     def test_mulzero(self):
         mulzero_test_case = CompSimpTestCase()
         mulzero_test_case.addr_of_interest = "0x40000d"
@@ -322,6 +405,51 @@ class CompSimpTestCaseRunner(unittest.TestCase):
                                                      exp_value="True")
         mulzero_test_case.run_checker()
         self.check_csv_for_expected_values(testcase=mulzero_test_case)
+
+    def test_divzero(self):
+        divzero_test_case = CompSimpTestCase()
+        divzero_test_case.addr_of_interest = "0x40000e"
+        divzero_test_case.expr_of_interest = "DivModS64to32(t8,t7)"
+        divzero_test_case.filename = test_common.COMP_SIMP_TEST_DIR / "divzero.o"
+        divzero_test_case.funcname = "divzero"
+        divzero_test_case.set_expected_csv_value(col_name="numZeroElementOperands",
+                                                     exp_value="1")
+        divzero_test_case.set_expected_csv_value(col_name="firstOperandZeroElem",
+                                                     exp_value="True")
+        divzero_test_case.set_expected_csv_value(col_name="secondOperandZeroElem",
+                                                     exp_value="False")
+        divzero_test_case.run_checker()
+        self.check_csv_for_expected_values(testcase=divzero_test_case)
+
+    def test_shlzero(self):
+        shlzero_test_case = CompSimpTestCase()
+        shlzero_test_case.addr_of_interest = "0x400010"
+        shlzero_test_case.expr_of_interest = "Shl64(t8,t11)"
+        shlzero_test_case.filename = test_common.COMP_SIMP_TEST_DIR / "shlzero.o"
+        shlzero_test_case.funcname = "shlzero"
+        shlzero_test_case.set_expected_csv_value(col_name="numZeroElementOperands",
+                                                     exp_value="1")
+        shlzero_test_case.set_expected_csv_value(col_name="firstOperandZeroElem",
+                                                     exp_value="True")
+        shlzero_test_case.set_expected_csv_value(col_name="secondOperandZeroElem",
+                                                     exp_value="False")
+        shlzero_test_case.run_checker()
+        self.check_csv_for_expected_values(testcase=shlzero_test_case)
+
+    def test_shrzero(self):
+        shrzero_test_case = CompSimpTestCase()
+        shrzero_test_case.addr_of_interest = "0x400010"
+        shrzero_test_case.expr_of_interest = "Shr64(t8,t11)"
+        shrzero_test_case.filename = test_common.COMP_SIMP_TEST_DIR / "shrzero.o"
+        shrzero_test_case.funcname = "shrzero"
+        shrzero_test_case.set_expected_csv_value(col_name="numZeroElementOperands",
+                                                     exp_value="1")
+        shrzero_test_case.set_expected_csv_value(col_name="firstOperandZeroElem",
+                                                     exp_value="True")
+        shrzero_test_case.set_expected_csv_value(col_name="secondOperandZeroElem",
+                                                     exp_value="False")
+        shrzero_test_case.run_checker()
+        self.check_csv_for_expected_values(testcase=shrzero_test_case)
 
     def test_mulconcretezero(self):
         mulconcretezero_test_case = CompSimpTestCase()
