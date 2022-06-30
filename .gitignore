@@ -14,3 +14,9 @@ Thumbs.db
 **/compiled
 **/compiled/**
 *~
+*.o
+*.csv
+*.insns
+log
+#*
+*__pycache__*
