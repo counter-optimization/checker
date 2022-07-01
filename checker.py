@@ -13,7 +13,7 @@ import pyvex
 import claripy
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.WARNING)
 
 class Checker(ABC):
     vulnerable_states: List[angr.sim_state.SimState] | 'NotImplemented'  = NotImplemented
@@ -681,6 +681,77 @@ def ed25519_point_addition_predicate(point, state):
     mul_inv_t(y)
     mul_inv_t(z)
     mul_inv_t(t)
+
+def ed25519_priv_key_precondition(priv_key_arr, state):
+    first_byte = priv_key_arr[0]
+    # mysecret[0] &= 248;
+    state.solver.add(
+        first_byte[2:0] == claripy.BVV(0, 3)
+    )
+    
+    last_byte = priv_key_arr[31]
+    
+    # mysecret[31] &= 127;
+    state.solver.add(
+        last_byte[7] == claripy.BVV(0, 1)
+    )
+
+    # mysecret[31] |= 64;
+    state.solver.add(
+        last_byte[6] == claripy.BVV(1, 1)
+    )
+
+def setup_symbolic_state_for_ed25519_pub_key_gen(proj, init_state, fn_name):
+    # in case i forget to comment this out for later
+    if "hacl" not in fn_name.lower():
+        return
+    else:
+        logger.warn("Setting up symbolic state for ed25519 comp simp checking")
+
+    # 1. generate priv key
+    priv_key = [claripy.BVS(f"priv{n}", 8) for n in range (1, 33)]
+    pub_key_storage = [claripy.BVS(f"pub{n}", 8) for n in range (1, 33)]
+
+    # 2. add preconditions to priv key
+    logger.debug("Adding preconditions...")
+    ed25519_priv_key_precondition(priv_key, init_state)
+    logger.debug("Done adding preconditions.")
+
+    # 3. use some current stack memory and ensure it is aligned
+    # i think on X86_64, rsp + 8 has to be 16 byte aligned.
+    # priv key is 32 bytes
+    size_of_priv_key = claripy.BVV(32 * 8, 64)
+    
+    init_state.regs.rsp = init_state.regs.rsp - size_of_priv_key
+    priv_key_addr = init_state.regs.rsp
+    
+    init_state.regs.rsp = init_state.regs.rsp - size_of_priv_key
+    pub_key_addr = init_state.regs.rsp
+
+    init_state.regs.rsp = init_state.regs.rsp - claripy.BVV(8, 64)
+    logger.debug(f"priv_key_addr: {priv_key_addr}")
+    logger.debug(f"pub_key_addr: {pub_key_addr}")
+    logger.debug(f"rsp is: {init_state.regs.rsp}")
+
+    # 4. put the keys in their addresses
+    def store_point_at_addr(key, addr):
+        sizeof_uint8_t = claripy.BVV(1, 64)
+        cur_addr = addr
+        for byte in key:
+            logger.debug(f"Storing limb {byte} to addr {cur_addr}")
+            init_state.mem[cur_addr].uint8_t = byte
+            cur_addr += sizeof_uint8_t
+
+    store_point_at_addr(priv_key, priv_key_addr)
+    store_point_at_addr(pub_key_storage, pub_key_addr)
+
+    # 5. set rdi, rsi, rdx for first three arguments
+    # rdi is u8* pub
+    # rsi is u8* priv
+    init_state.regs.rdi = pub_key_addr
+    init_state.regs.rsi = priv_key_addr
+    logger.debug(f"for init_state ({init_state}), rdi holds {init_state.regs.rdi}")
+    logger.debug(f"for init_state ({init_state}), rsi holds {init_state.regs.rsi}")
     
 def setup_symbolic_state_for_ed25519_point_addition(proj, init_state, fn_name):
     """
@@ -706,10 +777,10 @@ def setup_symbolic_state_for_ed25519_point_addition(proj, init_state, fn_name):
     out = [claripy.BVS(f"out{n}", 64) for n in range(1, 21)]
 
     # 2. add preconditions to input points
-    logger.debug("Adding preconditions...")
+    logger.warning("Adding point addition preconditions...")
     ed25519_point_addition_predicate(point1, init_state)
     ed25519_point_addition_predicate(point2, init_state)
-    logger.debug("Done adding preconditions.")
+    logger.warning("Done adding point addition preconditions.")
 
     # 3. use some current stack memory and ensure it is aligned
     # i think on X86_64, rsp + 8 has to be 16 byte aligned.
@@ -795,6 +866,7 @@ def run(filename: str, funcname: str):
                     action=CompSimpDataCollectionChecker.check)
 
     setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
+    # setup_symbolic_state_for_ed25519_pub_key_gen(proj, state, funcname)
 
     simgr = proj.factory.simgr(state)
     simgr.run(opt_level=-1)
