@@ -59,6 +59,7 @@
 (displayln (format "all-regs-but-raxes: ~a" all-regs-but-raxes))
 
 (define all-raxes (list rax eax ax al))
+(define all-rdxes (list rdx edx dx dl))
 
 (define (get-all-regs-but-raxes #:cpu cpu)
   (for/list ([reg all-regs-but-raxes])
@@ -67,6 +68,10 @@
 (define (get-all-regs-raxes-only #:cpu cpu)
   (for/list ([reg all-raxes])
     (cpu-gpr-ref cpu reg)))
+
+(define (get-all-regs-rdxes-only #:cpu cpu)
+  (for/list ([reg all-rdxes])
+    (cpu-gpr-ref (cpu reg))))
 
 (define assert-regs-equiv assert-bvs-equiv)
 (define assume-regs-equiv assume-bvs-equiv)
@@ -80,9 +85,9 @@
 (define-grammar (x86-64-arith-insn)
   [insn (choose* (bin-insn-rr)
                  (bin-insn-ri)
-                 (bin-op-special)
-                 (shifts)
-                 (rotates)
+                 ;; (bin-op-special)
+                 ;; (shifts)
+                 ;; (rotates)
                  (un-insn-r)
                  (un-insn-i))]
   
@@ -306,6 +311,10 @@
   (define impl-reg-raxes-state-before (get-all-regs-raxes-only #:cpu impl-cpu))
   (assume-regs-equiv spec-reg-raxes-state-before impl-reg-raxes-state-before)
 
+  (define spec-reg-rdxes-state-before (get-all-regs-rdxes-only #:cpu spec-cpu))
+  (define impl-reg-rdxes-state-before (get-all-regs-rdxes-only #:cpu impl-cpu))
+  (assume-regs-equiv spec-reg-rdxes-state-before impl-reg-rdxes-state-before)
+
   (define spec-flag-state-before (get-all-flags #:cpu spec-cpu))
   (define impl-flag-state-before (get-all-flags #:cpu impl-cpu))
   (assume-flags-equiv spec-flag-state-before impl-flag-state-before)
@@ -314,10 +323,9 @@
   ;;             (! (bveq (cpu-gpr-ref impl-cpu ecx) (bv 0 32)))))
 
   ; 2. for all add insns in impl-insns, no comp simp can take place.
-  ; TODO
-  (apply-insn-specific-asserts #:insns impl-insns
-                               #:asserter comp-simp-asserter
-                               #:cpu impl-cpu)
+  ;; (apply-insn-specific-asserts #:insns impl-insns
+  ;;                              #:asserter comp-simp-asserter
+  ;;                              #:cpu impl-cpu)
 
   ; 3. run the impl and the spec
   (run-x86-64-impl #:insns spec-insns #:cpu spec-cpu)
@@ -353,6 +361,7 @@
    #:guarantee (add-r/m32-r32-spec #:spec-cpu spec-cpu
                                    #:impl-cpu impl-cpu
                                    #:num-insns num-insns)))
+(printf "Solution is: ~a\n" solution)
 
 (if (sat? solution)
     (begin
