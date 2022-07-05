@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
 
 class Checker(ABC):
-    vulnerable_states: List[angr.sim_state.SimState] | 'NotImplemented'  = NotImplemented
-    effects: List[str] | 'NotImplemented' = NotImplemented
+    vulnerable_states: Union[List[angr.sim_state.SimState], 'NotImplemented']  = NotImplemented
+    effects: Union[List[str], 'NotImplemented'] = NotImplemented
 
     @staticmethod
     @abstractmethod
@@ -713,9 +713,9 @@ def setup_symbolic_state_for_ed25519_pub_key_gen(proj, init_state, fn_name):
     pub_key_storage = [claripy.BVS(f"pub{n}", 8) for n in range (1, 33)]
 
     # 2. add preconditions to priv key
-    logger.debug("Adding preconditions...")
-    ed25519_priv_key_precondition(priv_key, init_state)
-    logger.debug("Done adding preconditions.")
+    # logger.debug("Adding preconditions...")
+    # ed25519_priv_key_precondition(priv_key, init_state)
+    # logger.debug("Done adding preconditions.")
 
     # 3. use some current stack memory and ensure it is aligned
     # i think on X86_64, rsp + 8 has to be 16 byte aligned.
@@ -865,8 +865,8 @@ def run(filename: str, funcname: str):
                     when=angr.BP_BEFORE,
                     action=CompSimpDataCollectionChecker.check)
 
-    setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
-    # setup_symbolic_state_for_ed25519_pub_key_gen(proj, state, funcname)
+    # setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
+    setup_symbolic_state_for_ed25519_pub_key_gen(proj, state, funcname)
 
     simgr = proj.factory.simgr(state)
     simgr.run(opt_level=-1)
@@ -882,3 +882,4 @@ if '__main__' == __name__:
     funcname = sys.argv[2]
     
     run(filename, funcname)
+ 
