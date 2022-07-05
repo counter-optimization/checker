@@ -15,7 +15,9 @@
 
 (define (run-x86-64-impl #:insns insns #:cpu cpu)
   (for ([i insns])
-    (interpret-insn cpu i)))
+    (match i
+      ['noop empty]
+      [_ (interpret-insn cpu i)])))
 
 ;; Addition
 
@@ -42,14 +44,18 @@
 (define assume-flags-equiv assume-bvs-equiv)
 
 ; GPR comparison functions
-(define all-regs-but-raxes (list rcx rdx rbx
+(define all-regs-but-raxes (list rcx ;rdx
+                                 rbx
                                  rsp rbp rsi rdi
                                  r8 r9 r10 r11
                                  r12 r13 r14 r15
-                                 ecx edx ebx
+                                 ecx ;edx
+                                 ebx
                                  esp ebp esi edi
                                  r8d r9d r10d r11d
-                                 r12d r13d r14d r15d))
+                                 r12d r13d r14d r15d
+                                 ;dx dl
+                                 cx cl))
 (displayln (format "all-regs-but-raxes: ~a" all-regs-but-raxes))
 
 (define all-raxes (list rax eax ax al))
@@ -67,36 +73,33 @@
 
 ; Synthesis impl and spec for adding eax and ecx
 ; Adding eax <- eax + ecx
-; TODO:
-;   - get the rest of the imm8/reg16/reg8 opcodes
-;   - handle the special cases, i think someone said in slack
-;     that choose and structs do not go well together
-;   - handle rotate.rkt
-;   - handle setcc.rkt
-;     - needs gprs8 exported from registers.rkt
-;   - handle shift.rkt, shld.rkt, shrd.rkt
 (define (add-r/m32-r32-conc-impl)
   (define add (add-r/m32-r32 eax ecx))
   (list add))
 
 (define-grammar (x86-64-arith-insn)
-  [insn (choose (bin-insn-rr)
+  [insn (choose* (bin-insn-rr)
                  (bin-insn-ri)
+                 (bin-op-special)
+                 (shifts)
+                 (rotates)
                  (un-insn-r)
                  (un-insn-i))]
   
-  [bin-insn-rr (choose
+  [bin-insn-rr (choose*
                 ((bin-op-rr32) (reg32) (reg32))
                 ((bin-op-rr64) (reg64) (reg64)))]
-  [bin-insn-ri (choose
+  [bin-insn-ri (choose*
                 ((bin-op-ri) (reg32) (imm32))
                 ((bin-op-r64i32) (reg64) (imm32)))]
-  [un-insn-r (choose
+  [un-insn-r (choose*
+              ((un-op-r8) (reg8))
+              ((un-op-r16) (reg16))
               ((un-op-r32) (reg32))
               ((un-op-r64) (reg64)))]
   [un-insn-i ((un-op-i) (imm32))]
   
-  [bin-op-rr32 (choose add-r/m32-r32
+  [bin-op-rr32 (choose* add-r/m32-r32
                         and-r/m32-r32
                         adc-r/m32-r32
                         cmp-r/m32-r32
@@ -107,17 +110,17 @@
                         test-r/m32-r32
                         xchg-r/m32-r32
                         xor-r/m32-r32)]
-  [bin-op-rr64 (choose or-r/m64-r64
+  [bin-op-rr64 (choose* or-r/m64-r64
                         sbb-r/m64-r64
                         sub-r/m64-r64
                         test-r/m64-r64
                         xchg-r/m64-r64
                         xor-r/m64-r64)]
-  [bin-op-r64i32 (choose or-r/m64-imm32
+  [bin-op-r64i32 (choose* or-r/m64-imm32
                           sub-r/m64-imm32
                           test-r/m64-imm32
                           xor-r/m64-imm32)]
-  [bin-op-ri (choose add-r/m32-imm32
+  [bin-op-ri (choose* add-r/m32-imm32
                       and-r/m32-imm32
                       cmp-r/m32-imm32
                       mov-r/m32-imm32
@@ -125,19 +128,48 @@
                       sub-r/m32-imm32
                       test-r/m32-imm32
                       xor-r/m32-imm32)]
-  [bin-op-special (choose
+  [rotates (choose*
+            (rol-r/m16-imm8 (reg16) (imm8))
+            (rol-r/m32-imm8 (reg32) (imm8))
+            (rol-r/m64-imm8 (reg64) (imm8))
+            (ror-r/m16-imm8 (reg16) (imm8))
+            (ror-r/m32-imm8 (reg32) (imm8))
+            (ror-r/m64-imm8 (reg64) (imm8)))]
+  [shifts (choose*
+           (sar-r/m32-imm8 (reg32) (imm8))
+           (sar-r/m64-imm8 (reg64) (imm8))
+           (shl-r/m32-imm8 (reg32) (imm8))
+           (shl-r/m64-imm8 (reg64) (imm8))
+           (shr-r/m32-imm8 (reg32) (imm8))
+           (shr-r/m64-imm8 (reg64) (imm8)))]
+  [bin-op-special (choose*
                    (movsxd-r/m32-r64 (reg32) (reg64))
                    (movzx-r32-r/m16 (reg32) (reg16))
                    (movzx-r64-r/m16 (reg32) (reg16))
                    (sbb-r/m32-imm8 (reg32) (imm8))
                    (sbb-r/m64-imm8 (reg64) (imm8)))]
-  
-  [un-op-r32 (choose mul-r/m32
+
+  [un-op-r8 (choose* set-ge-r8
+                     set-l-r8
+                     set-ne-r8)]
+  [un-op-r16 (choose* rol-r/m16-cl
+                      ror-r/m16-cl)]
+  [un-op-r32 (choose* mul-r/m32
                       div-r/m32
                       bswap-r32
-                      neg-r/m32)]
-  [un-op-r64 (choose neg-r/m64)]
-  [un-op-i (choose add-eax-imm32
+                      neg-r/m32
+                      rol-r/m32-cl
+                      ror-r/m32-cl
+                      shl-r/m32-cl
+                      sar-r/m32-cl
+                      shr-r/m32-cl)]
+  [un-op-r64 (choose* neg-r/m64
+                      rol-r/m64-cl
+                      ror-r/m64-cl
+                      sar-r/m64-cl
+                      shl-r/m64-cl
+                      shr-r/m64-cl)]
+  [un-op-i (choose* add-eax-imm32
                     and-eax-imm32
                     and-rax-imm32
                     cmp-eax-imm32
@@ -151,18 +183,22 @@
                     xor-eax-imm32
                     xor-rax-imm32)]
 
-  [reg64 (choose rax rcx rdx rbx
-                  rsp rbp rsi rdi
-                  r8 r9 r10 r11
-                  r12 r13 r14 r15)]
-  [reg32 (choose eax ecx edx ebx
-                  esp ebp esi edi
-                  r8d r9d r10d r11d
-                  r12d r13d r14d r15d)]
-  [reg16 (choose ax cx dx bx
-                  sp bp si di
-                  r8w r9w r10w r11w
-                  r12w r13w r14w r15w)]
+  [reg64 (choose* rax rcx rdx)]
+                 ;; rbx
+                 ;;  rsp rbp rsi rdi
+                 ;;  r8 r9 r10 r11
+                 ;;  r12 r13 r14 r15)]
+  [reg32 (choose* eax ecx edx)]
+                 ;; ebx
+                 ;;  esp ebp esi edi
+                 ;;  r8d r9d r10d r11d
+                 ;;  r12d r13d r14d r15d)]
+  [reg16 (choose* ax cx dx)]
+                 ;; bx
+                  ;; sp bp si di
+                  ;; r8w r9w r10w r11w
+  ;; r12w r13w r14w r15w)]
+  [reg8 (choose* al cl dl)]
   
   [imm32 (encode-imm (?? (bitvector 32)))]
   [imm16 (encode-imm (?? (bitvector 16)))]
@@ -170,7 +206,7 @@
 
 (define (generate-add-r/m32-r32-insns #:num-insns num-insns)
   (for/list ([i num-insns])
-    (x86-64-arith-insn #:depth 12)))
+    (x86-64-arith-insn #:depth 20)))
 
 (displayln (format "Current grammar depth: ~a" (current-grammar-depth)))
 (error-print-width 4096)
@@ -201,7 +237,11 @@
          (struct gpr16 _)
          (struct gpr8 _)) (cpu-gpr-ref cpu operand)]
     ; probably an immediate
-    [(? list?) (decode-imm operand)]))
+    [(? list?) (decode-imm operand)]
+    ['implicit-rax (cpu-gpr-ref cpu rax)]
+    ['implicit-eax (cpu-gpr-ref cpu eax)]
+    ['implicit-ax (cpu-gpr-ref cpu ax)]
+    ['implicit-al (cpu-gpr-ref cpu al)]))
 
 (define (assert-operand-is-not-special operand special-for-bw cpu)
   (define operand-bw (bitwidth-getter operand))
@@ -210,10 +250,13 @@
   (assert (! (bveq special operand-val))))
 
 (define (comp-simp-asserter #:insn insn #:cpu cpu)
+  
   (define addident-checker
     (λ (op) (assert-operand-is-not-special op addident-for-bw cpu)))
+  
   (define mulident-checker
     (λ (op) (assert-operand-is-not-special op mulident-for-bw cpu)))
+  
   (define mulzero-checker
     (λ (op) (assert-operand-is-not-special op mulzero-for-bw cpu)))
   
@@ -223,9 +266,17 @@
      (begin
        (addident-checker op1)
        (addident-checker op2))]
+    
     [(or (add-eax-imm32 op1))
      (begin
-       (addident-checker op1))]))
+       (addident-checker op1))]
+
+    [(mul-r/m32 op1)
+     (begin
+       (mulident-checker op1)
+       (mulzero-checker op1)
+       (mulident-checker 'implicit-eax)
+       (mulzero-checker 'implicit-eax))]))
   
 (define (apply-insn-specific-asserts #:insns insns
                                      #:asserter asserter
