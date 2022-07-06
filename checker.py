@@ -603,6 +603,10 @@ class DMPChecker(Checker):
     def check(state: angr.sim_state.SimState) -> bool:
         return False
 
+class VoidSimProcedure(angr.SimProcedure):
+    def run(self):
+        return 0
+
 # here, p is a pythonic definition of the point type from HACL*:
 # p is a list of 20 uint64_t types. this list is broke down into field
 # elements of 5 uint64_t types or 5 51-bit limbs.
@@ -752,6 +756,16 @@ def setup_symbolic_state_for_ed25519_pub_key_gen(proj, init_state, fn_name):
     init_state.regs.rsi = priv_key_addr
     logger.debug(f"for init_state ({init_state}), rdi holds {init_state.regs.rdi}")
     logger.debug(f"for init_state ({init_state}), rsi holds {init_state.regs.rsi}")
+
+    stack_chk_fail_sym_str = "__stack_chk_fail"
+    if proj.loader.find_symbol(stack_chk_fail_sym_str):
+        logger.warning(f"Hooking {stack_chk_fail_sym_str} with VoidSimProcedure")
+        proj.hook_symbol(stack_chk_fail_sym_str, VoidSimProcedure())
+
+    memcpy_sym_str = "memcpy"
+    if proj.loader.find_symbol(memcpy_sym_str):
+        logger.warning(f"Hooking {memcpy_sym_str} with angr memcpy SimProcedure")
+        proj.hook_symbol(memcpy_sym_str, angr.SIM_PROCEDURES['libc']['memcpy']())
     
 def setup_symbolic_state_for_ed25519_point_addition(proj, init_state, fn_name):
     """
