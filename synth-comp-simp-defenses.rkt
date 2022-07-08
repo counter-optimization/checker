@@ -15,9 +15,7 @@
 
 (define (run-x86-64-impl #:insns insns #:cpu cpu)
   (for ([i insns])
-    (match i
-      ['noop empty]
-      [_ (interpret-insn cpu i)])))
+    (interpret-insn cpu i)))
 
 ;; Addition
 
@@ -84,7 +82,8 @@
 
 (define (sub-r/m32-r32-conc-impl)
   (define sub (sub-r/m32-r32 eax ecx))
-  (list sub))
+  (define subother (sub-r/m32-imm8 eax 14))
+  (list subother))
 
 (define-grammar (x86-64-sub-synth)
   [insn (choose
@@ -93,10 +92,10 @@
          (setcc)
          (mul))]
   [sub-r-i (choose
-            (sub-r/m32-imm32 (reg32) (?? (bitvector 32)))
-            (sub-r/m64-imm32 (reg64) (?? (bitvector 32)))
-            (sub-r/m32-imm8 (reg32) (?? (bitvector 8)))
-            (sub-r/m64-imm8 (reg64) (?? (bitvector 8))))]
+            (sub-r/m32-imm32 (reg32) (imm32))
+            (sub-r/m64-imm32 (reg64) (imm32))
+            (sub-r/m32-imm8 (reg32) (imm8))
+            (sub-r/m64-imm8 (reg64) (imm8)))]
   [sub-r-r (choose
             (sub-r/m32-r32 (reg32) (reg32))
             (sub-r/m64-r64 (reg64) (reg64)))]
@@ -121,9 +120,9 @@
                   ;; r8w r9w r10w r11w
   ;; r12w r13w r14w r15w)]
   [reg8 (choose al cl dl)]
-  [imm32 (?? (bitvector 32))]
-  [imm16 (?? (bitvector 16))]
-  [imm8 (?? (bitvector 8))])
+  [imm32 (choose (imm32) (?? (bitvector 32)))]
+  [imm16 (choose (imm16) (?? (bitvector 16)))]
+  [imm8 (choose (imm8) (?? (bitvector 8)))])
 
 (define-grammar (x86-64-arith-insn)
   [insn (choose* (bin-insn-rr)
@@ -258,7 +257,7 @@
 
 (define (generate-sub-r/m32-r32-insns #:num-insns num-insns)
   (for/list ([i num-insns])
-    (x86-64-sub-synth #:depth 3)))
+    (x86-64-sub-synth #:depth 7)))
 
 (displayln (format "Current grammar depth: ~a" (current-grammar-depth)))
 (error-print-width 100000)
@@ -286,7 +285,7 @@
     ; probably an immediate
     [(? list?) (length operand)]
     [_ (bitvector-size (type-of operand))]))
-    ;; [(? bitv8?) 8]
+    ;; [ (? bitv8?) 8]
     ;; [(? bitv16?) 16]
     ;; [(? bitv32?) 32]
     ;; [(? bitv64?) 64]))
@@ -369,7 +368,7 @@
 
   ; these are the synthesis candidate instructions
   (define impl-insns (generate-sub-r/m32-r32-insns #:num-insns num-insns))
-
+  
   ; 1. assume starting in the same state
   (define spec-reg-state-before (get-all-regs-but-raxes #:cpu spec-cpu))
   (define impl-reg-state-before (get-all-regs-but-raxes #:cpu impl-cpu))
@@ -415,10 +414,43 @@
   (assert (bveq spec-eax impl-eax)))
 
 (define num-insns (string->number (vector-ref (current-command-line-arguments) 0)))
-(displayln (format "num-insn: ~a" num-insns))
+(printf "num-insn: ~a\n" num-insns)
 
 (define impl-cpu (make-x86-64-cpu))
 (define spec-cpu (make-x86-64-cpu))
+
+;; (define (gen-const width)
+;;   (define-symbolic* x (bitvector width))
+;;   x)
+
+;; (define-grammar (small-sub)
+;;   [insn (choose (sub-r/m32-imm32 eax (imm32))
+;;                 (sub-r/m32-imm8 eax (imm8)))]
+;;   [imm32 (choose (imm32) (?? (bitvector 32)))]
+;;   [imm8 (choose (imm32) (?? (bitvector 8)))])
+;; (define insns (list (small-sub #:depth 5)))
+
+;; (define solution
+;;   (synthesize
+;;    #:forall (cpu-gpr-ref impl-cpu eax)
+;;    #:guarantee (begin
+;;                  (define before (cpu-gpr-ref impl-cpu eax))
+;;                  (run-x86-64-impl #:insns insns #:cpu impl-cpu)
+;;                  (define after (cpu-gpr-ref impl-cpu eax))
+;;                  (assert (bveq after
+;;                                (bvsub before (bv 14 32)))))))
+;; (printf "Solution is: ~a\n" solution)
+
+;; (if (sat? solution)
+;;     (begin
+;;       (printf "Solution found for ~a insns.\n" num-insns)
+;;       (print-forms solution)
+;;       (exit 0))
+;;     (begin
+;;       (printf "No solution.\n")
+;;       (exit 1)))
+
+;; (exit 0)
 
 (define solution
   (synthesize
