@@ -121,9 +121,9 @@
                   ;; r8w r9w r10w r11w
   ;; r12w r13w r14w r15w)]
   [reg8 (choose* al cl dl)]
-  [imm32 (encode-imm (?? (bitvector 32)))]
-  [imm16 (encode-imm (?? (bitvector 16)))]
-  [imm8 (encode-imm (?? (bitvector 8)))])
+  [imm32 (?? (bitvector 32))]
+  [imm16 (?? (bitvector 16))]
+  [imm8 (?? (bitvector 8))])
 
 (define-grammar (x86-64-arith-insn)
   [insn (choose* (bin-insn-rr)
@@ -248,9 +248,9 @@
   ;; r12w r13w r14w r15w)]
   [reg8 (choose* al cl dl)]
   
-  [imm32 (encode-imm (?? (bitvector 32)))]
-  [imm16 (encode-imm (?? (bitvector 16)))]
-  [imm8 (encode-imm (?? (bitvector 8)))])
+  [imm32 (?? (bitvector 32))]
+  [imm16 (?? (bitvector 16))]
+  [imm8 (?? (bitvector 8))])
 
 (define (generate-add-r/m32-r32-insns #:num-insns num-insns)
   (for/list ([i num-insns])
@@ -279,7 +279,8 @@
     [(struct gpr16 _) 16]
     [(struct gpr8 _) 8]
     ; probably an immediate
-    [(? list?) (length operand)]))
+    [(? list?) (length operand)]
+    [(? bitvector?) (bitvector-size operand)]))
 
 ; returns the bitvector value behind the operand
 (define (operand-decoder operand cpu)
@@ -290,6 +291,7 @@
          (struct gpr8 _)) (cpu-gpr-ref cpu operand)]
     ; probably an immediate
     [(? list?) (decode-imm operand)]
+    [(? bitvector?) operand]
     ['implicit-rax (cpu-gpr-ref cpu rax)]
     ['implicit-eax (cpu-gpr-ref cpu eax)]
     ['implicit-ax (cpu-gpr-ref cpu ax)]
