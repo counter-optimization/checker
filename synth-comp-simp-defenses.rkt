@@ -87,40 +87,40 @@
   (list sub))
 
 (define-grammar (x86-64-sub-synth)
-  [insn (choose*
+  [insn (choose
          (sub-r-i)
          (sub-r-r)
          (setcc)
          (mul))]
-  [sub-r-i (choose*
-            (sub-r/m32-imm32 (reg32) (imm32))
-            (sub-r/m64-imm32 (reg64) (imm32))
-            (sub-r/m32-imm8 (reg32) (imm8))
-            (sub-r/m64-imm8 (reg64) (imm8)))]
-  [sub-r-r (choose*
+  [sub-r-i (choose
+            (sub-r/m32-imm32 (reg32) (?? (bitvector 32)))
+            (sub-r/m64-imm32 (reg64) (?? (bitvector 32)))
+            (sub-r/m32-imm8 (reg32) (?? (bitvector 8)))
+            (sub-r/m64-imm8 (reg64) (?? (bitvector 8))))]
+  [sub-r-r (choose
             (sub-r/m32-r32 (reg32) (reg32))
             (sub-r/m64-r64 (reg64) (reg64)))]
-  [setcc (choose*
+  [setcc (choose
           (setz (reg8)))]
-  [mul (choose*
+  [mul (choose
         (mul-r/m32 (reg32))
         (mul-r/m64 (reg64)))]
-  [reg64 (choose* rax rcx rdx rdi)]
+  [reg64 (choose rax rcx rdx rdi)]
                  ;; rbx
                  ;;  rsp rbp rsi rdi
                  ;;  r8 r9 r10 r11
                  ;;  r12 r13 r14 r15)]
-  [reg32 (choose* eax ecx edx edi)]
+  [reg32 (choose eax ecx edx edi)]
                  ;; ebx
                  ;;  esp ebp esi edi
                  ;;  r8d r9d r10d r11d
                  ;;  r12d r13d r14d r15d)]
-  [reg16 (choose* ax cx dx di)]
+  [reg16 (choose ax cx dx di)]
                  ;; bx
                   ;; sp bp si di
                   ;; r8w r9w r10w r11w
   ;; r12w r13w r14w r15w)]
-  [reg8 (choose* al cl dl)]
+  [reg8 (choose al cl dl)]
   [imm32 (?? (bitvector 32))]
   [imm16 (?? (bitvector 16))]
   [imm8 (?? (bitvector 8))])
@@ -258,10 +258,10 @@
 
 (define (generate-sub-r/m32-r32-insns #:num-insns num-insns)
   (for/list ([i num-insns])
-    (x86-64-sub-synth #:depth 20)))
+    (x86-64-sub-synth #:depth 3)))
 
 (displayln (format "Current grammar depth: ~a" (current-grammar-depth)))
-(error-print-width 4096)
+(error-print-width 100000)
 (displayln (format "Current error-print-width: ~a" (error-print-width)))
 
 (define zero-for-bw (λ (bw) (bv 0 bw)))
@@ -270,6 +270,11 @@
 (define addident-for-bw zero-for-bw)
 (define mulident-for-bw one-for-bw)
 (define mulzero-for-bw zero-for-bw)
+
+(define bitv8? (bitvector 8))
+(define bitv16? (bitvector 16))
+(define bitv32? (bitvector 32))
+(define bitv64? (bitvector 64))
 
 ; gets bitwidth of operand as bitvector
 (define (bitwidth-getter operand)
@@ -280,7 +285,11 @@
     [(struct gpr8 _) 8]
     ; probably an immediate
     [(? list?) (length operand)]
-    [(? bitvector?) (bitvector-size operand)]))
+    [_ (bitvector-size (type-of operand))]))
+    ;; [(? bitv8?) 8]
+    ;; [(? bitv16?) 16]
+    ;; [(? bitv32?) 32]
+    ;; [(? bitv64?) 64]))
 
 ; returns the bitvector value behind the operand
 (define (operand-decoder operand cpu)
@@ -291,7 +300,7 @@
          (struct gpr8 _)) (cpu-gpr-ref cpu operand)]
     ; probably an immediate
     [(? list?) (decode-imm operand)]
-    [(? bitvector?) operand]
+    [(or (? bitvector?) (? bv?)) operand]
     ['implicit-rax (cpu-gpr-ref cpu rax)]
     ['implicit-eax (cpu-gpr-ref cpu eax)]
     ['implicit-ax (cpu-gpr-ref cpu ax)]
@@ -382,9 +391,9 @@
   ;;             (! (bveq (cpu-gpr-ref impl-cpu ecx) (bv 0 32)))))
 
   ; 2. for all add insns in impl-insns, no comp simp can take place.
-  (apply-insn-specific-asserts #:insns impl-insns
-                               #:asserter comp-simp-asserter
-                               #:cpu impl-cpu)
+  ;; (apply-insn-specific-asserts #:insns impl-insns
+  ;;                              #:asserter comp-simp-asserter
+  ;;                              #:cpu impl-cpu)
 
   ; 3. run the impl and the spec
   (run-x86-64-impl #:insns spec-insns #:cpu spec-cpu)
