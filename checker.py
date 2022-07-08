@@ -861,6 +861,11 @@ def run(filename: str, funcname: str):
     # state.options.add(angr.options.SYMBOL_FILL_UNCONSTRAINED_REGISTERS)
     state.options.add(angr.options.SYMBOLIC_INITIAL_VALUES)
     state.options.add(angr.options.UNDER_CONSTRAINED_SYMEXEC)
+    state.options.add(angr.options.LAZY_SOLVES)
+    # state.options.add(angr.options.EFFICIENT_STATE_MERGING) maybe?
+    state.options.remove('SIMPLIFY_MERGED_CONSTRAINTS')
+    state.options.remove('SIMPLIFY_MEMORY_WRITES')
+    state.options.remove('SIMPLIFY_REGISTER_WRITES')
 
     # For now, just print the code before running checkers. TODO: need
     # to later figure out how to output problematic states for a checker
@@ -873,6 +878,7 @@ def run(filename: str, funcname: str):
 
     # setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
     setup_symbolic_state_for_ed25519_pub_key_gen(proj, state, funcname)
+    state.regs.rbp = state.regs.rsp
     
     # state.inspect.b('mem_write',
     #                 when=angr.BP_BEFORE,
@@ -892,6 +898,18 @@ def run(filename: str, funcname: str):
                          "cswap20",
                          "point_add_and_double",
                          "Hacl_Curve25519_51_scalarmult",
+                         "Hacl_Impl_Curve25519_Field51_fadd",
+                         "Hacl_Impl_Curve25519_Field51_fsub",
+                         "Hacl_Impl_Curve25519_Field51_fsqr2",
+                         "Hacl_Impl_Curve25519_Field51_fmul",
+                         "fmul20",
+                         "FStar_UInt128_mul_wide",
+                         "FStar_UInt128_add",
+                         "FStar_UInt128_uint64_to_uint128",
+                         "FStar_UInt128_uint128_to_uint64",
+                         "FStar_UInt128_shift_right",
+                         
+                         "fsqr20",
                          "encode_point"]
                          
         
@@ -904,10 +922,25 @@ def run(filename: str, funcname: str):
                 break
         if name in funcs_of_interest:
             logger.warning(f"Calling function {name} at addr {call_addr}")
+
+    def on_ret(state):
+        logger.warning(f"ret at addr {hex(state.inspect.address)}")
+
+    def on_insn(state):
+        logger.warning(f"insn at {hex(state.inspect.instruction)}")
+        if state.inspect.instruction == 0x4064ac:
+            logger.warning(f"rax is {state.regs.rax}")
+            logger.warning(f"rcx is {state.regs.rcx}")
+        logger.warning(f"rbp is {state.regs.rbp}")
         
     state.inspect.b('call',
                     when=angr.BP_BEFORE,
                     action=on_call)
+
+    # state.inspect.b('return', when=angr.BP_BEFORE, action=on_ret)
+    # state.inspect.b('instruction',
+    #                 when=angr.BP_BEFORE,
+    #                 action=on_insn)
 
     simgr = proj.factory.simgr(state)
     simgr.run(opt_level=-1)
