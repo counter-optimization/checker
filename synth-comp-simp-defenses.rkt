@@ -87,45 +87,43 @@
   (list sub))
 
 (define-grammar (x86-64-sub-synth)
-  [insn (choose
+  [insn (choose*
          (sub-r-i)
          (sub-r-r)
          (setcc)
          (mul))]
-  [sub-r-i (choose
+  [sub-r-i (choose*
             (sub-r/m32-imm32 (reg32) (imm32))
             (sub-r/m64-imm32 (reg64) (imm32))
             (sub-r/m32-imm8 (reg32) (imm8))
             (sub-r/m64-imm8 (reg64) (imm8)))]
-  [sub-r-r (choose
+  [sub-r-r (choose*
             (sub-r/m32-r32 (reg32) (reg32))
             (sub-r/m64-r64 (reg64) (reg64)))]
-  [setcc (choose
+  [setcc (choose*
           (setz (reg8)))]
-  [mul (choose
+  [mul (choose*
         (mul-r/m32 (reg32))
         (mul-r/m64 (reg64)))]
-  [reg64 (choose rax rcx rdx rdi)]
+  [reg64 (choose* rax rcx rdx rdi)]
                  ;; rbx
                  ;;  rsp rbp rsi rdi
                  ;;  r8 r9 r10 r11
                  ;;  r12 r13 r14 r15)]
-  [reg32 (choose eax ecx edx edi)]
+  [reg32 (choose* eax ecx edx edi)]
                  ;; ebx
                  ;;  esp ebp esi edi
                  ;;  r8d r9d r10d r11d
                  ;;  r12d r13d r14d r15d)]
-  [reg16 (choose ax cx dx di)]
+  [reg16 (choose* ax cx dx di)]
                  ;; bx
                   ;; sp bp si di
                   ;; r8w r9w r10w r11w
   ;; r12w r13w r14w r15w)]
-  [reg8 (choose al cl dl)]
+  [reg8 (choose* al cl dl)]
   [imm32 (encode-imm (?? (bitvector 32)))]
   [imm16 (encode-imm (?? (bitvector 16)))]
   [imm8 (encode-imm (?? (bitvector 8)))])
-  
-               
 
 (define-grammar (x86-64-arith-insn)
   [insn (choose* (bin-insn-rr)
@@ -382,9 +380,9 @@
   ;;             (! (bveq (cpu-gpr-ref impl-cpu ecx) (bv 0 32)))))
 
   ; 2. for all add insns in impl-insns, no comp simp can take place.
-  ;; (apply-insn-specific-asserts #:insns impl-insns
-  ;;                              #:asserter comp-simp-asserter
-  ;;                              #:cpu impl-cpu)
+  (apply-insn-specific-asserts #:insns impl-insns
+                               #:asserter comp-simp-asserter
+                               #:cpu impl-cpu)
 
   ; 3. run the impl and the spec
   (run-x86-64-impl #:insns spec-insns #:cpu spec-cpu)
@@ -406,7 +404,7 @@
   (assert (bveq spec-eax impl-eax)))
 
 (define num-insns (string->number (vector-ref (current-command-line-arguments) 0)))
-(displayln (format "num-insns: ~a" num-insns))
+(displayln (format "num-insn: ~a" num-insns))
 
 (define impl-cpu (make-x86-64-cpu))
 (define spec-cpu (make-x86-64-cpu))
