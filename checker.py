@@ -13,7 +13,7 @@ import pyvex
 import claripy
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.DEBUG)
 
 class Checker(ABC):
     vulnerable_states: Union[List[angr.sim_state.SimState], 'NotImplemented']  = NotImplemented
@@ -870,20 +870,48 @@ def run(filename: str, funcname: str):
 
     compsimp_file_name = output_filename_stem(filename, funcname)
     CompSimpDataRecord.set_func_identifier(compsimp_file_name)
+
+    # setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
+    setup_symbolic_state_for_ed25519_pub_key_gen(proj, state, funcname)
     
     # state.inspect.b('mem_write',
     #                 when=angr.BP_BEFORE,
     #                 action=SilentStoreChecker.check)
 
-    state.inspect.b('expr',
-                    when=angr.BP_BEFORE,
-                    action=CompSimpDataCollectionChecker.check)
+    # state.inspect.b('expr',
+    #                 when=angr.BP_BEFORE,
+    #                 action=CompSimpDataCollectionChecker.check)
 
-    # setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
-    setup_symbolic_state_for_ed25519_pub_key_gen(proj, state, funcname)
+    loaded_symbols = proj.loader.symbols
+    for sym in loaded_symbols:
+        logger.debug(f"Function {sym.name} located at {hex(sym.rebased_addr)}")
+
+    funcs_of_interest = ["montgomery_ladder",
+                         "memcpy",
+                         "Hacl_Impl_Curve25519_Field51_cswap2",
+                         "cswap20",
+                         "point_add_and_double",
+                         "Hacl_Curve25519_51_scalarmult",
+                         "encode_point"]
+                         
+        
+    def on_call(state):
+        call_addr = state.inspect.function_address
+        name = "notfound"
+        for symbol in proj.loader.symbols:
+            if (symbol.rebased_addr == call_addr).is_true():
+                name = symbol.name
+                break
+        if name in funcs_of_interest:
+            logger.warning(f"Calling function {name} at addr {call_addr}")
+        
+    state.inspect.b('call',
+                    when=angr.BP_BEFORE,
+                    action=on_call)
 
     simgr = proj.factory.simgr(state)
     simgr.run(opt_level=-1)
+    logger.critical("done")
 
     comp_simp_record_csv_file_name = f"{compsimp_file_name}.csv"
     CompSimpDataCollectionChecker.write_records_to_csv(comp_simp_record_csv_file_name)
