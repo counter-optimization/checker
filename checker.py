@@ -762,10 +762,20 @@ def setup_symbolic_state_for_ed25519_pub_key_gen(proj, init_state, fn_name):
         logger.warning(f"Hooking {stack_chk_fail_sym_str} with VoidSimProcedure")
         proj.hook_symbol(stack_chk_fail_sym_str, VoidSimProcedure())
 
+    memcpy_chk_fail_sym_str = "__memcpy_chk"
+    if proj.loader.find_symbol(memcpy_chk_fail_sym_str):
+        logger.warning(f"Hooking {memcpy_chk_fail_sym_str} with VoidSimProcedure")
+        proj.hook_symbol(memcpy_chk_fail_sym_str, VoidSimProcedure())
+
     memcpy_sym_str = "memcpy"
     if proj.loader.find_symbol(memcpy_sym_str):
         logger.warning(f"Hooking {memcpy_sym_str} with angr memcpy SimProcedure")
         proj.hook_symbol(memcpy_sym_str, angr.SIM_PROCEDURES['libc']['memcpy']())
+
+    memset_sym_str = "memset"
+    if proj.loader.find_symbol(memset_sym_str):
+        logger.warning(f"Hooking {memset_sym_str} with angr memset SimProcedure")
+        proj.hook_symbol(memset_sym_str, angr.SIM_PROCEDURES['libc']['memset']())
     
 def setup_symbolic_state_for_ed25519_point_addition(proj, init_state, fn_name):
     """
@@ -870,8 +880,8 @@ def run(filename: str, funcname: str):
     # For now, just print the code before running checkers. TODO: need
     # to later figure out how to output problematic states for a checker
     # in a way that is debuggable
-    proj.factory.block(state.addr, opt_level=-1).pp()
-    proj.factory.block(state.addr, opt_level=-1).vex.pp()
+    # proj.factory.block(state.addr, opt_level=-1).pp()
+    # proj.factory.block(state.addr, opt_level=-1).vex.pp()
 
     compsimp_file_name = output_filename_stem(filename, funcname)
     CompSimpDataRecord.set_func_identifier(compsimp_file_name)
@@ -884,9 +894,9 @@ def run(filename: str, funcname: str):
     #                 when=angr.BP_BEFORE,
     #                 action=SilentStoreChecker.check)
 
-    # state.inspect.b('expr',
-    #                 when=angr.BP_BEFORE,
-    #                 action=CompSimpDataCollectionChecker.check)
+    state.inspect.b('expr',
+                    when=angr.BP_BEFORE,
+                    action=CompSimpDataCollectionChecker.check)
 
     loaded_symbols = proj.loader.symbols
     for sym in loaded_symbols:
@@ -926,30 +936,30 @@ def run(filename: str, funcname: str):
                 state.scratch.store_tmp(op2.tmp, new_loop_bound)
                 logger.critical(f"New value for t{op2.tmp} is {state.scratch.tmp_expr(op2.tmp)}")
         
-    def on_call(state):
-        call_addr = state.inspect.function_address
-        name = "notfound"
-        for symbol in proj.loader.symbols:
-            if (symbol.rebased_addr == call_addr).is_true():
-                name = symbol.name
-                break
-        if name in funcs_of_interest:
-            logger.warning(f"Calling function {name} at addr {call_addr}")
+    # def on_call(state):
+    #     call_addr = state.inspect.function_address
+    #     name = "notfound"
+    #     for symbol in proj.loader.symbols:
+    #         if (symbol.rebased_addr == call_addr).is_true():
+    #             name = symbol.name
+    #             break
+    #     if name in funcs_of_interest:
+    #         logger.warning(f"Calling function {name} at addr {call_addr}")
 
-    def on_ret(state):
-        logger.warning(f"ret at addr {hex(state.inspect.address)}")
+    # def on_ret(state):
+    #     logger.warning(f"ret at addr {hex(state.inspect.address)}")
 
-    def on_insn(state):
-        if state.inspect.instruction == 0x4033c7:
-            logger.critical(f"At montgomery_ladder main loop addr 0x4033c7")
-            state.block(opt_level=-1).vex.pp()
+    # def on_insn(state):
+    #     if state.inspect.instruction == 0x4033c7:
+    #         logger.critical(f"At montgomery_ladder main loop addr 0x4033c7")
+    #         state.block(opt_level=-1).vex.pp()
         
     # state.inspect.b('call',
     #                 when=angr.BP_BEFORE,
     #                 action=on_call)
 
     # state.inspect.b('return', when=angr.BP_BEFORE, action=on_ret)
-    state.inspect.b('instruction', when=angr.BP_BEFORE, action=on_insn)
+    # state.inspect.b('instruction', when=angr.BP_BEFORE, action=on_insn)
     state.inspect.b('expr', when=angr.BP_BEFORE, action=replace_big_loop_with_small)
 
     simgr = proj.factory.simgr(state)
