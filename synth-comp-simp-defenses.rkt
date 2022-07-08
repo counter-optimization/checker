@@ -71,7 +71,7 @@
 
 (define (get-all-regs-rdxes-only #:cpu cpu)
   (for/list ([reg all-rdxes])
-    (cpu-gpr-ref (cpu reg))))
+    (cpu-gpr-ref cpu reg)))
 
 (define assert-regs-equiv assert-bvs-equiv)
 (define assume-regs-equiv assume-bvs-equiv)
@@ -81,6 +81,51 @@
 (define (add-r/m32-r32-conc-impl)
   (define add (add-r/m32-r32 eax ecx))
   (list add))
+
+(define (sub-r/m32-r32-conc-impl)
+  (define sub (sub-r/m32-r32 eax ecx))
+  (list sub))
+
+(define-grammar (x86-64-sub-synth)
+  [insn (choose
+         (sub-r-i)
+         (sub-r-r)
+         (setcc)
+         (mul))]
+  [sub-r-i (choose
+            (sub-r/m32-imm32 (reg32) (imm32))
+            (sub-r/m64-imm32 (reg64) (imm32))
+            (sub-r/m32-imm8 (reg32) (imm8))
+            (sub-r/m64-imm8 (reg64) (imm8)))]
+  [sub-r-r (choose
+            (sub-r/m32-r32 (reg32) (reg32))
+            (sub-r/m64-r64 (reg64) (reg64)))]
+  [setcc (choose
+          (setz (reg8)))]
+  [mul (choose
+        (mul-r/m32 (reg32))
+        (mul-r/m64 (reg64)))]
+  [reg64 (choose rax rcx rdx rdi)]
+                 ;; rbx
+                 ;;  rsp rbp rsi rdi
+                 ;;  r8 r9 r10 r11
+                 ;;  r12 r13 r14 r15)]
+  [reg32 (choose eax ecx edx edi)]
+                 ;; ebx
+                 ;;  esp ebp esi edi
+                 ;;  r8d r9d r10d r11d
+                 ;;  r12d r13d r14d r15d)]
+  [reg16 (choose ax cx dx di)]
+                 ;; bx
+                  ;; sp bp si di
+                  ;; r8w r9w r10w r11w
+  ;; r12w r13w r14w r15w)]
+  [reg8 (choose al cl dl)]
+  [imm32 (encode-imm (?? (bitvector 32)))]
+  [imm16 (encode-imm (?? (bitvector 16)))]
+  [imm8 (encode-imm (?? (bitvector 8)))])
+  
+               
 
 (define-grammar (x86-64-arith-insn)
   [insn (choose* (bin-insn-rr)
@@ -213,6 +258,10 @@
   (for/list ([i num-insns])
     (x86-64-arith-insn #:depth 20)))
 
+(define (generate-sub-r/m32-r32-insns #:num-insns num-insns)
+  (for/list ([i num-insns])
+    (x86-64-sub-synth #:depth 20)))
+
 (displayln (format "Current grammar depth: ~a" (current-grammar-depth)))
 (error-print-width 4096)
 (displayln (format "Current error-print-width: ~a" (error-print-width)))
@@ -276,7 +325,17 @@
      (begin
        (addident-checker op1))]
 
-    [(mul-r/m32 op1)
+    [(or (sub-r/m32-r32 op1 op2)
+         (sub-r/m64-r64 op1 op2)
+         (sub-r/m32-imm32 op1 op2)
+         (sub-r/m32-imm8 op1 op2)
+         (sub-r/m64-imm8 op1 op2)
+         (sub-r/m64-imm32 op1 op2))
+     (begin
+       (addident-checker op2))]
+
+    [(or (mul-r/m32 op1)
+         (mul-r/m64 op1))
      (begin
        (mulident-checker op1)
        (mulzero-checker op1)
@@ -294,13 +353,13 @@
       (asserter #:insn val #:cpu cpu))
     (printf "----------\n")))
 
-(define (add-r/m32-r32-spec #:spec-cpu spec-cpu
+(define (sub-r/m32-r32-spec #:spec-cpu spec-cpu
                             #:impl-cpu impl-cpu
                             #:num-insns num-insns)
-  (define spec-insns (add-r/m32-r32-conc-impl))
+  (define spec-insns (sub-r/m32-r32-conc-impl))
 
   ; these are the synthesis candidate instructions
-  (define impl-insns (generate-add-r/m32-r32-insns #:num-insns num-insns))
+  (define impl-insns (generate-sub-r/m32-r32-insns #:num-insns num-insns))
 
   ; 1. assume starting in the same state
   (define spec-reg-state-before (get-all-regs-but-raxes #:cpu spec-cpu))
@@ -332,14 +391,14 @@
   (run-x86-64-impl #:insns impl-insns #:cpu impl-cpu)
   
   ; 4. preserves all registers but the dest reg
-  (define spec-reg-state-after (get-all-regs-but-raxes #:cpu spec-cpu))
-  (define impl-reg-state-after (get-all-regs-but-raxes #:cpu impl-cpu))
-  (assert-regs-equiv spec-reg-state-after impl-reg-state-after)
+  ;; (define spec-reg-state-after (get-all-regs-but-raxes #:cpu spec-cpu))
+  ;; (define impl-reg-state-after (get-all-regs-but-raxes #:cpu impl-cpu))
+  ;; (assert-regs-equiv spec-reg-state-after impl-reg-state-after)
   
   ; 5. sets all flags to expected values
-  (define spec-flag-state-after (get-all-flags #:cpu spec-cpu))
-  (define impl-flag-state-after (get-all-flags #:cpu impl-cpu))
-  (assert-flags-equiv spec-flag-state-after impl-flag-state-after)
+  ;; (define spec-flag-state-after (get-all-flags #:cpu spec-cpu))
+  ;; (define impl-flag-state-after (get-all-flags #:cpu impl-cpu))
+  ;; (assert-flags-equiv spec-flag-state-after impl-flag-state-after)
   
   ; 6. computes the add of eax and ecx into eax
   (define spec-eax (cpu-gpr-ref spec-cpu eax))
@@ -358,7 +417,7 @@
                     (vector->list (cpu-flags impl-cpu))
                     (vector->list (cpu-gprs spec-cpu))
                     (vector->list (cpu-flags spec-cpu)))
-   #:guarantee (add-r/m32-r32-spec #:spec-cpu spec-cpu
+   #:guarantee (sub-r/m32-r32-spec #:spec-cpu spec-cpu
                                    #:impl-cpu impl-cpu
                                    #:num-insns num-insns)))
 (printf "Solution is: ~a\n" solution)
