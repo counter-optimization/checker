@@ -13,7 +13,7 @@ import pyvex
 import claripy
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.WARNING)
 
 class Checker(ABC):
     vulnerable_states: Union[List[angr.sim_state.SimState], 'NotImplemented']  = NotImplemented
@@ -710,7 +710,7 @@ def setup_symbolic_state_for_ed25519_pub_key_gen(proj, init_state, fn_name):
     if "hacl" not in fn_name.lower():
         return
     else:
-        logger.warn("Setting up symbolic state for ed25519 comp simp checking")
+        logger.warning("Setting up symbolic state for ed25519 comp simp checking")
 
     # 1. generate priv key
     priv_key = [claripy.BVS(f"priv{n}", 8) for n in range (1, 33)]
@@ -908,10 +908,23 @@ def run(filename: str, funcname: str):
                          "FStar_UInt128_uint64_to_uint128",
                          "FStar_UInt128_uint128_to_uint64",
                          "FStar_UInt128_shift_right",
-                         
                          "fsqr20",
                          "encode_point"]
-                         
+
+    def replace_big_loop_with_small(state):
+        expr = state.inspect.expr
+        if isinstance(expr, pyvex.expr.Binop) and \
+           (state.addr == 0x4033c7 or state.inspect.instruction == 0x4033c7) and \
+           "sub" in expr.op.lower():
+            op1 = expr.args[0]
+            op2 = expr.args[1]
+            if isinstance(op2, pyvex.expr.RdTmp):
+                op2val = state.scratch.tmp_expr(op2.tmp)
+                logger.critical(f"Tmp value for t{op2.tmp} is {op2val} ({op2val.__class__})")
+                new_loop_bound = claripy.BVV(4, 32)
+                logger.critical(f"Storing value {new_loop_bound} in t{op2.tmp}")
+                state.scratch.store_tmp(op2.tmp, new_loop_bound)
+                logger.critical(f"New value for t{op2.tmp} is {state.scratch.tmp_expr(op2.tmp)}")
         
     def on_call(state):
         call_addr = state.inspect.function_address
@@ -927,26 +940,24 @@ def run(filename: str, funcname: str):
         logger.warning(f"ret at addr {hex(state.inspect.address)}")
 
     def on_insn(state):
-        logger.warning(f"insn at {hex(state.inspect.instruction)}")
-        if state.inspect.instruction == 0x4064ac:
-            logger.warning(f"rax is {state.regs.rax}")
-            logger.warning(f"rcx is {state.regs.rcx}")
-        logger.warning(f"rbp is {state.regs.rbp}")
+        if state.inspect.instruction == 0x4033c7:
+            logger.critical(f"At montgomery_ladder main loop addr 0x4033c7")
+            state.block(opt_level=-1).vex.pp()
         
-    state.inspect.b('call',
-                    when=angr.BP_BEFORE,
-                    action=on_call)
+    # state.inspect.b('call',
+    #                 when=angr.BP_BEFORE,
+    #                 action=on_call)
 
     # state.inspect.b('return', when=angr.BP_BEFORE, action=on_ret)
-    # state.inspect.b('instruction',
-    #                 when=angr.BP_BEFORE,
-    #                 action=on_insn)
+    state.inspect.b('instruction', when=angr.BP_BEFORE, action=on_insn)
+    state.inspect.b('expr', when=angr.BP_BEFORE, action=replace_big_loop_with_small)
 
     simgr = proj.factory.simgr(state)
     simgr.run(opt_level=-1)
     logger.critical("done")
 
     comp_simp_record_csv_file_name = f"{compsimp_file_name}.csv"
+    logger.critical("writing results to {comp_simp_record_csv_file_name}")
     CompSimpDataCollectionChecker.write_records_to_csv(comp_simp_record_csv_file_name)
 
 if '__main__' == __name__:
