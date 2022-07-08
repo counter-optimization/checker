@@ -82,25 +82,24 @@
 
 (define (sub-r/m32-r32-conc-impl)
   (define sub (sub-r/m32-r32 eax ecx))
-  (define subother (sub-r/m32-imm8 eax 14))
+  (define subother (sub-r/m32-imm32 eax (bv 14 32)))
   (list subother))
 
+(define (gen-const width)
+  (define-symbolic* x (bitvector width))
+  x)
+
 (define-grammar (x86-64-sub-synth)
-  [insn (choose
-         (sub-r-i)
-         (sub-r-r)
-         (setcc)
-         (mul))]
+  [single-insn (choose (sub-r-i) (sub-r-r) (setcc) (mul))]
   [sub-r-i (choose
-            (sub-r/m32-imm32 (reg32) (imm32))
-            (sub-r/m64-imm32 (reg64) (imm32))
-            (sub-r/m32-imm8 (reg32) (imm8))
-            (sub-r/m64-imm8 (reg64) (imm8)))]
+            (sub-r/m32-imm32 (reg32) (i32))
+            (sub-r/m64-imm32 (reg64) (i32))
+            (sub-r/m32-imm8 (reg32) (i8))
+            (sub-r/m64-imm8 (reg64) (i8)))]
   [sub-r-r (choose
             (sub-r/m32-r32 (reg32) (reg32))
             (sub-r/m64-r64 (reg64) (reg64)))]
-  [setcc (choose
-          (setz (reg8)))]
+  [setcc (choose (setz (reg8)))]
   [mul (choose
         (mul-r/m32 (reg32))
         (mul-r/m64 (reg64)))]
@@ -120,9 +119,9 @@
                   ;; r8w r9w r10w r11w
   ;; r12w r13w r14w r15w)]
   [reg8 (choose al cl dl)]
-  [imm32 (choose (imm32) (?? (bitvector 32)))]
-  [imm16 (choose (imm16) (?? (bitvector 16)))]
-  [imm8 (choose (imm8) (?? (bitvector 8)))])
+  [i32 (?? (bitvector 32))]
+  [i16 (?? (bitvector 16))]
+  [i8 (?? (bitvector 8))])
 
 (define-grammar (x86-64-arith-insn)
   [insn (choose* (bin-insn-rr)
@@ -419,9 +418,7 @@
 (define impl-cpu (make-x86-64-cpu))
 (define spec-cpu (make-x86-64-cpu))
 
-;; (define (gen-const width)
-;;   (define-symbolic* x (bitvector width))
-;;   x)
+
 
 ;; (define-grammar (small-sub)
 ;;   [insn (choose (sub-r/m32-imm32 eax (imm32))
@@ -458,6 +455,10 @@
                     (vector->list (cpu-flags impl-cpu))
                     (vector->list (cpu-gprs spec-cpu))
                     (vector->list (cpu-flags spec-cpu)))
+   ;; #:forall (list (cpu-gpr-ref impl-cpu eax)
+   ;;                (cpu-gpr-ref spec-cpu eax)
+   ;;                (cpu-gpr-ref impl-cpu ecx)
+   ;;                (cpu-gpr-ref spec-cpu ecx))
    #:guarantee (sub-r/m32-r32-spec #:spec-cpu spec-cpu
                                    #:impl-cpu impl-cpu
                                    #:num-insns num-insns)))
