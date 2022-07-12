@@ -849,6 +849,76 @@ def setup_symbolic_state_for_ed25519_point_addition(proj, init_state, fn_name):
     logger.debug(f"for init_state ({init_state}), rsi holds {init_state.regs.rsi}")
     logger.debug(f"for init_state ({init_state}), rdx holds {init_state.regs.rdx}")
 
+def setup_state_for_curve25519_point_add_and_double(proj, init_state, fn_name):
+    # 1. generate arguments
+    p01_tmp1_swap = [claripy.BVS(f"p01_tmp1_swap{n}", 8) for n in range (1, 8 * 42)]
+    init = [claripy.BVS(f"init{n}", 8) for n in range (1, 8*11)]
+    tmp2 = [claripy.BVS(f"init{n}", 8) for n in range (1, 16*11)]
+
+    # 3. use some current stack memory and ensure it is aligned
+    # i think on X86_64, rsp + 8 has to be 16 byte aligned.
+    # priv key is 32 bytes
+    size_of_p01_tmp1_swap = claripy.BVV(64 * 41, 64)
+    size_of_init = claripy.BVV(64 * 10, 64)
+    size_of_tmp2 = claripy.BVV(128 * 10, 64)
+    
+    init_state.regs.rsp = init_state.regs.rsp - size_of_p01_tmp1_swap
+    p01_tmp1_swap_addr = init_state.regs.rsp
+    
+    
+    init_state.regs.rsp = init_state.regs.rsp - size_of_init
+    init_addr = init_state.regs.rsp
+
+    init_state.regs.rsp = init_state.regs.rsp - size_of_tmp2
+    tmp2_addr = init_state.regs.rsp
+
+    init_state.regs.rsp = init_state.regs.rsp - claripy.BVV(8, 64)
+    logger.warning(f"p01_tmp1_swap_addr: {p01_tmp1_swap_addr}")
+    logger.warning(f"init_addr: {init_addr}")
+    logger.warning(f"tmp2_addr is: {tmp2_addr}")
+    logger.warning(f"rsp is: {init_state.regs.rsp}")
+
+    # 4. put the values in their addresses
+    def store_point_at_addr(key, addr):
+        sizeof_uint8_t = claripy.BVV(1, 64)
+        cur_addr = addr
+        for byte in key:
+            logger.debug(f"Storing limb {byte} to addr {cur_addr}")
+            init_state.mem[cur_addr].uint8_t = byte
+            cur_addr += sizeof_uint8_t
+
+    store_point_at_addr(p01_tmp1_swap, p01_tmp1_swap_addr)
+    store_point_at_addr(init, init_addr)
+    store_point_at_addr(tmp2, tmp2_addr)
+
+    # 5. set rdi, rsi, rdx for first three arguments
+    init_state.regs.rdi = init_addr
+    init_state.regs.rsi = p01_tmp1_swap_addr
+    init_state.regs.rdx = tmp2_addr
+    logger.warning(f"for init_state ({init_state}), rdi holds {init_state.regs.rdi}")
+    logger.warning(f"for init_state ({init_state}), rsi holds {init_state.regs.rsi}")
+    logger.warning(f"for init_state ({init_state}), rdx holds {init_state.regs.rdx}")
+
+    stack_chk_fail_sym_str = "__stack_chk_fail"
+    if proj.loader.find_symbol(stack_chk_fail_sym_str):
+        logger.warning(f"Hooking {stack_chk_fail_sym_str} with VoidSimProcedure")
+        proj.hook_symbol(stack_chk_fail_sym_str, VoidSimProcedure())
+
+    memcpy_chk_fail_sym_str = "__memcpy_chk"
+    if proj.loader.find_symbol(memcpy_chk_fail_sym_str):
+        logger.warning(f"Hooking {memcpy_chk_fail_sym_str} with VoidSimProcedure")
+        proj.hook_symbol(memcpy_chk_fail_sym_str, VoidSimProcedure())
+
+    memcpy_sym_str = "memcpy"
+    if proj.loader.find_symbol(memcpy_sym_str):
+        logger.warning(f"Hooking {memcpy_sym_str} with angr memcpy SimProcedure")
+        proj.hook_symbol(memcpy_sym_str, angr.SIM_PROCEDURES['libc']['memcpy']())
+
+    memset_sym_str = "memset"
+    if proj.loader.find_symbol(memset_sym_str):
+        logger.warning(f"Hooking {memset_sym_str} with angr memset SimProcedure")
+        proj.hook_symbol(memset_sym_str, angr.SIM_PROCEDURES['libc']['memset']())
+
 def output_filename_stem(target_filename: str, target_funcname: str) -> str:
     """
     pulled this out into a function since testing relies on this to check
@@ -887,7 +957,8 @@ def run(filename: str, funcname: str):
     CompSimpDataRecord.set_func_identifier(compsimp_file_name)
 
     # setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
-    setup_symbolic_state_for_ed25519_pub_key_gen(proj, state, funcname)
+    # setup_symbolic_state_for_ed25519_pub_key_gen(proj, state, funcname)
+    setup_state_for_curve25519_point_add_and_double(proj, state, funcname)
     state.regs.rbp = state.regs.rsp
     
     # state.inspect.b('mem_write',
@@ -960,7 +1031,7 @@ def run(filename: str, funcname: str):
 
     # state.inspect.b('return', when=angr.BP_BEFORE, action=on_ret)
     # state.inspect.b('instruction', when=angr.BP_BEFORE, action=on_insn)
-    state.inspect.b('expr', when=angr.BP_BEFORE, action=replace_big_loop_with_small)
+    # state.inspect.b('expr', when=angr.BP_BEFORE, action=replace_big_loop_with_small)
 
     simgr = proj.factory.simgr(state)
     simgr.run(opt_level=-1)
