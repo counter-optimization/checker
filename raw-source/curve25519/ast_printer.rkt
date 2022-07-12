@@ -33,6 +33,7 @@
 (struct Variable (type name) #:transparent)
 
 (struct Function (name arg-list insn-list) #:transparent)
+(struct ApplyFunction (name arg-list) #:tranparent)
 
 
 ;; lexing
@@ -382,39 +383,74 @@ Hacl_Impl_Curve25519_Field51_fmul2(u64 *out, u64 *f1, u64 *f2, uint128_t *uu___)
     [(Variable type name) (lookup name env)]
     [(Value x) x]
     [(? symbol?) expr] ; probably a type
-    [(Index place idx) (format "(~a[~a])" 
+    [(Index place idx) (format "~a[~a]" 
                                (writer-eval-expr place env)
                                (writer-eval-expr idx env))]
     [(Cast type expr) (format "((~a)~a)" 
                               (writer-eval-expr type env) 
                               (writer-eval-expr expr env))]
-    [(Mul left right) (format "(~a * ~a)"
-                              (writer-eval-expr left env)
-                              (writer-eval-expr right env))]
-    [(Div left right) (format "(~a / ~a)"
-                              (writer-eval-expr left env)
-                              (writer-eval-expr right env))]
-    [(Add left right) (format "(~a + ~a)"
-                              (writer-eval-expr left env)
-                              (writer-eval-expr right env))]
-    [(Sub left right) (format "(~a - ~a)"
-                              (writer-eval-expr left env)
-                              (writer-eval-expr right env))]
-    [(LShift left right) (format "(~a << ~a)"
-                              (writer-eval-expr left env)
-                              (writer-eval-expr right env))]
-    [(RShift left right) (format "(~a >> ~a)"
-                              (writer-eval-expr left env)
-                              (writer-eval-expr right env))]
-    [(Bvand left right) (format "(~a & ~a)"
-                              (writer-eval-expr left env)
-                              (writer-eval-expr right env))]
-    [(Bvor left right) (format "(~a | ~a)"
-                              (writer-eval-expr left env)
-                              (writer-eval-expr right env))]
-    [(Bvxor left right) (format "(~a ^ ~a)"
-                              (writer-eval-expr left env)
-                              (writer-eval-expr right env))]))
+    [(Mul left right) 
+     (begin
+       (define left-eval (writer-eval-expr left env))
+       (define right-eval (writer-eval-expr right env))
+       (printf "need to check that 1 <> ~a\n" left-eval)
+       (printf "need to check that 0 <> ~a\n" left-eval)
+       (printf "need to check that 1 <> ~a\n" right-eval)
+       (printf "need to check that 0 <> ~a\n" right-eval)
+	   (format "(~a * ~a)" left-eval right-eval))]
+    [(Div left right)
+     (begin 
+       (define left-eval (writer-eval-expr left env))
+       (define right-eval (writer-eval-expr right env))
+       (printf "need to check that 1 <> ~a\n" right-eval)
+       (printf "need to check that 0 <> ~a\n" left-eval)
+       (format "(~a / ~a)" left-eval right-eval))]
+    [(Add left right)
+     (begin 
+       (define left-eval (writer-eval-expr left env))
+       (define right-eval (writer-eval-expr right env))
+       (printf "need to check that 0 <> ~a\n" right-eval)
+       (printf "need to check that 0 <> ~a\n" left-eval)
+       (format "(~a + ~a)" left-eval right-eval))]
+    [(Sub left right)
+     (begin 
+       (define left-eval (writer-eval-expr left env))
+       (define right-eval (writer-eval-expr right env))
+       (printf "need to check that 0 <> ~a\n" left-eval)
+       (format "(~a - ~a)" left-eval right-eval))]
+    [(LShift left right) 
+     (begin 
+       (define left-eval (writer-eval-expr left env))
+       (define right-eval (writer-eval-expr right env))
+       (printf "need to check that 0 <> ~a\n" right-eval)
+       (format "(~a << ~a)" left-eval right-eval))]
+    [(RShift left right) 
+     (begin 
+       (define left-eval (writer-eval-expr left env))
+       (define right-eval (writer-eval-expr right env))
+       (printf "need to check that 0 <> ~a\n" right-eval)
+       (format "(~a >> ~a)" left-eval right-eval))]
+    [(Bvand left right)
+     (begin 
+       (define left-eval (writer-eval-expr left env))
+       (define right-eval (writer-eval-expr right env))
+       (printf "need to check that 0 <> ~a\n" right-eval)
+       (printf "need to check that 0 <> ~a\n" left-eval)
+       (format "(~a & ~a)" left-eval right-eval))]
+    [(Bvor left right) 
+     (begin 
+       (define left-eval (writer-eval-expr left env))
+       (define right-eval (writer-eval-expr right env))
+       (printf "need to check that 0 <> ~a\n" right-eval)
+       (printf "need to check that 0 <> ~a\n" left-eval)
+       (format "(~a | ~a)" left-eval right-eval))]
+    [(Bvxor left right) 
+     (begin 
+       (define left-eval (writer-eval-expr left env))
+       (define right-eval (writer-eval-expr right env))
+       (printf "need to check that 0 <> ~a\n" right-eval)
+       (printf "need to check that 0 <> ~a\n" left-eval)
+       (format "(~a ^ ~a)" left-eval right-eval))]))
 
 (define (writer fundef)
   (define env empty)
