@@ -818,12 +818,14 @@ static void point_add_and_double(u64 *q, u64 *p01_tmp1, uint128_t *tmp2)
        (define left-eval (writer-eval-expr left env))
        (define right-eval (writer-eval-expr right env))
        (printf "need to check that 0 <> ~a\n" right-eval)
+       (printf "need to check that 0 <> ~a\n" left-eval)
        (format "(~a << ~a)" left-eval right-eval))]
     [(RShift left right) 
      (begin 
        (define left-eval (writer-eval-expr left env))
        (define right-eval (writer-eval-expr right env))
        (printf "need to check that 0 <> ~a\n" right-eval)
+       (printf "need to check that 0 <> ~a\n" left-eval)
        (format "(~a >> ~a)" left-eval right-eval))]
     [(Bvand left right)
      (begin 
