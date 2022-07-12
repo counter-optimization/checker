@@ -8,12 +8,19 @@
 
 (struct Binop (op1 op2) #:transparent)
 (struct Add Binop () #:transparent)
+(struct Lt Binop () #:transparent)
+(struct Gt Binop () #:transparent)
+(struct Lte Binop () #:transparent)
+(struct Gte Binop () #:transparent)
+(struct Eq Binop () #:transparent)
 (struct Sub Binop () #:transparent)
 (struct Mul Binop () #:transparent)
 (struct Div Binop () #:transparent)
 (struct Bvand Binop () #:transparent)
 (struct Bvxor Binop () #:transparent)
 (struct Bvor Binop () #:transparent)
+(struct And Binop () #:transparent)
+(struct Or Binop () #:transparent)
 (struct RShift Binop () #:transparent)
 (struct LShift Binop () #:transparent)
 (struct Cast Binop () #:transparent) ; op1 is type, op2 is expr
@@ -73,6 +80,7 @@
     [(:or "u32" "uint32_t") 'U32]
     [(:or "u64" "uint64_t") 'U64]
     [(:or "u128" "uint128_t") 'U128]
+    ["=" 'EQUALS]
     ["&" '&]
     ["|" 'PIPE]
     [";" 'SEMICOLON]
@@ -106,7 +114,38 @@ Hacl_Impl_Curve25519_Field51_fmul2(u64 *out, u64 *f1, u64 *f2, uint128_t *uu___)
   u64 f10 = f1[0U];
   u64 f11 = f1[1U];
   u64 f12 = f1[2U];
-  u64 f13 = f1[3U];"))
+  u64 f13 = f1[3U];
+  u64 f14 = f1[4U];
+  u64 f20 = f2[0U];
+  u64 f21 = f2[1U];
+  u64 f22 = f2[2U];
+  u64 f23 = f2[3U];
+  u64 f24 = f2[4U];
+  u64 f30 = f1[5U];
+  u64 f31 = f1[6U];
+  u64 f32 = f1[7U];
+  u64 f33 = f1[8U];
+  u64 f34 = f1[9U];
+  u64 f40 = f2[5U];
+  u64 f41 = f2[6U];
+  u64 f42 = f2[7U];
+  u64 f43 = f2[8U];
+  u64 f44 = f2[9U];
+  u64 tmp11 = f21 * (u64)19U;
+  u64 tmp12 = f22 * (u64)19U;
+  u64 tmp13 = f23 * (u64)19U;
+  u64 tmp14 = f24 * (u64)19U;
+  u64 tmp21 = f41 * (u64)19U;
+  u64 tmp22 = f42 * (u64)19U;
+  u64 tmp23 = f43 * (u64)19U;
+  u64 tmp24 = f44 * (u64)19U;
+  uint128_t o00 = (uint128_t)f10 * f20;
+  uint128_t o15 = (uint128_t)f10 * f21;
+  uint128_t o25 = (uint128_t)f10 * f22;
+  uint128_t o30 = (uint128_t)f10 * f23;
+  uint128_t o40 = (uint128_t)f10 * f24;
+  uint128_t o44 = o43 + (uint128_t)f34 * f40
+  uint128_t tmp_w24 = o44;"))
 
 (define (run-lexer l str-in-port)
   (define result (l str-in-port))
@@ -138,10 +177,14 @@ Hacl_Impl_Curve25519_Field51_fmul2(u64 *out, u64 *f1, u64 *f2, uint128_t *uu___)
            (right =)
            (left OR)
            (left AND)
+           (left PIPE)
+           (left ^)
+           (left &)
            (left == !=)
            (left < <= > >=)
+           (left << >>)
            (left - +)
-           (left * /)
+           (left * / %)
            (right !)
            (left APPEND CONCAT EQUALS SPLIT ITER_LENGTH
                  STR_LENGTH STON NTOS ITER_CONCAT)
@@ -149,6 +192,8 @@ Hacl_Impl_Curve25519_Field51_fmul2(u64 *out, u64 *f1, u64 *f2, uint128_t *uu___)
     (grammar 
       
       (fundef
+        [(STATIC INLINE VOID VAR LPAREN argslist RPAREN LBRACE statement-list) 
+         (begin (displayln $4) (Function $4 $6 $9))]
         [(STATIC INLINE VOID VAR LPAREN argslist RPAREN LBRACE statement-list RBRACE) 
          (begin (displayln $4) (Function $4 '() '()))])
       
@@ -164,7 +209,6 @@ Hacl_Impl_Curve25519_Field51_fmul2(u64 *out, u64 *f1, u64 *f2, uint128_t *uu___)
         [(U64) 'U64]
         [(U128) 'U128])
       
-      
       (arg
         [(type VAR) (Variable $1 $2)])
       
@@ -173,20 +217,38 @@ Hacl_Impl_Curve25519_Field51_fmul2(u64 *out, u64 *f1, u64 *f2, uint128_t *uu___)
         [(arg COMMA argslist) (cons $1 $3)])
       
       (expr
-        [(expr LSQUARE expr RSQUARE) (Index $1 $2)]
+        [(expr LSQUARE expr RSQUARE) (Index $1 $3)]
+        [(expr < expr) (Lt $1 $3)]
+        [(expr > expr) (Gt $1 $3)]
+        [(expr <= expr) (Lte $1 $3)]
+        [(expr >= expr) (Gte $1 $3)]
+        [(expr == expr) (Eq $1 $3)]
+        [(expr OR expr) (Or $1 $3)]
+        [(expr AND expr) (And $1 $3)]
+        [(expr + expr) (Add $1 $3)]
+        [(expr - expr) (Sub $1 $3)]
+        [(expr * expr) (Mul $1 $3)]
+        [(expr / expr) (Div $1 $3)]
+        [(expr ^ expr) (Bvxor $1 $3)]
+        [(expr PIPE expr) (Bvor $1 $3)]
+        [(expr & expr) (Bvand $1 $3)]
+        [(expr >> expr) (LShift $1 $3)]
+        [(expr << expr) (RShift $1 $3)]
+        [(LPAREN type RPAREN expr) (Cast $2 $4)]
         [(VAR) $1]
-        [(NUM) $1])
+        [(NUM) $1]
+        [(NUM UNSIGNED) $1])
       
       (assn
         [(type VAR EQUALS expr) (Put (Variable $1 $2) $4)]
         [(expr EQUALS expr) (Put $1 $3)])
       
       (statement
-        [(assn) $1])
+        [(assn SEMICOLON) $1])
       
       (statement-list
         [(statement) (list $1)]
         [(statement statement-list) (cons $1 $2)]))))
 
-;(run-lexer c-lexer in)
-(run-parser c-parser c-lexer in)
+(run-lexer c-lexer in)
+;(run-parser c-parser c-lexer in)
