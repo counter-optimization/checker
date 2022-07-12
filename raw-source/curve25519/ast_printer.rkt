@@ -372,7 +372,10 @@ Hacl_Impl_Curve25519_Field51_fmul2(u64 *out, u64 *f1, u64 *f2, uint128_t *uu___)
 
 (define (lookup var env)
   (define identifier (if (Variable? var) (Variable-name var) var))
-  (assoc identifier env))
+  (define found (assoc identifier env))
+  (if found
+      (cdr found)
+      (raise (format "Couldn't find var ~a in env" var))))
 
 (define (writer-eval-expr expr env)
   (match expr
@@ -416,17 +419,27 @@ Hacl_Impl_Curve25519_Field51_fmul2(u64 *out, u64 *f1, u64 *f2, uint128_t *uu___)
 (define (writer fundef)
   (define env empty)
   (define insns (Function-insn-list fundef))
+  
+  (define (add-to-env! var val)
+    (set! env (cons (cons var val) env)))
+  
+  ; populate env with arguments
+  (for ([arg (Function-arg-list fundef)])
+    (match-let ([(Variable type name) arg]) 
+      (add-to-env! name name)))
+  
+  ; interpret the fn
   (for ([insn insns])
     (match insn
       [(Put (Variable type name) rhs) 
        (begin
        	(define evald-rhs (writer-eval-expr rhs env))
-        (set! env (cons (cons name evald-rhs) env)))]
+        (add-to-env! name evald-rhs))]
       [(Put lhs rhs) 
        (begin
        	(define evald-rhs (writer-eval-expr rhs env))
         (define evald-lhs (writer-eval-expr lhs env))
-        (set! env (cons (cons evald-lhs evald-rhs) env)))]))
+        (add-to-env! evald-lhs evald-rhs))]))
   env)
 
 ; running stuff
@@ -434,3 +447,5 @@ Hacl_Impl_Curve25519_Field51_fmul2(u64 *out, u64 *f1, u64 *f2, uint128_t *uu___)
 ;(run-lexer c-lexer in)
 (define parsed-result (run-parser c-parser c-lexer in))
 (define final-env (writer parsed-result))
+(define to-print (cdr (assoc "o10" final-env)))
+(displayln to-print)
