@@ -773,81 +773,173 @@ static void point_add_and_double(u64 *q, u64 *p01_tmp1, uint128_t *tmp2)
             cur
             (find-func-by-name name (cdr funcs))))))
 
+(define line-number 158)
+(define subexpr-number 1)
+(define declared-vars '())
+(define smt-lines '())
+(define bvzero "(_ bv0 8)")
+(define bvone "(_ bv1 8)")
+
+(define (get-smt-var-decls)
+  (for/list ([var declared-vars])
+    (format "(declare-const ~a (_ BitVec 8))\n" var)))
+
+(define (get-smt-lines)
+	(reverse smt-lines))
+
+(define (add-equal-smt-line lhs rhs)
+  (unless (equal? lhs rhs)
+	  (define line (format "(assert (= ~a ~a))\n" lhs rhs))
+	  (set! smt-lines (cons line smt-lines))))
+
+(define (handle-check)
+  (write-smt-check-file)
+  (set! subexpr-number (add1 subexpr-number))
+  (when (pair? smt-lines)
+    (set! smt-lines (cdr smt-lines))))
+
+(define (add-not-eq-zero-line val)
+  (define line (format "(assert (not (= ~a ~a)))\n" bvzero val))
+  (set! smt-lines (cons line smt-lines))
+  (handle-check))
+
+(define (add-not-eq-one-line val)
+  (define line (format "(assert (not (= ~a ~a)))\n" bvone val))
+  (set! smt-lines (cons line smt-lines))
+  (handle-check))
+
+(define (get-current-smt-file-contents)
+  (define decl-lines (string-join (get-smt-var-decls) "\n"))
+  (define assert-lines (string-join (get-smt-lines) "\n"))
+  (format "~a\n~a\n(check-sat)\n" decl-lines assert-lines))
+
+(define output-dir "./smt2formulas/")
+(define (write-smt-check-file)
+  (define file-name 
+    (format "~acheck-through-line-~a-subexpr-~a.smt2" 
+            output-dir line-number subexpr-number))
+  (when (file-exists? file-name)
+    (raise (format "File ~a already exists!" file-name)))
+  (with-output-to-file file-name
+    (lambda ()
+      (define contents (get-current-smt-file-contents))
+      (printf contents))))
+
 (define (writer-eval-expr expr env)
   (match expr
-    [(Variable type name) (lookup name env)]
-    [(Value x) x]
+    [(Variable type name) 
+     (define fin-val (lookup name env))
+     (printf "fin-val is ~a\n" fin-val)
+     fin-val]
+    [(Value x)
+     (printf "value is ~a\n" x)
+     (cond
+       [(string-contains? x "0x") "#xff"]
+       [(string=? x "0") bvzero]
+       [(string=? x "51") "(_ bv3 8)"]
+       [(string=? x "19") "(_ bv3 8)"]
+       [else x])]
     [(? symbol?) expr] ; probably a type
-    [(Index place idx) (format "~a[~a]" 
-                               (writer-eval-expr place env)
-                               (writer-eval-expr idx env))]
-    [(Cast type expr) (format "((~a)~a)" 
-                              (writer-eval-expr type env) 
-                              (writer-eval-expr expr env))]
+    ; [(Index place idx) 
+    ;  (define left (writer-eval-expr place env))
+    ;  (define right (writer-eval-expr idx env))
+    ;  ;(format "~a[~a]" left right)
+    ;  (define name (format "~a~a" left right))
+    ;  (unless (member name declared-vars)
+    ;    (set! declared-vars (cons name declared-vars)))
+    ;  name]
+    [(Index place (Value x))
+     (define left (writer-eval-expr place env))
+     (define name (format "~a~a" left x))
+     (unless (member name declared-vars)
+       (set! declared-vars (cons name declared-vars)))
+     name]
+    [(Cast type expr) 
+     (define etype (writer-eval-expr type env))
+     (define eexpr (writer-eval-expr expr env))
+     (format "((~a)~a)" etype eexpr)
+     eexpr]
     [(Mul left right) 
      (begin
        (define left-eval (writer-eval-expr left env))
        (define right-eval (writer-eval-expr right env))
-       (printf "need to check that 1 <> ~a\n" left-eval)
-       (printf "need to check that 0 <> ~a\n" left-eval)
-       (printf "need to check that 1 <> ~a\n" right-eval)
-       (printf "need to check that 0 <> ~a\n" right-eval)
-	   (format "(~a * ~a)" left-eval right-eval))]
+       ; (printf "need to check that 1 <> ~a\n" left-eval)
+       ; (printf "need to check that 0 <> ~a\n" left-eval)
+       ; (printf "need to check that 1 <> ~a\n" right-eval)
+       ; (printf "need to check that 0 <> ~a\n" right-eval)
+       (add-not-eq-one-line left-eval)
+       (add-not-eq-zero-line left-eval)
+       (add-not-eq-one-line right-eval)
+       (add-not-eq-zero-line right-eval)
+	   (format "(bvmul ~a ~a)" left-eval right-eval))]
     [(Div left right)
      (begin 
        (define left-eval (writer-eval-expr left env))
        (define right-eval (writer-eval-expr right env))
-       (printf "need to check that 1 <> ~a\n" right-eval)
-       (printf "need to check that 0 <> ~a\n" left-eval)
-       (format "(~a / ~a)" left-eval right-eval))]
+       ; (printf "need to check that 1 <> ~a\n" right-eval)
+       ; (printf "need to check that 0 <> ~a\n" left-eval)
+       (format "(bvudiv ~a ~a)" left-eval right-eval))]
     [(Add left right)
      (begin 
        (define left-eval (writer-eval-expr left env))
        (define right-eval (writer-eval-expr right env))
-       (printf "need to check that 0 <> ~a\n" right-eval)
-       (printf "need to check that 0 <> ~a\n" left-eval)
-       (format "(~a + ~a)" left-eval right-eval))]
+       ; (printf "need to check that 0 <> ~a\n" right-eval)
+       ; (printf "need to check that 0 <> ~a\n" left-eval)
+       (add-not-eq-zero-line left-eval)
+       (add-not-eq-zero-line right-eval)
+       (format "(bvadd ~a ~a)" left-eval right-eval))]
     [(Sub left right)
      (begin 
        (define left-eval (writer-eval-expr left env))
        (define right-eval (writer-eval-expr right env))
-       (printf "need to check that 0 <> ~a\n" left-eval)
-       (format "(~a - ~a)" left-eval right-eval))]
+       ; (printf "need to check that 0 <> ~a\n" left-eval)
+       (add-not-eq-zero-line right-eval)
+       (format "(bvsub ~a ~a)" left-eval right-eval))]
     [(LShift left right) 
      (begin 
        (define left-eval (writer-eval-expr left env))
        (define right-eval (writer-eval-expr right env))
-       (printf "need to check that 0 <> ~a\n" right-eval)
-       (printf "need to check that 0 <> ~a\n" left-eval)
-       (format "(~a << ~a)" left-eval right-eval))]
+       (add-not-eq-zero-line left-eval)
+       (add-not-eq-zero-line right-eval)
+       ; (printf "need to check that 0 <> ~a\n" right-eval)
+       ; (printf "need to check that 0 <> ~a\n" left-eval)
+       (format "(bvshl ~a ~a)" left-eval right-eval))]
     [(RShift left right) 
      (begin 
        (define left-eval (writer-eval-expr left env))
        (define right-eval (writer-eval-expr right env))
-       (printf "need to check that 0 <> ~a\n" right-eval)
-       (printf "need to check that 0 <> ~a\n" left-eval)
-       (format "(~a >> ~a)" left-eval right-eval))]
+       (add-not-eq-zero-line left-eval)
+       (add-not-eq-zero-line right-eval)
+       ; (printf "need to check that 0 <> ~a\n" right-eval)
+       ; (printf "need to check that 0 <> ~a\n" left-eval)
+       (format "(bvlshr ~a ~a)" left-eval right-eval))]
     [(Bvand left right)
      (begin 
        (define left-eval (writer-eval-expr left env))
        (define right-eval (writer-eval-expr right env))
-       (printf "need to check that 0 <> ~a\n" right-eval)
-       (printf "need to check that 0 <> ~a\n" left-eval)
-       (format "(~a & ~a)" left-eval right-eval))]
+       ; (printf "need to check that 0 <> ~a\n" right-eval)
+       ; (printf "need to check that 0 <> ~a\n" left-eval)
+       (add-not-eq-zero-line left-eval)
+       (add-not-eq-zero-line right-eval)
+       (format "(bvand ~a ~a)" left-eval right-eval))]
     [(Bvor left right) 
      (begin 
        (define left-eval (writer-eval-expr left env))
        (define right-eval (writer-eval-expr right env))
-       (printf "need to check that 0 <> ~a\n" right-eval)
-       (printf "need to check that 0 <> ~a\n" left-eval)
-       (format "(~a | ~a)" left-eval right-eval))]
+       ; (printf "need to check that 0 <> ~a\n" right-eval)
+       ; (printf "need to check that 0 <> ~a\n" left-eval)
+       (add-not-eq-zero-line left-eval)
+       (add-not-eq-zero-line right-eval)
+       (format "(bvor ~a ~a)" left-eval right-eval))]
     [(Bvxor left right) 
      (begin 
        (define left-eval (writer-eval-expr left env))
        (define right-eval (writer-eval-expr right env))
-       (printf "need to check that 0 <> ~a\n" right-eval)
-       (printf "need to check that 0 <> ~a\n" left-eval)
-       (format "(~a ^ ~a)" left-eval right-eval))]))
+       ; (printf "need to check that 0 <> ~a\n" right-eval)
+       ; (printf "need to check that 0 <> ~a\n" left-eval)
+       (add-not-eq-zero-line left-eval)
+       (add-not-eq-zero-line right-eval)
+       (format "(bvxor ~a ~a)" left-eval right-eval))]))
 
 (define (writer fundef prog [env empty] [default-pop-args #t])
   (define insns (Function-insn-list fundef))
@@ -863,19 +955,23 @@ static void point_add_and_double(u64 *q, u64 *p01_tmp1, uint128_t *tmp2)
   
   ; interpret the fn
   (for ([insn insns])
+    (printf "Processing line number ~a\n" line-number)
     (match insn
       [(Put (Variable type name) rhs) 
-       (begin
        	(define evald-rhs (writer-eval-expr rhs env))
-        (add-to-env! name evald-rhs))]
+        (add-to-env! name evald-rhs)
+        (unless (member name declared-vars)
+          (set! declared-vars (cons name declared-vars)))
+        (add-equal-smt-line name evald-rhs)]
       [(Put lhs rhs) 
-       (begin
        	(define evald-rhs (writer-eval-expr rhs env))
         (define evald-lhs (writer-eval-expr lhs env))
-        (add-to-env! evald-lhs evald-rhs))]
+        (add-to-env! evald-lhs evald-rhs)
+        (add-equal-smt-line evald-lhs evald-rhs)]
       [(DeclVar (Variable type name))
-       (begin
-       	(add-to-env! name name))]
+       (add-to-env! name name)
+       (unless (member name declared-vars)
+         (set! declared-vars (cons name declared-vars)))]
       [(ApplyFunction name calling-arg-list)
        (begin
          ; get the target function and its args
@@ -896,7 +992,9 @@ static void point_add_and_double(u64 *q, u64 *p01_tmp1, uint128_t *tmp2)
              (add-to-env! name (writer-eval-expr calling-arg saved-env))))
          
          ; evaluate the function
-         (writer func-to-call env #f))]))
+         (writer func-to-call env #f))])
+    (set! line-number (add1 line-number))
+    (set! subexpr-number 1))
   env)
 
 (define (writer-program prog target-fn-name)
@@ -911,4 +1009,4 @@ static void point_add_and_double(u64 *q, u64 *p01_tmp1, uint128_t *tmp2)
 (define final-env (writer-program parsed-program "Hacl_Impl_Curve25519_Field51_fmul2"))
 ;(define to-print (cdr (assoc "o10" final-env)))
 ;(displayln to-print)
-(displayln final-env)
+; (displayln final-env)
