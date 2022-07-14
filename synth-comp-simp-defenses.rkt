@@ -85,12 +85,11 @@
   (define subother (sub-r/m32-imm32 eax (bv 14 32)))
   (list subother))
 
-(define (gen-const width)
-  (define-symbolic* x (bitvector width))
-  x)
-
 (define-grammar (x86-64-sub-synth)
-  [single-insn (choose (sub-r-i) (sub-r-r) (setcc) (mul))]
+  [single-insn (choose (sub-r-i) 
+                       (sub-r-r) 
+                       (setcc) 
+                       (mul))]
   [sub-r-i (choose
             (sub-r/m32-imm32 (reg32) (i32))
             (sub-r/m64-imm32 (reg64) (i32))
@@ -322,27 +321,45 @@
     (λ (op) (assert-operand-is-not-special op mulzero-for-bw cpu)))
   
   (match insn
-    [(or (add-r/m32-r32 op1 op2)
-         (add-r/m32-imm32 op1 op2))
+    [(add-r/m32-r32 op1 op2)
+     (begin
+       (addident-checker op1)
+       (addident-checker op2))]
+    [(add-r/m32-imm32 op1 op2)
      (begin
        (addident-checker op1)
        (addident-checker op2))]
     
-    [(or (add-eax-imm32 op1))
+    [(add-eax-imm32 op1)
      (begin
        (addident-checker op1))]
 
-    [(or (sub-r/m32-r32 op1 op2)
-         (sub-r/m64-r64 op1 op2)
-         (sub-r/m32-imm32 op1 op2)
-         (sub-r/m32-imm8 op1 op2)
-         (sub-r/m64-imm8 op1 op2)
-         (sub-r/m64-imm32 op1 op2))
+    [(sub-r/m32-r32 op1 op2)
+     (begin
+       (addident-checker op2))]
+    [(sub-r/m64-r64 op1 op2)
+         (begin
+       (addident-checker op2))]
+    [(sub-r/m32-imm32 op1 op2)
+         (begin
+       (addident-checker op2))]
+    [(sub-r/m32-imm8 op1 op2)
+         (begin
+       (addident-checker op2))]
+    [(sub-r/m64-imm8 op1 op2)
+         (begin
+       (addident-checker op2))]
+    [(sub-r/m64-imm32 op1 op2)
      (begin
        (addident-checker op2))]
 
-    [(or (mul-r/m32 op1)
-         (mul-r/m64 op1))
+    [(mul-r/m32 op1)
+     (begin
+       (mulident-checker op1)
+       (mulzero-checker op1)
+       (mulident-checker 'implicit-eax)
+       (mulzero-checker 'implicit-eax))]
+    [(mul-r/m64 op1)
      (begin
        (mulident-checker op1)
        (mulzero-checker op1)
@@ -420,48 +437,20 @@
 
 
 
-;; (define-grammar (small-sub)
-;;   [insn (choose (sub-r/m32-imm32 eax (imm32))
-;;                 (sub-r/m32-imm8 eax (imm8)))]
-;;   [imm32 (choose (imm32) (?? (bitvector 32)))]
-;;   [imm8 (choose (imm32) (?? (bitvector 8)))])
-;; (define insns (list (small-sub #:depth 5)))
-
-;; (define solution
-;;   (synthesize
-;;    #:forall (cpu-gpr-ref impl-cpu eax)
-;;    #:guarantee (begin
-;;                  (define before (cpu-gpr-ref impl-cpu eax))
-;;                  (run-x86-64-impl #:insns insns #:cpu impl-cpu)
-;;                  (define after (cpu-gpr-ref impl-cpu eax))
-;;                  (assert (bveq after
-;;                                (bvsub before (bv 14 32)))))))
-;; (printf "Solution is: ~a\n" solution)
-
-;; (if (sat? solution)
-;;     (begin
-;;       (printf "Solution found for ~a insns.\n" num-insns)
-;;       (print-forms solution)
-;;       (exit 0))
-;;     (begin
-;;       (printf "No solution.\n")
-;;       (exit 1)))
-
-;; (exit 0)
+(define-grammar (small-sub)
+  [insn (choose (sub-r/m32-imm32 eax (?? (bitvector 32)))
+                (sub-r/m32-imm8 eax (?? (bitvector 8))))])
+(define insns (list (small-sub #:depth 5)))
 
 (define solution
   (synthesize
-   #:forall (append (vector->list (cpu-gprs impl-cpu))
-                    (vector->list (cpu-flags impl-cpu))
-                    (vector->list (cpu-gprs spec-cpu))
-                    (vector->list (cpu-flags spec-cpu)))
-   ;; #:forall (list (cpu-gpr-ref impl-cpu eax)
-   ;;                (cpu-gpr-ref spec-cpu eax)
-   ;;                (cpu-gpr-ref impl-cpu ecx)
-   ;;                (cpu-gpr-ref spec-cpu ecx))
-   #:guarantee (sub-r/m32-r32-spec #:spec-cpu spec-cpu
-                                   #:impl-cpu impl-cpu
-                                   #:num-insns num-insns)))
+   #:forall (cpu-gpr-ref impl-cpu eax)
+   #:guarantee (begin
+                 (define before (cpu-gpr-ref impl-cpu eax))
+                 (run-x86-64-impl #:insns insns #:cpu impl-cpu)
+                 (define after (cpu-gpr-ref impl-cpu eax))
+                 (assert (bveq after
+                               (bvsub before (bv 14 32)))))))
 (printf "Solution is: ~a\n" solution)
 
 (if (sat? solution)
@@ -472,3 +461,29 @@
     (begin
       (printf "No solution.\n")
       (exit 1)))
+
+(exit 0)
+
+; (define solution
+;   (synthesize
+;    ; #:forall (append (vector->list (cpu-gprs impl-cpu))
+;    ;                  (vector->list (cpu-flags impl-cpu))
+;    ;                  (vector->list (cpu-gprs spec-cpu))
+;    ;                  (vector->list (cpu-flags spec-cpu)))
+;    #:forall (list (cpu-gpr-ref impl-cpu eax)
+;                   (cpu-gpr-ref spec-cpu eax)
+;                   (cpu-gpr-ref impl-cpu ecx)
+;                   (cpu-gpr-ref spec-cpu ecx))
+;    #:guarantee (sub-r/m32-r32-spec #:spec-cpu spec-cpu
+;                                    #:impl-cpu impl-cpu
+;                                    #:num-insns num-insns)))
+; (printf "Solution is: ~a\n" solution)
+
+; (if (sat? solution)
+;     (begin
+;       (printf "Solution found for ~a insns.\n" num-insns)
+;       (print-forms solution)
+;       (exit 0))
+;     (begin
+;       (printf "No solution.\n")
+;       (exit 1)))
