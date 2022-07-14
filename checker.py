@@ -958,7 +958,8 @@ def run(filename: str, funcname: str):
 
     # setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
     # setup_symbolic_state_for_ed25519_pub_key_gen(proj, state, funcname)
-    setup_state_for_curve25519_point_add_and_double(proj, state, funcname)
+    # setup_state_for_curve25519_point_add_and_double(proj, state, funcname)
+    setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
     state.regs.rbp = state.regs.rsp
     
     # state.inspect.b('mem_write',
