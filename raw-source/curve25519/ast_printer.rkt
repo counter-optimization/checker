@@ -777,12 +777,12 @@ static void point_add_and_double(u64 *q, u64 *p01_tmp1, uint128_t *tmp2)
 (define subexpr-number 1)
 (define declared-vars '())
 (define smt-lines '())
-(define bvzero "(_ bv0 8)")
-(define bvone "(_ bv1 8)")
+(define bvzero "(_ bv0 16)")
+(define bvone "(_ bv1 16)")
 
 (define (get-smt-var-decls)
   (for/list ([var declared-vars])
-    (format "(declare-const ~a (_ BitVec 8))\n" var)))
+    (format "(declare-const ~a (_ BitVec 16))\n" var)))
 
 (define (get-smt-lines)
 	(reverse smt-lines))
@@ -834,10 +834,11 @@ static void point_add_and_double(u64 *q, u64 *p01_tmp1, uint128_t *tmp2)
     [(Value x)
      (printf "value is ~a\n" x)
      (cond
-       [(string-contains? x "0x") "#xff"]
+       [(string-contains? x "0x") "#xffff"]
        [(string=? x "0") bvzero]
-       [(string=? x "51") "(_ bv3 8)"]
-       [(string=? x "19") "(_ bv3 8)"]
+       [(string=? x "51") "(_ bv51 16)"]
+       [(string=? x "19") "(_ bv19 16)"]
+       [(string->number x) (format "(_ bv~a 16)" x)]
        [else x])]
     [(? symbol?) expr] ; probably a type
     ; [(Index place idx) 
