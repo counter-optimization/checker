@@ -2,6 +2,7 @@
 
 (require rosette/lib/synthax
          ;rosette/lib/value-browser
+         rosette/lib/match
          rosette/lib/angelic)
 
 (require "serval/serval/x86.rkt"
@@ -14,8 +15,10 @@
   (init-cpu mm))
 
 (define (run-x86-64-impl #:insns insns #:cpu cpu)
-  (for ([i insns])
-    (interpret-insn cpu i)))
+  (if (list? insns)
+    (for ([i insns])
+      (instruction-run i cpu))
+    (instruction-run insns cpu)))
 
 ;; Addition
 
@@ -86,10 +89,7 @@
   (list subother))
 
 (define-grammar (x86-64-sub-synth)
-  [single-insn (choose (sub-r-i) 
-                       (sub-r-r) 
-                       (setcc) 
-                       (mul))]
+  [single-insn (choose (sub-r-i) (sub-r-r) (setcc) (mul))]
   [sub-r-i (choose
             (sub-r/m32-imm32 (reg32) (i32))
             (sub-r/m64-imm32 (reg64) (i32))
@@ -435,22 +435,122 @@
 (define impl-cpu (make-x86-64-cpu))
 (define spec-cpu (make-x86-64-cpu))
 
-
-
 (define-grammar (small-sub)
   [insn (choose (sub-r/m32-imm32 eax (?? (bitvector 32)))
                 (sub-r/m32-imm8 eax (?? (bitvector 8))))])
-(define insns (list (small-sub #:depth 5)))
+(define insns (small-sub #:depth 2))
+
+(displayln (union-contents insns))
+(for/all ([v insns #:exhaustive])
+  (printf "~a\n" v))
+
+(begin
+  (printf "in pick-one-test\n")
+  ; (define pick-one (choose (sub-r/m32-imm32 eax (?? (bitvector 32)))
+  ;                            (sub-r/m32-imm8 eax (?? (bitvector 8)))))
+  (define pick-one (small-sub #:depth 2))
+  (define (run-synthd-insns input cpu)
+    (cpu-gpr-set! cpu eax input)
+    (run-x86-64-impl #:insns pick-one #:cpu cpu)
+    (cpu-gpr-ref cpu eax))
+  (define test-cpu (make-x86-64-cpu))
+  (define before (cpu-gpr-ref test-cpu eax))
+  (define result 
+    (synthesize 
+      #:forall (list before)
+      #:guarantee (assert 
+                    (bveq (run-synthd-insns before test-cpu) 
+                    (bvsub before (bv 14 32))))))
+  (printf "eax after: ~a\n" (cpu-gpr-ref test-cpu eax))
+  (printf "rax after: ~a\n" (cpu-gpr-ref test-cpu rax))
+  (printf "result is ~a\n" result)
+  (printf "union-contents are: ~a\n" (union-contents pick-one))
+  (printf "out of pick-one-test\n"))
+
+; tests
+(require rackunit)
+(define sub14-tests
+  (test-suite
+    "Tests for synthesizing sub 14 from eax"
+    #:before clear-vc!
+    #:after clear-vc!
+    
+    (test-case
+      "baby-synth"
+      (define impl-cpu (make-x86-64-cpu))
+      (define wanted (choose (sub-r/m32-imm32 eax (bv 14 32))
+                             (sub-r/m32-imm8 eax (bv 14 8))))
+      (define result (solve
+                      (assert 
+                        (let ([before (cpu-gpr-ref impl-cpu eax)])
+                          (run-x86-64-impl #:insns wanted #:cpu impl-cpu)
+                          (let ([after (cpu-gpr-ref impl-cpu eax)])
+                            (assert (bveq after
+                                          (bvsub before (bv 14 32)))))))))
+      (printf "result is ~a\n" result)
+      (check-pred sat? result))
+    
+    (test-case
+      "sub14 verifies as a list"
+      (define impl-cpu (make-x86-64-cpu))
+      (define wanted (list (sub-r/m32-imm32 eax (bv 14 32))))
+      (check-pred unsat?
+                  (verify
+                    (assert 
+                      (let ([before (cpu-gpr-ref impl-cpu eax)])
+                          (run-x86-64-impl #:insns wanted #:cpu impl-cpu)
+                          (let ([after (cpu-gpr-ref impl-cpu eax)])
+                            (assert (bveq after
+                                          (bvsub before (bv 14 32))))))))))
+    
+    (test-case
+      "sub14 fails to verify with wrong spec"
+      (define impl-cpu (make-x86-64-cpu))
+      (define wanted (list (sub-r/m32-imm32 eax (bv 14 32))))
+      (define result (verify
+                    (assert 
+                      (let ([before (cpu-gpr-ref impl-cpu eax)])
+                          (run-x86-64-impl #:insns wanted #:cpu impl-cpu)
+                          (let ([after (cpu-gpr-ref impl-cpu eax)])
+                            (assert (bveq after
+                                          (bvsub before (bv 15 32)))))))))
+      (check-pred sat? result))
+    
+    (test-case
+      "what synthesizer gets for sub14 works"
+      (define impl-cpu (make-x86-64-cpu))
+      (define wanted (list (sub-r/m32-imm32 (gpr32 (bv #b0 1) (bv #b000 3)) (bv #x0000000e 32))))
+      (check-pred unsat?
+                  (verify
+                    (assert 
+                      (let ([before (cpu-gpr-ref impl-cpu eax)])
+                          (run-x86-64-impl #:insns wanted #:cpu impl-cpu)
+                          (let ([after (cpu-gpr-ref impl-cpu eax)])
+                            (assert (bveq after
+                                          (bvsub before (bv 14 32))))))))))
+    
+    (test-case
+      "sub14 verifies as an insn"
+      (define impl-cpu (make-x86-64-cpu))
+      (define wanted (sub-r/m32-imm32 eax (bv 14 32)))
+      (check-pred unsat?
+                  (verify
+                    (assert 
+                      (let ([before (cpu-gpr-ref impl-cpu eax)])
+                          (run-x86-64-impl #:insns wanted #:cpu impl-cpu)
+                          (let ([after (cpu-gpr-ref impl-cpu eax)])
+                            (assert (bveq after
+                                          (bvsub before (bv 14 32))))))))))))
+(printf "~a\n" (run-test sub14-tests))
+; end tests
 
 (define solution
   (synthesize
-   #:forall (cpu-gpr-ref impl-cpu eax)
-   #:guarantee (begin
-                 (define before (cpu-gpr-ref impl-cpu eax))
-                 (run-x86-64-impl #:insns insns #:cpu impl-cpu)
-                 (define after (cpu-gpr-ref impl-cpu eax))
-                 (assert (bveq after
-                               (bvsub before (bv 14 32)))))))
+   #:forall (list (cpu-gpr-ref impl-cpu rax))
+   #:guarantee (let ([before (cpu-gpr-ref impl-cpu eax)])
+                   (run-x86-64-impl #:insns insns #:cpu impl-cpu)
+                   (let ([after (cpu-gpr-ref impl-cpu eax)])
+                     (assert (bveq after (bvsub before (bv 14 32))))))))
 (printf "Solution is: ~a\n" solution)
 
 (if (sat? solution)
