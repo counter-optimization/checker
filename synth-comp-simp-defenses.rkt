@@ -411,8 +411,8 @@
   (define impl-flag-state-before (get-all-flags #:cpu impl-cpu))
   (assume-flags-equiv spec-flag-state-before impl-flag-state-before)
 
-  (assume (&& (! (bveq (cpu-gpr-ref impl-cpu eax) (bv 0 32)))
-              (! (bveq (cpu-gpr-ref impl-cpu ecx) (bv 0 32)))))
+  ; (assume (&& (! (bveq (cpu-gpr-ref impl-cpu eax) (bv 0 32)))
+  ;           (! (bveq (cpu-gpr-ref impl-cpu ecx) (bv 0 32)))))
 
   ; 2. for all add insns in impl-insns, no comp simp can take place.
   (apply-insn-specific-asserts #:insns impl-insns
