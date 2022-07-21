@@ -88,7 +88,7 @@
   (list sub))
 
 (define-grammar (x86-64-sub-synth)
-  [single-insn (choose (sub-r-i) (sub-r-r) (setcc) (mul))]
+  [single-insn (choose (sub-r-i) (sub-r-r) (setcc) (cmov) (mul))]
   [sub-r-i (choose
             (sub-r/m32-imm32 (reg32) (i32))
             (sub-r/m64-imm32 (reg64) (i32))
@@ -98,6 +98,9 @@
             (sub-r/m32-r32 (reg32) (reg32))
             (sub-r/m64-r64 (reg64) (reg64)))]
   [setcc (choose (setz (reg8)))]
+  [cmov (choose
+          (cmovz-r32-r32 (reg32) (reg32))
+          (cmovne-r32-r32 (reg32) (reg32)))]
   [mul (choose
         (mul-r/m32 (reg32))
         (mul-r/m64 (reg64)))]
