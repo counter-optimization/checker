@@ -94,7 +94,12 @@
   (list sub))
 
 (define-grammar (x86-64-sub-synth)
-  [single-insn (choose* (sub-r-i) (sub-r-r) (setcc) (cmov) (mul))]
+  [single-insn (choose* 
+                 (sub-r-i) 
+                 (sub-r-r) 
+                 (setcc) 
+                 (cmov) 
+                 (mul))]
   [sub-r-i (choose*
             (sub-r/m32-imm32 (reg32) (i32))
             (sub-r/m64-imm32 (reg64) (i32))
@@ -171,11 +176,11 @@
                         test-r/m64-r64
                         xchg-r/m64-r64
                         xor-r/m64-r64)]
-  [bin-op-r64i32 (choose*  or-r/m64-imm32
+  [bin-op-r64i32 (choose* or-r/m64-imm32
                           sub-r/m64-imm32
                           test-r/m64-imm32
                           xor-r/m64-imm32)]
-  [bin-op-ri (choose*  add-r/m32-imm32
+  [bin-op-ri (choose* add-r/m32-imm32
                       and-r/m32-imm32
                       cmp-r/m32-imm32
                       mov-r/m32-imm32
@@ -389,6 +394,8 @@
 (define (sub-r/m32-r32-spec #:spec-cpu spec-cpu
                             #:impl-cpu impl-cpu
                             #:num-insns num-insns)
+  ; this is just the insn sequence:
+  ; (list (sub-r/m32-r32 eax ecx))
   (define spec-insns (sub-r/m32-r32-conc-impl))
 
   ; these are the synthesis candidate instructions
@@ -411,6 +418,11 @@
   (define impl-flag-state-before (get-all-flags #:cpu impl-cpu))
   (assume-flags-equiv spec-flag-state-before impl-flag-state-before)
 
+  ; this is for sanity checking the comp-simp checker applied asserts.
+  ; with these lines uncommented out (saying that eax and ecx never start
+  ; with the value 0), then the synthesizer should be able to synthesize
+  ; sub eax, ecx as a comp-simp-safe-for-these-assumptions, equivalent 
+  ; insn sequence
   ; (assume (&& (! (bveq (cpu-gpr-ref impl-cpu eax) (bv 0 32)))
   ;           (! (bveq (cpu-gpr-ref impl-cpu ecx) (bv 0 32)))))
 
@@ -438,18 +450,18 @@
   (define impl-eax (cpu-gpr-ref impl-cpu eax))
   (assert (bveq spec-eax impl-eax)))
 
+; Command line arg for insn seq length
+; varied by the shell script that runs this code
 (define num-insns (string->number (vector-ref (current-command-line-arguments) 0)))
 (printf "num-insn: ~a\n" num-insns)
 
+
+; synthesis calling code
 (define impl-cpu (make-x86-64-cpu))
 (define spec-cpu (make-x86-64-cpu))
 
 (define solution
   (synthesize
-   ; #:forall (append (vector->list (cpu-gprs impl-cpu))
-   ;                  (vector->list (cpu-flags impl-cpu))
-   ;                  (vector->list (cpu-gprs spec-cpu))
-   ;                  (vector->list (cpu-flags spec-cpu)))
    #:forall (list (cpu-gpr-ref impl-cpu eax)
                   (cpu-gpr-ref spec-cpu eax)
                   (cpu-gpr-ref impl-cpu ecx)
