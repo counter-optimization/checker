@@ -14,7 +14,7 @@ for start in ${starts}; do
         # generate the hardcoded insn sequence file
         subbed_file_name=synth-comp-simp-defenses-macrod-${insn_seq_len}.rkt
         cat synth-comp-simp-defenses-macrod.rkt \
-        | sed 's/REPLACE_ME/${insn_seq_len}/' > ${subbed_file_name}
+        | sed "s/REPLACE_ME/${insn_seq_len}/" > ${subbed_file_name}
 
         racket ${subbed_file_name} ${insn_seq_len} &>./log/hard-coded-synthesis-seq-len-$\
 {insn_seq_len}-`date | tr ' ' '-'`.log &
