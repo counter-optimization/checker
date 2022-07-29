@@ -16,8 +16,7 @@ for start in ${starts}; do
         cat synth-comp-simp-defenses-macrod.rkt \
         | sed "s/REPLACE_ME/${insn_seq_len}/" > ${subbed_file_name}
 
-        racket ${subbed_file_name} ${insn_seq_len} &>./log/hard-coded-synthesis-seq-len-$\
-{insn_seq_len}-`date | tr ' ' '-'`.log &
+        racket ${subbed_file_name} ${insn_seq_len} &>./log/hard-coded-synthesis-seq-len-${insn_seq_len}-`date | tr ' ' '-'`.log &
         pids[$i]=$!
         echo Done running insn_seq_len: $insn_seq_len
     done

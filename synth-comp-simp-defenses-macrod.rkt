@@ -132,6 +132,8 @@
   [mul (choose
         (mul-r/m32 (reg32))
         (mul-r/m64 (reg64)))]
+  
+  
   [reg64 (choose rax rcx rdx rdi)]
                  ;; rbx
                  ;;  rsp rbp rsi rdi
@@ -439,7 +441,7 @@
   ; sub eax, ecx as a comp-simp-safe-for-these-assumptions, equivalent 
   ; insn sequence
   ; (assume (&& (! (bveq (cpu-gpr-ref impl-cpu eax) (bv 0 32)))
-  ;           (! (bveq (cpu-gpr-ref impl-cpu ecx) (bv 0 32)))))
+  ;             (! (bveq (cpu-gpr-ref impl-cpu ecx) (bv 0 32)))))
 
   ; 2. for all add insns in impl-insns, no comp simp can take place.
   (apply-insn-specific-asserts #:insns impl-insns
@@ -475,12 +477,16 @@
 (define impl-cpu (make-x86-64-cpu))
 (define spec-cpu (make-x86-64-cpu))
 
+;; these **must** be the same as the ones used in
+;; define-grammar
+(define (forall-quantified-vars some-cpu)
+  (for/list ([reg-id (list rax rcx rdx rdi eax ecx edi edi ax cx dx di al cl dl)])
+    (cpu-gpr-ref some-cpu reg-id)))
+
 (define solution
   (synthesize
-   #:forall (list (cpu-gpr-ref impl-cpu eax)
-                  (cpu-gpr-ref spec-cpu eax)
-                  (cpu-gpr-ref impl-cpu ecx)
-                  (cpu-gpr-ref spec-cpu ecx))
+   #:forall (append (forall-quantified-vars impl-cpu)
+                    (forall-quantified-vars spec-cpu))
    #:guarantee (sub-r/m32-r32-spec #:spec-cpu spec-cpu
                                    #:impl-cpu impl-cpu)))
 (printf "Solution is: ~a\n" solution)
