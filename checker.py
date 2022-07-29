@@ -3,17 +3,65 @@ import logging
 from abc import ABC, abstractmethod
 import typing
 from typing import List, Optional, Union
-import re
-import base64
 from pathlib import Path
 import csv
+import argparse
 
 import angr
 import pyvex
 import claripy
 
+# GLOBALS
+version = '0.0.0'
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
+
+# solver that the checkers will use
+# constraints will not be held over across
+# different calls (like .satisfiable or .is_true) 
+# to the solver backend
+solver = None
+
+argparser = argparse.ArgumentParser()
+
+argparser.add_argument('--version', 
+                        action='version',
+                        version=version)
+
+checker_arg_group = argparser.add_argument_group('Available checkers')
+checker_arg_group.add_argument('--silent-stores', 
+                        action='store_true',
+                        help='check the function in the binary for instructions '
+                             'vulnerable to silent stores')
+
+checker_arg_group.add_argument('--comp-simp',
+                        action='store_true',
+                        help='check the function in the binary for instructions '
+                             'vulnerable to computation simplification')
+
+comp_simp_arg_group = argparser.add_argument_group('Computation simplification')
+comp_simp_arg_group.add_argument('--use-small-bitwidth-solver', 
+                        action='store_true')
+
+comp_simp_arg_group.add_argument('--bitwidth-for-small-bitwidth-solver',
+                        choices=[1, 2, 4, 8, 16, 32, 64, 128],
+                        help='must be a power of two >= 1, <= 128',
+                        type=int)
+
+required_arg_group = argparser.add_argument_group('Required target file info')
+required_arg_group.add_argument('path_to_binary',
+                        help='path to binary containing the function to check. '
+                             'for the current version of the checker, it *must be'
+                             '* an ELF file (or at least a format cle understands '
+                             'which is at least not a macho file)')
+
+required_arg_group.add_argument('function_name_symbol',
+                        help='name of the function that is also its '
+                             'symbol in the binary')
+
+parsed_args = None
+# END GLOBALS
 
 class Checker(ABC):
     vulnerable_states: Union[List[angr.sim_state.SimState], 'NotImplemented']  = NotImplemented
@@ -926,7 +974,10 @@ def output_filename_stem(target_filename: str, target_funcname: str) -> str:
     """
     return f"{Path(target_filename).name}-{target_funcname}"
 
-def run(filename: str, funcname: str):
+def run(args):
+    filename = args.path_to_binary
+    funcname = args.function_name_symbol
+
     proj = angr.Project(filename)
     
     func_symbol = proj.loader.find_symbol(funcname)
@@ -953,60 +1004,49 @@ def run(filename: str, funcname: str):
     # proj.factory.block(state.addr, opt_level=-1).pp()
     # proj.factory.block(state.addr, opt_level=-1).vex.pp()
 
-    compsimp_file_name = output_filename_stem(filename, funcname)
-    CompSimpDataRecord.set_func_identifier(compsimp_file_name)
-
     # setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
     # setup_symbolic_state_for_ed25519_pub_key_gen(proj, state, funcname)
     # setup_state_for_curve25519_point_add_and_double(proj, state, funcname)
-    setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
+    # setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
     state.regs.rbp = state.regs.rsp
-    
-    # state.inspect.b('mem_write',
-    #                 when=angr.BP_BEFORE,
-    #                 action=SilentStoreChecker.check)
 
-    state.inspect.b('expr',
-                    when=angr.BP_BEFORE,
-                    action=CompSimpDataCollectionChecker.check)
+    # loaded_symbols = proj.loader.symbols
+    # for sym in loaded_symbols:
+    #     logger.debug(f"Function {sym.name} located at {hex(sym.rebased_addr)}")
 
-    loaded_symbols = proj.loader.symbols
-    for sym in loaded_symbols:
-        logger.debug(f"Function {sym.name} located at {hex(sym.rebased_addr)}")
+    # funcs_of_interest = ["montgomery_ladder",
+    #                      "memcpy",
+    #                      "Hacl_Impl_Curve25519_Field51_cswap2",
+    #                      "cswap20",
+    #                      "point_add_and_double",
+    #                      "Hacl_Curve25519_51_scalarmult",
+    #                      "Hacl_Impl_Curve25519_Field51_fadd",
+    #                      "Hacl_Impl_Curve25519_Field51_fsub",
+    #                      "Hacl_Impl_Curve25519_Field51_fsqr2",
+    #                      "Hacl_Impl_Curve25519_Field51_fmul",
+    #                      "fmul20",
+    #                      "FStar_UInt128_mul_wide",
+    #                      "FStar_UInt128_add",
+    #                      "FStar_UInt128_uint64_to_uint128",
+    #                      "FStar_UInt128_uint128_to_uint64",
+    #                      "FStar_UInt128_shift_right",
+    #                      "fsqr20",
+    #                      "encode_point"]
 
-    funcs_of_interest = ["montgomery_ladder",
-                         "memcpy",
-                         "Hacl_Impl_Curve25519_Field51_cswap2",
-                         "cswap20",
-                         "point_add_and_double",
-                         "Hacl_Curve25519_51_scalarmult",
-                         "Hacl_Impl_Curve25519_Field51_fadd",
-                         "Hacl_Impl_Curve25519_Field51_fsub",
-                         "Hacl_Impl_Curve25519_Field51_fsqr2",
-                         "Hacl_Impl_Curve25519_Field51_fmul",
-                         "fmul20",
-                         "FStar_UInt128_mul_wide",
-                         "FStar_UInt128_add",
-                         "FStar_UInt128_uint64_to_uint128",
-                         "FStar_UInt128_uint128_to_uint64",
-                         "FStar_UInt128_shift_right",
-                         "fsqr20",
-                         "encode_point"]
-
-    def replace_big_loop_with_small(state):
-        expr = state.inspect.expr
-        if isinstance(expr, pyvex.expr.Binop) and \
-           (state.addr == 0x4033c7 or state.inspect.instruction == 0x4033c7) and \
-           "sub" in expr.op.lower():
-            op1 = expr.args[0]
-            op2 = expr.args[1]
-            if isinstance(op2, pyvex.expr.RdTmp):
-                op2val = state.scratch.tmp_expr(op2.tmp)
-                logger.critical(f"Tmp value for t{op2.tmp} is {op2val} ({op2val.__class__})")
-                new_loop_bound = claripy.BVV(4, 32)
-                logger.critical(f"Storing value {new_loop_bound} in t{op2.tmp}")
-                state.scratch.store_tmp(op2.tmp, new_loop_bound)
-                logger.critical(f"New value for t{op2.tmp} is {state.scratch.tmp_expr(op2.tmp)}")
+    # def replace_big_loop_with_small(state):
+    #     expr = state.inspect.expr
+    #     if isinstance(expr, pyvex.expr.Binop) and \
+    #        (state.addr == 0x4033c7 or state.inspect.instruction == 0x4033c7) and \
+    #        "sub" in expr.op.lower():
+    #         op1 = expr.args[0]
+    #         op2 = expr.args[1]
+    #         if isinstance(op2, pyvex.expr.RdTmp):
+    #             op2val = state.scratch.tmp_expr(op2.tmp)
+    #             logger.critical(f"Tmp value for t{op2.tmp} is {op2val} ({op2val.__class__})")
+    #             new_loop_bound = claripy.BVV(4, 32)
+    #             logger.critical(f"Storing value {new_loop_bound} in t{op2.tmp}")
+    #             state.scratch.store_tmp(op2.tmp, new_loop_bound)
+    #             logger.critical(f"New value for t{op2.tmp} is {state.scratch.tmp_expr(op2.tmp)}")
         
     # def on_call(state):
     #     call_addr = state.inspect.function_address
@@ -1034,20 +1074,33 @@ def run(filename: str, funcname: str):
     # state.inspect.b('instruction', when=angr.BP_BEFORE, action=on_insn)
     # state.inspect.b('expr', when=angr.BP_BEFORE, action=replace_big_loop_with_small)
 
+    if args.comp_simp:
+        # TODO: this should be handled in the comp-simp specific checker
+        compsimp_file_name = output_filename_stem(filename, funcname)
+        CompSimpDataRecord.set_func_identifier(compsimp_file_name)
+
+        state.inspect.b('expr',
+                        when=angr.BP_BEFORE,
+                        action=CompSimpDataCollectionChecker.check)
+    
+    if args.silent_stores:
+        state.inspect.b('mem_write',
+                        when=angr.BP_BEFORE,
+                        action=SilentStoreChecker.check)
+
     simgr = proj.factory.simgr(state)
     simgr.run(opt_level=-1)
     logger.critical("done")
 
-    comp_simp_record_csv_file_name = f"{compsimp_file_name}.csv"
-    logger.critical("writing results to {comp_simp_record_csv_file_name}")
-    CompSimpDataCollectionChecker.write_records_to_csv(comp_simp_record_csv_file_name)
+    # TODO: this should be handled in the comp-simp specific checker
+    if args.comp_simp:
+        comp_simp_record_csv_file_name = f"{compsimp_file_name}.csv"
+        logger.critical(f"writing results to {comp_simp_record_csv_file_name}")
+        CompSimpDataCollectionChecker.write_records_to_csv(comp_simp_record_csv_file_name)
 
 if '__main__' == __name__:
-    expected_num_args = 2
-    assert(len(sys.argv) - 1 == expected_num_args)
-    
-    filename = sys.argv[1]
-    funcname = sys.argv[2]
-    
-    run(filename, funcname)
+    # argparser.parse_args expects to receive only the CL options
+    args = sys.argv[1:]
+    parsed_args = argparser.parse_args(args)
+    run(parsed_args)
  
