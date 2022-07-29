@@ -17,11 +17,8 @@ version = '0.0.0'
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
 
-# solver that the checkers will use
-# constraints will not be held over across
-# different calls (like .satisfiable or .is_true) 
-# to the solver backend
-solver = None
+default_solver = claripy.Solver()
+comp_simp_solver = None
 
 argparser = argparse.ArgumentParser()
 
@@ -104,9 +101,8 @@ class SilentStoreChecker(Checker):
         logger.debug(f"prev_val is {prev_val}")
         logger.debug(f"addr is {addr}")
 
-        solver = claripy.Solver()
-        solver.add(expr == prev_val)
-        is_sat = solver.satisfiable() # True if SAT, False if UNSAT/UNKNOWN
+        default_solver.add(expr == prev_val)
+        is_sat = default_solver.satisfiable() # True if SAT, False if UNSAT/UNKNOWN
         
         if is_sat:
             SilentStoreChecker.vulnerable_states.append(state)
@@ -191,10 +187,9 @@ class CompSimpDataRecord():
         # zero = claripy.BVV(0, self.bitwidth)
         one = claripy.BVV(1, symval.length)
         zero = claripy.BVV(0, symval.length)
-        solver = claripy.Solver()
-        solver.add(symval != zero)
-        solver.add((symval & (symval - one)) == zero)
-        is_sat = solver.satisfiable()
+        comp_simp_solver.add(symval != zero)
+        comp_simp_solver.add((symval & (symval - one)) == zero)
+        is_sat = comp_simp_solver.satisfiable()
         return is_sat
 
     def couldBePowerOfTwoConcrete(self, concval: pyvex.expr.Const) -> bool:
@@ -204,9 +199,8 @@ class CompSimpDataRecord():
         return cond
 
     def couldBeRightIdentity(self, expr) -> bool:
-        solver = claripy.Solver()
-        solver.add(expr == self.rightIdentity(expr.length))
-        is_sat = solver.satisfiable()
+        comp_simp_solver.add(expr == self.rightIdentity(expr.length))
+        is_sat = comp_simp_solver.satisfiable()
         return is_sat
 
     def couldBeRightIdentityConcrete(self, expr: pyvex.expr.Const) -> bool:
@@ -214,9 +208,8 @@ class CompSimpDataRecord():
         return (expr.con.value == self.rightIdentity(64)).is_true()
 
     def couldBeLeftIdentity(self, expr) -> bool:
-        solver = claripy.Solver()
-        solver.add(expr == self.leftIdentity(expr.length))
-        is_sat = solver.satisfiable()
+        comp_simp_solver.add(expr == self.leftIdentity(expr.length))
+        is_sat = comp_simp_solver.satisfiable()
         return is_sat
 
     def couldBeLeftIdentityConcrete(self, expr: pyvex.expr.Const) -> bool:
@@ -224,15 +217,13 @@ class CompSimpDataRecord():
         return (expr.con.value == self.leftIdentity(64)).is_true()
 
     def couldBeLeftZero(self, expr) -> bool:
-        solver = claripy.Solver()
-        solver.add(expr == self.leftZero(expr.length))
-        is_sat = solver.satisfiable()
+        comp_simp_solver.add(expr == self.leftZero(expr.length))
+        is_sat = comp_simp_solver.satisfiable()
         return is_sat
 
     def couldBeRightZero(self, expr) -> bool:
-        solver = claripy.Solver()
-        solver.add(expr == self.rightZero(expr.length))
-        is_sat = solver.satisfiable()
+        comp_simp_solver.add(expr == self.rightZero(expr.length))
+        is_sat = comp_simp_solver.satisfiable()
         return is_sat
 
     def couldBeRightZeroConcrete(self, expr: pyvex.expr.Const) -> bool:
@@ -974,7 +965,39 @@ def output_filename_stem(target_filename: str, target_funcname: str) -> str:
     """
     return f"{Path(target_filename).name}-{target_funcname}"
 
+def setup_solver_globally(args):
+    """
+    :param args: the namespace (or whichever object) returned from argparse
+    """
+    global comp_simp_solver
+    
+    if args.use_small_bitwidth_solver:
+        use_bitwidth = args.bitwidth_for_small_bitwidth_solver
+
+        # TODO: tell argparse that if use_small_bitwidth_solver option
+        # enabled, then bitwidth_for_small_bitwidth_solver is also
+        # required
+        if not use_bitwidth:
+            raise("option --bitwidth-for-small-bitwidth-solver "
+                  "required if using small bitwidth solver")
+
+        comp_simp_solver = claripy.SmallBitwidthSolver(bitwidth=use_bitwidth)
+    else:
+        comp_simp_solver = default_solver
+
 def run(args):
+    """
+    1) Load the binary 
+    2) Try to find the function in the binary *using on symbols*
+    3) Set up angr options for symbolic execution useful for verification and
+       helpful for running on cryptographic code
+    4) Set up the solver to use based on the command line args
+    4) Register the checkers based on the command line args (@args)
+    5) Run the symbolic execution
+    6) If any results need to be logged, log them
+
+    :param args: the namespace (or whichever object) returned from argparse
+    """
     filename = args.path_to_binary
     funcname = args.function_name_symbol
 
@@ -997,6 +1020,9 @@ def run(args):
     state.options.remove('SIMPLIFY_MERGED_CONSTRAINTS')
     state.options.remove('SIMPLIFY_MEMORY_WRITES')
     state.options.remove('SIMPLIFY_REGISTER_WRITES')
+
+    # set up special, global solvers
+    setup_solver_globally(args)
 
     # For now, just print the code before running checkers. TODO: need
     # to later figure out how to output problematic states for a checker
