@@ -5,8 +5,8 @@
          rosette/lib/match
          rosette/lib/angelic)
 
-(require "serval/serval/x86.rkt"
-         (prefix-in core: "serval/serval/lib/core.rkt"))
+(require "../serval/serval/x86.rkt"
+         (prefix-in core: "../serval/serval/lib/core.rkt"))
 
 ; Serval setup
 (define (make-x86-64-cpu)

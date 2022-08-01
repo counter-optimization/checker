@@ -5,8 +5,8 @@
          rosette/lib/match
          rosette/lib/angelic)
 
-(require "serval/serval/x86.rkt"
-         (prefix-in core: "serval/serval/lib/core.rkt"))
+(require "../serval/serval/x86.rkt"
+         (prefix-in core: "../serval/serval/lib/core.rkt"))
 
 ;; Common
 
@@ -423,8 +423,8 @@
   ; with the value 0), then the synthesizer should be able to synthesize
   ; sub eax, ecx as a comp-simp-safe-for-these-assumptions, equivalent 
   ; insn sequence
-  ; (assume (&& (! (bveq (cpu-gpr-ref impl-cpu eax) (bv 0 32)))
-  ;           (! (bveq (cpu-gpr-ref impl-cpu ecx) (bv 0 32)))))
+  ;; (assume (&& (! (bveq (cpu-gpr-ref impl-cpu eax) (bv 0 32)))
+  ;;             (! (bveq (cpu-gpr-ref impl-cpu ecx) (bv 0 32)))))
 
   ; 2. for all add insns in impl-insns, no comp simp can take place.
   (apply-insn-specific-asserts #:insns impl-insns
@@ -460,12 +460,20 @@
 (define impl-cpu (make-x86-64-cpu))
 (define spec-cpu (make-x86-64-cpu))
 
+;; these **must** be the same as the ones used in
+;; define-grammar
+(define (forall-quantified-vars some-cpu)
+  (for/list ([reg-id (list rax rcx rdx rdi eax ecx edi edi ax cx dx di al cl dl)])
+    (cpu-gpr-ref some-cpu reg-id)))
+
 (define solution
   (synthesize
-   #:forall (list (cpu-gpr-ref impl-cpu eax)
-                  (cpu-gpr-ref spec-cpu eax)
-                  (cpu-gpr-ref impl-cpu ecx)
-                  (cpu-gpr-ref spec-cpu ecx))
+   #:forall (append (forall-quantified-vars impl-cpu)
+                    (forall-quantified-vars spec-cpu))
+   ;; #:forall (list (cpu-gpr-ref spec-cpu eax)
+   ;;                (cpu-gpr-ref spec-cpu ecx)
+   ;;                (cpu-gpr-ref impl-cpu eax)
+   ;;                (cpu-gpr-ref impl-cpu ecx))
    #:guarantee (sub-r/m32-r32-spec #:spec-cpu spec-cpu
                                    #:impl-cpu impl-cpu
                                    #:num-insns num-insns)))
