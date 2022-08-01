@@ -307,11 +307,6 @@
 (define mulident-for-bw one-for-bw)
 (define mulzero-for-bw zero-for-bw)
 
-(define bitv8? (bitvector 8))
-(define bitv16? (bitvector 16))
-(define bitv32? (bitvector 32))
-(define bitv64? (bitvector 64))
-
 ; gets bitwidth of operand as bitvector
 (define (bitwidth-getter operand)
   (match operand
@@ -328,10 +323,6 @@
     [(quote implicit-al) 8]
     [_ (printf "unhandled case in bitwidth-getter for operand ~a\n" operand)
        (exit 2)]))
-    ;; [ (? bitv8?) 8]
-    ;; [(? bitv16?) 16]
-    ;; [(? bitv32?) 32]
-    ;; [(? bitv64?) 64]))
 
 ; returns the bitvector value behind the operand
 (define (operand-decoder operand cpu)

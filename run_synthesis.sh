@@ -1,31 +1,31 @@
-if [[ ! -d log ]]; then
+if [[ ! -e log ]]; then
+    mkdir log
+elif [[ ! -d log ]]; then
+    rm log
     mkdir log
 fi
 
-starts=`seq 0 6 18`
+start=1
+end=18
 
-for start in ${starts}; do
-    echo Batch start is $start
-    end=$((start+6))
+for insn_seq_len in `seq ${start} ${end}`; do
+    echo Running insn_seq_len: $insn_seq_len
 
-    for insn_seq_len in `seq ${start} ${end}`; do
-        echo Running insn_seq_len: $insn_seq_len
-
-        # generate the hardcoded insn sequence file
-        subbed_file_name=synth-comp-simp-defenses-macrod-${insn_seq_len}.rkt
-        cat synth-comp-simp-defenses-macrod.rkt \
+    # generate the hardcoded insn sequence file
+    subbed_file_name=synth/synth-comp-simp-defenses-macrod-${insn_seq_len}.rkt
+    cat synth/synth-comp-simp-defenses-macrod.rkt \
         | sed "s/REPLACE_ME/${insn_seq_len}/" > ${subbed_file_name}
 
-        racket ${subbed_file_name} ${insn_seq_len} &>./log/hard-coded-synthesis-seq-len-${insn_seq_len}-`date | tr ' ' '-'`.log &
-        pids[$i]=$!
-        echo Done running insn_seq_len: $insn_seq_len
-    done
-
-    for pid_no in ${pids[*]}; do
-        echo Waiting on pid $pid_no
-        wait $pid_no
-    done
+    racket ${subbed_file_name} ${insn_seq_len} &>./log/hard-coded-synthesis-seq-len-${insn_seq_len}-`date | tr ' ' '-'`.log &
+    pids[$i]=$!
+    echo Done starting insn_seq_len: $insn_seq_len
 done
+
+for pid_no in ${pids[*]}; do
+    echo Waiting on pid $pid_no
+    wait $pid_no
+done
+
 
 # start_insn_seq_len=1
 # end_insn_seq_len=20
