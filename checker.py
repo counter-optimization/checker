@@ -12,7 +12,7 @@ import pyvex
 import claripy
 
 # GLOBALS
-version = '0.0.0'
+__version__ = '0.0.0'
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
@@ -24,7 +24,7 @@ argparser = argparse.ArgumentParser()
 
 argparser.add_argument('--version', 
                         action='version',
-                        version=version)
+                        version=__version__)
 
 checker_arg_group = argparser.add_argument_group('Available checkers')
 checker_arg_group.add_argument('--silent-stores', 
@@ -592,6 +592,7 @@ class CompSimpDataCollectionChecker(Checker):
             filename = exception_traceback.tb_frame.f_code.co_filename
             line_number = exception_traceback.tb_lineno
             logger.critical(f"ERROR in {filename} at L{line_number}! ({err})")
+            logger.critical(f"exception occured when processing state {state} expr {expr} op {expr.op}")
             traceback.print_tb(exception_traceback)
             sys.exit(-1)
 
@@ -745,11 +746,7 @@ def ed25519_priv_key_precondition(priv_key_arr, state):
     )
 
 def setup_symbolic_state_for_ed25519_pub_key_gen(proj, init_state, fn_name):
-    # in case i forget to comment this out for later
-    if "hacl" not in fn_name.lower():
-        return
-    else:
-        logger.warning("Setting up symbolic state for ed25519 comp simp checking")
+    logger.warning("Setting up symbolic state for ed25519 comp simp checking")
 
     # 1. generate priv key
     priv_key = [claripy.BVS(f"priv{n}", 8) for n in range (1, 33)]
@@ -970,7 +967,7 @@ def setup_solver_globally(args):
     :param args: the namespace (or whichever object) returned from argparse
     """
     global comp_simp_solver
-    
+
     if args.use_small_bitwidth_solver:
         use_bitwidth = args.bitwidth_for_small_bitwidth_solver
 
@@ -981,8 +978,13 @@ def setup_solver_globally(args):
             raise("option --bitwidth-for-small-bitwidth-solver "
                   "required if using small bitwidth solver")
 
+        log_msg = f"Running comp simp checker with claripy small ({use_bitwidth}) bitwidth solver"
+        logger.warning(log_msg)
+
         comp_simp_solver = claripy.SmallBitwidthSolver(bitwidth=use_bitwidth)
     else:
+        log_msg = f"Running comp simp checker with default claripy solver"
+        logger.warning(log_msg)
         comp_simp_solver = default_solver
 
 def run(args):
@@ -1024,83 +1026,15 @@ def run(args):
     # set up special, global solvers
     setup_solver_globally(args)
 
-    # For now, just print the code before running checkers. TODO: need
-    # to later figure out how to output problematic states for a checker
-    # in a way that is debuggable
-    # proj.factory.block(state.addr, opt_level=-1).pp()
-    # proj.factory.block(state.addr, opt_level=-1).vex.pp()
-
     # setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
-    # setup_symbolic_state_for_ed25519_pub_key_gen(proj, state, funcname)
     # setup_state_for_curve25519_point_add_and_double(proj, state, funcname)
     # setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
+
+    setup_symbolic_state_for_ed25519_pub_key_gen(proj, state, funcname)
     state.regs.rbp = state.regs.rsp
 
-    # loaded_symbols = proj.loader.symbols
-    # for sym in loaded_symbols:
-    #     logger.debug(f"Function {sym.name} located at {hex(sym.rebased_addr)}")
-
-    # funcs_of_interest = ["montgomery_ladder",
-    #                      "memcpy",
-    #                      "Hacl_Impl_Curve25519_Field51_cswap2",
-    #                      "cswap20",
-    #                      "point_add_and_double",
-    #                      "Hacl_Curve25519_51_scalarmult",
-    #                      "Hacl_Impl_Curve25519_Field51_fadd",
-    #                      "Hacl_Impl_Curve25519_Field51_fsub",
-    #                      "Hacl_Impl_Curve25519_Field51_fsqr2",
-    #                      "Hacl_Impl_Curve25519_Field51_fmul",
-    #                      "fmul20",
-    #                      "FStar_UInt128_mul_wide",
-    #                      "FStar_UInt128_add",
-    #                      "FStar_UInt128_uint64_to_uint128",
-    #                      "FStar_UInt128_uint128_to_uint64",
-    #                      "FStar_UInt128_shift_right",
-    #                      "fsqr20",
-    #                      "encode_point"]
-
-    # def replace_big_loop_with_small(state):
-    #     expr = state.inspect.expr
-    #     if isinstance(expr, pyvex.expr.Binop) and \
-    #        (state.addr == 0x4033c7 or state.inspect.instruction == 0x4033c7) and \
-    #        "sub" in expr.op.lower():
-    #         op1 = expr.args[0]
-    #         op2 = expr.args[1]
-    #         if isinstance(op2, pyvex.expr.RdTmp):
-    #             op2val = state.scratch.tmp_expr(op2.tmp)
-    #             logger.critical(f"Tmp value for t{op2.tmp} is {op2val} ({op2val.__class__})")
-    #             new_loop_bound = claripy.BVV(4, 32)
-    #             logger.critical(f"Storing value {new_loop_bound} in t{op2.tmp}")
-    #             state.scratch.store_tmp(op2.tmp, new_loop_bound)
-    #             logger.critical(f"New value for t{op2.tmp} is {state.scratch.tmp_expr(op2.tmp)}")
-        
-    # def on_call(state):
-    #     call_addr = state.inspect.function_address
-    #     name = "notfound"
-    #     for symbol in proj.loader.symbols:
-    #         if (symbol.rebased_addr == call_addr).is_true():
-    #             name = symbol.name
-    #             break
-    #     if name in funcs_of_interest:
-    #         logger.warning(f"Calling function {name} at addr {call_addr}")
-
-    # def on_ret(state):
-    #     logger.warning(f"ret at addr {hex(state.inspect.address)}")
-
-    # def on_insn(state):
-    #     if state.inspect.instruction == 0x4033c7:
-    #         logger.critical(f"At montgomery_ladder main loop addr 0x4033c7")
-    #         state.block(opt_level=-1).vex.pp()
-        
-    # state.inspect.b('call',
-    #                 when=angr.BP_BEFORE,
-    #                 action=on_call)
-
-    # state.inspect.b('return', when=angr.BP_BEFORE, action=on_ret)
-    # state.inspect.b('instruction', when=angr.BP_BEFORE, action=on_insn)
-    # state.inspect.b('expr', when=angr.BP_BEFORE, action=replace_big_loop_with_small)
-
     if args.comp_simp:
+        logger.warning("Checking for potential computation simplification spots")
         # TODO: this should be handled in the comp-simp specific checker
         compsimp_file_name = output_filename_stem(filename, funcname)
         CompSimpDataRecord.set_func_identifier(compsimp_file_name)
@@ -1110,19 +1044,21 @@ def run(args):
                         action=CompSimpDataCollectionChecker.check)
     
     if args.silent_stores:
+        logger.warning("Checking for potential silent store spots")
         state.inspect.b('mem_write',
                         when=angr.BP_BEFORE,
                         action=SilentStoreChecker.check)
 
     simgr = proj.factory.simgr(state)
     simgr.run(opt_level=-1)
-    logger.critical("done")
+    logger.warning("Done running checkers")
 
     # TODO: this should be handled in the comp-simp specific checker
     if args.comp_simp:
         comp_simp_record_csv_file_name = f"{compsimp_file_name}.csv"
-        logger.critical(f"writing results to {comp_simp_record_csv_file_name}")
+        logger.warning(f"Writing results to {comp_simp_record_csv_file_name}...")
         CompSimpDataCollectionChecker.write_records_to_csv(comp_simp_record_csv_file_name)
+        logger.warning("Done writing comp simp results.")
 
 if '__main__' == __name__:
     # argparser.parse_args expects to receive only the CL options
