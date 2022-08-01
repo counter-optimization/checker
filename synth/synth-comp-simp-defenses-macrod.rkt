@@ -1,3 +1,4 @@
+
 #lang rosette
 
 (require rosette/lib/synthax
@@ -320,7 +321,13 @@
     [(struct gpr8 _) 8]
     ; probably an immediate
     [(list smt ...) (length operand)]
-    [_ (bitvector-size (type-of operand))]))
+    [(? bv?) (bitvector-size (type-of operand))]
+    [(quote implicit-rax) 64]
+    [(quote implicit-eax) 32]
+    [(quote implicit-ax) 16]
+    [(quote implicit-al) 8]
+    [_ (printf "unhandled case in bitwidth-getter for operand ~a\n" operand)
+       (exit 2)]))
     ;; [ (? bitv8?) 8]
     ;; [(? bitv16?) 16]
     ;; [(? bitv32?) 32]
@@ -337,10 +344,12 @@
     [(list smt ...) (decode-imm operand)]
     [(? bitvector?) operand]
     [(? bv?) operand]
-    ['implicit-rax (cpu-gpr-ref cpu rax)]
-    ['implicit-eax (cpu-gpr-ref cpu eax)]
-    ['implicit-ax (cpu-gpr-ref cpu ax)]
-    ['implicit-al (cpu-gpr-ref cpu al)]))
+    [(quote implicit-rax) (cpu-gpr-ref cpu rax)]
+    [(quote implicit-eax) (cpu-gpr-ref cpu eax)]
+    [(quote implicit-ax) (cpu-gpr-ref cpu ax)]
+    [(quote implicit-al) (cpu-gpr-ref cpu al)]
+    [_ (printf "unhandled case in operand-decoder for operand ~a\n" operand)
+       (exit 3)]))
 
 (define (assert-operand-is-not-special operand special-for-bw cpu)
   (define operand-bw (bitwidth-getter operand))
