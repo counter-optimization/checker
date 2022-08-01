@@ -294,14 +294,6 @@
                                   #'(for/list ([i num-insns])
                                       (x86-64-sub-synth #:depth 3)))])
        #'synth-calls)]))
-(displayln (generate-sub-insns REPLACE_ME))
-
-(define (generate-sub-r/m32-r32-insns #:num-insns num-insns)
-  (list
-    (x86-64-sub-synth #:depth 3)
-    (x86-64-sub-synth #:depth 3)
-    (x86-64-sub-synth #:depth 3)
-    (x86-64-sub-synth #:depth 3)))
 
 (displayln (format "Current grammar depth: ~a" (current-grammar-depth)))
 (error-print-width 100000)
