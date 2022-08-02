@@ -45,6 +45,13 @@ def run_checker(filename: Path, funcname: str):
         comp_simp=True)
     checker.run(cl_args)
 
+    if cl_args.comp_simp:
+        checker.CompSimpDataCollectionChecker.csv_records.clear()
+        checker.CompSimpDataCollectionChecker.vulnerable_states.clear()
+
+    if cl_args.silent_stores:
+        checker.SilentStoreChecker.vulnerable_states.clear()
+
 def remove_csv_files_from_dir(d: Path):
     csv_files = list(d.glob("*.csv"))
     # logger.info(f"Removing files: {csv_files}")

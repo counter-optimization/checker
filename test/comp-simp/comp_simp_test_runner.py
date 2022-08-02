@@ -108,11 +108,6 @@ class CompSimpTestCaseRunner(unittest.TestCase):
                         self.assertEqual(exp_value, actual,
                                          msg=f"Non matching value for col: {col_name}")
 
-        if testcase.funcname == 'xorident':
-            with open('xorident.log', mode='w') as f:
-                writer = csv.writer(f)
-                writer.writerows(selected_rows)
-
         # so this doesn't fail open if no row is found
         self.assertEqual(num_rows_selected, 1,
                          msg="Probably couldn't find the row of interest in csv file")
