@@ -1,9 +1,11 @@
+from importlib.resources import path
 import sys
 from pathlib import Path
 import typing
 from typing import List, Optional
 import re
 import subprocess
+from dataclasses import dataclass
 
 # Make sure ENV var $PYTHONPATH is set or python knows how to find the checker module
 # https://docs.python.org/3/tutorial/modules.html#the-module-search-path
@@ -26,9 +28,22 @@ def is_venv():
     return (hasattr(sys, 'real_prefix') or
             (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix))
 
+# for use in run_checker
+@dataclass
+class MockCommandlineArgs:
+    path_to_binary: str
+    function_name_symbol: str
+    use_small_bitwidth_solver: bool = False
+    bitwidth_for_small_bitwidth_solver: int = -1
+    comp_simp: bool = False
+    silent_stores: bool = False
+
 def run_checker(filename: Path, funcname: str):
     file_abs_path = filename.resolve()
-    checker.run(file_abs_path, funcname)
+    cl_args = MockCommandlineArgs(path_to_binary=filename, 
+        function_name_symbol=funcname, 
+        comp_simp=True)
+    checker.run(cl_args)
 
 def remove_csv_files_from_dir(d: Path):
     csv_files = list(d.glob("*.csv"))

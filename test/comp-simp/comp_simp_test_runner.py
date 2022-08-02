@@ -7,6 +7,9 @@ import typing
 from typing import Callable, List, Any
 from pathlib import Path
 
+from typeguard.importhook import install_import_hook
+install_import_hook('test_common')
+
 import test_common
 import checker
 
