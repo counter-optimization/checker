@@ -17,7 +17,7 @@ from traitlets import default
 __version__ = '0.0.0'
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.DEBUG)
 
 get_default_solver = lambda: claripy.Solver()
 get_comp_simp_solver = None
@@ -136,8 +136,6 @@ class CompSimpDataRecord():
         self.operation = expr.op
         self.bitwidth = pyvex.get_type_size(expr.result_type(state.scratch.tyenv))
         
-        self.solver = get_comp_simp_solver()
-        
         # Sane defaults for csv values
         self.numConstantOperands = 0
         self.firstOperandConst = None
@@ -163,12 +161,6 @@ class CompSimpDataRecord():
         self.secondOperandZeroElem = False
         self.leftZero = NotImplemented
         self.rightZero = NotImplemented
-
-        self.numPossibleFirstOperand = None
-        self.numPossibleSecondOperand = None
-
-        self.serializedFirstOperandFormula = ""
-        self.serializedSecondOperandFormula = ""
 
     def check(self):
         self.__check_expr(self.expr)
@@ -236,8 +228,7 @@ class CompSimpDataRecord():
         if (self.hasLeftIdentity and is_left) or \
             (self.hasRightIdentity and not is_left):
             ident = self.leftIdentity(bw) if is_left else self.rightIdentity(bw)
-            self.solver.add(ident == o)
-            is_sat = self.solver.satisfiable()
+            is_sat = self.__could_be_true(ident == o)
             if is_sat:
                 logger.debug(f"expr ({self.expr}) can have ident element operand")
                 self.numIdentityOperands += 1
@@ -249,8 +240,7 @@ class CompSimpDataRecord():
         # check if it is zero
         if (self.hasLeftZero and is_left) or (self.hasRightZero and not is_left):
             zero = self.leftZero(bw) if is_left else self.rightZero(bw)
-            self.solver.add(zero == o)
-            is_sat = self.solver.satisfiable()
+            is_sat = self.__could_be_true(zero == o)
             if is_sat:
                 logger.debug(f"expr ({self.expr}) can have zero element operand")
                 self.numZeroElementOperands += 1
@@ -274,9 +264,8 @@ class CompSimpDataRecord():
         # https://stackoverflow.com/questions/600293/how-to-check-if-a-number-is-a-power-of-2
         one = claripy.BVV(1, symval.length)
         zero = claripy.BVV(0, symval.length)
-        self.solver.add(symval != zero)
-        self.solver.add((symval & (symval - one)) == zero)
-        is_sat = self.solver.satisfiable()
+        is_sat = self.__all_could_be_true([symval != zero, 
+            (symval & (symval - one)) == zero])
         return is_sat
 
     def __write_insns(self):
@@ -288,6 +277,19 @@ class CompSimpDataRecord():
                 block.pp()
                 f.write(str(block))
                 f.write(str(block.vex))
+
+    def __all_could_be_true(self, constraints: List[claripy.ast.Base]) -> bool:
+        solver = get_comp_simp_solver()
+        for c in constraints:
+            solver.add(c)
+        is_sat = solver.satisfiable()
+        return is_sat
+
+    def __could_be_true(self, constraint: claripy.ast.Base) -> bool:
+        solver = get_comp_simp_solver()
+        solver.add(constraint)
+        is_sat = solver.satisfiable()
+        return is_sat
 
     def address(self) -> str:
         return hex(self.state.addr)
@@ -312,11 +314,7 @@ class CompSimpDataRecord():
                 'secondOperandIdentity',
                 'numZeroElementOperands',
                 'firstOperandZeroElem',
-                'secondOperandZeroElem',
-                'numPossibleFirstOperand',
-                'numPossibleSecondOperand',
-                'serializedFirstOperandFormula',
-                'serializedSecondOperandFormula']
+                'secondOperandZeroElem']
         return cols
 
     def getAttributeResult(self, attrname: str) -> str:
