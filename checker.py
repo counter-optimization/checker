@@ -1,7 +1,6 @@
 import sys
 import logging
 from abc import ABC, abstractmethod
-from tkinter import BaseWidget
 import typing
 from typing import List, Optional, Union
 from pathlib import Path
@@ -11,13 +10,12 @@ import argparse
 import angr
 import pyvex
 import claripy
-from traitlets import default
 
 # GLOBALS
 __version__ = '0.0.0'
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.WARNING)
 
 get_default_solver = lambda: claripy.Solver()
 get_comp_simp_solver = None
@@ -169,7 +167,7 @@ class CompSimpDataRecord():
         # only supporting binops right now because of 
         # how left/right ident/zero/etc are defined
         if not isinstance(e, pyvex.expr.Binop):
-            error_msg = f"Operand ({o}) arity not supported (not a binop)."
+            error_msg = f"Operand ({e}) arity not supported (not a binop)."
             error_msg += f" State: {self.state}, expr: {self.expr}"
             raise CompSimpCheckerError(error_msg)
 
@@ -943,7 +941,7 @@ def run(args):
     # setup_state_for_curve25519_point_add_and_double(proj, state, funcname)
     # setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
 
-    # setup_symbolic_state_for_ed25519_pub_key_gen(proj, state, funcname)
+    setup_symbolic_state_for_ed25519_pub_key_gen(proj, state, funcname)
     state.regs.rbp = state.regs.rsp
 
     if args.comp_simp:
