@@ -78,7 +78,7 @@ def run_cmd(cmd: List[str], timeout: int = 30) -> bool:
     return True
 
 def get_csv_value_from_col_name(col_name: str, csv_row: List[str]) -> Optional[str]:
-    all_col_names = checker.CompSimpDataRecord.getCSVHeaderColNames()
+    all_col_names = checker.CompSimpDataRecord.get_csv_header_col_names()
     if not col_name in all_col_names:
         return None
     else:
