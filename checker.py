@@ -1,6 +1,7 @@
 import sys
 import logging
 from abc import ABC, abstractmethod
+from tkinter import BaseWidget
 import typing
 from typing import List, Optional, Union
 from pathlib import Path
@@ -10,6 +11,7 @@ import argparse
 import angr
 import pyvex
 import claripy
+from traitlets import default
 
 # GLOBALS
 __version__ = '0.0.0'
@@ -17,8 +19,8 @@ __version__ = '0.0.0'
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
 
-default_solver = claripy.Solver()
-comp_simp_solver = None
+get_default_solver = lambda: claripy.Solver()
+get_comp_simp_solver = None
 
 argparser = argparse.ArgumentParser()
 
@@ -101,8 +103,9 @@ class SilentStoreChecker(Checker):
         logger.debug(f"prev_val is {prev_val}")
         logger.debug(f"addr is {addr}")
 
-        default_solver.add(expr == prev_val)
-        is_sat = default_solver.satisfiable() # True if SAT, False if UNSAT/UNKNOWN
+        solver = get_default_solver()
+        solver.add(expr == prev_val)
+        is_sat = solver.satisfiable() # True if SAT, False if UNSAT/UNKNOWN
         
         if is_sat:
             SilentStoreChecker.vulnerable_states.append(state)
@@ -115,8 +118,12 @@ class SilentStoreChecker(Checker):
 
         return is_sat
 
+class CompSimpCheckerError(Exception):
+    pass
+
 class CompSimpDataRecord():
-    func_identifier = "" 
+    checks_ops: List[str] = []
+    func_identifier: str = "" 
 
     @staticmethod
     def set_func_identifier(name: str):
@@ -126,9 +133,12 @@ class CompSimpDataRecord():
         self.state = state
         self.expr = expr
 
-        self.operation = ""
+        self.operation = expr.op
         self.bitwidth = pyvex.get_type_size(expr.result_type(state.scratch.tyenv))
         
+        self.solver = get_comp_simp_solver()
+        
+        # Sane defaults for csv values
         self.numConstantOperands = 0
         self.firstOperandConst = None
         self.secondOperandConst = None
@@ -151,231 +161,125 @@ class CompSimpDataRecord():
         self.numZeroElementOperands = 0
         self.firstOperandZeroElem = False
         self.secondOperandZeroElem = False
+        self.leftZero = NotImplemented
+        self.rightZero = NotImplemented
 
         self.numPossibleFirstOperand = None
         self.numPossibleSecondOperand = None
 
-        # base64 encoded for shoving into csv
         self.serializedFirstOperandFormula = ""
         self.serializedSecondOperandFormula = ""
 
-    def operandIsConst(self, expr):
-        return type(expr) == pyvex.expr.Const
+    def check(self):
+        self.__check_expr(self.expr)
 
-    def isTmpVar(self, expr) -> bool:
-        return type(expr) == pyvex.expr.RdTmp
+    def __check_expr(self, e: pyvex.expr.IRExpr):
+        # only supporting binops right now because of 
+        # how left/right ident/zero/etc are defined
+        if not isinstance(e, pyvex.expr.Binop):
+            error_msg = f"Operand ({o}) arity not supported (not a binop)."
+            error_msg += f" State: {self.state}, expr: {self.expr}"
+            raise CompSimpCheckerError(error_msg)
 
-    def isSupportedOperandType(self, expr) -> bool:
-        return self.isTmpVar(expr) or self.operandIsConst(expr)
+        operands = []
+        for ir_expr in e.child_expressions:
+            operands.append(self.__decode_operand(ir_expr))
+        assert(len(operands) == 2) # Should be a binop (for now)
 
-    def getTmpSymbolicValue(self, expr):
-        assert(self.isTmpVar(expr))
-        logger.debug(f"in getTmpSymbolicValue, expr.tmp is {expr.tmp}")
-        tmp_expr = self.state.scratch.tmp_expr(expr.tmp)
-        logger.debug(f"tmp_expr returns: {tmp_expr}")
-        # return self.state.scratch.temps[expr.tmp]
-        return tmp_expr
+        self.__check_operand(operands[0], is_left=True)
+        self.__check_operand(operands[1], is_left=False)
 
-    def couldBePowerOfTwo(self, symval) -> bool:
+    def __decode_operand(self, o: pyvex.expr.IRExpr) -> claripy.ast.Base:
+        """
+        Takes an operand to a pyvex expr (vex ir expr) and returns its backing
+        claripy expr AST.
+        """
+        if isinstance(o, pyvex.const.IRConst):
+            return self.__wrap_in_claripy_ast(o)
+        elif isinstance(o, pyvex.expr.Const):
+            value = o.con.value
+            return self.__wrap_in_claripy_ast(value)
+        elif isinstance(o, pyvex.expr.RdTmp):
+            stored_tmp_expr = self.state.scratch.tmp_expr(o.tmp)
+            return self.__decode_operand(stored_tmp_expr)
+        elif isinstance(o, claripy.ast.Base):
+            return o
+        else:
+            error_msg = f"Operand ({o}) type not supported."
+            error_msg += f" State: {self.state}, expr: {self.expr}"
+            raise CompSimpCheckerError(error_msg)
+            
+    def __wrap_in_claripy_ast(self, o) -> claripy.ast.Base:
+        if isinstance(o, claripy.ast.Base):
+            return o
+        elif isinstance(o, int):
+            return claripy.BVV(o, self.bitwidth)
+        else:
+            error_msg = f"Operand ({o}) type not supported."
+            error_msg += f" State: {self.state}, expr: {self.expr}"
+            raise CompSimpCheckerError(error_msg)
+
+    def __check_operand(self, o: claripy.ast.Base, is_left=True):
+        bw = o.length # the operand's bitwidth
+
+        # check if it is a constant
+        constants = {'BVV', 'BoolV', 'FPV', 'Int'}
+        if o.op in constants:
+            logger.debug(f"expr ({self.expr}) has a constant operand")
+            self.numConstantOperands += 1
+            if is_left:
+                self.firstOperandConst = o
+            else:
+                self.secondOperandConst = o
+
+        # check if it is ident
+        if (self.hasLeftIdentity and is_left) or \
+            (self.hasRightIdentity and not is_left):
+            ident = self.leftIdentity(bw) if is_left else self.rightIdentity(bw)
+            self.solver.add(ident == o)
+            is_sat = self.solver.satisfiable()
+            if is_sat:
+                logger.debug(f"expr ({self.expr}) can have ident element operand")
+                self.numIdentityOperands += 1
+                if is_left:
+                    self.firstOperandIdentity = True
+                else:
+                    self.secondOperandIdentity = True
+
+        # check if it is zero
+        if (self.hasLeftZero and is_left) or (self.hasRightZero and not is_left):
+            zero = self.leftZero(bw) if is_left else self.rightZero(bw)
+            self.solver.add(zero == o)
+            is_sat = self.solver.satisfiable()
+            if is_sat:
+                logger.debug(f"expr ({self.expr}) can have zero element operand")
+                self.numZeroElementOperands += 1
+                if is_left:
+                    self.firstOperandZeroElem = True
+                else:
+                    self.secondOperandZeroElem = True
+
+        # check if it is a power of two
+        if self.powerOfTwoSignificant:
+            if self.__could_be_power_of_two(o):
+                logger.debug(f"expr ({self.expr}) can have power of two operand")
+                self.numPowerOfTwoOperands += 1
+                if is_left:
+                    self.firstOperandPowerOfTwo = True
+                else:
+                    self.secondOperandPowerOfTwo = True
+
+    def __could_be_power_of_two(self, symval) -> bool:
         # symval != 0 and ((symval & (symval - 1)) == 0)
         # https://stackoverflow.com/questions/600293/how-to-check-if-a-number-is-a-power-of-2
-        # originally, this generated one or zero using self.bitwidth
-        # this now just matches symval.length (symval's bitwidth) for in the
-        # case of division (vexir does div of 64 bit value by 32 bit value,
-        # so the operation's bitwidth is not reliable
-        # one = claripy.BVV(1, self.bitwidth)
-        # zero = claripy.BVV(0, self.bitwidth)
         one = claripy.BVV(1, symval.length)
         zero = claripy.BVV(0, symval.length)
-        comp_simp_solver.add(symval != zero)
-        comp_simp_solver.add((symval & (symval - one)) == zero)
-        is_sat = comp_simp_solver.satisfiable()
+        self.solver.add(symval != zero)
+        self.solver.add((symval & (symval - one)) == zero)
+        is_sat = self.solver.satisfiable()
         return is_sat
 
-    def couldBePowerOfTwoConcrete(self, concval: pyvex.expr.Const) -> bool:
-        value = concval.con.value
-        cond = value != 0
-        cond = cond and ((value & (value - 1)) == 0)
-        return cond
-
-    def couldBeRightIdentity(self, expr) -> bool:
-        comp_simp_solver.add(expr == self.rightIdentity(expr.length))
-        is_sat = comp_simp_solver.satisfiable()
-        return is_sat
-
-    def couldBeRightIdentityConcrete(self, expr: pyvex.expr.Const) -> bool:
-        # just default to largest bitwidth
-        return (expr.con.value == self.rightIdentity(64)).is_true()
-
-    def couldBeLeftIdentity(self, expr) -> bool:
-        comp_simp_solver.add(expr == self.leftIdentity(expr.length))
-        is_sat = comp_simp_solver.satisfiable()
-        return is_sat
-
-    def couldBeLeftIdentityConcrete(self, expr: pyvex.expr.Const) -> bool:
-        # just default to largest bitwidth
-        return (expr.con.value == self.leftIdentity(64)).is_true()
-
-    def couldBeLeftZero(self, expr) -> bool:
-        comp_simp_solver.add(expr == self.leftZero(expr.length))
-        is_sat = comp_simp_solver.satisfiable()
-        return is_sat
-
-    def couldBeRightZero(self, expr) -> bool:
-        comp_simp_solver.add(expr == self.rightZero(expr.length))
-        is_sat = comp_simp_solver.satisfiable()
-        return is_sat
-
-    def couldBeRightZeroConcrete(self, expr: pyvex.expr.Const) -> bool:
-        # just default to largest bitwidth
-        return (expr.con.value == self.rightZero(64)).is_true()
-
-    def couldBeLeftZeroConcrete(self, expr: pyvex.expr.Const) -> bool:
-        # just default to largest bitwidth
-        return (expr.con.value == self.leftZero(64)).is_true()
-
-    def checkForSpecialValues(self, expr, isLeft: bool):
-        logger.debug(f"Checking {expr} for special values")
-        if self.powerOfTwoSignificant:
-            if self.couldBePowerOfTwo(expr):
-                logger.debug(f"{expr} could be power of two")
-                self.numPowerOfTwoOperands += 1
-                if isLeft:
-                    self.firstOperandPowerOfTwo = True
-                else:
-                    self.secondOperandPowerOfTwo = True
-
-        if isLeft:
-            if self.hasLeftIdentity:
-                if self.couldBeLeftIdentity(expr):
-                    logger.debug(f"{expr} could be left ident")
-                    self.numIdentityOperands += 1
-                    self.firstOperandIdentity = True
-            if self.hasLeftZero:
-                if self.couldBeLeftZero(expr):
-                    logger.debug(f"{expr} could be left zero")
-                    self.numZeroElementOperands += 1
-                    self.firstOperandZeroElem = True
-        else:
-            if self.hasRightIdentity:
-                if self.couldBeRightIdentity(expr):
-                    logger.debug(f"{expr} could be right ident")
-                    self.numIdentityOperands += 1
-                    self.secondOperandIdentity = True
-            if self.hasRightZero:
-                if self.couldBeRightZero(expr):
-                    logger.debug(f"{expr} could be right zero")
-                    self.numZeroElementOperands += 1
-                    self.secondOperandZeroElem = True
-
-    def checkForSpecialValuesConcrete(self, expr, isLeft: bool):
-        logger.debug(f"Checking {expr} for special values concrete")
-        if self.powerOfTwoSignificant:
-            if self.couldBePowerOfTwoConcrete(expr):
-                logger.debug(f"{expr} could be power of two concrete")
-                self.numPowerOfTwoOperands += 1
-                if isLeft:
-                    self.firstOperandPowerOfTwo = True
-                else:
-                    self.secondOperandPowerOfTwo = True
-
-        if isLeft:
-            if self.hasLeftIdentity:
-                if self.couldBeLeftIdentityConcrete(expr):
-                    logger.debug(f"{expr} could be left ident concrete")
-                    self.numIdentityOperands += 1
-                    self.firstOperandIdentity = True
-
-            if self.hasLeftZero:
-                if self.couldBeLeftZeroConcrete(expr):
-                    logger.debug(f"{expr} could be left zero concrete")
-                    self.numZeroElementOperands += 1
-                    self.firstOperandZeroElem = True
-        else:
-            if self.hasRightIdentity:
-                if self.couldBeRightIdentityConcrete(expr):
-                    logger.debug(f"{expr} could be right ident concrete")
-                    self.numIdentityOperands += 1
-                    self.secondOperandIdentity = True
-            if self.hasRightZero:
-                if self.couldBeRightZeroConcrete(expr):
-                    logger.debug(f"{expr} could be right zero concrete")
-                    self.numZeroElementOperands += 1
-                    self.secondOperandZeroElem = True
-
-    def handleBinOp(self):
-        """
-        in two-address, firstOperand is dst
-        e.g., in angr, addq rax, rbx is:
-        $tmpXXX = Add64(RdTmp($tmpXXX), RdTmp($tmpYYY))
-        """
-        # Getting
-        assert(type(self.expr) == pyvex.expr.Binop)
-        firstOperand = self.expr.args[0]
-        secondOperand = self.expr.args[1]
-        operation = self.expr.op
-        self.operation = operation
-        logger.debug(f"In handleBinOp: firstOperand is: {firstOperand}")
-        logger.debug(f"In handleBinOp: secondOperand is: {secondOperand}")
-
-        # Decoding
-        if not self.isSupportedOperandType(firstOperand):
-            warn_str = "In handlBinOp: unsupported operand type for operand: "
-            warn_str += (str(firstOperand))
-            warn_str += (" with type: ")
-            warn_str += (type(firstOperand))
-            logger.critical(warn_str)
-            raise RuntimeError(warn_str)
-
-        if not self.isSupportedOperandType(secondOperand):
-            warn_str = "In handlBinOp: unsupported operand type for operand: "
-            warn_str += (str(secondOperand))
-            warn_str += (" with type: ")
-            warn_str += (type(secondOperand))
-            logger.critical(warn_str)
-            raise RuntimeError(warn_str)
-
-        # TODO: so this symval should be handled at least for expr: RdTmp,
-        # expr: Const, expr: Reg(?) in addition to just tmp vars
-        firstOperandSymVal = None
-        secondOperandSymVal = None
-
-        if self.isTmpVar(firstOperand):
-            logger.debug("first operand is tmp var")
-            firstOperandSymVal = self.getTmpSymbolicValue(firstOperand)
-
-        if self.isTmpVar(secondOperand):
-            logger.debug("second operand is tmp var")
-            secondOperandSymVal = self.getTmpSymbolicValue(secondOperand)
-
-        logger.debug(f"firstOperandSymVal: {firstOperandSymVal}")
-        logger.debug(f"secondOperandSymVal: {secondOperandSymVal}")
-
-        if self.operandIsConst(firstOperand):
-            self.firstOperandConst = firstOperand.con.value
-            self.numConstantOperands += 1
-            self.checkForSpecialValuesConcrete(firstOperand, isLeft=True)
-        elif self.isTmpVar(firstOperand):
-            if firstOperandSymVal.concrete:
-                self.firstOperandConst = str(firstOperandSymVal)
-                self.numConstantOperands += 1
-            self.checkForSpecialValues(firstOperandSymVal, isLeft=True)
-        else:
-            raise RuntimeError(f"Unsupported operand type, firstOperand: {firstOperand}")
-
-        if self.operandIsConst(secondOperand):
-            self.secondOperandConst = secondOperand.con.value
-            self.numConstantOperands += 1
-            self.checkForSpecialValuesConcrete(secondOperand, isLeft=False)
-        elif self.isTmpVar(secondOperand):
-            if secondOperandSymVal.concrete:
-                self.secondOperandConst = str(secondOperandSymVal)
-                self.numConstantOperands += 1
-            self.checkForSpecialValues(secondOperandSymVal, isLeft=False)
-        else:
-            raise RuntimeError(f"Unsupported operand type, secondOperand: {secondOperand}")
-
-    def writeInsns(self):
+    def __write_insns(self):
         logger.debug(f"Writing insns to {CompSimpDataRecord.func_identifier}")
         insns_file = Path.cwd() / Path(f"{CompSimpDataRecord.func_identifier}.insns")
         if not insns_file.exists():
@@ -392,7 +296,7 @@ class CompSimpDataRecord():
         return str(self.expr)
 
     @staticmethod
-    def getCSVHeaderColNames() -> List[str]:
+    def get_csv_header_col_names() -> List[str]:
         cols = ['address',
                 'expression',
                 'operation',
@@ -422,12 +326,14 @@ class CompSimpDataRecord():
         else:
             return str(intermediate_result)
 
-    def getCSVRow(self) -> List[str] :
+    def get_csv_row(self) -> List[str] :
         values = map(lambda x: self.getAttributeResult(x),
-                     CompSimpDataRecord.getCSVHeaderColNames())
+                     CompSimpDataRecord.get_csv_header_col_names())
         return list(values)
 
 class AddDataRecord(CompSimpDataRecord):
+    checks_ops: List[str] = ["Iop_Add8",  "Iop_Add16",  "Iop_Add32",  "Iop_Add64"]
+
     def __init__(self, expr, state):
         super().__init__(expr, state)
         self.hasRightIdentity = True
@@ -437,10 +343,13 @@ class AddDataRecord(CompSimpDataRecord):
         self.rightIdentity = lambda bw: claripy.BVV(0, bw)
         self.leftIdentity = lambda bw: claripy.BVV(0, bw)
         self.powerOfTwoSignificant = False
-        if type(self.expr) == pyvex.expr.Binop:
-            self.handleBinOp()
 
 class ShiftDataRecord(CompSimpDataRecord):
+    checks_ops: List[str] = ["Iop_Shl8",  "Iop_Shl16",  "Iop_Shl32",  "Iop_Shl64",
+      "Iop_Shr8",  "Iop_Shr16",  "Iop_Shr32",  "Iop_Shr64",
+      "Iop_Sar8",  "Iop_Sar16",  "Iop_Sar32",  "Iop_Sar64"
+      ]
+
     def __init__(self, expr, state):
         super().__init__(expr, state)
         self.hasRightIdentity = True
@@ -450,10 +359,9 @@ class ShiftDataRecord(CompSimpDataRecord):
         self.rightIdentity = lambda bw: claripy.BVV(0, bw)
         self.leftZero = lambda bw: claripy.BVV(0, bw)
         self.powerOfTwoSignificant = False
-        if type(self.expr) == pyvex.expr.Binop:
-            self.handleBinOp()
 
 class SubDataRecord(CompSimpDataRecord):
+    checks_ops: List[str] = ["Iop_Sub8",  "Iop_Sub16",  "Iop_Sub32",  "Iop_Sub64"]
     def __init__(self, expr, state):
         super().__init__(expr, state)
         self.hasRightIdentity = True
@@ -462,10 +370,9 @@ class SubDataRecord(CompSimpDataRecord):
         self.hasLeftZero = False
         self.rightIdentity = lambda bw: claripy.BVV(0, bw)
         self.powerOfTwoSignificant = False
-        if type(self.expr) == pyvex.expr.Binop:
-            self.handleBinOp()
 
 class AndDataRecord(CompSimpDataRecord):
+    checks_ops: List[str] = ["Iop_And8",  "Iop_And16",  "Iop_And32",  "Iop_And64"]
     def __init__(self, expr, state):
         super().__init__(expr, state)
         self.hasRightIdentity = True
@@ -477,10 +384,9 @@ class AndDataRecord(CompSimpDataRecord):
         self.rightZero = lambda bw: claripy.BVV(0, bw)
         self.leftZero = self.rightZero
         self.powerOfTwoSignificant = False
-        if type(self.expr) == pyvex.expr.Binop:
-            self.handleBinOp()
 
 class OrDataRecord(CompSimpDataRecord):
+    checks_ops: List[str] = ["Iop_Or8",   "Iop_Or16",   "Iop_Or32",   "Iop_Or64"]
     def __init__(self, expr, state):
         super().__init__(expr, state)
         self.hasRightIdentity = True
@@ -490,10 +396,9 @@ class OrDataRecord(CompSimpDataRecord):
         self.rightIdentity = lambda bw: claripy.BVV(0, bw)
         self.leftIdentity = self.rightIdentity
         self.powerOfTwoSignificant = False
-        if type(self.expr) == pyvex.expr.Binop:
-            self.handleBinOp()
 
 class XorDataRecord(CompSimpDataRecord):
+    checks_ops: List[str] = ["Iop_Xor8",  "Iop_Xor16",  "Iop_Xor32",  "Iop_Xor64"]
     def __init__(self, expr, state):
         super().__init__(expr, state)
         self.hasRightIdentity = True
@@ -502,12 +407,10 @@ class XorDataRecord(CompSimpDataRecord):
         self.hasLeftZero = False
         self.rightIdentity = lambda bw: claripy.BVV(0, bw)
         self.leftIdentity = self.rightIdentity
-        self.powerOfTwoSignificant = False
-        if type(self.expr) == pyvex.expr.Binop:
-            self.handleBinOp()
 
 class MulDataRecord(CompSimpDataRecord):
-   def __init__(self, expr, state):
+    checks_ops: List[str] = ["Iop_Mul8",  "Iop_Mul16",  "Iop_Mul32",  "Iop_Mul64"]
+    def __init__(self, expr, state):
         super().__init__(expr, state)
         self.hasRightIdentity = True
         self.hasLeftIdentity = True
@@ -518,11 +421,25 @@ class MulDataRecord(CompSimpDataRecord):
         self.rightZero = lambda bw: claripy.BVV(0, bw)
         self.leftZero = lambda bw: claripy.BVV(0, bw)
         self.powerOfTwoSignificant = True
-        if type(self.expr) == pyvex.expr.Binop:
-            self.handleBinOp()
 
 class DivDataRecord(CompSimpDataRecord):
-   def __init__(self, expr, state):
+    checks_ops: List[str] = [
+      "Iop_DivU32",
+      "Iop_DivS32",
+      "Iop_DivU64",
+      "Iop_DivS64",
+      "Iop_DivU64E",           
+      "Iop_DivS64E",
+      "Iop_DivU32E",        
+      "Iop_DivS32E",
+      "Iop_DivModU64to32",            
+      "Iop_DivModS64to32",
+      "Iop_DivModU128to64",       
+      "Iop_DivModS128to64",
+      "Iop_DivModS64to64"
+    ]
+                       
+    def __init__(self, expr, state):
         super().__init__(expr, state)
         self.hasRightIdentity = True
         self.hasLeftIdentity = False
@@ -531,8 +448,6 @@ class DivDataRecord(CompSimpDataRecord):
         self.rightIdentity = lambda bw: claripy.BVV(1, bw)
         self.leftZero = lambda bw: claripy.BVV(0, bw)
         self.powerOfTwoSignificant = True
-        if type(self.expr) == pyvex.expr.Binop:
-            self.handleBinOp()
                 
 class CompSimpDataCollectionChecker(Checker):
     """
@@ -540,49 +455,49 @@ class CompSimpDataCollectionChecker(Checker):
     In charge of filtering out insns, passing the state and expr
     to some class that processes these, and then outputting a CSV
     of all the processes states and exprs.
-
-    Examples of some states and exprs
-    expr Shl64(t349,0x01) (<class 'pyvex.expr.Binop'>) is binop
-    expr Shl64(t349,0x01) op: Iop_Shl64. tag: Iex_Binop
-    expr And64(t440,t157) (<class 'pyvex.expr.Binop'>) is binop
-    expr And64(t440,t157) op: Iop_And64. tag: Iex_Binop
     """
     vulnerable_states = []
     effects = []
     finders = []
     csv_records = []
 
-    # maps substring of pyvex binop expr names to their checking class
-    checkers = {'add': AddDataRecord,
-                'mul': MulDataRecord,
-                'div': DivDataRecord,
-                'sh': ShiftDataRecord,
-                'sa': ShiftDataRecord,
-                'sub': SubDataRecord,
-                'and': AndDataRecord,
-                'or': OrDataRecord,
-                'xor': XorDataRecord}
+    checkers = [AddDataRecord,
+                MulDataRecord,
+                DivDataRecord,
+                ShiftDataRecord,
+                SubDataRecord,
+                AndDataRecord,
+                OrDataRecord,
+                XorDataRecord]
 
     @staticmethod
     def check(state: angr.sim_state.SimState) -> bool:
         expr = state.inspect.expr
-        checkers = CompSimpDataCollectionChecker.checkers
-        
-        # only pyvex.expr.Binop has `.op` attribute
-        if not isinstance(expr, pyvex.expr.Binop):
-            return False
 
         logger.debug(f"Checking expr: {expr}")
 
+        # only check Add, Mul, Sub, etc, not subexprs of those
+        # and not get/puts of registers
+        if not isinstance(expr, pyvex.expr.Binop):
+            return False
+
+        # figure out which comp simp checker(s) to run on the expr
+        checkers_to_use = []
+        all_checkers = CompSimpDataCollectionChecker.checkers
+        operator_name = expr.op
+
+        for checker_clz in all_checkers:
+            if operator_name in checker_clz.checks_ops:
+                logger.debug(f"Using checker class {checker_clz} to check expr {expr}")
+                checkers_to_use.append(checker_clz)
+
+        # run the checkers
         try:
-            for op_kw in checkers.keys():
-                if op_kw in expr.op.lower():
-                    logger.debug(f"{expr} is going to be recorded")
-                    checker = checkers[op_kw]
-                    logger.debug(f"Using {checker} to check {expr}")
-                    filled_out_record = checker(expr, state)
-                    csv_record = filled_out_record.getCSVRow()
-                    CompSimpDataCollectionChecker.csv_records.append(csv_record)
+            for checker_clz in checkers_to_use:
+                data_record = checker_clz(expr, state)
+                data_record.check()
+                csv_record = data_record.get_csv_row()
+                CompSimpDataCollectionChecker.csv_records.append(csv_record)
         except Exception as err:
             # unfortunately, exceptions are not being propagated when running this
             # from the command line... putting this here to catch anything since
@@ -615,7 +530,7 @@ class CompSimpDataCollectionChecker(Checker):
         with csv_file_path.open(mode="w") as f:
             csv_file = csv.writer(f)
 
-            header_cols = CompSimpDataRecord.getCSVHeaderColNames()
+            header_cols = CompSimpDataRecord.get_csv_header_col_names()
             csv_file.writerow(header_cols)
             csv_rows = CompSimpDataCollectionChecker.get_unique_csv_records()
             logger.debug(f"Writing {len(csv_rows)} csv records")
@@ -966,7 +881,7 @@ def setup_solver_globally(args):
     """
     :param args: the namespace (or whichever object) returned from argparse
     """
-    global comp_simp_solver
+    global get_comp_simp_solver
 
     if args.use_small_bitwidth_solver:
         use_bitwidth = args.bitwidth_for_small_bitwidth_solver
@@ -981,11 +896,11 @@ def setup_solver_globally(args):
         log_msg = f"Running comp simp checker with claripy small ({use_bitwidth}) bitwidth solver"
         logger.warning(log_msg)
 
-        comp_simp_solver = claripy.SmallBitwidthSolver(bitwidth=use_bitwidth)
+        get_comp_simp_solver = lambda: claripy.SmallBitwidthSolver(bitwidth=use_bitwidth)
     else:
         log_msg = f"Running comp simp checker with default claripy solver"
         logger.warning(log_msg)
-        comp_simp_solver = default_solver
+        get_comp_simp_solver = get_default_solver
 
 def run(args):
     """
@@ -1030,7 +945,7 @@ def run(args):
     # setup_state_for_curve25519_point_add_and_double(proj, state, funcname)
     # setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
 
-    setup_symbolic_state_for_ed25519_pub_key_gen(proj, state, funcname)
+    # setup_symbolic_state_for_ed25519_pub_key_gen(proj, state, funcname)
     state.regs.rbp = state.regs.rsp
 
     if args.comp_simp:

@@ -28,9 +28,9 @@ def is_venv():
     return (hasattr(sys, 'real_prefix') or
             (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix))
 
-# for use in run_checker
 @dataclass
 class MockCommandlineArgs:
+    # for use in run_checker
     path_to_binary: str
     function_name_symbol: str
     use_small_bitwidth_solver: bool = False
