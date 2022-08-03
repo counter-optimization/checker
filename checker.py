@@ -15,7 +15,7 @@ import claripy
 __version__ = '0.0.0'
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.INFO)
 
 get_default_solver = lambda: claripy.Solver()
 get_comp_simp_solver = None
@@ -56,6 +56,12 @@ required_arg_group.add_argument('path_to_binary',
 required_arg_group.add_argument('function_name_symbol',
                                 help='name of the function that is also its '
                                     'symbol in the binary')
+
+utility_group = argparser.add_argument_group('Helpers and utilities')
+utility_group.add_argument('--just-print-cfg-vex', 
+                            action="store_true",
+                            help='print the vex ir of `function_name_symbol`'
+                                 ' and exit')
 
 parsed_args = None
 # END GLOBALS
@@ -971,9 +977,37 @@ def run(args):
         CompSimpDataCollectionChecker.write_records_to_csv(comp_simp_record_csv_file_name)
         logger.warning("Done writing comp simp results.")
 
+def print_cfg_vex(args):
+    filename = args.path_to_binary
+    funcname = args.function_name_symbol
+    logger.info("only printing the cfg for func %s" % funcname)
+
+    proj = angr.Project(filename)
+    
+    func_symbol = proj.loader.find_symbol(funcname)
+    if func_symbol:
+        logger.info(f"Found symbol: {func_symbol}")
+    else:
+        logger.critical(f"Couldn't find symbol for funcname: {funcname}")
+        sys.exit(1)
+
+    logger.info("Building the CFG for the project...")
+    cfg = proj.analyses.CFGFast()
+    logger.info("Project CFG built")
+    func_cfg = cfg.kb.functions[func_symbol.rebased_addr]
+
+    for bb_addr in func_cfg.block_addrs:
+        proj.factory.block(addr=bb_addr, opt_level=-1).vex.pp()
+
+    logger.info("done")
+
 if '__main__' == __name__:
     # argparser.parse_args expects to receive only the CL options
     args = sys.argv[1:]
     parsed_args = argparser.parse_args(args)
-    run(parsed_args)
+
+    if parsed_args.just_print_cfg_vex:
+        print_cfg_vex(parsed_args)
+    else:
+        run(parsed_args)
  
