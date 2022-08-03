@@ -28,34 +28,34 @@ argparser.add_argument('--version',
 
 checker_arg_group = argparser.add_argument_group('Available checkers')
 checker_arg_group.add_argument('--silent-stores', 
-                        action='store_true',
-                        help='check the function in the binary for instructions '
-                             'vulnerable to silent stores')
+                                action='store_true',
+                                help='check the function in the binary for instructions '
+                                    'vulnerable to silent stores')
 
 checker_arg_group.add_argument('--comp-simp',
-                        action='store_true',
-                        help='check the function in the binary for instructions '
-                             'vulnerable to computation simplification')
+                                action='store_true',
+                                help='check the function in the binary for instructions '
+                                    'vulnerable to computation simplification')
 
 comp_simp_arg_group = argparser.add_argument_group('Computation simplification')
 comp_simp_arg_group.add_argument('--use-small-bitwidth-solver', 
-                        action='store_true')
+                                 action='store_true')
 
 comp_simp_arg_group.add_argument('--bitwidth-for-small-bitwidth-solver',
-                        choices=[1, 2, 4, 8, 16, 32, 64, 128],
-                        help='must be a power of two >= 1, <= 128',
-                        type=int)
+                                choices=[1, 2, 4, 8, 16, 32, 64, 128],
+                                help='must be a power of two >= 1, <= 128',
+                                type=int)
 
 required_arg_group = argparser.add_argument_group('Required target file info')
 required_arg_group.add_argument('path_to_binary',
-                        help='path to binary containing the function to check. '
-                             'for the current version of the checker, it *must be'
-                             '* an ELF file (or at least a format cle understands '
-                             'which is at least not a macho file)')
+                                help='path to binary containing the function to check. '
+                                    'for the current version of the checker, it *must be'
+                                    '* an ELF file (or at least a format cle understands '
+                                    'which is at least not a macho file)')
 
 required_arg_group.add_argument('function_name_symbol',
-                        help='name of the function that is also its '
-                             'symbol in the binary')
+                                help='name of the function that is also its '
+                                    'symbol in the binary')
 
 parsed_args = None
 # END GLOBALS
