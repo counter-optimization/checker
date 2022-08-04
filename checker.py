@@ -114,8 +114,6 @@ class SilentStoreChecker(Checker):
         if is_sat:
             SilentStoreChecker.vulnerable_states.append(state)
             logger.warning(f"Found state {state} with a silent store")
-        else:
-            logger.debug(f"No silent store possible in state {state}")
         
         logger.debug(f"Values could be the same: {is_sat}")
         logger.debug(f"Leaving before mem write at state: {state}")
@@ -712,22 +710,22 @@ def setup_symbolic_state_for_ed25519_pub_key_gen(proj, init_state, fn_name):
 
     stack_chk_fail_sym_str = "__stack_chk_fail"
     if proj.loader.find_symbol(stack_chk_fail_sym_str):
-        logger.warning(f"Hooking {stack_chk_fail_sym_str} with VoidSimProcedure")
+        logger.info(f"Hooking {stack_chk_fail_sym_str} with VoidSimProcedure")
         proj.hook_symbol(stack_chk_fail_sym_str, VoidSimProcedure())
 
     memcpy_chk_fail_sym_str = "__memcpy_chk"
     if proj.loader.find_symbol(memcpy_chk_fail_sym_str):
-        logger.warning(f"Hooking {memcpy_chk_fail_sym_str} with VoidSimProcedure")
+        logger.info(f"Hooking {memcpy_chk_fail_sym_str} with VoidSimProcedure")
         proj.hook_symbol(memcpy_chk_fail_sym_str, VoidSimProcedure())
 
     memcpy_sym_str = "memcpy"
     if proj.loader.find_symbol(memcpy_sym_str):
-        logger.warning(f"Hooking {memcpy_sym_str} with angr memcpy SimProcedure")
+        logger.info(f"Hooking {memcpy_sym_str} with angr memcpy SimProcedure")
         proj.hook_symbol(memcpy_sym_str, angr.SIM_PROCEDURES['libc']['memcpy']())
 
     memset_sym_str = "memset"
     if proj.loader.find_symbol(memset_sym_str):
-        logger.warning(f"Hooking {memset_sym_str} with angr memset SimProcedure")
+        logger.info(f"Hooking {memset_sym_str} with angr memset SimProcedure")
         proj.hook_symbol(memset_sym_str, angr.SIM_PROCEDURES['libc']['memset']())
     
 def setup_symbolic_state_for_ed25519_point_addition(proj, init_state, fn_name):
@@ -741,12 +739,7 @@ def setup_symbolic_state_for_ed25519_point_addition(proj, init_state, fn_name):
        addition, set the argument registers to the memory addresses of the│
        three points                                                       │
     """
-
-    # in case i forget to comment this out for later
-    if "hacl" not in fn_name.lower():
-        return
-    else:
-        logger.warn("Setting up symbolic state for ed25519 comp simp checking")
+    logger.warning("Setting up symbolic state for ed25519 comp simp checking")
 
     # 1. generate three points
     point1 = [claripy.BVS(f"x{n}", 64) for n in range(1, 21)]
@@ -754,10 +747,10 @@ def setup_symbolic_state_for_ed25519_point_addition(proj, init_state, fn_name):
     out = [claripy.BVS(f"out{n}", 64) for n in range(1, 21)]
 
     # 2. add preconditions to input points
-    logger.warning("Adding point addition preconditions...")
+    logger.debug("Adding point addition preconditions...")
     ed25519_point_addition_predicate(point1, init_state)
     ed25519_point_addition_predicate(point2, init_state)
-    logger.warning("Done adding point addition preconditions.")
+    logger.debug("Done adding point addition preconditions.")
 
     # 3. use some current stack memory and ensure it is aligned
     # i think on X86_64, rsp + 8 has to be 16 byte aligned.
@@ -826,10 +819,10 @@ def setup_state_for_curve25519_point_add_and_double(proj, init_state, fn_name):
     tmp2_addr = init_state.regs.rsp
 
     init_state.regs.rsp = init_state.regs.rsp - claripy.BVV(8, 64)
-    logger.warning(f"p01_tmp1_swap_addr: {p01_tmp1_swap_addr}")
-    logger.warning(f"init_addr: {init_addr}")
-    logger.warning(f"tmp2_addr is: {tmp2_addr}")
-    logger.warning(f"rsp is: {init_state.regs.rsp}")
+    logger.debug(f"p01_tmp1_swap_addr: {p01_tmp1_swap_addr}")
+    logger.debug(f"init_addr: {init_addr}")
+    logger.debug(f"tmp2_addr is: {tmp2_addr}")
+    logger.debug(f"rsp is: {init_state.regs.rsp}")
 
     # 4. put the values in their addresses
     def store_point_at_addr(key, addr):
@@ -848,28 +841,28 @@ def setup_state_for_curve25519_point_add_and_double(proj, init_state, fn_name):
     init_state.regs.rdi = init_addr
     init_state.regs.rsi = p01_tmp1_swap_addr
     init_state.regs.rdx = tmp2_addr
-    logger.warning(f"for init_state ({init_state}), rdi holds {init_state.regs.rdi}")
-    logger.warning(f"for init_state ({init_state}), rsi holds {init_state.regs.rsi}")
-    logger.warning(f"for init_state ({init_state}), rdx holds {init_state.regs.rdx}")
+    logger.debug(f"for init_state ({init_state}), rdi holds {init_state.regs.rdi}")
+    logger.debug(f"for init_state ({init_state}), rsi holds {init_state.regs.rsi}")
+    logger.debug(f"for init_state ({init_state}), rdx holds {init_state.regs.rdx}")
 
     stack_chk_fail_sym_str = "__stack_chk_fail"
     if proj.loader.find_symbol(stack_chk_fail_sym_str):
-        logger.warning(f"Hooking {stack_chk_fail_sym_str} with VoidSimProcedure")
+        logger.debug(f"Hooking {stack_chk_fail_sym_str} with VoidSimProcedure")
         proj.hook_symbol(stack_chk_fail_sym_str, VoidSimProcedure())
 
     memcpy_chk_fail_sym_str = "__memcpy_chk"
     if proj.loader.find_symbol(memcpy_chk_fail_sym_str):
-        logger.warning(f"Hooking {memcpy_chk_fail_sym_str} with VoidSimProcedure")
+        logger.debug(f"Hooking {memcpy_chk_fail_sym_str} with VoidSimProcedure")
         proj.hook_symbol(memcpy_chk_fail_sym_str, VoidSimProcedure())
 
     memcpy_sym_str = "memcpy"
     if proj.loader.find_symbol(memcpy_sym_str):
-        logger.warning(f"Hooking {memcpy_sym_str} with angr memcpy SimProcedure")
+        logger.debug(f"Hooking {memcpy_sym_str} with angr memcpy SimProcedure")
         proj.hook_symbol(memcpy_sym_str, angr.SIM_PROCEDURES['libc']['memcpy']())
 
     memset_sym_str = "memset"
     if proj.loader.find_symbol(memset_sym_str):
-        logger.warning(f"Hooking {memset_sym_str} with angr memset SimProcedure")
+        logger.debug(f"Hooking {memset_sym_str} with angr memset SimProcedure")
         proj.hook_symbol(memset_sym_str, angr.SIM_PROCEDURES['libc']['memset']())
 
 def output_filename_stem(target_filename: str, target_funcname: str) -> str:
@@ -896,12 +889,12 @@ def setup_solver_globally(args):
                   "required if using small bitwidth solver")
 
         log_msg = f"Running comp simp checker with claripy small ({use_bitwidth}) bitwidth solver"
-        logger.warning(log_msg)
+        logger.info(log_msg)
 
         get_comp_simp_solver = lambda: claripy.SmallBitwidthSolver(bitwidth=use_bitwidth)
     else:
         log_msg = f"Running comp simp checker with default claripy solver"
-        logger.warning(log_msg)
+        logger.info(log_msg)
         get_comp_simp_solver = get_default_solver
 
 def run(args):
@@ -951,7 +944,7 @@ def run(args):
     state.regs.rbp = state.regs.rsp
 
     if args.comp_simp:
-        logger.warning("Checking for potential computation simplification spots")
+        logger.info("Checking for potential computation simplification spots")
         # TODO: this should be handled in the comp-simp specific checker
         compsimp_file_name = output_filename_stem(filename, funcname)
         CompSimpDataRecord.set_func_identifier(compsimp_file_name)
@@ -961,21 +954,21 @@ def run(args):
                         action=CompSimpDataCollectionChecker.check)
     
     if args.silent_stores:
-        logger.warning("Checking for potential silent store spots")
+        logger.info("Checking for potential silent store spots")
         state.inspect.b('mem_write',
                         when=angr.BP_BEFORE,
                         action=SilentStoreChecker.check)
 
     simgr = proj.factory.simgr(state)
     simgr.run(opt_level=-1)
-    logger.warning("Done running checkers")
+    logger.info("Done running checkers")
 
     # TODO: this should be handled in the comp-simp specific checker
     if args.comp_simp:
         comp_simp_record_csv_file_name = f"{compsimp_file_name}.csv"
-        logger.warning(f"Writing results to {comp_simp_record_csv_file_name}...")
+        logger.info(f"Writing results to {comp_simp_record_csv_file_name}...")
         CompSimpDataCollectionChecker.write_records_to_csv(comp_simp_record_csv_file_name)
-        logger.warning("Done writing comp simp results.")
+        logger.info("Done writing comp simp results.")
 
 def print_cfg_vex(args):
     filename = args.path_to_binary
