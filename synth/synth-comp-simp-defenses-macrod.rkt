@@ -2,12 +2,21 @@
 #lang rosette
 
 (require rosette/lib/synthax
-         ;rosette/lib/value-browser
+         rosette/lib/value-browser
          rosette/lib/match
          rosette/lib/angelic)
 
 (require "../serval/serval/x86.rkt"
          (prefix-in core: "../serval/serval/lib/core.rkt"))
+
+(provide 
+  (all-defined-out)
+  (all-from-out "../serval/serval/x86.rkt"
+                "../serval/serval/lib/core.rkt"
+                rosette/lib/synthax
+                rosette/lib/match
+                rosette/lib/angelic
+                rosette/lib/value-browser))
 
 ;; Common
 
@@ -421,7 +430,8 @@
   (define spec-insns (sub-r/m32-r32-conc-impl))
 
   ; these are the synthesis candidate instructions
-  (define impl-insns (generate-sub-insns REPLACE_ME))
+  ; REPLACE_ME
+  (define impl-insns (generate-sub-insns 1))
   
   ; 1. assume starting in the same state
   (assume-all-regs-equiv spec-cpu impl-cpu)
@@ -432,8 +442,8 @@
   ; with the value 0), then the synthesizer should be able to synthesize
   ; sub eax, ecx as a comp-simp-safe-for-these-assumptions, equivalent 
   ; insn sequence
-  ; (assume (&& (! (bveq (cpu-gpr-ref impl-cpu eax) (bv 0 32)))
-  ;             (! (bveq (cpu-gpr-ref impl-cpu ecx) (bv 0 32)))))
+  (assume (&& (! (bveq (cpu-gpr-ref impl-cpu eax) (bv 0 32)))
+              (! (bveq (cpu-gpr-ref impl-cpu ecx) (bv 0 32)))))
 
   ; 2. for all add insns in impl-insns, no comp simp can take place.
   (apply-insn-specific-asserts #:insns impl-insns
@@ -459,35 +469,36 @@
   (define impl-eax (cpu-gpr-ref impl-cpu eax))
   (assert (bveq spec-eax impl-eax)))
 
-; Command line arg for insn seq length
-; varied by the shell script that runs this code
-; (define num-insns (string->number (vector-ref (current-command-line-arguments) 0)))
-; (printf "num-insn: ~a\n" num-insns)
-
-
-; synthesis calling code
-(define impl-cpu (make-x86-64-cpu))
-(define spec-cpu (make-x86-64-cpu))
-
 ;; these **must** be the same as the ones used in
 ;; define-grammar
 (define (forall-quantified-vars some-cpu)
   (for/list ([reg-id (list rax rcx rdx rdi eax ecx edi edi ax cx dx di al cl dl)])
     (cpu-gpr-ref some-cpu reg-id)))
 
-(define solution
-  (synthesize
-   #:forall (append (forall-quantified-vars impl-cpu)
-                    (forall-quantified-vars spec-cpu))
-   #:guarantee (sub-r/m32-r32-spec #:spec-cpu spec-cpu
-                                   #:impl-cpu impl-cpu)))
-(printf "Solution is: ~a\n" solution)
 
-(if (sat? solution)
-    (begin
-      (printf "Solution found for REPLACE_ME insns.\n")
-      (print-forms solution)
-      (exit 0))
-    (begin
-      (printf "No solution.\n")
-      (exit 1)))
+(module+ main
+  ; Command line arg for insn seq length
+  ; varied by the shell script that runs this code
+  ; (define num-insns (string->number (vector-ref (current-command-line-arguments) 0)))
+  ; (printf "num-insn: ~a\n" num-insns)
+
+  ; synthesis calling code
+  (define impl-cpu (make-x86-64-cpu))
+  (define spec-cpu (make-x86-64-cpu))
+
+  (define solution
+    (synthesize
+    #:forall (append (forall-quantified-vars impl-cpu)
+                      (forall-quantified-vars spec-cpu))
+    #:guarantee (sub-r/m32-r32-spec #:spec-cpu spec-cpu
+                                    #:impl-cpu impl-cpu)))
+  (printf "Solution is: ~a\n" solution)
+
+  (if (sat? solution)
+      (begin
+        (printf "Solution found for n=1 insns.\n")
+        (print-forms solution)
+        (exit 0))
+      (begin
+        (printf "No solution.\n")
+        (exit 1))))
