@@ -940,7 +940,7 @@ def run(args):
     # setup_state_for_curve25519_point_add_and_double(proj, state, funcname)
     # setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
 
-    setup_symbolic_state_for_ed25519_pub_key_gen(proj, state, funcname)
+    setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
     state.regs.rbp = state.regs.rsp
 
     if args.comp_simp:
