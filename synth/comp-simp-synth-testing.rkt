@@ -4,7 +4,6 @@
   rosette/lib/synthax
   rosette/lib/match
   "../serval/serval/x86.rkt"
-  (prefix-in core: "../serval/serval/lib/core.rkt")
   (prefix-in comp-simp: "synth-comp-simp-defenses-macrod.rkt"))
 
 ;; Helpers for testing
@@ -137,7 +136,8 @@
 ; impl is used by the synthesized insn sequence.
 (define (run-and-check-synthesis #:spec-cpu spec-cpu
                        #:spec-insns spec-insns
-                       #:impl-cpu impl-cpu)
+                       #:impl-cpu impl-cpu
+                       #:apply-asserts [apply-asserts #f])
   ; the synthesizer AST to choose from. insn sequence
   ; of length exactly 1
   (define impl-insns (comp-simp:generate-sub-insns 1))
@@ -146,9 +146,10 @@
   (comp-simp:assume-all-flags-equiv spec-cpu impl-cpu)
   (comp-simp:assume-all-regs-equiv spec-cpu impl-cpu)
 
-  (comp-simp:apply-insn-specific-asserts #:insns impl-insns
-                                         #:asserter comp-simp:comp-simp-asserter
-                                         #:cpu impl-cpu)
+  (when apply-asserts
+    (comp-simp:apply-insn-specific-asserts #:insns impl-insns
+                                           #:asserter comp-simp:comp-simp-asserter
+                                           #:cpu impl-cpu))
   
   ; Run the synthesized code
   (comp-simp:run-x86-64-impl #:insns impl-insns #:cpu impl-cpu)
@@ -167,7 +168,7 @@
   (define succeeded '())
 
   (for ([insn insns-to-test])
-    (printf "Testing insn: ~a\n" insn)
+    (printf "---------------------\nTesting insn: ~a\n" insn)
     (define start-time (current-milliseconds))
 
     (define spec-cpu (comp-simp:make-x86-64-cpu))
@@ -180,19 +181,18 @@
                   (comp-simp:forall-quantified-vars impl-cpu)
                   (comp-simp:forall-quantified-vars spec-cpu))
       #:guarantee (run-and-check-synthesis #:spec-cpu spec-cpu
-                                          #:spec-insns spec-for-insn
-                                          #:impl-cpu impl-cpu)))
+                                           #:spec-insns spec-for-insn
+                                           #:impl-cpu impl-cpu
+                                           #:apply-asserts #f)))
 
     (if (sat? result)
         (begin
-          (printf "Successfully synthesized insn sequence")
-          (printf "Synthesized insn sequence is: ")
-          (print-forms result)
-          ; spec-for-insn is (list single-insn)
+          (printf "Successfully synthesized insn sequence\n")
+          (printf "Solution was: ~a\n" result)
           (printf "Spec insn was: ~a\n" (car spec-for-insn))
           (set! succeeded (cons insn succeeded)))
         (begin
-          (printf "FAILURE: Could not synthesize insn sequence")
+          (printf "FAILURE: Could not synthesize insn sequence\n")
           (printf "Insn was: ~a\n" (car spec-for-insn))
           (set! failed (cons insn failed))))
 

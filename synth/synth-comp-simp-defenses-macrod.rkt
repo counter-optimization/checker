@@ -485,7 +485,6 @@
   (for/list ([reg-id (list rax rcx rdx rdi eax ecx edi edi ax cx dx di al cl dl)])
     (cpu-gpr-ref some-cpu reg-id)))
 
-
 ; sorta the equivalent to if __name__ == '__main__' in python:
 ; see https://stackoverflow.com/questions/28591576/detecting-if-script-executed-from-command-line-in-racket
 (module+ main
