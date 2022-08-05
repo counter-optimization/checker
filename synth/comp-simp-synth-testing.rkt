@@ -135,7 +135,8 @@
                                 #:num-insns num-insns)
   ; the synthesizer AST to choose from. insn sequence
   ; of length exactly 1
-  (define impl-insns (comp-simp:generate-sub-insns-no-macro num-insns))
+  (define impl-insns 
+    (comp-simp:generate-sub-insns-no-macro #:num-insns num-insns))
 
   ; start the cpus in the same initial state
   (comp-simp:assume-all-flags-equiv spec-cpu impl-cpu)
@@ -173,8 +174,11 @@
   (for/list ([cur-length (range N)])
     (get-rand-insn-seq #:length (add1 cur-length))))
 
+(define (get-insns-to-test) insns-to-test)
+
 ;; Run all of the individual insn synth tests
 (module+ main
+  (printf "Insns to test are: ~a\n" (get-insns-to-test))
   (define all-test-start-time (current-milliseconds))
   (define failed '())
   (define succeeded '())
@@ -204,7 +208,7 @@
     (cond
       [use-single-insn 
         (printf "Running tests using single insns\n")
-        insns-to-test]
+        (get-insns-to-test)]
       [use-rand-seq 
         (printf "Running tests using random sequences of length up to ~a\n" max-seq-len)
         (get-rand-insn-seqs-up-to #:length max-seq-len)]
@@ -270,9 +274,3 @@
       (printf "Failing instructions:\n")
       (for ([insn failed])
         (printf "\t~a\n" insn))))
-
-
-
-
-
-
