@@ -476,6 +476,8 @@
     (cpu-gpr-ref some-cpu reg-id)))
 
 
+; sorta the equivalent to if __name__ == '__main__' in python:
+; see https://stackoverflow.com/questions/28591576/detecting-if-script-executed-from-command-line-in-racket
 (module+ main
   ; Command line arg for insn seq length
   ; varied by the shell script that runs this code
