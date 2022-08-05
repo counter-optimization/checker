@@ -12,11 +12,13 @@
 (provide 
   (all-defined-out)
   (all-from-out "../serval/serval/x86.rkt"
-                "../serval/serval/lib/core.rkt"
-                rosette/lib/synthax
-                rosette/lib/match
-                rosette/lib/angelic
-                rosette/lib/value-browser))
+                "../serval/serval/lib/core.rkt"))
+
+;; Config
+
+(error-print-width 100000)
+; (displayln (format "Current grammar depth: ~a" (current-grammar-depth)))
+; (displayln (format "Current error-print-width: ~a" (error-print-width)))
 
 ;; Common
 
@@ -51,7 +53,7 @@
 
 ; (E)FLAG comparison functions
 (define flag-symbols '(CF PF AF ZF SF OF))
-(displayln (format "flag-symbols: ~a" flag-symbols))
+; (displayln (format "flag-symbols: ~a" flag-symbols))
 
 (define (get-all-flags #:cpu cpu)
   (for/list ([flag-sym flag-symbols])
@@ -78,7 +80,7 @@
                                  r12d r13d r14d r15d
                                  ;dx dl
                                  cx cl))
-(displayln (format "all-regs-but-raxes: ~a" all-regs-but-raxes))
+; (displayln (format "all-regs-but-raxes: ~a" all-regs-but-raxes))
 
 (define all-raxes (list rax eax ax al))
 (define all-rdxes (list rdx edx dx dl))
@@ -109,6 +111,18 @@
     (define f1 (cpu-flag-ref cpu1 flag-name))
     (define f2 (cpu-flag-ref cpu2 flag-name))
     (assume (bveq f1 f2))))
+
+(define (assert-all-regs-equiv cpu1 cpu2)
+  (for ([reg-name all-regs])
+    (define r1 (cpu-gpr-ref cpu1 reg-name))
+    (define r2 (cpu-gpr-ref cpu2 reg-name))
+    (assert (bveq r1 r2))))
+
+(define (assert-all-flags-equiv cpu1 cpu2)
+  (for ([flag-name flag-symbols])
+    (define f1 (cpu-flag-ref cpu1 flag-name))
+    (define f2 (cpu-flag-ref cpu2 flag-name))
+    (assert (bveq f1 f2))))
 
 ; Synthesis impl and spec for adding eax and ecx
 ; Adding eax <- eax + ecx
@@ -305,10 +319,6 @@
                                       (x86-64-sub-synth #:depth 3)))])
        #'synth-calls)]))
 
-(displayln (format "Current grammar depth: ~a" (current-grammar-depth)))
-(error-print-width 100000)
-(displayln (format "Current error-print-width: ~a" (error-print-width)))
-
 (define zero-for-bw (λ (bw) (bv 0 bw)))
 (define one-for-bw (λ (bw) (bv 1 bw)))
 
@@ -442,8 +452,8 @@
   ; with the value 0), then the synthesizer should be able to synthesize
   ; sub eax, ecx as a comp-simp-safe-for-these-assumptions, equivalent 
   ; insn sequence
-  (assume (&& (! (bveq (cpu-gpr-ref impl-cpu eax) (bv 0 32)))
-              (! (bveq (cpu-gpr-ref impl-cpu ecx) (bv 0 32)))))
+  ; (assume (&& (! (bveq (cpu-gpr-ref impl-cpu eax) (bv 0 32)))
+  ;             (! (bveq (cpu-gpr-ref impl-cpu ecx) (bv 0 32)))))
 
   ; 2. for all add insns in impl-insns, no comp simp can take place.
   (apply-insn-specific-asserts #:insns impl-insns
