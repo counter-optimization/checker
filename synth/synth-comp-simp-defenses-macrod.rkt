@@ -317,6 +317,10 @@
                                       (x86-64-sub-synth #:depth 3)))])
        #'synth-calls)]))
 
+(define (generate-sub-insns-no-macro #:num-insns N)
+  (for/list ([i N])
+    (x86-64-sub-synth #:depth 3)))
+
 (define zero-for-bw (λ (bw) (bv 0 bw)))
 (define one-for-bw (λ (bw) (bv 1 bw)))
 

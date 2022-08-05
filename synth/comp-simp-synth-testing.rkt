@@ -93,21 +93,20 @@
 ; another sanity check that all types are in the
 ; arg-types list
 (for ([pair insn-to-type-map])
-    (match-let ([(cons insn type) pair])
-        (unless (member type arg-types)
-            (raise (format "Unrecognized type: ~a\n" type)))))
-
+  (match-let ([(cons insn type) pair])
+    (unless (member type arg-types)
+      (raise (format "Unrecognized type: ~a\n" type)))))
 
 ;; Generate every single instruction with every combo of 
 ;; registers and immediates (for some small predefined set
 ;; of special immediates, see definition `get-special-imms`)
 (define insns-to-test '())
-
 (for ([insn-type-pair insn-to-type-map])
   (match-let ([(cons insn arg-types) insn-type-pair])
     (define all-args (get-all-arg-list-for-type arg-types))
     (for ([arg-list all-args])
       (set! insns-to-test (cons (apply insn arg-list) insns-to-test)))))
+(define num-insns-to-test (length insns-to-test))
 
 ;; Generating test code for an insn
 
@@ -130,12 +129,13 @@
 ; implementation. anything prefixed with 
 ; impl is used by the synthesized insn sequence.
 (define (run-and-check-synthesis #:spec-cpu spec-cpu
-                       #:spec-insns spec-insns
-                       #:impl-cpu impl-cpu
-                       #:apply-asserts [apply-asserts #f])
+                                #:spec-insns spec-insns
+                                #:impl-cpu impl-cpu
+                                #:apply-asserts [apply-asserts #f]
+                                #:num-insns num-insns)
   ; the synthesizer AST to choose from. insn sequence
   ; of length exactly 1
-  (define impl-insns (comp-simp:generate-sub-insns 1))
+  (define impl-insns (comp-simp:generate-sub-insns-no-macro num-insns))
 
   ; start the cpus in the same initial state
   (comp-simp:assume-all-flags-equiv spec-cpu impl-cpu)
@@ -156,20 +156,80 @@
   (comp-simp:assert-all-regs-equiv spec-cpu impl-cpu)
   (comp-simp:assert-all-flags-equiv spec-cpu impl-cpu))
 
+;; For testing sequences of insns of random length
+(define (get-rand-insn) 
+  (define rand-idx (random num-insns-to-test))
+  (list-ref insns-to-test rand-idx))
+
+(define (get-rand-insn-seq #:length N)
+  (for/list ([i (range N)])
+    (get-rand-insn)))
+
+; For given N, returns a list of random insn sequences
+; for sequence len 1, 2, 3, ..., N-1. Not inclusive of N,
+; so (get-rand-insn-seqs-up-to #:length 3) returns:
+; (list (INSN-SEQ-LEN-1) (INSN-SEQ-LEN-2)).
+(define (get-rand-insn-seqs-up-to #:length N)
+  (for/list ([cur-length (range N)])
+    (get-rand-insn-seq #:length (add1 cur-length))))
+
 ;; Run all of the individual insn synth tests
 (module+ main
-  (printf "Running all of the individual insn synth tests...\n")
   (define all-test-start-time (current-milliseconds))
   (define failed '())
   (define succeeded '())
+   
+  (define use-rand-seq #f)
+  (define max-seq-len void)
+  (define use-single-insn #f)
+  (define use-comp-simp-asserts #f)
+
+  (define cl-parser
+    (command-line
+      #:once-any
+      [("--use-random-sequences")  
+       MAX_SEQ_NUM
+       "use random sequences"
+       (set! use-rand-seq #t)
+       (set! max-seq-len (string->number MAX_SEQ_NUM))]
+      [("--use-single-insns") 
+       "use single insn sequences"
+       (set! use-single-insn #t)]
+      #:once-each
+      [("--use-comp-simp-asserts") 
+       "use comp-simp asserts"
+       (set! use-comp-simp-asserts #t)]))
+
+  (define insns-to-test 
+    (cond
+      [use-single-insn 
+        (printf "Running tests using single insns\n")
+        insns-to-test]
+      [use-rand-seq 
+        (printf "Running tests using random sequences of length up to ~a\n" max-seq-len)
+        (get-rand-insn-seqs-up-to #:length max-seq-len)]
+      [else
+        (printf "Specifiy which test to run.")
+        (exit -1)]))
+  (define num-insns-to-test (length insns-to-test))
+
+  (when use-rand-seq
+    ; print out the random sequences being used
+    (printf "Testing out ~a random insn sequences\n" num-insns-to-test)
+    (printf "The sequences are:\n")
+    (for ([seq insns-to-test]
+          [num (range num-insns-to-test)])
+      (printf "------LEN: ~a------\n" (add1 num))
+      (for ([insn seq])
+        (displayln insn))))
 
   (for ([insn insns-to-test])
-    (printf "---------------------\nTesting insn: ~a\n" insn)
+    (printf "---------------------\nTesting insn(s): ~a\n" insn)
     (define start-time (current-milliseconds))
 
     (define spec-cpu (comp-simp:make-x86-64-cpu))
     (define impl-cpu (comp-simp:make-x86-64-cpu))
-    (define spec-for-insn (list insn))
+    (define spec-for-insn (if (list? insn) insn (list insn)))
 
     (define result
       (synthesize
@@ -179,28 +239,29 @@
       #:guarantee (run-and-check-synthesis #:spec-cpu spec-cpu
                                            #:spec-insns spec-for-insn
                                            #:impl-cpu impl-cpu
-                                           #:apply-asserts #f)))
+                                           #:apply-asserts #f
+                                           #:num-insns (length spec-for-insn))))
 
     (if (sat? result)
         (begin
           (printf "Successfully synthesized insn sequence\n")
           (printf "Solution was: ~a\n" result)
-          (printf "Spec insn was: ~a\n" (car spec-for-insn))
+          (printf "Spec insn was: ~a\n" spec-for-insn)
           (set! succeeded (cons insn succeeded)))
         (begin
           (printf "FAILURE: Could not synthesize insn sequence\n")
-          (printf "Insn was: ~a\n" (car spec-for-insn))
+          (printf "Insn was: ~a\n" spec-for-insn)
           (set! failed (cons insn failed))))
 
     (define end-time (current-milliseconds))
-    (printf "Done testing insn: ~a. Time: ~a ms\n"
+    (printf "Done testing insn(s): ~a. Time: ~a ms\n"
             insn
             (- end-time start-time)))
 
     (define all-test-end-time (current-milliseconds))
             
     (printf "--------\nTest summary:\n")
-    (printf "Total number of tests: ~a\n" (length insns-to-test))
+    (printf "Total number of tests: ~a\n" num-insns-to-test)
     (printf "Total wall clock test time: ~a ms\n" 
       (- all-test-end-time all-test-start-time))
     (printf "Num failed: ~a\n" (length failed))
@@ -209,5 +270,9 @@
       (printf "Failing instructions:\n")
       (for ([insn failed])
         (printf "\t~a\n" insn))))
+
+
+
+
 
 
