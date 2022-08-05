@@ -109,11 +109,6 @@
     (for ([arg-list all-args])
       (set! insns-to-test (cons (apply insn arg-list) insns-to-test)))))
 
-;; print the insns to test to for a quick visual check
-; (displayln "insns-to-test: ")
-; (for ([insn insns-to-test])
-;   (displayln insn))
-
 ;; Generating test code for an insn
 
 ; Generate the 'spec' insn sequence for an insn.
@@ -164,6 +159,7 @@
 ;; Run all of the individual insn synth tests
 (module+ main
   (printf "Running all of the individual insn synth tests...\n")
+  (define all-test-start-time (current-milliseconds))
   (define failed '())
   (define succeeded '())
 
@@ -200,8 +196,13 @@
     (printf "Done testing insn: ~a. Time: ~a ms\n"
             insn
             (- end-time start-time)))
+
+    (define all-test-end-time (current-milliseconds))
             
     (printf "--------\nTest summary:\n")
+    (printf "Total number of tests: ~a\n" (length insns-to-test))
+    (printf "Total wall clock test time: ~a ms\n" 
+      (- all-test-end-time all-test-start-time))
     (printf "Num failed: ~a\n" (length failed))
     (printf "Num succeeded: ~a\n" (length succeeded))
     (when (> (length failed) 0)

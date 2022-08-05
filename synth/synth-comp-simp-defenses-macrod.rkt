@@ -156,8 +156,6 @@
   [mul (choose
         (mul-r/m32 (reg32))
         (mul-r/m64 (reg64)))]
-  
-  
   [reg64 (choose rax rcx rdx rdi)]
                  ;; rbx
                  ;;  rsp rbp rsi rdi
