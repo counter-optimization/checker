@@ -107,6 +107,7 @@
     (for ([arg-list all-args])
       (set! insns-to-test (cons (apply insn arg-list) insns-to-test)))))
 (define num-insns-to-test (length insns-to-test))
+(define (get-insns-to-test) insns-to-test)
 
 ;; Generating test code for an insn
 
@@ -174,11 +175,8 @@
   (for/list ([cur-length (range N)])
     (get-rand-insn-seq #:length (add1 cur-length))))
 
-(define (get-insns-to-test) insns-to-test)
-
 ;; Run all of the individual insn synth tests
 (module+ main
-  (printf "Insns to test are: ~a\n" (get-insns-to-test))
   (define all-test-start-time (current-milliseconds))
   (define failed '())
   (define succeeded '())
