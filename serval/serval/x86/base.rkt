@@ -76,7 +76,8 @@
 
 (define (cpu-flag-havoc! cpu . ks)
   (for ([k ks])
-    (cpu-flag-set! cpu k #f)))
+    (define-symbolic* fresh-bit (bitvector 1))
+    (cpu-flag-set! cpu k fresh-bit)))
 
 (define (init-cpu memmgr)
   (define-symbolic* pc (bitvector 64))
