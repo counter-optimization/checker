@@ -2,7 +2,7 @@
 #lang rosette
 
 (require rosette/lib/synthax
-         rosette/lib/value-browser
+         ; rosette/lib/value-browser
          rosette/lib/match
          rosette/lib/angelic)
 
