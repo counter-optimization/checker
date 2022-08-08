@@ -211,7 +211,7 @@
         (printf "Running tests using random sequences of length up to ~a\n" max-seq-len)
         (get-rand-insn-seqs-up-to #:length max-seq-len)]
       [else
-        (printf "Specifiy which test to run.")
+        (printf "Specifiy which test to run.\n")
         (exit -1)]))
   (define num-insns-to-test (length insns-to-test))
 
@@ -258,7 +258,9 @@
     (define end-time (current-milliseconds))
     (printf "Done testing insn(s): ~a. Time: ~a ms\n"
             insn
-            (- end-time start-time)))
+            (- end-time start-time))
+
+    (clear-vc!))
 
     (define all-test-end-time (current-milliseconds))
             
