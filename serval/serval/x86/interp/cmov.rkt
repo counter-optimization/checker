@@ -21,7 +21,7 @@
   #:encode [(list (byte #x0f) (byte #x44) (/r dst src))]
   (lambda (cpu dst src)
     (define zf (cpu-flag-ref cpu 'ZF))
-    (interp-cmov cpu dst src (bvzero? zf))))
+    (interp-cmov cpu dst src (! (bvzero? zf)))))
 
 
 (define-insn cmovne-r32-r32 (dst src)
@@ -30,4 +30,4 @@
   #:encode [(list (byte #x0f) (byte #x45) (/r dst src))]
   (lambda (cpu dst src)
     (define zf (cpu-flag-ref cpu 'ZF))
-    (interp-cmov cpu dst src (! (bvzero? zf)))))
+    (interp-cmov cpu dst src (bvzero? zf))))
