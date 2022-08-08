@@ -6,6 +6,8 @@
   "../serval/serval/x86.rkt"
   (prefix-in comp-simp: "synth-comp-simp-defenses-macrod.rkt"))
 
+(provide (all-defined-out))
+
 ;; Helpers for testing
 ; Just the regs used in comp simp testing
 (define reg64s (list rax rcx rdx rdi))
