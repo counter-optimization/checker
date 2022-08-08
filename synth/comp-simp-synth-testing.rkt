@@ -146,6 +146,8 @@
   (comp-simp:assume-all-regs-equiv spec-cpu impl-cpu)
 
   (when apply-asserts
+    (assume-all-regs-never-0-or-1 impl-cpu)
+    (assume-all-regs-never-0-or-1 spec-cpu)
     (comp-simp:apply-insn-specific-asserts #:insns impl-insns
                                            #:asserter comp-simp:comp-simp-asserter
                                            #:cpu impl-cpu))
@@ -176,6 +178,17 @@
 (define (get-rand-insn-seqs-up-to #:length N)
   (for/list ([cur-length (range N)])
     (get-rand-insn-seq #:length (add1 cur-length))))
+
+;; for debugging and testing: assume all registers never
+;; start with values 0 or 1
+(define (assume-all-regs-never-0-or-1 some-cpu)
+  (for ([reg comp-simp:all-regs])
+    (define reg-bitwidth (comp-simp:bitwidth-getter reg))
+    (define zero (bv #x0 reg-bitwidth))
+    (define one (bv #x1 reg-bitwidth))
+    (define reg-val (cpu-gpr-ref some-cpu reg))
+    (assume (&& (! (bveq reg-val one))
+                (! (bveq reg-val zero))))))
 
 ;; Run all of the individual insn synth tests
 (module+ main
@@ -217,6 +230,9 @@
         (exit -1)]))
   (define num-insns-to-test (length insns-to-test))
 
+  (when use-comp-simp-asserts
+    (printf "Using comp simp asserts\n"))
+
   (when use-rand-seq
     ; print out the random sequences being used
     (printf "Testing out ~a random insn sequences\n" num-insns-to-test)
@@ -243,13 +259,13 @@
       #:guarantee (run-and-check-synthesis #:spec-cpu spec-cpu
                                            #:spec-insns spec-for-insn
                                            #:impl-cpu impl-cpu
-                                           #:apply-asserts #f
+                                           #:apply-asserts use-comp-simp-asserts
                                            #:num-insns (length spec-for-insn))))
 
     (if (sat? result)
         (begin
           (printf "Successfully synthesized insn sequence\n")
-          (printf "Solution was: ~a\n" result)
+          ;; (printf "Solution was: ~a\n" result)
           (printf "Spec insn was: ~a\n" spec-for-insn)
           (set! succeeded (cons insn succeeded)))
         (begin
