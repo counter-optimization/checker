@@ -135,43 +135,43 @@
   (list sub))
 
 (define-grammar (x86-64-sub-synth)
-  [single-insn (choose
+  [single-insn (choose*
                  (sub-r-i) 
                  (sub-r-r) 
                  (setcc) 
                  (cmov) 
                  (mul))]
-  [sub-r-i (choose
+  [sub-r-i (choose*
             (sub-r/m32-imm32 (reg32) (i32))
             (sub-r/m64-imm32 (reg64) (i32))
             (sub-r/m32-imm8 (reg32) (i8))
             (sub-r/m64-imm8 (reg64) (i8)))]
-  [sub-r-r (choose
+  [sub-r-r (choose*
             (sub-r/m32-r32 (reg32) (reg32))
             (sub-r/m64-r64 (reg64) (reg64)))]
-  [setcc (choose (setz (reg8)))]
-  [cmov (choose
+  [setcc (choose* (setz (reg8)))]
+  [cmov (choose*
           (cmovz-r32-r32 (reg32) (reg32))
           (cmovne-r32-r32 (reg32) (reg32)))]
-  [mul (choose
+  [mul (choose*
         (mul-r/m32 (reg32))
         (mul-r/m64 (reg64)))]
-  [reg64 (choose rax rcx rdx rdi)]
+  [reg64 (choose* rax rcx rdx rdi)]
                  ;; rbx
                  ;;  rsp rbp rsi rdi
                  ;;  r8 r9 r10 r11
                  ;;  r12 r13 r14 r15)]
-  [reg32 (choose eax ecx edx edi)]
+  [reg32 (choose* eax ecx edx edi)]
                  ;; ebx
                  ;;  esp ebp esi edi
                  ;;  r8d r9d r10d r11d
                  ;;  r12d r13d r14d r15d)]
-  [reg16 (choose ax cx dx di)]
+  [reg16 (choose* ax cx dx di)]
                  ;; bx
                   ;; sp bp si di
                   ;; r8w r9w r10w r11w
   ;; r12w r13w r14w r15w)]
-  [reg8 (choose al cl dl)]
+  [reg8 (choose* al cl dl)]
   [i32 (?? (bitvector 32))]
   [i16 (?? (bitvector 16))]
   [i8 (?? (bitvector 8))])
