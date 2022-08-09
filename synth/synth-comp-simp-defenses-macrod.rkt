@@ -379,52 +379,32 @@
   
   (define mulzero-checker
     (λ (op) (assert-operand-is-not-special op mulzero-for-bw cpu)))
-  
+
   (match insn
     [(add-r/m32-r32 op1 op2)
-     (begin
-       (addident-checker op1)
-       (addident-checker op2))]
-    [(add-r/m32-imm32 op1 op2)
-     (begin
-       (addident-checker op1)
-       (addident-checker op2))]
+     (addident-checker op1)
+     (addident-checker op2)]
     
-    [(add-eax-imm32 op1)
-     (begin
-       (addident-checker op1))]
-
+    [(add-r/m32-imm32 op1 op2)
+     (addident-checker op1)]
+    
     [(sub-r/m32-r32 op1 op2)
-     (begin
-       (addident-checker op2))]
+     (addident-checker op2)]
+    
     [(sub-r/m64-r64 op1 op2)
-         (begin
-       (addident-checker op2))]
-    [(sub-r/m32-imm32 op1 op2)
-         (begin
-       (addident-checker op2))]
-    [(sub-r/m32-imm8 op1 op2)
-         (begin
-       (addident-checker op2))]
-    [(sub-r/m64-imm8 op1 op2)
-         (begin
-       (addident-checker op2))]
-    [(sub-r/m64-imm32 op1 op2)
-     (begin
-       (addident-checker op2))]
+     (addident-checker op2)]
 
     [(mul-r/m32 op1)
-     (begin
-       (mulident-checker op1)
-       (mulzero-checker op1)
-       (mulident-checker 'implicit-eax)
-       (mulzero-checker 'implicit-eax))]
+     (mulident-checker op1)
+     (mulzero-checker op1)
+     (mulident-checker 'implicit-eax)
+     (mulzero-checker 'implicit-eax)]
+    
     [(mul-r/m64 op1)
-     (begin
-       (mulident-checker op1)
-       (mulzero-checker op1)
-       (mulident-checker 'implicit-eax)
-       (mulzero-checker 'implicit-eax))]
+     (mulident-checker op1)
+     (mulzero-checker op1)
+     (mulident-checker 'implicit-eax)
+     (mulzero-checker 'implicit-eax)]
     
     [_ #f]))
   
