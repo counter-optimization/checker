@@ -41,6 +41,9 @@ comp_simp_arg_group = argparser.add_argument_group('Computation simplification')
 comp_simp_arg_group.add_argument('--use-small-bitwidth-solver', 
                                  action='store_true')
 
+comp_simp_arg_group.add_argument('--use-interval-analysis', 
+                                 action='store_true')
+
 comp_simp_arg_group.add_argument('--bitwidth-for-small-bitwidth-solver',
                                 choices=[1, 2, 4, 8, 16, 32, 64, 128],
                                 help='must be a power of two >= 1, <= 128',
@@ -892,6 +895,11 @@ def setup_solver_globally(args):
         logger.info(log_msg)
 
         get_comp_simp_solver = lambda: claripy.SmallBitwidthSolver(bitwidth=use_bitwidth)
+    elif args.use_interval_analysis:
+        log_msg = "Running comp simp checker with claripy VSA (strided intervals) abstract interpretation solver"
+        logger.info(log_msg)
+        
+        get_comp_simp_solver = lambda: claripy.SolverVSA()
     else:
         log_msg = f"Running comp simp checker with default claripy solver"
         logger.info(log_msg)
