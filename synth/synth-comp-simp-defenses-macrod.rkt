@@ -416,14 +416,14 @@
       (asserter #:insn val #:cpu cpu))))
 
 (define (sub-r/m32-r32-spec #:spec-cpu spec-cpu
-                            #:impl-cpu impl-cpu)
+                            #:impl-cpu impl-cpu
+			    #:num-insns num-insns)
   ; this is just the insn sequence:
   ; (list (sub-r/m32-r32 eax ecx))
   (define spec-insns (sub-r/m32-r32-conc-impl))
 
   ; these are the synthesis candidate instructions
-  ; REPLACE_ME
-  (define impl-insns (generate-sub-insns 1))
+  (define impl-insns (generate-sub-insns-no-macro #:num-insns num-insns))
   
   ; 1. assume starting in the same state
   (assume-all-regs-equiv spec-cpu impl-cpu)
@@ -472,8 +472,8 @@
 (module+ main
   ; Command line arg for insn seq length
   ; varied by the shell script that runs this code
-  ; (define num-insns (string->number (vector-ref (current-command-line-arguments) 0)))
-  ; (printf "num-insn: ~a\n" num-insns)
+  (define num-insns (string->number (vector-ref (current-command-line-arguments) 0)))
+  (printf "num-insn: ~a\n" num-insns)
 
   ; synthesis calling code
   (define impl-cpu (make-x86-64-cpu))
@@ -484,12 +484,13 @@
     #:forall (append (forall-quantified-vars impl-cpu)
                       (forall-quantified-vars spec-cpu))
     #:guarantee (sub-r/m32-r32-spec #:spec-cpu spec-cpu
-                                    #:impl-cpu impl-cpu)))
+                                    #:impl-cpu impl-cpu
+				    #:num-insns num-insns)))
   (printf "Solution is: ~a\n" solution)
 
   (if (sat? solution)
       (begin
-        (printf "Solution found for n=1 insns.\n")
+        (printf "Solution found for n=~a insns.\n" num-insns)
         (print-forms solution)
         (exit 0))
       (begin
