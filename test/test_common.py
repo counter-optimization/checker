@@ -37,6 +37,7 @@ class MockCommandlineArgs:
     bitwidth_for_small_bitwidth_solver: int = -1
     comp_simp: bool = False
     silent_stores: bool = False
+    use_interval_analysis: bool = False
 
 def run_checker(filename: Path, funcname: str):
     file_abs_path = filename.resolve()
