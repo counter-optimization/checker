@@ -190,6 +190,28 @@
     (assume (&& (! (bveq reg-val one))
                 (! (bveq reg-val zero))))))
 
+;; For calculating search space stats
+(define (print-info-about-search-space seq-len)
+  ; first, for each insn: print out the number of possible
+  ; instantiations could be. this is the number of the
+  ; possible combintations of arguments it could have:
+  ; the cartesian product of each argument type
+  (define total-num-instantiations 0)
+  (for ([insn-type-pair insn-to-type-map])
+    (match-let ([(cons insn type) insn-type-pair])
+      (define num-instantiations (length (get-all-arg-list-for-type type)))
+      (set! total-num-instantiations (+ num-instantiations total-num-instantiations))
+      (printf "~a has ~a possible instantiations\n" insn num-instantiations)))
+
+  (printf "there are ~a total instantiations\n" total-num-instantiations)
+
+  (when seq-len
+    (printf "for a seq of exactly length ~a, there are (~a ** ~a = ~a) total sequences to search\n"
+            seq-len
+            total-num-instantiations
+            seq-len
+            (expt total-num-instantiations seq-len))))
+
 ;; Run all of the individual insn synth tests
 (module+ main
   (define all-test-start-time (current-milliseconds))
@@ -197,9 +219,10 @@
   (define succeeded '())
    
   (define use-rand-seq #f)
-  (define max-seq-len void)
+  (define max-seq-len #f)
   (define use-single-insn #f)
   (define use-comp-simp-asserts #f)
+  (define do-search-space-stats #f)
 
   (define cl-parser
     (command-line
@@ -212,10 +235,21 @@
       [("--use-single-insns") 
        "use single insn sequences"
        (set! use-single-insn #t)]
+      [("--do-search-space-stats")
+       "calculate and print stats about the search space for synthesis"
+       (set! do-search-space-stats #t)]
       #:once-each
       [("--use-comp-simp-asserts") 
        "use comp-simp asserts"
-       (set! use-comp-simp-asserts #t)]))
+       (set! use-comp-simp-asserts #t)]
+      [("--max-seq-len")
+       MAX_SEQ_NUM
+       "number of insns"
+       (set! max-seq-len (string->number MAX_SEQ_NUM))]))
+
+  (when do-search-space-stats
+    (print-info-about-search-space max-seq-len)
+    (exit 0))
 
   (define insns-to-test 
     (cond
