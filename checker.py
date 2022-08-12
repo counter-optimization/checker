@@ -26,6 +26,11 @@ argparser.add_argument('--version',
                         action='version',
                         version=__version__)
 
+argparser.add_argument('--verbose',
+                       action='store_true',
+                       help='print debug log statements. if not provided, then '
+                            'the logging level is logging.INFO')
+
 checker_arg_group = argparser.add_argument_group('Available checkers')
 checker_arg_group.add_argument('--silent-stores', 
                                 action='store_true',
@@ -95,20 +100,18 @@ class SilentStoreChecker(Checker):
         expr = state.inspect.mem_write_expr
         addr = state.inspect.mem_write_address
 
-        if expr.size() == 64:
-            prev_val = state.mem[addr].uint64_t.resolved
-        elif expr.size() == 32:
-            prev_val = state.mem[addr].uint32_t.resolved
-        elif expr.size() == 16:
-            prev_val = state.mem[addr].uint16_t.resolved
-        elif expr.size() == 8:
-            prev_val = state.mem[addr].uint8_t.resolved
-        else:
-            raise RuntimeError(f"Unhandled bitwidth in store at state: {state}")
+        logger.debug("in ss check: expr (%s) size is %s, addr to load is %s" %
+                     (expr, expr.size(), addr))
 
-        logger.debug(f"expr is {expr}")
-        logger.debug(f"prev_val is {prev_val}")
-        logger.debug(f"addr is {addr}")
+        size_of_byte = 8
+        bytes_to_load = expr.size() // size_of_byte
+        logger.debug("bytes_to_load are: %s" % bytes_to_load)
+        prev_val = state.memory.load(addr,
+                                     size=bytes_to_load,
+                                     disable_actions=True,
+                                     inspect=False)
+
+        logger.debug("prev_val is %s" % prev_val)
 
         solver = get_default_solver()
         solver.add(expr == prev_val)
@@ -930,6 +933,11 @@ def run(args):
         print(f"Couldn't find symbol for funcname: {funcname}")
         sys.exit(1)
 
+    if args.verbose:
+        logger.setLevel(logging.DEBUG)
+    else:
+        logger.setLevel(logging.INFO)
+
     state = proj.factory.blank_state(addr=func_symbol.rebased_addr)
     # state.options.add(angr.options.SYMBOL_FILL_UNCONSTRAINED_MEMORY)
     # state.options.add(angr.options.SYMBOL_FILL_UNCONSTRAINED_REGISTERS)
@@ -948,7 +956,8 @@ def run(args):
     # setup_state_for_curve25519_point_add_and_double(proj, state, funcname)
     # setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
 
-    setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
+    # setup_symbolic_state_for_ed25519_point_addition(proj, state, funcname)
+    setup_symbolic_state_for_ed25519_pub_key_gen(proj, state, funcname)
     state.regs.rbp = state.regs.rsp
 
     if args.comp_simp:
