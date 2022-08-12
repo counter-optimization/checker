@@ -42,6 +42,7 @@
                     r64-i8
                     r32-r32
                     r64-r64
+                    r8-r8
                     r8
                     r16
                     r32
@@ -70,6 +71,7 @@
     ['r64-i8 (cartesian-product reg64s special-imms-for-8)]
     ['r32-r32 (cartesian-product reg32s reg32s)]
     ['r64-r64 (cartesian-product reg64s reg64s)]
+    ['r8-r8 (cartesian-product reg8s reg8s)]
     ['r8 (wrap-plain-list-in-lists reg8s)]
     ['r16 (wrap-plain-list-in-lists reg16s)]
     ['r32 (wrap-plain-list-in-lists reg32s)]
@@ -78,19 +80,6 @@
         (printf "Uncaught type in get-all-arg-list-for-type: ~a\n" argtype)
         (exit 1))]))
 
-;; arg-types (r32-i32 r64-i32 r32-i8 r64-i8 r32-r32 r64-r64 r8 r16 r32 r64)
-;; #<procedure:sub-r/m32-imm32> has 4 possible instantiations
-;; #<procedure:sub-r/m64-imm32> has 4 possible instantiations
-;; #<procedure:sub-r/m32-imm8> has 4 possible instantiations
-;; #<procedure:sub-r/m64-imm8> has 4 possible instantiations
-;; #<procedure:sub-r/m32-r32> has 16 possible instantiations
-;; #<procedure:sub-r/m64-r64> has 16 possible instantiations
-;; #<procedure:setz> has 3 possible instantiations
-;; #<procedure:cmovz-r32-r32> has 16 possible instantiations
-;; #<procedure:cmovne-r32-r32> has 16 possible instantiations
-;; #<procedure:mul-r/m32> has 4 possible instantiations
-;; #<procedure:mul-r/m64> has 4 possible instantiations
-;; there are 91 total instantiations
 (define insn-to-type-map 
   (list
    (cons sub-r/m32-imm32 'r32-i32)
@@ -102,6 +91,10 @@
    (cons setz 'r8)
    (cons cmovz-r32-r32 'r32-r32)
    (cons cmovne-r32-r32 'r32-r32)
+   (cons xor-r/m32-r32 'r32-r32)
+   (cons xor-r/m64-r64 'r64-r64)
+   (cons mov-r/m8-r8 'r8-r8)
+   (cons mov-r/m32-r32 'r32-r32)
    (cons mul-r/m32 'r32)
    (cons mul-r/m64 'r64)))
 
@@ -217,6 +210,7 @@
       [(or 'r64-i32 'r64-i8 'r64) (length reg64s)]
       ['r32-r32 (* (length reg32s) (length reg32s))]
       ['r64-r64 (* (length reg32s) (length reg32s))]
+      [(or 'r8-r8) (* (length reg8s) (length reg8s))]
       ['r8 (length reg8s)]
       ['r16 (length reg16s)]
       [_ (begin

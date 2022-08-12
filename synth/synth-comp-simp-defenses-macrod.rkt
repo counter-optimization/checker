@@ -139,7 +139,9 @@
                  (sub-r-i) 
                  (sub-r-r) 
                  (setcc) 
-                 (cmov) 
+                 (cmov)
+                 (xor)
+                 (mov)
                  (mul))]
   [sub-r-i (choose*
             (sub-r/m32-imm32 (reg32) (i32))
@@ -156,6 +158,12 @@
   [mul (choose*
         (mul-r/m32 (reg32))
         (mul-r/m64 (reg64)))]
+  [xor (choose*
+        (xor-r/m32-r32 (reg32) (reg32))
+        (xor-r/m64-r64 (reg64) (reg64)))]
+  [mov (choose*
+        (mov-r/m8-r8 (reg8) (reg8))
+        (mov-r/m32-r32 (reg32) (reg32)))]
   [reg64 (choose* rax rcx rdx rdi)]
                  ;; rbx
                  ;;  rsp rbp rsi rdi
