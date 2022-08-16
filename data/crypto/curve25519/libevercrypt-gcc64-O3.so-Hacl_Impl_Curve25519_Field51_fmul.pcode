@@ -1,0 +1,2085 @@
+--------------------------------------------------------------------------------
+00000000/4: ENDBR64 
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+00000004/2: PUSH R15
+--------------------------------------------------------------------------------
+  0: unique[0xea00:8] = COPY register[0xb8:8]
+  1: register[0x20:8] = INT_SUB register[0x20:8], const[0x8:8]
+  2: STORE const[0x7ff4ce408520:8], register[0x20:8], unique[0xea00:8]
+
+--------------------------------------------------------------------------------
+00000006/2: PUSH R14
+--------------------------------------------------------------------------------
+  0: unique[0xea00:8] = COPY register[0xb0:8]
+  1: register[0x20:8] = INT_SUB register[0x20:8], const[0x8:8]
+  2: STORE const[0x7ff4ce408520:8], register[0x20:8], unique[0xea00:8]
+
+--------------------------------------------------------------------------------
+00000008/2: PUSH R13
+--------------------------------------------------------------------------------
+  0: unique[0xea00:8] = COPY register[0xa8:8]
+  1: register[0x20:8] = INT_SUB register[0x20:8], const[0x8:8]
+  2: STORE const[0x7ff4ce408520:8], register[0x20:8], unique[0xea00:8]
+
+--------------------------------------------------------------------------------
+0000000a/2: PUSH R12
+--------------------------------------------------------------------------------
+  0: unique[0xea00:8] = COPY register[0xa0:8]
+  1: register[0x20:8] = INT_SUB register[0x20:8], const[0x8:8]
+  2: STORE const[0x7ff4ce408520:8], register[0x20:8], unique[0xea00:8]
+
+--------------------------------------------------------------------------------
+0000000c/1: PUSH RBP
+--------------------------------------------------------------------------------
+  0: unique[0xea00:8] = COPY register[0x28:8]
+  1: register[0x20:8] = INT_SUB register[0x20:8], const[0x8:8]
+  2: STORE const[0x7ff4ce408520:8], register[0x20:8], unique[0xea00:8]
+
+--------------------------------------------------------------------------------
+0000000d/1: PUSH RBX
+--------------------------------------------------------------------------------
+  0: unique[0xea00:8] = COPY register[0x18:8]
+  1: register[0x20:8] = INT_SUB register[0x20:8], const[0x8:8]
+  2: STORE const[0x7ff4ce408520:8], register[0x20:8], unique[0xea00:8]
+
+--------------------------------------------------------------------------------
+0000000e/3: MOV R15,qword ptr [RSI]
+--------------------------------------------------------------------------------
+  0: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], register[0x30:8]
+  1: register[0xb8:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+00000011/4: MOV R14,qword ptr [RSI + 0x8]
+--------------------------------------------------------------------------------
+  0: unique[0x3100:8] = INT_ADD register[0x30:8], const[0x8:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3100:8]
+  2: register[0xb0:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+00000015/4: MOV RBP,qword ptr [RSI + 0x20]
+--------------------------------------------------------------------------------
+  0: unique[0x3100:8] = INT_ADD register[0x30:8], const[0x20:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3100:8]
+  2: register[0x28:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+00000019/4: MOV R13,qword ptr [RSI + 0x10]
+--------------------------------------------------------------------------------
+  0: unique[0x3100:8] = INT_ADD register[0x30:8], const[0x10:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3100:8]
+  2: register[0xa8:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+0000001d/4: MOV R12,qword ptr [RSI + 0x18]
+--------------------------------------------------------------------------------
+  0: unique[0x3100:8] = INT_ADD register[0x30:8], const[0x18:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3100:8]
+  2: register[0xa0:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+00000021/3: MOV RAX,qword ptr [RDX]
+--------------------------------------------------------------------------------
+  0: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], register[0x10:8]
+  1: register[0x0:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+00000024/4: MOV RSI,qword ptr [RDX + 0x10]
+--------------------------------------------------------------------------------
+  0: unique[0x3100:8] = INT_ADD register[0x10:8], const[0x10:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3100:8]
+  2: register[0x30:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+00000028/4: MOV RBX,qword ptr [RDX + 0x18]
+--------------------------------------------------------------------------------
+  0: unique[0x3100:8] = INT_ADD register[0x10:8], const[0x18:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3100:8]
+  2: register[0x18:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+0000002c/4: MOV RCX,qword ptr [RDX + 0x8]
+--------------------------------------------------------------------------------
+  0: unique[0x3100:8] = INT_ADD register[0x10:8], const[0x8:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3100:8]
+  2: register[0x8:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+00000030/5: MOV qword ptr [RSP + -0x40],R12
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffc0:8], register[0x20:8]
+  1: unique[0xc000:8] = COPY register[0xa0:8]
+  2: STORE const[0x7ff4ce408520:8], unique[0x3800:8], unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+00000035/5: MOV qword ptr [RSP + -0x50],RAX
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffb0:8], register[0x20:8]
+  1: unique[0xc000:8] = COPY register[0x0:8]
+  2: STORE const[0x7ff4ce408520:8], unique[0x3800:8], unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+0000003a/4: MOV RDX,qword ptr [RDX + 0x20]
+--------------------------------------------------------------------------------
+  0: unique[0x3100:8] = INT_ADD register[0x10:8], const[0x20:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3100:8]
+  2: register[0x10:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+0000003e/4: LEA RAX,[RSI + RSI*0x8]
+--------------------------------------------------------------------------------
+  0: unique[0x3300:8] = INT_MULT register[0x30:8], const[0x8:8]
+  1: unique[0x3400:8] = INT_ADD register[0x30:8], unique[0x3300:8]
+  2: register[0x0:8] = COPY unique[0x3400:8]
+
+--------------------------------------------------------------------------------
+00000042/4: LEA R9,[RSI + RAX*0x2]
+--------------------------------------------------------------------------------
+  0: unique[0x3300:8] = INT_MULT register[0x0:8], const[0x2:8]
+  1: unique[0x3400:8] = INT_ADD register[0x30:8], unique[0x3300:8]
+  2: register[0x88:8] = COPY unique[0x3400:8]
+
+--------------------------------------------------------------------------------
+00000046/4: LEA RAX,[RBX + RBX*0x8]
+--------------------------------------------------------------------------------
+  0: unique[0x3300:8] = INT_MULT register[0x18:8], const[0x8:8]
+  1: unique[0x3400:8] = INT_ADD register[0x18:8], unique[0x3300:8]
+  2: register[0x0:8] = COPY unique[0x3400:8]
+
+--------------------------------------------------------------------------------
+0000004a/5: MOV qword ptr [RSP + -0x48],R13
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffb8:8], register[0x20:8]
+  1: unique[0xc000:8] = COPY register[0xa8:8]
+  2: STORE const[0x7ff4ce408520:8], unique[0x3800:8], unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+0000004f/4: LEA R8,[RBX + RAX*0x2]
+--------------------------------------------------------------------------------
+  0: unique[0x3300:8] = INT_MULT register[0x0:8], const[0x2:8]
+  1: unique[0x3400:8] = INT_ADD register[0x18:8], unique[0x3300:8]
+  2: register[0x80:8] = COPY unique[0x3400:8]
+
+--------------------------------------------------------------------------------
+00000053/4: LEA RAX,[RDX + RDX*0x8]
+--------------------------------------------------------------------------------
+  0: unique[0x3300:8] = INT_MULT register[0x10:8], const[0x8:8]
+  1: unique[0x3400:8] = INT_ADD register[0x10:8], unique[0x3300:8]
+  2: register[0x0:8] = COPY unique[0x3400:8]
+
+--------------------------------------------------------------------------------
+00000057/5: MOV qword ptr [RSP + -0x30],RDX
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffd0:8], register[0x20:8]
+  1: unique[0xc000:8] = COPY register[0x10:8]
+  2: STORE const[0x7ff4ce408520:8], unique[0x3800:8], unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+0000005c/4: LEA RDX,[RDX + RAX*0x2]
+--------------------------------------------------------------------------------
+  0: unique[0x3300:8] = INT_MULT register[0x0:8], const[0x2:8]
+  1: unique[0x3400:8] = INT_ADD register[0x10:8], unique[0x3300:8]
+  2: register[0x10:8] = COPY unique[0x3400:8]
+
+--------------------------------------------------------------------------------
+00000060/3: MOV RAX,RDX
+--------------------------------------------------------------------------------
+  0: register[0x0:8] = COPY register[0x10:8]
+
+--------------------------------------------------------------------------------
+00000063/5: MOV qword ptr [RSP + -0x38],RDX
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffc8:8], register[0x20:8]
+  1: unique[0xc000:8] = COPY register[0x10:8]
+  2: STORE const[0x7ff4ce408520:8], unique[0x3800:8], unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+00000068/3: MUL R14
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0xb0:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+0000006b/3: MOV R10,RAX
+--------------------------------------------------------------------------------
+  0: register[0x90:8] = COPY register[0x0:8]
+
+--------------------------------------------------------------------------------
+0000006e/5: MOV RAX,qword ptr [RSP + -0x50]
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffb0:8], register[0x20:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3800:8]
+  2: register[0x0:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+00000073/3: MOV R11,RDX
+--------------------------------------------------------------------------------
+  0: register[0x98:8] = COPY register[0x10:8]
+
+--------------------------------------------------------------------------------
+00000076/3: MUL R15
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0xb8:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+00000079/3: ADD R10,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0x90:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0x90:8], register[0x0:8]
+  2: register[0x90:8] = INT_ADD register[0x90:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0x90:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x90:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x90:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+0000007c/3: MOV RAX,R13
+--------------------------------------------------------------------------------
+  0: register[0x0:8] = COPY register[0xa8:8]
+
+--------------------------------------------------------------------------------
+0000007f/3: ADC R11,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0x98:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0x98:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0x98:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0x98:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0x98:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0x98:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0x98:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000082/3: MUL R8
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0x80:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+00000085/3: ADD R10,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0x90:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0x90:8], register[0x0:8]
+  2: register[0x90:8] = INT_ADD register[0x90:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0x90:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x90:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x90:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000088/3: MOV RAX,R12
+--------------------------------------------------------------------------------
+  0: register[0x0:8] = COPY register[0xa0:8]
+
+--------------------------------------------------------------------------------
+0000008b/3: ADC R11,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0x98:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0x98:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0x98:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0x98:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0x98:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0x98:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0x98:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+0000008e/3: MUL R9
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0x88:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+00000091/3: ADD R10,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0x90:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0x90:8], register[0x0:8]
+  2: register[0x90:8] = INT_ADD register[0x90:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0x90:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x90:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x90:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000094/4: LEA RAX,[RCX + RCX*0x8]
+--------------------------------------------------------------------------------
+  0: unique[0x3300:8] = INT_MULT register[0x8:8], const[0x8:8]
+  1: unique[0x3400:8] = INT_ADD register[0x8:8], unique[0x3300:8]
+  2: register[0x0:8] = COPY unique[0x3400:8]
+
+--------------------------------------------------------------------------------
+00000098/4: LEA RAX,[RCX + RAX*0x2]
+--------------------------------------------------------------------------------
+  0: unique[0x3300:8] = INT_MULT register[0x0:8], const[0x2:8]
+  1: unique[0x3400:8] = INT_ADD register[0x8:8], unique[0x3300:8]
+  2: register[0x0:8] = COPY unique[0x3400:8]
+
+--------------------------------------------------------------------------------
+0000009c/3: ADC R11,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0x98:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0x98:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0x98:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0x98:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0x98:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0x98:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0x98:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+0000009f/3: MUL RBP
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0x28:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+000000a2/3: ADD R10,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0x90:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0x90:8], register[0x0:8]
+  2: register[0x90:8] = INT_ADD register[0x90:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0x90:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x90:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x90:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000000a5/5: MOV RAX,qword ptr [RSP + -0x50]
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffb0:8], register[0x20:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3800:8]
+  2: register[0x0:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+000000aa/3: ADC R11,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0x98:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0x98:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0x98:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0x98:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0x98:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0x98:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0x98:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000000ad/3: MOV R12,R10
+--------------------------------------------------------------------------------
+  0: register[0xa0:8] = COPY register[0x90:8]
+
+--------------------------------------------------------------------------------
+000000b0/3: MUL R14
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0xb0:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+000000b3/3: MOV R13,R11
+--------------------------------------------------------------------------------
+  0: register[0xa8:8] = COPY register[0x98:8]
+
+--------------------------------------------------------------------------------
+000000b6/5: MOV qword ptr [RSP + -0x28],R12
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffd8:8], register[0x20:8]
+  1: unique[0xc000:8] = COPY register[0xa0:8]
+  2: STORE const[0x7ff4ce408520:8], unique[0x3800:8], unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+000000bb/5: MOV qword ptr [RSP + -0x20],R13
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffe0:8], register[0x20:8]
+  1: unique[0xc000:8] = COPY register[0xa8:8]
+  2: STORE const[0x7ff4ce408520:8], unique[0x3800:8], unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+000000c0/3: MOV R10,RAX
+--------------------------------------------------------------------------------
+  0: register[0x90:8] = COPY register[0x0:8]
+
+--------------------------------------------------------------------------------
+000000c3/3: MOV RAX,R15
+--------------------------------------------------------------------------------
+  0: register[0x0:8] = COPY register[0xb8:8]
+
+--------------------------------------------------------------------------------
+000000c6/3: MOV R11,RDX
+--------------------------------------------------------------------------------
+  0: register[0x98:8] = COPY register[0x10:8]
+
+--------------------------------------------------------------------------------
+000000c9/3: MUL RCX
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0x8:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+000000cc/3: ADD R10,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0x90:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0x90:8], register[0x0:8]
+  2: register[0x90:8] = INT_ADD register[0x90:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0x90:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x90:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x90:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000000cf/5: MOV RAX,qword ptr [RSP + -0x38]
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffc8:8], register[0x20:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3800:8]
+  2: register[0x0:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+000000d4/3: ADC R11,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0x98:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0x98:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0x98:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0x98:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0x98:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0x98:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0x98:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000000d7/5: MUL qword ptr [RSP + -0x48]
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffb8:8], register[0x20:8]
+  1: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  2: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3800:8]
+  3: unique[0x3fb80:16] = INT_ZEXT unique[0xc000:8]
+  4: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  5: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  6: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  7: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  8: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+000000dc/3: ADD R10,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0x90:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0x90:8], register[0x0:8]
+  2: register[0x90:8] = INT_ADD register[0x90:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0x90:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x90:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x90:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000000df/5: MOV RAX,qword ptr [RSP + -0x40]
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffc0:8], register[0x20:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3800:8]
+  2: register[0x0:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+000000e4/3: ADC R11,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0x98:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0x98:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0x98:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0x98:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0x98:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0x98:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0x98:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000000e7/3: MUL R8
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0x80:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+000000ea/3: ADD R10,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0x90:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0x90:8], register[0x0:8]
+  2: register[0x90:8] = INT_ADD register[0x90:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0x90:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x90:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x90:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000000ed/3: MOV RAX,R9
+--------------------------------------------------------------------------------
+  0: register[0x0:8] = COPY register[0x88:8]
+
+--------------------------------------------------------------------------------
+000000f0/3: ADC R11,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0x98:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0x98:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0x98:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0x98:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0x98:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0x98:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0x98:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000000f3/3: MUL RBP
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0x28:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+000000f6/3: ADD RAX,R10
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0x0:8], register[0x90:8]
+  1: register[0x20b:1] = INT_SCARRY register[0x0:8], register[0x90:8]
+  2: register[0x0:8] = INT_ADD register[0x0:8], register[0x90:8]
+  3: register[0x207:1] = INT_SLESS register[0x0:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x0:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x0:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000000f9/3: ADC RDX,R11
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0x10:8], register[0x98:8]
+  2: register[0x20b:1] = INT_SCARRY register[0x10:8], register[0x98:8]
+  3: unique[0x12500:8] = INT_ADD register[0x10:8], register[0x98:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0x10:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0x10:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0x10:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0x10:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000000fc/5: SHRD R12,R13,0x33
+--------------------------------------------------------------------------------
+  0: unique[0x57d00:4] = INT_AND const[0x33:4], const[0x3f:4]
+  1: unique[0x57d80:8] = COPY register[0xa0:8]
+  2: unique[0x57e00:8] = INT_RIGHT register[0xa0:8], unique[0x57d00:4]
+  3: unique[0x57e80:4] = INT_SUB const[0x40:4], unique[0x57d00:4]
+  4: unique[0x57f00:8] = INT_LEFT register[0xa8:8], unique[0x57e80:4]
+  5: register[0xa0:8] = INT_OR unique[0x57e00:8], unique[0x57f00:8]
+  6: unique[0x16d00:1] = INT_NOTEQUAL unique[0x57d00:4], const[0x0:4]
+  7: unique[0x16d80:4] = INT_SUB unique[0x57d00:4], const[0x1:4]
+  8: unique[0x16e00:8] = INT_RIGHT unique[0x57d80:8], unique[0x16d80:4]
+  9: unique[0x16e80:8] = INT_AND unique[0x16e00:8], const[0x1:8]
+ 10: unique[0x16f80:1] = INT_NOTEQUAL unique[0x16e80:8], const[0x0:8]
+ 11: unique[0x17000:1] = BOOL_NEGATE unique[0x16d00:1]
+ 12: unique[0x17080:1] = INT_AND unique[0x17000:1], register[0x200:1]
+ 13: unique[0x17100:1] = INT_AND unique[0x16d00:1], unique[0x16f80:1]
+ 14: register[0x200:1] = INT_OR unique[0x17080:1], unique[0x17100:1]
+ 15: unique[0x17280:1] = INT_EQUAL unique[0x57d00:4], const[0x1:4]
+ 16: unique[0x17300:1] = INT_SLESS unique[0x57d80:8], const[0x0:8]
+ 17: unique[0x17380:1] = INT_SLESS register[0xa0:8], const[0x0:8]
+ 18: unique[0x17480:1] = INT_XOR unique[0x17300:1], unique[0x17380:1]
+ 19: unique[0x17500:1] = BOOL_NEGATE unique[0x17280:1]
+ 20: unique[0x17580:1] = INT_AND unique[0x17500:1], register[0x20b:1]
+ 21: unique[0x17600:1] = INT_AND unique[0x17280:1], unique[0x17480:1]
+ 22: register[0x20b:1] = INT_OR unique[0x17580:1], unique[0x17600:1]
+ 23: unique[0x13100:1] = INT_NOTEQUAL unique[0x57d00:4], const[0x0:4]
+ 24: unique[0x13200:1] = INT_SLESS register[0xa0:8], const[0x0:8]
+ 25: unique[0x13280:1] = BOOL_NEGATE unique[0x13100:1]
+ 26: unique[0x13300:1] = INT_AND unique[0x13280:1], register[0x207:1]
+ 27: unique[0x13380:1] = INT_AND unique[0x13100:1], unique[0x13200:1]
+ 28: register[0x207:1] = INT_OR unique[0x13300:1], unique[0x13380:1]
+ 29: unique[0x13500:1] = INT_EQUAL register[0xa0:8], const[0x0:8]
+ 30: unique[0x13580:1] = BOOL_NEGATE unique[0x13100:1]
+ 31: unique[0x13600:1] = INT_AND unique[0x13580:1], register[0x206:1]
+ 32: unique[0x13680:1] = INT_AND unique[0x13100:1], unique[0x13500:1]
+ 33: register[0x206:1] = INT_OR unique[0x13600:1], unique[0x13680:1]
+ 34: unique[0x13780:8] = INT_AND register[0xa0:8], const[0xff:8]
+ 35: unique[0x13800:1] = POPCOUNT unique[0x13780:8]
+ 36: unique[0x13880:1] = INT_AND unique[0x13800:1], const[0x1:1]
+ 37: unique[0x13980:1] = INT_EQUAL unique[0x13880:1], const[0x0:1]
+ 38: unique[0x13a00:1] = BOOL_NEGATE unique[0x13100:1]
+ 39: unique[0x13a80:1] = INT_AND unique[0x13a00:1], register[0x202:1]
+ 40: unique[0x13b00:1] = INT_AND unique[0x13100:1], unique[0x13980:1]
+ 41: register[0x202:1] = INT_OR unique[0x13a80:1], unique[0x13b00:1]
+
+--------------------------------------------------------------------------------
+00000101/3: XOR R11D,R11D
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = COPY const[0x0:1]
+  1: register[0x20b:1] = COPY const[0x0:1]
+  2: register[0x98:4] = INT_XOR register[0x98:4], register[0x98:4]
+  3: register[0x98:8] = INT_ZEXT register[0x98:4]
+  4: register[0x207:1] = INT_SLESS register[0x98:4], const[0x0:4]
+  5: register[0x206:1] = INT_EQUAL register[0x98:4], const[0x0:4]
+  6: unique[0x12e80:4] = INT_AND register[0x98:4], const[0xff:4]
+  7: unique[0x12f00:1] = POPCOUNT unique[0x12e80:4]
+  8: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  9: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000104/3: ADD RAX,R12
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0x0:8], register[0xa0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0x0:8], register[0xa0:8]
+  2: register[0x0:8] = INT_ADD register[0x0:8], register[0xa0:8]
+  3: register[0x207:1] = INT_SLESS register[0x0:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x0:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x0:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000107/3: ADC RDX,R11
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0x10:8], register[0x98:8]
+  2: register[0x20b:1] = INT_SCARRY register[0x10:8], register[0x98:8]
+  3: unique[0x12500:8] = INT_ADD register[0x10:8], register[0x98:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0x10:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0x10:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0x10:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0x10:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+0000010a/3: MOV R12,RAX
+--------------------------------------------------------------------------------
+  0: register[0xa0:8] = COPY register[0x0:8]
+
+--------------------------------------------------------------------------------
+0000010d/3: MOV RAX,RCX
+--------------------------------------------------------------------------------
+  0: register[0x0:8] = COPY register[0x8:8]
+
+--------------------------------------------------------------------------------
+00000110/3: MOV R13,RDX
+--------------------------------------------------------------------------------
+  0: register[0xa8:8] = COPY register[0x10:8]
+
+--------------------------------------------------------------------------------
+00000113/3: MUL R14
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0xb0:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+00000116/3: MOV R10,RAX
+--------------------------------------------------------------------------------
+  0: register[0x90:8] = COPY register[0x0:8]
+
+--------------------------------------------------------------------------------
+00000119/3: MOV RAX,R15
+--------------------------------------------------------------------------------
+  0: register[0x0:8] = COPY register[0xb8:8]
+
+--------------------------------------------------------------------------------
+0000011c/3: MOV R11,RDX
+--------------------------------------------------------------------------------
+  0: register[0x98:8] = COPY register[0x10:8]
+
+--------------------------------------------------------------------------------
+0000011f/3: MUL RSI
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0x30:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+00000122/3: ADD R10,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0x90:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0x90:8], register[0x0:8]
+  2: register[0x90:8] = INT_ADD register[0x90:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0x90:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x90:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x90:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000125/5: MOV RAX,qword ptr [RSP + -0x50]
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffb0:8], register[0x20:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3800:8]
+  2: register[0x0:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+0000012a/3: ADC R11,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0x98:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0x98:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0x98:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0x98:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0x98:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0x98:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0x98:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+0000012d/5: MUL qword ptr [RSP + -0x48]
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffb8:8], register[0x20:8]
+  1: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  2: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3800:8]
+  3: unique[0x3fb80:16] = INT_ZEXT unique[0xc000:8]
+  4: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  5: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  6: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  7: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  8: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+00000132/3: ADD R10,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0x90:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0x90:8], register[0x0:8]
+  2: register[0x90:8] = INT_ADD register[0x90:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0x90:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x90:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x90:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000135/5: MOV RAX,qword ptr [RSP + -0x38]
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffc8:8], register[0x20:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3800:8]
+  2: register[0x0:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+0000013a/3: ADC R11,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0x98:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0x98:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0x98:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0x98:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0x98:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0x98:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0x98:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+0000013d/5: MUL qword ptr [RSP + -0x40]
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffc0:8], register[0x20:8]
+  1: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  2: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3800:8]
+  3: unique[0x3fb80:16] = INT_ZEXT unique[0xc000:8]
+  4: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  5: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  6: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  7: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  8: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+00000142/5: MOV qword ptr [RSP + -0x18],R12
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffe8:8], register[0x20:8]
+  1: unique[0xc000:8] = COPY register[0xa0:8]
+  2: STORE const[0x7ff4ce408520:8], unique[0x3800:8], unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+00000147/5: MOV qword ptr [RSP + -0x10],R13
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xfffffffffffffff0:8], register[0x20:8]
+  1: unique[0xc000:8] = COPY register[0xa8:8]
+  2: STORE const[0x7ff4ce408520:8], unique[0x3800:8], unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+0000014c/3: ADD R10,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0x90:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0x90:8], register[0x0:8]
+  2: register[0x90:8] = INT_ADD register[0x90:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0x90:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x90:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x90:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+0000014f/3: MOV RAX,R8
+--------------------------------------------------------------------------------
+  0: register[0x0:8] = COPY register[0x80:8]
+
+--------------------------------------------------------------------------------
+00000152/3: MOV R8,R12
+--------------------------------------------------------------------------------
+  0: register[0x80:8] = COPY register[0xa0:8]
+
+--------------------------------------------------------------------------------
+00000155/3: ADC R11,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0x98:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0x98:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0x98:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0x98:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0x98:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0x98:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0x98:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000158/3: MUL RBP
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0x28:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+0000015b/3: ADD RAX,R10
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0x0:8], register[0x90:8]
+  1: register[0x20b:1] = INT_SCARRY register[0x0:8], register[0x90:8]
+  2: register[0x0:8] = INT_ADD register[0x0:8], register[0x90:8]
+  3: register[0x207:1] = INT_SLESS register[0x0:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x0:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x0:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+0000015e/3: ADC RDX,R11
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0x10:8], register[0x98:8]
+  2: register[0x20b:1] = INT_SCARRY register[0x10:8], register[0x98:8]
+  3: unique[0x12500:8] = INT_ADD register[0x10:8], register[0x98:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0x10:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0x10:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0x10:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0x10:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000161/5: SHRD R8,R13,0x33
+--------------------------------------------------------------------------------
+  0: unique[0x57d00:4] = INT_AND const[0x33:4], const[0x3f:4]
+  1: unique[0x57d80:8] = COPY register[0x80:8]
+  2: unique[0x57e00:8] = INT_RIGHT register[0x80:8], unique[0x57d00:4]
+  3: unique[0x57e80:4] = INT_SUB const[0x40:4], unique[0x57d00:4]
+  4: unique[0x57f00:8] = INT_LEFT register[0xa8:8], unique[0x57e80:4]
+  5: register[0x80:8] = INT_OR unique[0x57e00:8], unique[0x57f00:8]
+  6: unique[0x16d00:1] = INT_NOTEQUAL unique[0x57d00:4], const[0x0:4]
+  7: unique[0x16d80:4] = INT_SUB unique[0x57d00:4], const[0x1:4]
+  8: unique[0x16e00:8] = INT_RIGHT unique[0x57d80:8], unique[0x16d80:4]
+  9: unique[0x16e80:8] = INT_AND unique[0x16e00:8], const[0x1:8]
+ 10: unique[0x16f80:1] = INT_NOTEQUAL unique[0x16e80:8], const[0x0:8]
+ 11: unique[0x17000:1] = BOOL_NEGATE unique[0x16d00:1]
+ 12: unique[0x17080:1] = INT_AND unique[0x17000:1], register[0x200:1]
+ 13: unique[0x17100:1] = INT_AND unique[0x16d00:1], unique[0x16f80:1]
+ 14: register[0x200:1] = INT_OR unique[0x17080:1], unique[0x17100:1]
+ 15: unique[0x17280:1] = INT_EQUAL unique[0x57d00:4], const[0x1:4]
+ 16: unique[0x17300:1] = INT_SLESS unique[0x57d80:8], const[0x0:8]
+ 17: unique[0x17380:1] = INT_SLESS register[0x80:8], const[0x0:8]
+ 18: unique[0x17480:1] = INT_XOR unique[0x17300:1], unique[0x17380:1]
+ 19: unique[0x17500:1] = BOOL_NEGATE unique[0x17280:1]
+ 20: unique[0x17580:1] = INT_AND unique[0x17500:1], register[0x20b:1]
+ 21: unique[0x17600:1] = INT_AND unique[0x17280:1], unique[0x17480:1]
+ 22: register[0x20b:1] = INT_OR unique[0x17580:1], unique[0x17600:1]
+ 23: unique[0x13100:1] = INT_NOTEQUAL unique[0x57d00:4], const[0x0:4]
+ 24: unique[0x13200:1] = INT_SLESS register[0x80:8], const[0x0:8]
+ 25: unique[0x13280:1] = BOOL_NEGATE unique[0x13100:1]
+ 26: unique[0x13300:1] = INT_AND unique[0x13280:1], register[0x207:1]
+ 27: unique[0x13380:1] = INT_AND unique[0x13100:1], unique[0x13200:1]
+ 28: register[0x207:1] = INT_OR unique[0x13300:1], unique[0x13380:1]
+ 29: unique[0x13500:1] = INT_EQUAL register[0x80:8], const[0x0:8]
+ 30: unique[0x13580:1] = BOOL_NEGATE unique[0x13100:1]
+ 31: unique[0x13600:1] = INT_AND unique[0x13580:1], register[0x206:1]
+ 32: unique[0x13680:1] = INT_AND unique[0x13100:1], unique[0x13500:1]
+ 33: register[0x206:1] = INT_OR unique[0x13600:1], unique[0x13680:1]
+ 34: unique[0x13780:8] = INT_AND register[0x80:8], const[0xff:8]
+ 35: unique[0x13800:1] = POPCOUNT unique[0x13780:8]
+ 36: unique[0x13880:1] = INT_AND unique[0x13800:1], const[0x1:1]
+ 37: unique[0x13980:1] = INT_EQUAL unique[0x13880:1], const[0x0:1]
+ 38: unique[0x13a00:1] = BOOL_NEGATE unique[0x13100:1]
+ 39: unique[0x13a80:1] = INT_AND unique[0x13a00:1], register[0x202:1]
+ 40: unique[0x13b00:1] = INT_AND unique[0x13100:1], unique[0x13980:1]
+ 41: register[0x202:1] = INT_OR unique[0x13a80:1], unique[0x13b00:1]
+
+--------------------------------------------------------------------------------
+00000166/3: XOR R13D,R13D
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = COPY const[0x0:1]
+  1: register[0x20b:1] = COPY const[0x0:1]
+  2: register[0xa8:4] = INT_XOR register[0xa8:4], register[0xa8:4]
+  3: register[0xa8:8] = INT_ZEXT register[0xa8:4]
+  4: register[0x207:1] = INT_SLESS register[0xa8:4], const[0x0:4]
+  5: register[0x206:1] = INT_EQUAL register[0xa8:4], const[0x0:4]
+  6: unique[0x12e80:4] = INT_AND register[0xa8:4], const[0xff:4]
+  7: unique[0x12f00:1] = POPCOUNT unique[0x12e80:4]
+  8: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  9: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000169/3: MOV R12,R8
+--------------------------------------------------------------------------------
+  0: register[0xa0:8] = COPY register[0x80:8]
+
+--------------------------------------------------------------------------------
+0000016c/3: ADD R12,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0xa0:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0xa0:8], register[0x0:8]
+  2: register[0xa0:8] = INT_ADD register[0xa0:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0xa0:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0xa0:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0xa0:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+0000016f/3: MOV RAX,RSI
+--------------------------------------------------------------------------------
+  0: register[0x0:8] = COPY register[0x30:8]
+
+--------------------------------------------------------------------------------
+00000172/3: ADC R13,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0xa8:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0xa8:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0xa8:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0xa8:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0xa8:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0xa8:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0xa8:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000175/3: MUL R14
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0xb0:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+00000178/3: MOV R10,R12
+--------------------------------------------------------------------------------
+  0: register[0x90:8] = COPY register[0xa0:8]
+
+--------------------------------------------------------------------------------
+0000017b/3: MOV R8,RAX
+--------------------------------------------------------------------------------
+  0: register[0x80:8] = COPY register[0x0:8]
+
+--------------------------------------------------------------------------------
+0000017e/3: MOV RAX,R15
+--------------------------------------------------------------------------------
+  0: register[0x0:8] = COPY register[0xb8:8]
+
+--------------------------------------------------------------------------------
+00000181/3: MOV R9,RDX
+--------------------------------------------------------------------------------
+  0: register[0x88:8] = COPY register[0x10:8]
+
+--------------------------------------------------------------------------------
+00000184/3: MUL RBX
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0x18:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+00000187/3: ADD R8,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0x80:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0x80:8], register[0x0:8]
+  2: register[0x80:8] = INT_ADD register[0x80:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0x80:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x80:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x80:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+0000018a/5: MOV RAX,qword ptr [RSP + -0x48]
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffb8:8], register[0x20:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3800:8]
+  2: register[0x0:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+0000018f/3: ADC R9,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0x88:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0x88:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0x88:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0x88:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0x88:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0x88:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0x88:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000192/3: MUL RCX
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0x8:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+00000195/3: ADD R8,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0x80:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0x80:8], register[0x0:8]
+  2: register[0x80:8] = INT_ADD register[0x80:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0x80:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x80:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x80:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000198/5: MOV RAX,qword ptr [RSP + -0x50]
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffb0:8], register[0x20:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3800:8]
+  2: register[0x0:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+0000019d/3: ADC R9,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0x88:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0x88:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0x88:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0x88:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0x88:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0x88:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0x88:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000001a0/5: MUL qword ptr [RSP + -0x40]
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffc0:8], register[0x20:8]
+  1: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  2: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3800:8]
+  3: unique[0x3fb80:16] = INT_ZEXT unique[0xc000:8]
+  4: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  5: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  6: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  7: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  8: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+000001a5/3: ADD R8,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0x80:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0x80:8], register[0x0:8]
+  2: register[0x80:8] = INT_ADD register[0x80:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0x80:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x80:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x80:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000001a8/5: MOV RAX,qword ptr [RSP + -0x38]
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffc8:8], register[0x20:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3800:8]
+  2: register[0x0:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+000001ad/3: ADC R9,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0x88:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0x88:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0x88:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0x88:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0x88:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0x88:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0x88:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000001b0/3: MUL RBP
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0x28:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+000001b3/3: ADD RAX,R8
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0x0:8], register[0x80:8]
+  1: register[0x20b:1] = INT_SCARRY register[0x0:8], register[0x80:8]
+  2: register[0x0:8] = INT_ADD register[0x0:8], register[0x80:8]
+  3: register[0x207:1] = INT_SLESS register[0x0:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x0:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x0:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000001b6/3: ADC RDX,R9
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0x10:8], register[0x88:8]
+  2: register[0x20b:1] = INT_SCARRY register[0x10:8], register[0x88:8]
+  3: unique[0x12500:8] = INT_ADD register[0x10:8], register[0x88:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0x10:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0x10:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0x10:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0x10:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000001b9/5: SHRD R10,R13,0x33
+--------------------------------------------------------------------------------
+  0: unique[0x57d00:4] = INT_AND const[0x33:4], const[0x3f:4]
+  1: unique[0x57d80:8] = COPY register[0x90:8]
+  2: unique[0x57e00:8] = INT_RIGHT register[0x90:8], unique[0x57d00:4]
+  3: unique[0x57e80:4] = INT_SUB const[0x40:4], unique[0x57d00:4]
+  4: unique[0x57f00:8] = INT_LEFT register[0xa8:8], unique[0x57e80:4]
+  5: register[0x90:8] = INT_OR unique[0x57e00:8], unique[0x57f00:8]
+  6: unique[0x16d00:1] = INT_NOTEQUAL unique[0x57d00:4], const[0x0:4]
+  7: unique[0x16d80:4] = INT_SUB unique[0x57d00:4], const[0x1:4]
+  8: unique[0x16e00:8] = INT_RIGHT unique[0x57d80:8], unique[0x16d80:4]
+  9: unique[0x16e80:8] = INT_AND unique[0x16e00:8], const[0x1:8]
+ 10: unique[0x16f80:1] = INT_NOTEQUAL unique[0x16e80:8], const[0x0:8]
+ 11: unique[0x17000:1] = BOOL_NEGATE unique[0x16d00:1]
+ 12: unique[0x17080:1] = INT_AND unique[0x17000:1], register[0x200:1]
+ 13: unique[0x17100:1] = INT_AND unique[0x16d00:1], unique[0x16f80:1]
+ 14: register[0x200:1] = INT_OR unique[0x17080:1], unique[0x17100:1]
+ 15: unique[0x17280:1] = INT_EQUAL unique[0x57d00:4], const[0x1:4]
+ 16: unique[0x17300:1] = INT_SLESS unique[0x57d80:8], const[0x0:8]
+ 17: unique[0x17380:1] = INT_SLESS register[0x90:8], const[0x0:8]
+ 18: unique[0x17480:1] = INT_XOR unique[0x17300:1], unique[0x17380:1]
+ 19: unique[0x17500:1] = BOOL_NEGATE unique[0x17280:1]
+ 20: unique[0x17580:1] = INT_AND unique[0x17500:1], register[0x20b:1]
+ 21: unique[0x17600:1] = INT_AND unique[0x17280:1], unique[0x17480:1]
+ 22: register[0x20b:1] = INT_OR unique[0x17580:1], unique[0x17600:1]
+ 23: unique[0x13100:1] = INT_NOTEQUAL unique[0x57d00:4], const[0x0:4]
+ 24: unique[0x13200:1] = INT_SLESS register[0x90:8], const[0x0:8]
+ 25: unique[0x13280:1] = BOOL_NEGATE unique[0x13100:1]
+ 26: unique[0x13300:1] = INT_AND unique[0x13280:1], register[0x207:1]
+ 27: unique[0x13380:1] = INT_AND unique[0x13100:1], unique[0x13200:1]
+ 28: register[0x207:1] = INT_OR unique[0x13300:1], unique[0x13380:1]
+ 29: unique[0x13500:1] = INT_EQUAL register[0x90:8], const[0x0:8]
+ 30: unique[0x13580:1] = BOOL_NEGATE unique[0x13100:1]
+ 31: unique[0x13600:1] = INT_AND unique[0x13580:1], register[0x206:1]
+ 32: unique[0x13680:1] = INT_AND unique[0x13100:1], unique[0x13500:1]
+ 33: register[0x206:1] = INT_OR unique[0x13600:1], unique[0x13680:1]
+ 34: unique[0x13780:8] = INT_AND register[0x90:8], const[0xff:8]
+ 35: unique[0x13800:1] = POPCOUNT unique[0x13780:8]
+ 36: unique[0x13880:1] = INT_AND unique[0x13800:1], const[0x1:1]
+ 37: unique[0x13980:1] = INT_EQUAL unique[0x13880:1], const[0x0:1]
+ 38: unique[0x13a00:1] = BOOL_NEGATE unique[0x13100:1]
+ 39: unique[0x13a80:1] = INT_AND unique[0x13a00:1], register[0x202:1]
+ 40: unique[0x13b00:1] = INT_AND unique[0x13100:1], unique[0x13980:1]
+ 41: register[0x202:1] = INT_OR unique[0x13a80:1], unique[0x13b00:1]
+
+--------------------------------------------------------------------------------
+000001be/3: XOR R9D,R9D
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = COPY const[0x0:1]
+  1: register[0x20b:1] = COPY const[0x0:1]
+  2: register[0x88:4] = INT_XOR register[0x88:4], register[0x88:4]
+  3: register[0x88:8] = INT_ZEXT register[0x88:4]
+  4: register[0x207:1] = INT_SLESS register[0x88:4], const[0x0:4]
+  5: register[0x206:1] = INT_EQUAL register[0x88:4], const[0x0:4]
+  6: unique[0x12e80:4] = INT_AND register[0x88:4], const[0xff:4]
+  7: unique[0x12f00:1] = POPCOUNT unique[0x12e80:4]
+  8: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  9: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000001c1/3: MOV R8,R10
+--------------------------------------------------------------------------------
+  0: register[0x80:8] = COPY register[0x90:8]
+
+--------------------------------------------------------------------------------
+000001c4/3: ADD R8,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0x80:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0x80:8], register[0x0:8]
+  2: register[0x80:8] = INT_ADD register[0x80:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0x80:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x80:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x80:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000001c7/3: MOV RAX,RBX
+--------------------------------------------------------------------------------
+  0: register[0x0:8] = COPY register[0x18:8]
+
+--------------------------------------------------------------------------------
+000001ca/3: ADC R9,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0x88:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0x88:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0x88:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0x88:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0x88:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0x88:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0x88:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000001cd/3: MUL R14
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0xb0:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+000001d0/3: MOV R10,RAX
+--------------------------------------------------------------------------------
+  0: register[0x90:8] = COPY register[0x0:8]
+
+--------------------------------------------------------------------------------
+000001d3/5: MOV RAX,qword ptr [RSP + -0x30]
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffd0:8], register[0x20:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3800:8]
+  2: register[0x0:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+000001d8/3: MOV R11,RDX
+--------------------------------------------------------------------------------
+  0: register[0x98:8] = COPY register[0x10:8]
+
+--------------------------------------------------------------------------------
+000001db/3: MOV R14,R10
+--------------------------------------------------------------------------------
+  0: register[0xb0:8] = COPY register[0x90:8]
+
+--------------------------------------------------------------------------------
+000001de/5: MOV R10,qword ptr [RSP + -0x28]
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffd8:8], register[0x20:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3800:8]
+  2: register[0x90:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+000001e3/3: MUL R15
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0xb8:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+000001e6/3: MOV R15,R11
+--------------------------------------------------------------------------------
+  0: register[0xb8:8] = COPY register[0x98:8]
+
+--------------------------------------------------------------------------------
+000001e9/3: ADD R14,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0xb0:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0xb0:8], register[0x0:8]
+  2: register[0xb0:8] = INT_ADD register[0xb0:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0xb0:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0xb0:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0xb0:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000001ec/5: MOV RAX,qword ptr [RSP + -0x48]
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffb8:8], register[0x20:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3800:8]
+  2: register[0x0:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+000001f1/3: ADC R15,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0xb8:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0xb8:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0xb8:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0xb8:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0xb8:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0xb8:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0xb8:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000001f4/3: MUL RSI
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0x30:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+000001f7/3: ADD R14,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0xb0:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0xb0:8], register[0x0:8]
+  2: register[0xb0:8] = INT_ADD register[0xb0:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0xb0:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0xb0:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0xb0:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+000001fa/5: MOV RAX,qword ptr [RSP + -0x40]
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffc0:8], register[0x20:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3800:8]
+  2: register[0x0:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+000001ff/3: ADC R15,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0xb8:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0xb8:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0xb8:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0xb8:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0xb8:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0xb8:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0xb8:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000202/3: MUL RCX
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0x8:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+00000205/3: MOV RCX,R8
+--------------------------------------------------------------------------------
+  0: register[0x8:8] = COPY register[0x80:8]
+
+--------------------------------------------------------------------------------
+00000208/3: ADD R14,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0xb0:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0xb0:8], register[0x0:8]
+  2: register[0xb0:8] = INT_ADD register[0xb0:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0xb0:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0xb0:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0xb0:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+0000020b/5: MOV RAX,qword ptr [RSP + -0x50]
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffb0:8], register[0x20:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3800:8]
+  2: register[0x0:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+00000210/3: ADC R15,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0xb8:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0xb8:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0xb8:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0xb8:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0xb8:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0xb8:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0xb8:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000213/3: MUL RBP
+--------------------------------------------------------------------------------
+  0: unique[0x3fb00:16] = INT_ZEXT register[0x0:8]
+  1: unique[0x3fb80:16] = INT_ZEXT register[0x28:8]
+  2: unique[0x3fc80:16] = INT_MULT unique[0x3fb00:16], unique[0x3fb80:16]
+  3: register[0x10:8] = SUBPIECE unique[0x3fc80:16], const[0x8:4]
+  4: register[0x0:8] = SUBPIECE unique[0x3fc80:16], const[0x0:4]
+  5: register[0x200:1] = INT_NOTEQUAL register[0x10:8], const[0x0:8]
+  6: register[0x20b:1] = COPY register[0x200:1]
+
+--------------------------------------------------------------------------------
+00000216/3: ADD R14,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0xb0:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0xb0:8], register[0x0:8]
+  2: register[0xb0:8] = INT_ADD register[0xb0:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0xb0:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0xb0:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0xb0:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000219/3: ADC R15,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0xb8:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0xb8:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0xb8:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0xb8:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0xb8:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0xb8:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0xb8:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+0000021c/5: SHRD RCX,R9,0x33
+--------------------------------------------------------------------------------
+  0: unique[0x57d00:4] = INT_AND const[0x33:4], const[0x3f:4]
+  1: unique[0x57d80:8] = COPY register[0x8:8]
+  2: unique[0x57e00:8] = INT_RIGHT register[0x8:8], unique[0x57d00:4]
+  3: unique[0x57e80:4] = INT_SUB const[0x40:4], unique[0x57d00:4]
+  4: unique[0x57f00:8] = INT_LEFT register[0x88:8], unique[0x57e80:4]
+  5: register[0x8:8] = INT_OR unique[0x57e00:8], unique[0x57f00:8]
+  6: unique[0x16d00:1] = INT_NOTEQUAL unique[0x57d00:4], const[0x0:4]
+  7: unique[0x16d80:4] = INT_SUB unique[0x57d00:4], const[0x1:4]
+  8: unique[0x16e00:8] = INT_RIGHT unique[0x57d80:8], unique[0x16d80:4]
+  9: unique[0x16e80:8] = INT_AND unique[0x16e00:8], const[0x1:8]
+ 10: unique[0x16f80:1] = INT_NOTEQUAL unique[0x16e80:8], const[0x0:8]
+ 11: unique[0x17000:1] = BOOL_NEGATE unique[0x16d00:1]
+ 12: unique[0x17080:1] = INT_AND unique[0x17000:1], register[0x200:1]
+ 13: unique[0x17100:1] = INT_AND unique[0x16d00:1], unique[0x16f80:1]
+ 14: register[0x200:1] = INT_OR unique[0x17080:1], unique[0x17100:1]
+ 15: unique[0x17280:1] = INT_EQUAL unique[0x57d00:4], const[0x1:4]
+ 16: unique[0x17300:1] = INT_SLESS unique[0x57d80:8], const[0x0:8]
+ 17: unique[0x17380:1] = INT_SLESS register[0x8:8], const[0x0:8]
+ 18: unique[0x17480:1] = INT_XOR unique[0x17300:1], unique[0x17380:1]
+ 19: unique[0x17500:1] = BOOL_NEGATE unique[0x17280:1]
+ 20: unique[0x17580:1] = INT_AND unique[0x17500:1], register[0x20b:1]
+ 21: unique[0x17600:1] = INT_AND unique[0x17280:1], unique[0x17480:1]
+ 22: register[0x20b:1] = INT_OR unique[0x17580:1], unique[0x17600:1]
+ 23: unique[0x13100:1] = INT_NOTEQUAL unique[0x57d00:4], const[0x0:4]
+ 24: unique[0x13200:1] = INT_SLESS register[0x8:8], const[0x0:8]
+ 25: unique[0x13280:1] = BOOL_NEGATE unique[0x13100:1]
+ 26: unique[0x13300:1] = INT_AND unique[0x13280:1], register[0x207:1]
+ 27: unique[0x13380:1] = INT_AND unique[0x13100:1], unique[0x13200:1]
+ 28: register[0x207:1] = INT_OR unique[0x13300:1], unique[0x13380:1]
+ 29: unique[0x13500:1] = INT_EQUAL register[0x8:8], const[0x0:8]
+ 30: unique[0x13580:1] = BOOL_NEGATE unique[0x13100:1]
+ 31: unique[0x13600:1] = INT_AND unique[0x13580:1], register[0x206:1]
+ 32: unique[0x13680:1] = INT_AND unique[0x13100:1], unique[0x13500:1]
+ 33: register[0x206:1] = INT_OR unique[0x13600:1], unique[0x13680:1]
+ 34: unique[0x13780:8] = INT_AND register[0x8:8], const[0xff:8]
+ 35: unique[0x13800:1] = POPCOUNT unique[0x13780:8]
+ 36: unique[0x13880:1] = INT_AND unique[0x13800:1], const[0x1:1]
+ 37: unique[0x13980:1] = INT_EQUAL unique[0x13880:1], const[0x0:1]
+ 38: unique[0x13a00:1] = BOOL_NEGATE unique[0x13100:1]
+ 39: unique[0x13a80:1] = INT_AND unique[0x13a00:1], register[0x202:1]
+ 40: unique[0x13b00:1] = INT_AND unique[0x13100:1], unique[0x13980:1]
+ 41: register[0x202:1] = INT_OR unique[0x13a80:1], unique[0x13b00:1]
+
+--------------------------------------------------------------------------------
+00000221/2: XOR EDX,EDX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = COPY const[0x0:1]
+  1: register[0x20b:1] = COPY const[0x0:1]
+  2: register[0x10:4] = INT_XOR register[0x10:4], register[0x10:4]
+  3: register[0x10:8] = INT_ZEXT register[0x10:4]
+  4: register[0x207:1] = INT_SLESS register[0x10:4], const[0x0:4]
+  5: register[0x206:1] = INT_EQUAL register[0x10:4], const[0x0:4]
+  6: unique[0x12e80:4] = INT_AND register[0x10:4], const[0xff:4]
+  7: unique[0x12f00:1] = POPCOUNT unique[0x12e80:4]
+  8: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  9: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000223/3: ADD R14,RCX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0xb0:8], register[0x8:8]
+  1: register[0x20b:1] = INT_SCARRY register[0xb0:8], register[0x8:8]
+  2: register[0xb0:8] = INT_ADD register[0xb0:8], register[0x8:8]
+  3: register[0x207:1] = INT_SLESS register[0xb0:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0xb0:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0xb0:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000226/3: ADC R15,RDX
+--------------------------------------------------------------------------------
+  0: unique[0x12300:8] = INT_ZEXT register[0x200:1]
+  1: register[0x200:1] = INT_CARRY register[0xb8:8], register[0x10:8]
+  2: register[0x20b:1] = INT_SCARRY register[0xb8:8], register[0x10:8]
+  3: unique[0x12500:8] = INT_ADD register[0xb8:8], register[0x10:8]
+  4: unique[0x12580:1] = INT_CARRY unique[0x12500:8], unique[0x12300:8]
+  5: register[0x200:1] = BOOL_OR register[0x200:1], unique[0x12580:1]
+  6: unique[0x12680:1] = INT_SCARRY unique[0x12500:8], unique[0x12300:8]
+  7: register[0x20b:1] = BOOL_XOR register[0x20b:1], unique[0x12680:1]
+  8: register[0xb8:8] = INT_ADD unique[0x12500:8], unique[0x12300:8]
+  9: register[0x207:1] = INT_SLESS register[0xb8:8], const[0x0:8]
+ 10: register[0x206:1] = INT_EQUAL register[0xb8:8], const[0x0:8]
+ 11: unique[0x12e80:8] = INT_AND register[0xb8:8], const[0xff:8]
+ 12: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+ 13: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+ 14: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000229/3: MOV RAX,R14
+--------------------------------------------------------------------------------
+  0: register[0x0:8] = COPY register[0xb0:8]
+
+--------------------------------------------------------------------------------
+0000022c/5: SHRD RAX,R15,0x33
+--------------------------------------------------------------------------------
+  0: unique[0x57d00:4] = INT_AND const[0x33:4], const[0x3f:4]
+  1: unique[0x57d80:8] = COPY register[0x0:8]
+  2: unique[0x57e00:8] = INT_RIGHT register[0x0:8], unique[0x57d00:4]
+  3: unique[0x57e80:4] = INT_SUB const[0x40:4], unique[0x57d00:4]
+  4: unique[0x57f00:8] = INT_LEFT register[0xb8:8], unique[0x57e80:4]
+  5: register[0x0:8] = INT_OR unique[0x57e00:8], unique[0x57f00:8]
+  6: unique[0x16d00:1] = INT_NOTEQUAL unique[0x57d00:4], const[0x0:4]
+  7: unique[0x16d80:4] = INT_SUB unique[0x57d00:4], const[0x1:4]
+  8: unique[0x16e00:8] = INT_RIGHT unique[0x57d80:8], unique[0x16d80:4]
+  9: unique[0x16e80:8] = INT_AND unique[0x16e00:8], const[0x1:8]
+ 10: unique[0x16f80:1] = INT_NOTEQUAL unique[0x16e80:8], const[0x0:8]
+ 11: unique[0x17000:1] = BOOL_NEGATE unique[0x16d00:1]
+ 12: unique[0x17080:1] = INT_AND unique[0x17000:1], register[0x200:1]
+ 13: unique[0x17100:1] = INT_AND unique[0x16d00:1], unique[0x16f80:1]
+ 14: register[0x200:1] = INT_OR unique[0x17080:1], unique[0x17100:1]
+ 15: unique[0x17280:1] = INT_EQUAL unique[0x57d00:4], const[0x1:4]
+ 16: unique[0x17300:1] = INT_SLESS unique[0x57d80:8], const[0x0:8]
+ 17: unique[0x17380:1] = INT_SLESS register[0x0:8], const[0x0:8]
+ 18: unique[0x17480:1] = INT_XOR unique[0x17300:1], unique[0x17380:1]
+ 19: unique[0x17500:1] = BOOL_NEGATE unique[0x17280:1]
+ 20: unique[0x17580:1] = INT_AND unique[0x17500:1], register[0x20b:1]
+ 21: unique[0x17600:1] = INT_AND unique[0x17280:1], unique[0x17480:1]
+ 22: register[0x20b:1] = INT_OR unique[0x17580:1], unique[0x17600:1]
+ 23: unique[0x13100:1] = INT_NOTEQUAL unique[0x57d00:4], const[0x0:4]
+ 24: unique[0x13200:1] = INT_SLESS register[0x0:8], const[0x0:8]
+ 25: unique[0x13280:1] = BOOL_NEGATE unique[0x13100:1]
+ 26: unique[0x13300:1] = INT_AND unique[0x13280:1], register[0x207:1]
+ 27: unique[0x13380:1] = INT_AND unique[0x13100:1], unique[0x13200:1]
+ 28: register[0x207:1] = INT_OR unique[0x13300:1], unique[0x13380:1]
+ 29: unique[0x13500:1] = INT_EQUAL register[0x0:8], const[0x0:8]
+ 30: unique[0x13580:1] = BOOL_NEGATE unique[0x13100:1]
+ 31: unique[0x13600:1] = INT_AND unique[0x13580:1], register[0x206:1]
+ 32: unique[0x13680:1] = INT_AND unique[0x13100:1], unique[0x13500:1]
+ 33: register[0x206:1] = INT_OR unique[0x13600:1], unique[0x13680:1]
+ 34: unique[0x13780:8] = INT_AND register[0x0:8], const[0xff:8]
+ 35: unique[0x13800:1] = POPCOUNT unique[0x13780:8]
+ 36: unique[0x13880:1] = INT_AND unique[0x13800:1], const[0x1:1]
+ 37: unique[0x13980:1] = INT_EQUAL unique[0x13880:1], const[0x0:1]
+ 38: unique[0x13a00:1] = BOOL_NEGATE unique[0x13100:1]
+ 39: unique[0x13a80:1] = INT_AND unique[0x13a00:1], register[0x202:1]
+ 40: unique[0x13b00:1] = INT_AND unique[0x13100:1], unique[0x13980:1]
+ 41: register[0x202:1] = INT_OR unique[0x13a80:1], unique[0x13b00:1]
+
+--------------------------------------------------------------------------------
+00000231/4: LEA RDX,[RAX + RAX*0x8]
+--------------------------------------------------------------------------------
+  0: unique[0x3300:8] = INT_MULT register[0x0:8], const[0x8:8]
+  1: unique[0x3400:8] = INT_ADD register[0x0:8], unique[0x3300:8]
+  2: register[0x10:8] = COPY unique[0x3400:8]
+
+--------------------------------------------------------------------------------
+00000235/4: LEA RCX,[RAX + RDX*0x2]
+--------------------------------------------------------------------------------
+  0: unique[0x3300:8] = INT_MULT register[0x10:8], const[0x2:8]
+  1: unique[0x3400:8] = INT_ADD register[0x0:8], unique[0x3300:8]
+  2: register[0x8:8] = COPY unique[0x3400:8]
+
+--------------------------------------------------------------------------------
+00000239/10: MOV RDX,0x7ffffffffffff
+--------------------------------------------------------------------------------
+  0: register[0x10:8] = COPY const[0x7ffffffffffff:8]
+
+--------------------------------------------------------------------------------
+00000243/3: AND R10,RDX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = COPY const[0x0:1]
+  1: register[0x20b:1] = COPY const[0x0:1]
+  2: register[0x90:8] = INT_AND register[0x90:8], register[0x10:8]
+  3: register[0x207:1] = INT_SLESS register[0x90:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x90:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x90:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000246/3: AND R14,RDX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = COPY const[0x0:1]
+  1: register[0x20b:1] = COPY const[0x0:1]
+  2: register[0xb0:8] = INT_AND register[0xb0:8], register[0x10:8]
+  3: register[0x207:1] = INT_SLESS register[0xb0:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0xb0:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0xb0:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000249/3: AND R8,RDX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = COPY const[0x0:1]
+  1: register[0x20b:1] = COPY const[0x0:1]
+  2: register[0x80:8] = INT_AND register[0x80:8], register[0x10:8]
+  3: register[0x207:1] = INT_SLESS register[0x80:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x80:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x80:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+0000024c/4: LEA RAX,[RCX + R10*0x1]
+--------------------------------------------------------------------------------
+  0: unique[0x3300:8] = INT_MULT register[0x90:8], const[0x1:8]
+  1: unique[0x3400:8] = INT_ADD register[0x8:8], unique[0x3300:8]
+  2: register[0x0:8] = COPY unique[0x3400:8]
+
+--------------------------------------------------------------------------------
+00000250/5: MOV R10,qword ptr [RSP + -0x18]
+--------------------------------------------------------------------------------
+  0: unique[0x3800:8] = INT_ADD const[0xffffffffffffffe8:8], register[0x20:8]
+  1: unique[0xc000:8] = LOAD const[0x7ff4ce408520:8], unique[0x3800:8]
+  2: register[0x90:8] = COPY unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+00000255/1: POP RBX
+--------------------------------------------------------------------------------
+  0: register[0x18:8] = LOAD const[0x7ff4ce408520:8], register[0x20:8]
+  1: register[0x20:8] = INT_ADD register[0x20:8], const[0x8:8]
+
+--------------------------------------------------------------------------------
+00000256/4: MOV qword ptr [RDI + 0x20],R14
+--------------------------------------------------------------------------------
+  0: unique[0x3100:8] = INT_ADD register[0x38:8], const[0x20:8]
+  1: unique[0xc000:8] = COPY register[0xb0:8]
+  2: STORE const[0x7ff4ce408520:8], unique[0x3100:8], unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+0000025a/3: MOV RCX,RAX
+--------------------------------------------------------------------------------
+  0: register[0x8:8] = COPY register[0x0:8]
+
+--------------------------------------------------------------------------------
+0000025d/4: SHR RAX,0x33
+--------------------------------------------------------------------------------
+  0: unique[0x59780:4] = INT_AND const[0x33:4], const[0x3f:4]
+  1: unique[0x59800:8] = COPY register[0x0:8]
+  2: register[0x0:8] = INT_RIGHT register[0x0:8], unique[0x59780:4]
+  3: unique[0x16380:1] = INT_NOTEQUAL unique[0x59780:4], const[0x0:4]
+  4: unique[0x16400:4] = INT_SUB unique[0x59780:4], const[0x1:4]
+  5: unique[0x16480:8] = INT_RIGHT unique[0x59800:8], unique[0x16400:4]
+  6: unique[0x16500:8] = INT_AND unique[0x16480:8], const[0x1:8]
+  7: unique[0x16600:1] = INT_NOTEQUAL unique[0x16500:8], const[0x0:8]
+  8: unique[0x16680:1] = BOOL_NEGATE unique[0x16380:1]
+  9: unique[0x16700:1] = INT_AND unique[0x16680:1], register[0x200:1]
+ 10: unique[0x16780:1] = INT_AND unique[0x16380:1], unique[0x16600:1]
+ 11: register[0x200:1] = INT_OR unique[0x16700:1], unique[0x16780:1]
+ 12: unique[0x16900:1] = INT_EQUAL unique[0x59780:4], const[0x1:4]
+ 13: unique[0x16a00:1] = INT_SLESS unique[0x59800:8], const[0x0:8]
+ 14: unique[0x16a80:1] = BOOL_NEGATE unique[0x16900:1]
+ 15: unique[0x16b00:1] = INT_AND unique[0x16a80:1], register[0x20b:1]
+ 16: unique[0x16b80:1] = INT_AND unique[0x16900:1], unique[0x16a00:1]
+ 17: register[0x20b:1] = INT_OR unique[0x16b00:1], unique[0x16b80:1]
+ 18: unique[0x13100:1] = INT_NOTEQUAL unique[0x59780:4], const[0x0:4]
+ 19: unique[0x13200:1] = INT_SLESS register[0x0:8], const[0x0:8]
+ 20: unique[0x13280:1] = BOOL_NEGATE unique[0x13100:1]
+ 21: unique[0x13300:1] = INT_AND unique[0x13280:1], register[0x207:1]
+ 22: unique[0x13380:1] = INT_AND unique[0x13100:1], unique[0x13200:1]
+ 23: register[0x207:1] = INT_OR unique[0x13300:1], unique[0x13380:1]
+ 24: unique[0x13500:1] = INT_EQUAL register[0x0:8], const[0x0:8]
+ 25: unique[0x13580:1] = BOOL_NEGATE unique[0x13100:1]
+ 26: unique[0x13600:1] = INT_AND unique[0x13580:1], register[0x206:1]
+ 27: unique[0x13680:1] = INT_AND unique[0x13100:1], unique[0x13500:1]
+ 28: register[0x206:1] = INT_OR unique[0x13600:1], unique[0x13680:1]
+ 29: unique[0x13780:8] = INT_AND register[0x0:8], const[0xff:8]
+ 30: unique[0x13800:1] = POPCOUNT unique[0x13780:8]
+ 31: unique[0x13880:1] = INT_AND unique[0x13800:1], const[0x1:1]
+ 32: unique[0x13980:1] = INT_EQUAL unique[0x13880:1], const[0x0:1]
+ 33: unique[0x13a00:1] = BOOL_NEGATE unique[0x13100:1]
+ 34: unique[0x13a80:1] = INT_AND unique[0x13a00:1], register[0x202:1]
+ 35: unique[0x13b00:1] = INT_AND unique[0x13100:1], unique[0x13980:1]
+ 36: register[0x202:1] = INT_OR unique[0x13a80:1], unique[0x13b00:1]
+
+--------------------------------------------------------------------------------
+00000261/1: POP RBP
+--------------------------------------------------------------------------------
+  0: register[0x28:8] = LOAD const[0x7ff4ce408520:8], register[0x20:8]
+  1: register[0x20:8] = INT_ADD register[0x20:8], const[0x8:8]
+
+--------------------------------------------------------------------------------
+00000262/4: MOV qword ptr [RDI + 0x18],R8
+--------------------------------------------------------------------------------
+  0: unique[0x3100:8] = INT_ADD register[0x38:8], const[0x18:8]
+  1: unique[0xc000:8] = COPY register[0x80:8]
+  2: STORE const[0x7ff4ce408520:8], unique[0x3100:8], unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+00000266/3: AND R10,RDX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = COPY const[0x0:1]
+  1: register[0x20b:1] = COPY const[0x0:1]
+  2: register[0x90:8] = INT_AND register[0x90:8], register[0x10:8]
+  3: register[0x207:1] = INT_SLESS register[0x90:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x90:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x90:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+00000269/3: AND RCX,RDX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = COPY const[0x0:1]
+  1: register[0x20b:1] = COPY const[0x0:1]
+  2: register[0x8:8] = INT_AND register[0x8:8], register[0x10:8]
+  3: register[0x207:1] = INT_SLESS register[0x8:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x8:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x8:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+0000026c/3: ADD R10,RAX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = INT_CARRY register[0x90:8], register[0x0:8]
+  1: register[0x20b:1] = INT_SCARRY register[0x90:8], register[0x0:8]
+  2: register[0x90:8] = INT_ADD register[0x90:8], register[0x0:8]
+  3: register[0x207:1] = INT_SLESS register[0x90:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x90:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x90:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+0000026f/3: MOV qword ptr [RDI],RCX
+--------------------------------------------------------------------------------
+  0: unique[0xc000:8] = COPY register[0x8:8]
+  1: STORE const[0x7ff4ce408520:8], register[0x38:8], unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+00000272/4: MOV qword ptr [RDI + 0x8],R10
+--------------------------------------------------------------------------------
+  0: unique[0x3100:8] = INT_ADD register[0x38:8], const[0x8:8]
+  1: unique[0xc000:8] = COPY register[0x90:8]
+  2: STORE const[0x7ff4ce408520:8], unique[0x3100:8], unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+00000276/3: MOV R10,R12
+--------------------------------------------------------------------------------
+  0: register[0x90:8] = COPY register[0xa0:8]
+
+--------------------------------------------------------------------------------
+00000279/2: POP R12
+--------------------------------------------------------------------------------
+  0: register[0xa0:8] = LOAD const[0x7ff4ce408520:8], register[0x20:8]
+  1: register[0x20:8] = INT_ADD register[0x20:8], const[0x8:8]
+
+--------------------------------------------------------------------------------
+0000027b/3: AND R10,RDX
+--------------------------------------------------------------------------------
+  0: register[0x200:1] = COPY const[0x0:1]
+  1: register[0x20b:1] = COPY const[0x0:1]
+  2: register[0x90:8] = INT_AND register[0x90:8], register[0x10:8]
+  3: register[0x207:1] = INT_SLESS register[0x90:8], const[0x0:8]
+  4: register[0x206:1] = INT_EQUAL register[0x90:8], const[0x0:8]
+  5: unique[0x12e80:8] = INT_AND register[0x90:8], const[0xff:8]
+  6: unique[0x12f00:1] = POPCOUNT unique[0x12e80:8]
+  7: unique[0x12f80:1] = INT_AND unique[0x12f00:1], const[0x1:1]
+  8: register[0x202:1] = INT_EQUAL unique[0x12f80:1], const[0x0:1]
+
+--------------------------------------------------------------------------------
+0000027e/2: POP R13
+--------------------------------------------------------------------------------
+  0: register[0xa8:8] = LOAD const[0x7ff4ce408520:8], register[0x20:8]
+  1: register[0x20:8] = INT_ADD register[0x20:8], const[0x8:8]
+
+--------------------------------------------------------------------------------
+00000280/2: POP R14
+--------------------------------------------------------------------------------
+  0: register[0xb0:8] = LOAD const[0x7ff4ce408520:8], register[0x20:8]
+  1: register[0x20:8] = INT_ADD register[0x20:8], const[0x8:8]
+
+--------------------------------------------------------------------------------
+00000282/4: MOV qword ptr [RDI + 0x10],R10
+--------------------------------------------------------------------------------
+  0: unique[0x3100:8] = INT_ADD register[0x38:8], const[0x10:8]
+  1: unique[0xc000:8] = COPY register[0x90:8]
+  2: STORE const[0x7ff4ce408520:8], unique[0x3100:8], unique[0xc000:8]
+
+--------------------------------------------------------------------------------
+00000286/2: POP R15
+--------------------------------------------------------------------------------
+  0: register[0xb8:8] = LOAD const[0x7ff4ce408520:8], register[0x20:8]
+  1: register[0x20:8] = INT_ADD register[0x20:8], const[0x8:8]
+
+--------------------------------------------------------------------------------
+00000288/1: RET 
+--------------------------------------------------------------------------------
+  0: register[0x288:8] = LOAD const[0x7ff4ce408520:8], register[0x20:8]
+  1: register[0x20:8] = INT_ADD register[0x20:8], const[0x8:8]
+  2: RETURN register[0x288:8]
+
