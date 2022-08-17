@@ -297,6 +297,8 @@
       (for ([insn seq])
         (displayln insn))))
 
+  (flush-output)
+
   (for ([insn insns-to-test])
     (printf "---------------------\nTesting insn(s): ~a\n" insn)
     (define start-time (current-milliseconds))
@@ -332,7 +334,8 @@
             insn
             (- end-time start-time))
 
-    (clear-vc!))
+    (clear-vc!)
+    (flush-output))
 
     (define all-test-end-time (current-milliseconds))
             

@@ -482,6 +482,7 @@
   ; varied by the shell script that runs this code
   (define num-insns (string->number (vector-ref (current-command-line-arguments) 0)))
   (printf "num-insn: ~a\n" num-insns)
+  (flush-output)
 
   ; synthesis calling code
   (define impl-cpu (make-x86-64-cpu))
