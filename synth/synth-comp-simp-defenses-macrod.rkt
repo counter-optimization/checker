@@ -411,8 +411,8 @@
     [(mul-r/m64 op1)
      (mulident-checker op1)
      (mulzero-checker op1)
-     (mulident-checker 'implicit-eax)
-     (mulzero-checker 'implicit-eax)]
+     (mulident-checker 'implicit-rax)
+     (mulzero-checker 'implicit-rax)]
     
     [_ #f]))
   
