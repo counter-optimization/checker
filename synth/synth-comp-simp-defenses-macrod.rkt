@@ -140,7 +140,7 @@
                  (sub-r-r) 
                  (setcc) 
                  (cmov)
-                 (xor)
+                 (sxor)
                  (mov)
                  (mul))]
   [sub-r-i (choose*
@@ -158,7 +158,7 @@
   [mul (choose*
         (mul-r/m32 (reg32))
         (mul-r/m64 (reg64)))]
-  [xor (choose*
+  [sxor (choose*
         (xor-r/m32-r32 (reg32) (reg32))
         (xor-r/m64-r64 (reg64) (reg64)))]
   [mov (choose*
@@ -420,8 +420,8 @@
                                      #:asserter asserter
                                      #:cpu cpu)
   (for ([i insns])
-    (for/all ([val i #:exhaustive])
-      (asserter #:insn val #:cpu cpu))))
+    (for ([i-choice (union-values i)])
+      (asserter #:insn i-choice #:cpu cpu))))
 
 (define (sub-r/m32-r32-spec #:spec-cpu spec-cpu
                             #:impl-cpu impl-cpu
