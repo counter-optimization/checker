@@ -206,6 +206,13 @@ let of_words lo hi = Interval (Endpoint.of_word lo, Endpoint.of_word hi)
 
 let of_word lo_and_hi = of_words lo_and_hi lo_and_hi
 
+let to_string = function
+  | Bot -> "_|_"
+  | Interval (lo, hi) ->
+     let lo = Endpoint.to_string lo in
+     let hi = Endpoint.to_string hi in
+     Format.sprintf "[%s, %s]" lo hi
+
 let b0 = of_int 0
 let b1 = of_int 1
   
@@ -281,9 +288,8 @@ let binop f i1 i2 =
 let low n = function
   | Bot -> Bot
   | Interval (lo, hi) ->
-     let open Endpoint in
-     let max = Int.pow 2 n |> Word.of_int ~width |> num in
-     let min = Int.pow 2 n |> Word.of_int ~width |> Word.neg |> num in
+     let max = Int.pow 2 n |> Word.of_int ~width |> Endpoint.num in
+     let min = Int.pow 2 n |> Word.of_int ~width |> Word.neg |> Endpoint.num in
      match lo, hi with
      | NegInf, PosInf -> Interval (min, max)
      | PosInf, PosInf -> Interval (max, max)
@@ -295,22 +301,30 @@ let low n = function
         let biggest = Word.max lo hi in
         Interval (Num smallest, Num biggest)
      | NegInf, Num x ->
-        let hi = Word.extract_exn x ~hi:(n - 1) ~lo:0 |> num in
+        let hi = Word.extract_exn x ~hi:(n - 1) ~lo:0 |> Endpoint.num in
         let smallest = Endpoint.min min hi in
         let biggest = Endpoint.max min hi in
         Interval (smallest, biggest)
-     | _ -> failwith "shouldn't happen"
+     | Num x, PosInf ->
+        let lo = Word.extract_exn x ~hi:(n-1) ~lo:0 |> Endpoint.num in
+        let smallest = Endpoint.min lo max in
+        let biggest = Endpoint.max lo max in
+        Interval (smallest, biggest)
+     | _ ->
+        let failed_intvl_str = to_string (Interval (lo, hi)) in
+        let fail_msg = Format.sprintf "low failed on %s" failed_intvl_str in
+        failwith fail_msg
 
 let high n = function
   | Bot -> Bot
   | Interval (lo, hi) ->
-     let () = Format.printf "Need to support signed\n%!" in
+     let () = Format.printf "Need to support high\n%!" in
      top
 
 let unsigned n = function
   | Bot -> Bot
   | Interval (lo, hi) ->
-     let () = Format.printf "Need to support signed\n%!" in
+     let () = Format.printf "Need to support unsigned\n%!" in
      top
 
 let signed n = function

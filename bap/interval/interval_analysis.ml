@@ -72,8 +72,8 @@ let rec denote_exp (e : Bil.exp) (d : state) : Interval.t =
       if Interval.could_be_true cond'
       then denote_exp ifthen d
       else denote_exp ifelse d
-   | Bil.Unknown (_, _) ->
-      let () = Format.printf "Todo: support Bil.Unknown\n%!" in
+   | Bil.Unknown (str, _) ->
+      let () = Format.printf "Todo: support Bil.Unknown (%s, -) \n%!" str in
       Interval.top
    | Bil.Let (var, exp, body) ->
       let binding = denote_exp exp d in
@@ -108,12 +108,18 @@ let denote_blk (b : blk term) : state -> state =
     Seq.fold ~init:state ~f:(fun prev_state def ->
         (denote_def def) prev_state)
 
+let denote_node (n : Graphs.Ir.node) : state -> state =
+  Graphs.Ir.Node.label n |> denote_blk
+
 (** Solver related *)
 
 let default_elt_value : Interval.t = Interval.bot
 
-let make_initial_solution (sub : sub term) : (Blk.t, state) Solution.t =
-  let first_block = Option.value_exn (Term.first blk_t sub) in
+let make_initial_solution (sub : sub term) (irg : Graphs.Ir.t)
+    : (Graphs.Ir.node, state) Solution.t =
+  let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
+  let first_node = Seq.hd_exn nodes in
+  let first_block = Graphs.Ir.Node.label first_node in
   let free_vars = Blk.free_vars first_block in
   let empty = IML.empty in
   let with_initial_info = Var.Set.fold free_vars
@@ -126,34 +132,52 @@ let make_initial_solution (sub : sub term) : (Blk.t, state) Solution.t =
                          ~key:"RSP"
                          ~data:(Interval.of_int 0)
   in
-  let empty_blk_map = Blk.Map.empty in
-  let first = Blk.Map.set empty_blk_map
-                ~key:first_block
+  let empty_node_map = Graphs.Ir.Node.Map.empty in
+  let first = Graphs.Ir.Node.Map.set empty_node_map
+                ~key:first_node
                 ~data:with_rsp_fixed
   in
   Solution.create first (IML.empty)
 
-let run (s : sub term) : (Blk.t, state) Solution.t =
-  let init = make_initial_solution s in
+let run (s : sub term) : (Graphs.Ir.node, state) Solution.t =
   let irg = Sub.to_cfg s in
-  let first_node = Graphlib.reverse_postorder_traverse
+  let init = make_initial_solution s irg in
+  let merge state1 state2 : state =
+    IML.fold state2 ~init:state1 ~f:(fun ~key ~data prev ->
+        if IML.mem prev key
+        then
+          begin
+            let last = IML.find_exn prev key in
+            let merged = Interval.join last data in
+            IML.set prev ~key ~data:merged
+          end
+        else IML.set prev ~key ~data)
+  in
+  let widen_threshold = 256 in
+  let widen steps n prev_state new_state : state =
+    if steps < widen_threshold
+    then merge prev_state new_state
+    else
+      IML.fold new_state ~init:prev_state ~f:(fun ~key ~data prev ->
+          if IML.mem prev key
+          then
+            begin
+              let prev_intvl = IML.find_exn prev key in
+              let widened_val = if not (Interval.equal data prev_intvl)
+                                then Interval.top
+                                else data
+              in
+              IML.set prev ~key ~data:widened_val
+            end
+          else
+            IML.set prev ~key ~data)
+  in
   Graphlib.fixpoint
     (module Graphs.Ir)
     irg
     ~init
     ~equal:(IML.equal Interval.equal)
-    ~merge:(fun state1 state2 ->
-      IML.fold state2 ~init:state1 ~f:(fun ~key ~data prev ->
-          if IML.mem prev key
-          then
-            begin
-              let last = IML.find_exn prev key in
-              let merged = Interval.join last data in
-              IML.set prev ~key ~data:merged
-            end
-          else IML.set prev ~key ~data))
-    ~f:denote_blk
+    ~merge
+    ~f:denote_node
+    ~step:widen
 
-
-(* let do_interval_analysis (name, block, cfg) : Solution.t = *)
-(*   Solution.create *)
