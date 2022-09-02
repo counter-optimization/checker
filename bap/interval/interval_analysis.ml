@@ -161,6 +161,11 @@ let setup_initial_state (sub : sub term) (irg : Graphs.Ir.t)
                           ~key:first_node
                           ~data:with_rsp_fixed
   in
+  let () = Graphs.Ir.Node.Map.iter node_iml_map
+             ~f:(fun iml ->
+               let iml_sexp = IML.sexp_of_t Interval.sexp_of_t iml in
+               Format.printf "initial node_iml_map: %a\n%!"
+                 Sexp.pp iml_sexp) in
   let final_node_iml_map = Seq.fold
                              nodes
                              ~init:node_iml_map
