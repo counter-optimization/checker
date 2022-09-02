@@ -141,6 +141,16 @@ module Endpoint = struct
     | NegInf, NegInf -> zero
     | _ -> PosInf
 
+  let smod_single (e : t) (sz : int) : t =
+    let max = Int.pow 2 sz in
+    let min = (-max) in
+    match e with
+    | PosInf -> Num (Word.of_int ~width (max - 1))
+    | NegInf -> Num (Word.of_int ~width min)
+    | Num w ->
+       let m = Word.of_int ~width sz in
+       Num (Word.modulo w m)
+
   (** Ordering *)
   let compare (x : t) (y : t) : int =
     match (x, y) with
@@ -288,50 +298,19 @@ let binop f i1 i2 =
 let low n = function
   | Bot -> Bot
   | Interval (lo, hi) ->
-     let max = Int.pow 2 n |> Word.of_int ~width |> Endpoint.num in
-     let min = Int.pow 2 n |> Word.of_int ~width |> Word.neg |> Endpoint.num in
-     match lo, hi with
-     | NegInf, PosInf -> Interval (min, max)
-     | PosInf, PosInf -> Interval (max, max)
-     | NegInf, NegInf -> Interval (min, min)
-     | Num x, Num y ->
-        let lo = Word.extract_exn x ~hi:(n - 1) ~lo:0 in
-        let hi = Word.extract_exn y ~hi:(n - 1) ~lo:0 in
-        let smallest = Word.min lo hi in
-        let biggest = Word.max lo hi in
-        Interval (Num smallest, Num biggest)
-     | NegInf, Num x ->
-        let hi = Word.extract_exn x ~hi:(n - 1) ~lo:0 |> Endpoint.num in
-        let smallest = Endpoint.min min hi in
-        let biggest = Endpoint.max min hi in
-        Interval (smallest, biggest)
-     | Num x, PosInf ->
-        let lo = Word.extract_exn x ~hi:(n-1) ~lo:0 |> Endpoint.num in
-        let smallest = Endpoint.min lo max in
-        let biggest = Endpoint.max lo max in
-        Interval (smallest, biggest)
-     | _ ->
-        let failed_intvl_str = to_string (Interval (lo, hi)) in
-        let fail_msg = Format.sprintf "low failed on %s" failed_intvl_str in
-        failwith fail_msg
+     let x = Endpoint.smod_single lo n in
+     let y = Endpoint.smod_single hi n in
+     let smallest = Endpoint.min x y in
+     let biggest = Endpoint.max x y in
+     Interval (smallest, biggest)
 
+(* This could be more precise *)
 let high n = function
   | Bot -> Bot
-  | Interval (lo, hi) ->
-     let () = Format.printf "Need to support high\n%!" in
-     top
-
-let unsigned n = function
-  | Bot -> Bot
-  | Interval (lo, hi) ->
-     let () = Format.printf "Need to support unsigned\n%!" in
-     top
-
-let signed n = function
-  | Bot -> Bot
-  | Interval (lo, hi) ->
-     let () = Format.printf "Need to support signed\n%!" in
-     top
+  | Interval (lo, hi) -> top
+     
+let unsigned n x = x
+let signed n x = x
                
 let add = binop Endpoint.add
 let sub = binop Endpoint.sub

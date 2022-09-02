@@ -36,10 +36,10 @@ let print_if_target_func (name, block, cfg) =
       let num_nodes_in_graph = Seq.length nodes in
       Format.printf "There were %d nodes in the irg\n%!" num_nodes_in_graph;
 
-      (* Seq.iter nodes ~f:(fun node -> *)
-      (*     let blk = Graphs.Ir.Node.label node in *)
-      (*     let blk_id = Term.tid blk in  *)
-      (*     Format.printf "Block (%a):\n%a\n\n%!" Tid.pp blk_id Blk.pp blk) *)
+      Seq.iter nodes ~f:(fun node ->
+          let blk = Graphs.Ir.Node.label node in
+          let blk_id = Term.tid blk in
+          Format.printf "Block (%a):\n%a\n\n%!" Tid.pp blk_id Blk.pp blk)
     end
   else
     ()

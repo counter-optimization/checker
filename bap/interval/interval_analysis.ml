@@ -4,6 +4,7 @@ open Graphlib.Std
 
 module KB = Bap_knowledge.Knowledge
 module IML = Map_lattice.Interval
+module T = Bap_core_theory.Theory
 
 type state = Interval.t IML.t
 
@@ -33,11 +34,12 @@ let denote_binop (op : binop) : Interval.t -> Interval.t -> Interval.t =
    | Bil.SLE -> boolsle
 
 let denote_cast (c : cast) : int -> Interval.t -> Interval.t =
+  let open Interval in
   match c with
-   | Bil.UNSIGNED -> Interval.unsigned
-   | Bil.SIGNED -> Interval.signed
-   | Bil.HIGH -> Interval.high
-   | Bil.LOW -> Interval.low
+   | Bil.UNSIGNED -> unsigned
+   | Bil.SIGNED -> signed
+   | Bil.HIGH -> high
+   | Bil.LOW -> low
 
 let denote_unop (op : unop) : Interval.t -> Interval.t =
   match op with
@@ -73,8 +75,10 @@ let rec denote_exp (e : Bil.exp) (d : state) : Interval.t =
       then denote_exp ifthen d
       else denote_exp ifelse d
    | Bil.Unknown (str, _) ->
-      let () = Format.printf "Todo: support Bil.Unknown (%s, -) \n%!" str in
-      Interval.top
+      (* This seems to be used for at least:
+         setting undefined flags (like everything
+           but OF,CF after x86_64 mul) *)
+      Interval.bot
    | Bil.Let (var, exp, body) ->
       let binding = denote_exp exp d in
       let varname = Var.name var in
@@ -115,33 +119,62 @@ let denote_node (n : Graphs.Ir.node) : state -> state =
 
 let default_elt_value : Interval.t = Interval.bot
 
-let make_initial_solution (sub : sub term) (irg : Graphs.Ir.t)
+let setup_initial_state (sub : sub term) (irg : Graphs.Ir.t)
     : (Graphs.Ir.node, state) Solution.t =
+  let module Names = Var_name_scraper.VarName in
+  
+  let args = Term.enum arg_t sub in
+  let argnames = Seq.map args ~f:(fun arg -> Arg.var arg |> T.Var.name) in
+  
   let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
   let first_node = Seq.hd_exn nodes in
   let first_block = Graphs.Ir.Node.label first_node in
+  
   let free_vars = Blk.free_vars first_block in
+
+  let all_vars_in_cfg = Var_name_scraper.get_all_vars irg in
+  
   let empty = IML.empty in
-  let with_initial_info = Var.Set.fold free_vars
-                            ~init:empty
-                            ~f:(fun acc var ->
-                              let key = Var.name var in
-                              IML.set acc ~key ~data:Interval.top)
+
+  let all_vars_iml = Names.Set.fold all_vars_in_cfg
+                       ~init:empty
+                       ~f:(fun acc key ->
+                         IML.set acc ~key ~data:Interval.bot)
   in
-  let with_rsp_fixed = IML.set with_initial_info
+  let with_free_vars_iml = Var.Set.fold free_vars
+                             ~init:all_vars_iml
+                             ~f:(fun acc var ->
+                               let key = Var.name var in
+                               IML.set acc ~key ~data:Interval.top)
+  in
+  let with_args_iml  = Seq.fold argnames
+                         ~init:with_free_vars_iml
+                         ~f:(fun acc key ->
+                           IML.set acc ~key ~data:Interval.top)
+  in
+  let with_rsp_fixed = IML.set with_args_iml
                          ~key:"RSP"
                          ~data:(Interval.of_int 0)
   in
-  let empty_node_map = Graphs.Ir.Node.Map.empty in
-  let first = Graphs.Ir.Node.Map.set empty_node_map
-                ~key:first_node
-                ~data:with_rsp_fixed
+  let node_iml_map = Graphs.Ir.Node.Map.empty
+                     |> Graphs.Ir.Node.Map.set
+                          ~key:first_node
+                          ~data:with_rsp_fixed
   in
-  Solution.create first (IML.empty)
+  let final_node_iml_map = Seq.fold
+                             nodes
+                             ~init:node_iml_map
+                             ~f:(fun acc key ->
+                               Graphs.Ir.Node.Map.set
+                                 acc
+                                 ~key
+                                 ~data:all_vars_iml)
+  in
+  Solution.create final_node_iml_map all_vars_iml
 
 let run (s : sub term) : (Graphs.Ir.node, state) Solution.t =
   let irg = Sub.to_cfg s in
-  let init = make_initial_solution s irg in
+  let init = setup_initial_state s irg in
   let merge state1 state2 : state =
     IML.fold state2 ~init:state1 ~f:(fun ~key ~data prev ->
         if IML.mem prev key
