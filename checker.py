@@ -924,7 +924,7 @@ def run(args):
     filename = args.path_to_binary
     funcname = args.function_name_symbol
 
-    proj = angr.Project(filename)
+    proj = angr.Project(filename, engine=angr.engines.UberEnginePcode)
     
     func_symbol = proj.loader.find_symbol(funcname)
     if func_symbol:
