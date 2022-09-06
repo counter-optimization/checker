@@ -259,7 +259,7 @@ let join x y =
   | Bot, _ -> y
   | _, Bot -> x
   | Interval (lo, hi), Interval (lo', hi') ->
-     Interval (Endpoint.max lo lo', Endpoint.max hi hi')
+     Interval (Endpoint.min lo lo', Endpoint.max hi hi')
 
 let to_string x =
   match x with

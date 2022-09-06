@@ -104,7 +104,8 @@ let denote_phi (p : phi term) : state -> state =
   state
 
 let denote_jmp (j : jmp term) : state -> state =
-  fun state -> state
+  fun state ->
+  state
 
 let denote_blk (b : blk term) : state -> state =
   fun state ->
@@ -129,7 +130,8 @@ let setup_initial_state (sub : sub term) (irg : Graphs.Ir.t)
   let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
   let first_node = Seq.hd_exn nodes in
   let first_block = Graphs.Ir.Node.label first_node in
-  
+  let first_blk_denotation = denote_blk first_block in
+
   let free_vars = Blk.free_vars first_block in
 
   let all_vars_in_cfg = Var_name_scraper.get_all_vars irg in
@@ -156,16 +158,12 @@ let setup_initial_state (sub : sub term) (irg : Graphs.Ir.t)
                          ~key:"RSP"
                          ~data:(Interval.of_int 0)
   in
+  let manual_run_first_blk = first_blk_denotation with_rsp_fixed in
   let node_iml_map = Graphs.Ir.Node.Map.empty
                      |> Graphs.Ir.Node.Map.set
                           ~key:first_node
-                          ~data:with_rsp_fixed
+                          ~data:manual_run_first_blk
   in
-  let () = Graphs.Ir.Node.Map.iter node_iml_map
-             ~f:(fun iml ->
-               let iml_sexp = IML.sexp_of_t Interval.sexp_of_t iml in
-               Format.printf "initial node_iml_map: %a\n%!"
-                 Sexp.pp iml_sexp) in
   let final_node_iml_map = Seq.fold
                              nodes
                              ~init:node_iml_map
@@ -173,14 +171,14 @@ let setup_initial_state (sub : sub term) (irg : Graphs.Ir.t)
                                Graphs.Ir.Node.Map.set
                                  acc
                                  ~key
-                                 ~data:all_vars_iml)
+                                 ~data:all_vars_iml) |>
+                             Graphs.Ir.Node.Map.set
+                               ~key:first_node
+                               ~data:manual_run_first_blk
   in
   Solution.create final_node_iml_map all_vars_iml
 
-let run (s : sub term) : (Graphs.Ir.node, state) Solution.t =
-  let irg = Sub.to_cfg s in
-  let init = setup_initial_state s irg in
-  let merge state1 state2 : state =
+let merge state1 state2 : state =
     IML.fold state2 ~init:state1 ~f:(fun ~key ~data prev ->
         if IML.mem prev key
         then
@@ -190,7 +188,10 @@ let run (s : sub term) : (Graphs.Ir.node, state) Solution.t =
             IML.set prev ~key ~data:merged
           end
         else IML.set prev ~key ~data)
-  in
+
+let run (s : sub term) : (Graphs.Ir.node, state) Solution.t =
+  let irg = Sub.to_cfg s in
+  let init = setup_initial_state s irg in
   let widen_threshold = 256 in
   let widen steps n prev_state new_state : state =
     if steps < widen_threshold
@@ -208,8 +209,7 @@ let run (s : sub term) : (Graphs.Ir.node, state) Solution.t =
               IML.set prev ~key ~data:widened_val
             end
           else
-            IML.set prev ~key ~data)
-  in
+            IML.set prev ~key ~data) in
   Graphlib.fixpoint
     (module Graphs.Ir)
     irg
