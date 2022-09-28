@@ -6,12 +6,15 @@ module KB = Bap_knowledge.Knowledge
 module IML = Map_lattice.Interval
 module T = Bap_core_theory.Theory
 
-type state = Interval.t IML.t
+type result = Wrapping_interval.t
+
+type state = result IML.t
 
 (** Transfer function related *)
 
-let denote_binop (op : binop) : Interval.t -> Interval.t -> Interval.t =
-  let open Interval in
+let denote_binop (op : binop) : result -> result -> result =
+  (* let open Interval in *)
+  let open Wrapping_interval in
   match op with
    | Bil.PLUS -> add
    | Bil.MINUS -> sub
@@ -33,63 +36,65 @@ let denote_binop (op : binop) : Interval.t -> Interval.t -> Interval.t =
    | Bil.SLT -> boolslt
    | Bil.SLE -> boolsle
 
-let denote_cast (c : cast) : int -> Interval.t -> Interval.t =
-  let open Interval in
+let denote_cast (c : cast) : int -> result -> result =
+  let open Wrapping_interval in
   match c with
    | Bil.UNSIGNED -> unsigned
    | Bil.SIGNED -> signed
    | Bil.HIGH -> high
    | Bil.LOW -> low
 
-let denote_unop (op : unop) : Interval.t -> Interval.t =
+let denote_unop (op : unop) : result -> result =
   match op with
-  | Bil.NEG -> Interval.neg
-  | Bil.NOT -> Interval.lnot
+  | Bil.NEG -> Wrapping_interval.neg
+  | Bil.NOT -> Wrapping_interval.lnot
               
-let rec denote_exp (e : Bil.exp) (d : state) : Interval.t =
+let rec denote_exp (e : Bil.exp) (d : state) : result =
   match e with
-   | Bil.Load (_mem, _idx, _endian, _size) -> Interval.top
-   | Bil.Store (_mem, _idx, _val, _endian, _size) -> Interval.top
-   | Bil.BinOp (op, x, y) ->
-      let x' = denote_exp x d in
-      let y' = denote_exp y d in
-      (denote_binop op) x' y'
-   | Bil.UnOp (op, x) ->
-      let x' = denote_exp x d in
-      (denote_unop op) x'
-   | Bil.Var v ->
-      begin
-        let name = Var.name v in
-        match IML.find d name with
-        | Some intvl -> intvl
-        | None -> Interval.bot
-      end
-   | Bil.Int w -> Interval.of_word w
-   | Bil.Cast (cast, n, exp) ->
-      let exp' = denote_exp exp d in
-      let cast' = denote_cast cast in
-      cast' n exp'
-   | Bil.Ite (cond, ifthen, ifelse) ->
-      let cond' = denote_exp cond d in
-      if Interval.could_be_true cond'
-      then denote_exp ifthen d
-      else denote_exp ifelse d
-   | Bil.Unknown (str, _) ->
-      (* This seems to be used for at least:
-         setting undefined flags (like everything
-           but OF,CF after x86_64 mul) *)
-      Interval.bot
-   | Bil.Let (var, exp, body) ->
-      let binding = denote_exp exp d in
-      let varname = Var.name var in
-      let env' = IML.set d ~key:varname ~data:binding in
-      denote_exp body env'
-   | Bil.Extract (_, _, _) ->
-      let () = Format.printf "TODO: support Bil.Extract\n%!" in
-      Interval.top
-   | Bil.Concat (_, _) ->
-      let () = Format.printf "TODO: support Bil.Concat\n%!" in
-      Interval.top
+  | Bil.Load (_mem, _idx, _endian, size) ->
+     Wrapping_interval.top ~width:(Size.in_bits size) ~signed:false
+  | Bil.Store (_mem, _idx, _val, _endian, size) ->
+     Wrapping_interval.top ~width:(Size.in_bits size) ~signed:false
+  | Bil.BinOp (op, x, y) ->
+     let x' = denote_exp x d in
+     let y' = denote_exp y d in
+     (denote_binop op) x' y'
+  | Bil.UnOp (op, x) ->
+     let x' = denote_exp x d in
+     (denote_unop op) x'
+  | Bil.Var v ->
+     begin
+       let name = Var.name v in
+       match IML.find d name with
+       | Some intvl -> intvl
+       | None -> Wrapping_interval.bot
+     end
+  | Bil.Int w -> Wrapping_interval.of_word w
+  | Bil.Cast (cast, n, exp) ->
+     let exp' = denote_exp exp d in
+     let cast' = denote_cast cast in
+     cast' n exp'
+  | Bil.Ite (cond, ifthen, ifelse) ->
+     let cond' = denote_exp cond d in
+     if Wrapping_interval.could_be_true cond'
+     then denote_exp ifthen d
+     else denote_exp ifelse d
+  | Bil.Unknown (str, _) ->
+     (* This seems to be used for at least:
+        setting undefined flags (like everything
+        but OF,CF after x86_64 mul) *)
+     Wrapping_interval.bot
+  | Bil.Let (var, exp, body) ->
+     let binding = denote_exp exp d in
+     let varname = Var.name var in
+     let env' = IML.set d ~key:varname ~data:binding in
+     denote_exp body env'
+  | Bil.Extract (_, _, _) ->
+     let () = Format.printf "TODO: support Bil.Extract\n%!" in
+     Wrapping_interval.default_top
+  | Bil.Concat (_, _) ->
+     let () = Format.printf "TODO: support Bil.Concat\n%!" in
+     Wrapping_interval.default_top
 
 let denote_def (d : def term) : state -> state =
   fun state ->
@@ -118,7 +123,7 @@ let denote_node (n : Graphs.Ir.node) : state -> state =
 
 (** Solver related *)
 
-let default_elt_value : Interval.t = Interval.bot
+let default_elt_value : result = Wrapping_interval.bot
 
 let setup_initial_state (sub : sub term) (irg : Graphs.Ir.t)
     : (Graphs.Ir.node, state) Solution.t =
@@ -141,22 +146,22 @@ let setup_initial_state (sub : sub term) (irg : Graphs.Ir.t)
   let all_vars_iml = Names.Set.fold all_vars_in_cfg
                        ~init:empty
                        ~f:(fun acc key ->
-                         IML.set acc ~key ~data:Interval.bot)
+                         IML.set acc ~key ~data:Wrapping_interval.bot)
   in
   let with_free_vars_iml = Var.Set.fold free_vars
                              ~init:all_vars_iml
                              ~f:(fun acc var ->
                                let key = Var.name var in
-                               IML.set acc ~key ~data:Interval.top)
+                               IML.set acc ~key ~data:Wrapping_interval.default_top)
   in
   let with_args_iml  = Seq.fold argnames
                          ~init:with_free_vars_iml
                          ~f:(fun acc key ->
-                           IML.set acc ~key ~data:Interval.top)
+                           IML.set acc ~key ~data:Wrapping_interval.default_top)
   in
   let with_rsp_fixed = IML.set with_args_iml
                          ~key:"RSP"
-                         ~data:(Interval.of_int 0)
+                         ~data:(Wrapping_interval.of_int 0)
   in
   let manual_run_first_blk = first_blk_denotation with_rsp_fixed in
   let node_iml_map = Graphs.Ir.Node.Map.empty
@@ -184,7 +189,7 @@ let merge state1 state2 : state =
         then
           begin
             let last = IML.find_exn prev key in
-            let merged = Interval.join last data in
+            let merged = Wrapping_interval.join last data in
             IML.set prev ~key ~data:merged
           end
         else IML.set prev ~key ~data)
@@ -202,8 +207,8 @@ let run (s : sub term) : (Graphs.Ir.node, state) Solution.t =
           then
             begin
               let prev_intvl = IML.find_exn prev key in
-              let widened_val = if not (Interval.equal data prev_intvl)
-                                then Interval.top
+              let widened_val = if not (Wrapping_interval.equal data prev_intvl)
+                                then Wrapping_interval.default_top
                                 else data
               in
               IML.set prev ~key ~data:widened_val
@@ -214,7 +219,7 @@ let run (s : sub term) : (Graphs.Ir.node, state) Solution.t =
     (module Graphs.Ir)
     irg
     ~init
-    ~equal:(IML.equal Interval.equal)
+    ~equal:(IML.equal Wrapping_interval.equal)
     ~merge
     ~f:denote_node
     ~step:widen

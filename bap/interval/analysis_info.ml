@@ -1,10 +1,5 @@
-open Core_kernel
-open Bap.Std
-
 module T = Bap_core_theory.Theory
 module KB = Bap_knowledge.Knowledge
-
-open KB.Monad_infix
 
 let package = "uarch-checker"
 let cls_name = "analysis-results"

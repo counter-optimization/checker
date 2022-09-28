@@ -16,7 +16,7 @@ let print_iml iml : unit =
   Format.printf
         "%a\n%!"
         Sexp.pp
-        (Map_lattice.Interval.M.sexp_of_t Interval.sexp_of_t iml)
+        (Map_lattice.Interval.M.sexp_of_t Wrapping_interval.sexp_of_t iml)
 
 let print_sol sol : unit =
   Solution.enum sol |>

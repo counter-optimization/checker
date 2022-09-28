@@ -1,5 +1,4 @@
 open Core_kernel
-open Bap.Std
 
 module KB = Bap_knowledge.Knowledge 
 

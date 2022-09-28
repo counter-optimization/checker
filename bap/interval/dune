@@ -1,0 +1,8 @@
+(env
+  (dev
+   (flags (:standard -warn-error -K-27))))
+
+(library
+ (name cfg)
+ (libraries bap core_kernel stdio graphlib bignum zarith)
+ (preprocess (pps ppx_jane)))
