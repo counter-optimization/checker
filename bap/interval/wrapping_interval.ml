@@ -63,8 +63,10 @@ let wrap_intvl (intvl : t) (r : range) : t =
        if Z.leq lo_inc lo' && Z.leq lo' hi
        then Interval r
        else
-         Interval { lo = wrap lo r;
-                    hi = wrap hi r;
+         let wrapped_lo = wrap lo r in
+         let wrapped_hi = wrap hi r in
+         Interval { lo = Z.min wrapped_lo wrapped_hi;
+                    hi = Z.max wrapped_lo wrapped_hi;
                     width = width';
                     signed = signed' }
 
@@ -96,6 +98,7 @@ let equal x y : bool =
   | EQ -> true
   | _ -> false
 
+(* potential width/sign mismatch spot *)
 let join x y : t =
   match x, y with
   | Bot, Bot -> Bot
@@ -103,23 +106,24 @@ let join x y : t =
   | _, Bot -> x
   | Interval {lo=lo1; hi=hi1; width=width1; signed=signed1},
     Interval {lo=lo2; hi=hi2; width=width2; signed=signed2} ->
-     let () = if width1 <> width2
-              then Format.printf "Mismatch in widths join\n%!"
-              else
-                if not (Bool.equal signed1 signed2)
-                then Format.printf "Mismatch in signedness join \n%!"
-                else () in
      Interval { lo = Z.min lo1 lo2;
                 hi = Z.max hi1 hi2;
                 width = Int.max width1 width2;
-                signed = signed1 }
+                signed = false }
 
 (* Does i1 fit completely in i2? *)
-let contains i1 i2 : bool =
+(* this is the <= subset relation on two intervals and
+   only looks at interval endpoints (the values) rather
+   than the type of the interval (width and signedness) *)
+let range_subset r1 r2 : bool =
+  match r1, r2 with
+  | {lo=lo1; hi=hi1; width=width1; signed=signed1},
+    {lo=lo2; hi=hi2; width=width2; signed=signed2} ->
+     Z.leq lo2 lo1 && Z.leq hi1 hi2
+
+let interval_subset i1 i2 : bool =
   match i1, i2 with
-  | Interval {lo=lo1; hi=hi1; width=width1; signed=signed1},
-    Interval {lo=lo2; hi=hi2; width=width2; signed=signed2}
-    -> Z.leq lo2 lo1 && Z.leq hi1 hi2
+  | Interval r1, Interval r2 -> range_subset r1 r2
   | _ -> false
 
 let range ~width ~signed : range =
@@ -127,6 +131,20 @@ let range ~width ~signed : range =
   let lo = if signed then Z.neg (Z.pow (Z.of_int 2) width_pred) else Z.zero in
   let hi = Z.pred (Z.pow (Z.of_int 2) (if signed then width_pred else width)) in
   { lo; hi; width; signed }
+
+let int8_range = range ~width:8 ~signed:true
+let uint8_range = range ~width:8 ~signed:false
+let int16_range = range ~width:16 ~signed:true
+let uint16_range = range ~width:16 ~signed:false
+let int32_range = range ~width:32 ~signed:true
+let uint32_range = range ~width:32 ~signed:false
+let int64_range = range ~width:64 ~signed:true
+let uint64_range = range ~width:64 ~signed:false
+
+let range_of_interval = function
+  | Bot -> failwith "Can't get range of _|_ in range_of_interval"
+  | Interval { lo; hi; width; signed } ->
+     range ~width ~signed
 
 let rank_range (r : range) : int =
   let {lo; hi; width; signed} = r in
@@ -140,6 +158,35 @@ let rank_range (r : range) : int =
   | 512 -> 7
   | _ -> failwith "unknown range width in Wraping_interval.rank range"
 
+let range_for_promote intvl : range =
+  match intvl with
+  | Bot -> failwith "Can't promote _|_ in range_for_promote"
+  | Interval { lo; hi; width; signed } ->
+     let int_rank = rank_range int32_range in
+     let current_range = range_of_interval intvl in
+     let current_rank = rank_range current_range in
+     if current_rank < int_rank && range_subset current_range int32_range
+     then int32_range
+     else
+       if current_rank < int_rank && range_subset current_range uint32_range
+       then uint32_range
+       else current_range
+
+(* Is the final else correct? the paper makes it seem
+   like the final ite if/else conditions are exclusive, but
+   i haven't looked at it hard enough *)
+let rec range_lub r r' : range =
+  let rank = rank_range r in
+  let rank' = rank_range r' in
+  if rank < rank'
+  then range_lub r' r
+  else
+    if Bool.equal r.signed r'.signed ||
+         not r.signed && r'.signed ||
+           r.signed && not r'.signed && range_subset r' r
+    then r
+    else range ~width:(r.width) ~signed:false
+
 let min4 x1 x2 x3 x4 : Z.t =
   Z.min x1 x2
   |> Z.min x3
@@ -150,45 +197,28 @@ let max4 x1 x2 x3 x4 : Z.t =
   |> Z.max x3
   |> Z.max x4
 
-let join x y =
-  match x, y with
-  | Bot, Bot -> Bot
-  | Bot, _ -> y
-  | _, Bot -> x
-  | Interval {lo=lo1; hi=hi1; width=width1; signed=signed1},
-    Interval {lo=lo2; hi=hi2; width=width2; signed=signed2}
-    ->
-     let () = if width1 <> width2
-              then Format.printf "Widths (%d, %d) don't match in Wrapping_interval.join\n%!"
-                     width1 width2
-              else
-                if not (Bool.equal signed1 signed2)
-                then Format.printf "Signedness (%B, %B) don't match in Wrapping_interval.join\n%!"
-                       signed1 signed2
-                else () in
-       Interval {lo = Z.min lo1 lo2;
-                 hi = Z.max hi1 hi2;
-                 width = Int.max width1 width2;
-                 signed = signed1}
+(** typing *)
+let type_nonshift_binop op left right : range =
+  let left_promote = range_for_promote left in
+  let right_promote = range_for_promote right in
+  range_lub left_promote right_promote
+
+let type_shift_binop op left right : range = range_for_promote left
 
 (** Operators *)
+
+(* potential width/sign mismatch spot *)
 let binop op left right : t =
   match left, right with
   | Interval {lo=lo1; hi=hi1; width=width1; signed=signed1},
-    Interval {lo=lo2; hi=hi2; width=width2; signed=signed2}
-    -> let x1 = op lo1 lo2 in
-       let x2 = op lo1 hi2 in
-       let x3 = op hi1 lo2 in
-       let x4 = op hi1 hi2 in
-       let new_lo = min4 x1 x2 x3 x4 in
-       let new_hi = max4 x1 x2 x3 x4 in
-       let () = if width1 <> width2
-                then Format.printf "Bitwidths %d and %d don't match\n%!" width1 width2
-                else
-                  if not (Bool.equal signed1 signed2)
-                  then Format.printf "Signednesses %B and %B don't match\n%!" signed1 signed2
-                  else () in
-       Interval {lo=new_lo; hi=new_hi; width=width1; signed=signed1}
+    Interval {lo=lo2; hi=hi2; width=width2; signed=signed2} ->
+     let x1 = op lo1 lo2 in
+     let x2 = op lo1 hi2 in
+     let x3 = op hi1 lo2 in
+     let x4 = op hi1 hi2 in
+     let new_lo = min4 x1 x2 x3 x4 in
+     let new_hi = max4 x1 x2 x3 x4 in
+     Interval {lo=new_lo; hi=new_hi; width=64; signed=false}
   | _, _ -> Bot
 
 let unop op intvl =
@@ -244,7 +274,7 @@ let could_be_true x =
   | Bot -> false
   | Interval {lo; hi; width; signed} ->
      let one = b1 ~width ~signed in
-     contains one x
+     interval_subset one x
 
 (** casts *)
 let unsigned len x =
@@ -318,12 +348,12 @@ let sexp_of_t : t -> Sexp.t = function
          Int.sexp_of_t width;
          Bool.sexp_of_t signed ]
 
-(** bap KB specific *)
-(* let domain = *)
-(*   KB.Domain.define *)
-(*     ~inspect:sexp_of_t *)
-(*     ~join:(fun x y -> Ok (join x y)) *)
-(*     ~empty *)
-(*     ~order *)
-(*     "wrapping-interval-dommain" *)
+(** BAP KB specific *)
+let domain =
+  KB.Domain.define
+    ~inspect:sexp_of_t
+    ~join:(fun x y -> Ok (join x y))
+    ~empty
+    ~order
+    "wrapping-interval-dommain"
       

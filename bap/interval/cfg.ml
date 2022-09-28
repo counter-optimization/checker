@@ -10,7 +10,7 @@ module IrCfg = Bap.Std.Graphs.Ir
 
 module Names = Var_name_scraper.VarName
 
-let target_func = "Hacl_Ed25519_sign"
+let target_func = "ite_xorident"
 
 let print_iml iml : unit =
   Format.printf
