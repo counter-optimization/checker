@@ -388,6 +388,7 @@
   (define mulzero-checker
     (λ (op) (assert-operand-is-not-special op mulzero-for-bw cpu)))
 
+  (displayln insn)
   (match insn
     [(add-r/m32-r32 op1 op2)
      (addident-checker op1)
@@ -414,14 +415,13 @@
      (mulident-checker 'implicit-rax)
      (mulzero-checker 'implicit-rax)]
     
-    [_ #f]))
+    [_ void]))
   
 (define (apply-insn-specific-asserts #:insns insns
                                      #:asserter asserter
                                      #:cpu cpu)
-  (for ([i insns])
-    (for ([i-choice (union-values i)])
-      (asserter #:insn i-choice #:cpu cpu))))
+  (for/all ([i insns #:exhaustive])
+    (asserter #:insn i #:cpu cpu)))
 
 (define (sub-r/m32-r32-spec #:spec-cpu spec-cpu
                             #:impl-cpu impl-cpu

@@ -5,6 +5,9 @@ S analysis_info.ml
 S interval_analysis.ml
 S map_lattice.ml
 S wrapping_interval.ml
+S common.ml
+S abstract_memory.ml
+S comp_simp.ml
 
 B _build
 

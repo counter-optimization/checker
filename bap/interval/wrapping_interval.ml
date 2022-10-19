@@ -15,24 +15,27 @@ type t = Bot | Interval of range (* [@@deriving sexp, bin_io] *)
 (** constants and lattice-based values *)
 let empty = Bot
 let bot = Bot
-let b1 ~width ~signed = Interval {lo=Z.one; hi=Z.one; width; signed}
-let b0 ~width ~signed = Interval {lo=Z.zero; hi=Z.zero; width; signed}
-let b1_u64 = b1 ~width:64 ~signed:false
-let b0_u64 = b0 ~width:64 ~signed:false
+
+let make_b1 width signed = Interval {lo=Z.one; hi=Z.one; width; signed}
+let make_b0 width signed = Interval {lo=Z.zero; hi=Z.zero; width; signed}
+let b1_u64 = make_b1 64 false
+let b0_u64 = make_b0 64 false
+let b1 = make_b1 8 false
+let b0 = make_b0 8 false
 
 (* defaults to uint 64 range *)
-let top ?(width : int = 64) ?(signed = false) : t =
+let make_top width signed : t =
   (* -2**(N-1) or 0 *)
   let two = Z.of_int 2 in
   let range_lo = if signed then Z.neg (Z.pow two (width - 1)) else Z.zero in
   let range_hi = Z.sub (Z.pow two (if signed then width - 1 else width)) Z.one in
-  Interval {lo = range_lo;
+ Interval {lo = range_lo;
             hi = range_hi;
             width = width;
             signed = signed}
 
-let default_top : t =
-  top ~width:64 ~signed:false
+let top : t =
+  make_top 64 false
 
 (** Wraparound, integer semantics, etc *)
 let wrap (n : Z.t) (r : range) : Z.t =
@@ -273,7 +276,7 @@ let could_be_true x =
   match x with
   | Bot -> false
   | Interval {lo; hi; width; signed} ->
-     let one = b1 ~width ~signed in
+     let one = make_b1 width signed in
      interval_subset one x
 
 (** casts *)
@@ -334,6 +337,12 @@ let of_int (i : int) : t =
              width = 64;
              signed = false }
 
+let of_z (z : Z.t) : t =
+  Interval { lo = z;
+             hi = z;
+             width = 64;
+             signed = false }
+
 let of_word (w : word) : t =
   Word.to_int_exn w |> of_int
 
@@ -356,4 +365,16 @@ let domain =
     ~empty
     ~order
     "wrapping-interval-dommain"
-      
+
+(** Checker specific *)
+let contains = interval_subset
+let contains_pow_of_two intvl =
+  match intvl with
+  | Interval {lo; hi; width; signed} ->
+     let two = Z.of_int 2 in
+     let pows_to_check = 0 :: (List.init (width - 1) ~f:succ) in
+     let idx_to_pow_intvl i = of_z @@ Z.pow two i in
+     let pows = List.map pows_to_check ~f:idx_to_pow_intvl in
+     List.fold_left pows ~init:false ~f:(fun acc cur_pow_two ->
+         acc || (contains cur_pow_two intvl))
+  | _ -> false

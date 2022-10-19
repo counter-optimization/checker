@@ -11,7 +11,6 @@ type result = Wrapping_interval.t
 type state = result IML.t
 
 (** Transfer function related *)
-
 let denote_binop (op : binop) : result -> result -> result =
   (* let open Interval in *)
   let open Wrapping_interval in
@@ -52,9 +51,9 @@ let denote_unop (op : unop) : result -> result =
 let rec denote_exp (e : Bil.exp) (d : state) : result =
   match e with
   | Bil.Load (_mem, _idx, _endian, size) ->
-     Wrapping_interval.top ~width:(Size.in_bits size) ~signed:false
+     Wrapping_interval.make_top (Size.in_bits size) false
   | Bil.Store (_mem, _idx, _val, _endian, size) ->
-     Wrapping_interval.top ~width:(Size.in_bits size) ~signed:false
+     Wrapping_interval.make_top (Size.in_bits size) false
   | Bil.BinOp (op, x, y) ->
      let x' = denote_exp x d in
      let y' = denote_exp y d in
@@ -91,10 +90,10 @@ let rec denote_exp (e : Bil.exp) (d : state) : result =
      denote_exp body env'
   | Bil.Extract (_, _, _) ->
      let () = Format.printf "TODO: support Bil.Extract\n%!" in
-     Wrapping_interval.default_top
+     Wrapping_interval.top
   | Bil.Concat (_, _) ->
      let () = Format.printf "TODO: support Bil.Concat\n%!" in
-     Wrapping_interval.default_top
+     Wrapping_interval.top
 
 let denote_def (d : def term) : state -> state =
   fun state ->
@@ -152,12 +151,12 @@ let setup_initial_state (sub : sub term) (irg : Graphs.Ir.t)
                              ~init:all_vars_iml
                              ~f:(fun acc var ->
                                let key = Var.name var in
-                               IML.set acc ~key ~data:Wrapping_interval.default_top)
+                               IML.set acc ~key ~data:Wrapping_interval.top)
   in
   let with_args_iml  = Seq.fold argnames
                          ~init:with_free_vars_iml
                          ~f:(fun acc key ->
-                           IML.set acc ~key ~data:Wrapping_interval.default_top)
+                           IML.set acc ~key ~data:Wrapping_interval.top)
   in
   let with_rsp_fixed = IML.set with_args_iml
                          ~key:"RSP"
@@ -194,6 +193,19 @@ let merge state1 state2 : state =
           end
         else IML.set prev ~key ~data)
 
+(* let new_run (s : sub term) : (Graphs.Ir.node, state) Solution.t = *)
+(*   let module E = Common.Env(Wrapping_interval) in *)
+(*   let irg = Sub.to_cfg s in *)
+(*   let init_sol = E.initial_solution sub irg in *)
+(*   Graphlib.fixpoint *)
+(*     (module Graphs.Ir) *)
+(*     irg *)
+(*     ~init:(E.initial_solution sub irg) *)
+(*     ~equal:E.equal *)
+(*     ~merge:E.merge *)
+(*     ~f:denote_node *)
+(*     ~step:E.widen_with_step *)
+
 let run (s : sub term) : (Graphs.Ir.node, state) Solution.t =
   let irg = Sub.to_cfg s in
   let init = setup_initial_state s irg in
@@ -208,7 +220,7 @@ let run (s : sub term) : (Graphs.Ir.node, state) Solution.t =
             begin
               let prev_intvl = IML.find_exn prev key in
               let widened_val = if not (Wrapping_interval.equal data prev_intvl)
-                                then Wrapping_interval.default_top
+                                then Wrapping_interval.top
                                 else data
               in
               IML.set prev ~key ~data:widened_val

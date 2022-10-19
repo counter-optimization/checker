@@ -1,3 +1,3 @@
-int addident(int x, int y) {
+int addident(__attribute__((secret)) int x, __attribute__((secret)) int y) {
   return x + y;
 }
