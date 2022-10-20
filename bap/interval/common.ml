@@ -45,6 +45,7 @@ module type NumericDomain = sig
   val boolslt : t -> t -> t
   val boolsle : t -> t -> t
   val could_be_true : t -> bool
+  val could_be_false : t -> bool
 
   val unsigned : int -> t -> t
   val signed : int -> t -> t
@@ -201,9 +202,16 @@ module AbstractInterpreter(N: NumericDomain) = struct
        cast' n exp'
     | Bil.Ite (cond, ifthen, ifelse) ->
        let cond' = denote_exp cond d in
-       if N.could_be_true cond'
-       then denote_exp ifthen d
-       else denote_exp ifelse d
+       let truthy = N.could_be_true cond' in
+       let falsy = N.could_be_false cond' in
+       let compute_then = fun () -> denote_exp ifthen d in
+       let compute_else = fun () -> denote_exp ifelse d in
+       if truthy && not falsy
+       then compute_then ()
+       else
+         if not truthy && falsy
+         then compute_else ()
+         else N.join (compute_then ()) (compute_else ())
     | Bil.Unknown (str, _) ->
        (* This seems to be used for at least:
           setting undefined flags (like everything
@@ -240,4 +248,28 @@ module AbstractInterpreter(N: NumericDomain) = struct
     | `Def d -> denote_def d state
     | `Jmp j -> denote_jmp j state
     | `Phi p -> denote_phi p state
+end
+
+module DomainProduct(X : NumericDomain)(Y : NumericDomain) : NumericDomain = struct
+  type t = X.t * Y.t
+  
+  let bot = X.bot, Y.bot
+  let top = X.top, Y.top
+  let make_top width signed = X.make_top width signed, Y.make_top width signed
+
+  let b1 = X.b1, Y.b1
+  let b0 = X.b0, Y.b0
+  
+  let order (x, y) (x', y') =
+    let open KB.Order in
+    match X.order x x', Y.order y y' with
+    | EQ, EQ -> EQ
+    | LT, LT -> LT
+    | GT, GT -> GT
+    | _ -> NC
+
+  let equal f s =
+    match order f s with
+    | KB.Order.EQ -> true
+    | _ -> false
 end

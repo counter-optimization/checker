@@ -8,6 +8,7 @@ S wrapping_interval.ml
 S common.ml
 S abstract_memory.ml
 S comp_simp.ml
+S taint.ml
 
 B _build
 

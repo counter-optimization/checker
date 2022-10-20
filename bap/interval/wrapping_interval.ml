@@ -278,6 +278,12 @@ let could_be_true x =
   | Interval {lo; hi; width; signed} ->
      let one = make_b1 width signed in
      interval_subset one x
+let could_be_false x =
+  match x with
+  | Bot -> false
+  | Interval {lo; hi; width; signed} ->
+     let zero = make_b0 width signed in
+     interval_subset zero x
 
 (** casts *)
 let unsigned len x =
