@@ -103,8 +103,9 @@ let sub_to_insn_graph sub =
   let cfg = Graphlib.create (module G) ~edges () in
 
   (* AbsInt *)
-  let module E = NumericEnv(Wrapping_interval) in
-  let module AbsInt = AbstractInterpreter(Wrapping_interval) in
+  let module ProdIntvlxTaint = DomainProduct(Wrapping_interval)(Checker_taint.Analysis) in
+  let module E = NumericEnv(ProdIntvlxTaint) in
+  let module AbsInt = AbstractInterpreter(ProdIntvlxTaint) in
   let final_sol = Graphlib.fixpoint
                     (module G)
                     cfg 
@@ -124,17 +125,17 @@ let sub_to_insn_graph sub =
   in
   let () = print_sol final_sol in
 
-  let module CompSimpChecker = Comp_simp.Checker(Wrapping_interval) in
-  let comp_simp_checker_res =
-    List.fold edges
-      ~init:(CompSimpChecker.init_results)
-      ~f:(fun acc_res (from', to', ()) ->
-        let from_state = Solution.get final_sol from' in
-        let elt = TidMap.find_exn tidmap to' in
-        let check_res = CompSimpChecker.check_elt elt from_state in
-        CompSimpChecker.join_results acc_res check_res)
-  in
-  let () = CompSimpChecker.print_results comp_simp_checker_res in
+  (* let module CompSimpChecker = Comp_simp.Checker(Wrapping_interval) in *)
+  (* let comp_simp_checker_res = *)
+  (*   List.fold edges *)
+  (*     ~init:(CompSimpChecker.init_results) *)
+  (*     ~f:(fun acc_res (from', to', ()) -> *)
+  (*       let from_state = Solution.get final_sol from' in *)
+  (*       let elt = TidMap.find_exn tidmap to' in *)
+  (*       let check_res = CompSimpChecker.check_elt elt from_state in *)
+  (*       CompSimpChecker.join_results acc_res check_res) *)
+  (* in *)
+  (* let () = CompSimpChecker.print_results comp_simp_checker_res in *)
   
 
   List.iter edges ~f:(fun (f, t, ()) ->

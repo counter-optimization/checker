@@ -272,4 +272,57 @@ module DomainProduct(X : NumericDomain)(Y : NumericDomain) : NumericDomain = str
     match order f s with
     | KB.Order.EQ -> true
     | _ -> false
+
+  let join (x, y) (x', y') = X.join x x', Y.join y y'
+
+  (* If at least one domain says it's true, then it *could* be true *) 
+  let contains (x, y) (x', y') = X.contains x x' || Y.contains y y'
+
+  let binop xf yf =
+    fun (x, y) (x', y') -> xf x x', yf y y'
+                              
+  let add = binop X.add Y.add
+  let sub = binop X.sub Y.sub
+  let mul = binop X.mul Y.mul
+  let div = binop X.div Y.div
+  let sdiv = binop X.sdiv Y.sdiv
+  let umod = binop X.umod Y.umod
+  let smod = binop X.smod Y.smod
+  let lshift = binop X.lshift Y.lshift
+  let rshift = binop X.rshift Y.rshift
+  let arshift = binop X.arshift Y.arshift
+  let logand = binop X.logand Y.logand
+  let logor = binop X.logor Y.logor
+  let logxor = binop X.logxor Y.logxor
+
+  let neg (x, y) = X.neg x, Y.neg y
+  let lnot (x, y) = X.lnot x, Y.lnot y
+
+  (* If at least one domain says it's true, then it *could* be true *) 
+  let bincomp xf yf =
+    fun (x, y) (x', y') -> xf x x', yf y y'
+  
+  let booleq = bincomp X.booleq Y.booleq
+  let boolneq = bincomp X.boolneq Y.boolneq
+  let boollt = bincomp X.boollt Y.boollt
+  let boolle = bincomp X.boolle Y.boolle
+  let boolslt = bincomp X.boolslt Y.boolslt
+  let boolsle = bincomp X.boolsle Y.boolsle
+
+  (* If at least one domain says it's true, then it *could* be true *)
+  (* TODO: taint could be made more precise here *) 
+  let could_be_true (x, y) = X.could_be_true x || Y.could_be_true y
+
+  let could_be_false (x, y) = X.could_be_false x || Y.could_be_false y
+
+  let cast_or_extract xf yf = fun n (x, y) -> xf n x, yf n y
+  let unsigned = cast_or_extract X.unsigned Y.unsigned
+  let signed = cast_or_extract X.signed Y.signed
+  let low = cast_or_extract X.low Y.low 
+  let high = cast_or_extract X.high Y.high
+
+  let to_string (x, y) = Format.sprintf "(%s, %s)" (X.to_string x) (Y.to_string y)
+  let of_int i = X.of_int i, Y.of_int i
+  let of_word w = X.of_word w, Y.of_word w
+  let sexp_of_t (x, y) = Sexp.List [ X.sexp_of_t x; Y.sexp_of_t y ]
 end

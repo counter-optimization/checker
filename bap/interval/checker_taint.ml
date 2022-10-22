@@ -13,8 +13,8 @@ module Analysis : NumericDomain = struct
   let top = Taint
   let make_top _width _signed = top
 
-  let b1 = failwith "b1 not used in taint analysis"
-  let b0 = failwith "b0 not used in taint analysis"
+  let b1 = top
+  let b0 = bot
 
   let order x y =
     match x, y with
@@ -34,7 +34,11 @@ module Analysis : NumericDomain = struct
     | _, Taint -> Taint
     | _ -> Notaint
 
-  let contains x y = failwith "contains not used in taint analysis"
+  let contains x y =
+    match order x y with
+    | KB.Order.EQ -> true
+    | KB.Order.LT -> true
+    | _ -> false
 
   let binop = join
   let add = binop
