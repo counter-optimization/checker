@@ -132,6 +132,9 @@ module NumericEnv(ValueDom : NumericDomain) = struct
     let f = if steps < widen_threshold then merge else widen_state in
     f prev_state new_state
 
+  let select_from_prod_env (prod_env : t) selector =
+    M.map prod_env ~f:selector
+
   let pp (env : t) : unit =
     Format.printf "%a\n%!" Sexp.pp (M.sexp_of_t ValueDom.sexp_of_t env)
 end
@@ -250,8 +253,16 @@ module AbstractInterpreter(N: NumericDomain) = struct
     | `Phi p -> denote_phi p state
 end
 
-module DomainProduct(X : NumericDomain)(Y : NumericDomain) : NumericDomain = struct
+module DomainProduct(X : NumericDomain)(Y : NumericDomain) = struct
   type t = X.t * Y.t
+
+  let first (prod : t) : X.t =
+    match prod with
+    | x, y -> x
+
+  let second (prod : t) : Y.t =
+    match prod with
+    | x, y -> y
   
   let bot = X.bot, Y.bot
   let top = X.top, Y.top
@@ -326,3 +337,6 @@ module DomainProduct(X : NumericDomain)(Y : NumericDomain) : NumericDomain = str
   let of_word w = X.of_word w, Y.of_word w
   let sexp_of_t (x, y) = Sexp.List [ X.sexp_of_t x; Y.sexp_of_t y ]
 end
+
+
+  

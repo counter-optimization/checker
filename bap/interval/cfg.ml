@@ -125,18 +125,18 @@ let sub_to_insn_graph sub =
   in
   let () = print_sol final_sol in
 
-  (* let module CompSimpChecker = Comp_simp.Checker(Wrapping_interval) in *)
-  (* let comp_simp_checker_res = *)
-  (*   List.fold edges *)
-  (*     ~init:(CompSimpChecker.init_results) *)
-  (*     ~f:(fun acc_res (from', to', ()) -> *)
-  (*       let from_state = Solution.get final_sol from' in *)
-  (*       let elt = TidMap.find_exn tidmap to' in *)
-  (*       let check_res = CompSimpChecker.check_elt elt from_state in *)
-  (*       CompSimpChecker.join_results acc_res check_res) *)
-  (* in *)
-  (* let () = CompSimpChecker.print_results comp_simp_checker_res in *)
-  
+  let module CompSimpChecker = Comp_simp.Checker(Wrapping_interval) in
+  let comp_simp_checker_res =
+    List.fold edges
+      ~init:(CompSimpChecker.init_results)
+      ~f:(fun acc_res (from', to', ()) ->
+        let prod_from_state = Solution.get final_sol from' in
+        let intvl_from_state = E.select_from_prod_env prod_from_state ProdIntvlxTaint.first in
+        let elt = TidMap.find_exn tidmap to' in
+        let check_res = CompSimpChecker.check_elt elt intvl_from_state in
+        CompSimpChecker.join_results acc_res check_res)
+  in
+  let () = CompSimpChecker.print_results comp_simp_checker_res in
 
   List.iter edges ~f:(fun (f, t, ()) ->
       let from_str = Tid.to_string f in
@@ -174,15 +174,15 @@ let print_if_target_func (name, block, cfg) =
       let irg = Sub.to_cfg sub in
 
       let () = iter_insns sub in
-      let () = sub_to_insn_graph sub in
+      sub_to_insn_graph sub
       
-      Format.printf "Vars are:\n%!";
-      let vars = Var_name_scraper.get_all_vars irg in
-      Names.Set.iter vars ~f:(fun name -> Format.printf "%s\n%!" name);
+      (* Format.printf "Vars are:\n%!"; *)
+      (* let vars = Var_name_scraper.get_all_vars irg in *)
+      (* Names.Set.iter vars ~f:(fun name -> Format.printf "%s\n%!" name); *)
 
-      let final_sol = Interval_analysis.run sub in
-      Format.printf "Final sol is: \n%!";
-      print_sol final_sol
+      (* let final_sol = Interval_analysis.run sub in *)
+      (* Format.printf "Final sol is: \n%!"; *)
+      (* print_sol final_sol *)
     end
   else
     ()
