@@ -27,7 +27,7 @@
   (list
    (mov-r64-imm64 rdx (bv (expt 2 32) 64))
    (sub-r/m64-r64 rax rdx)
-   (sub-r/m64-imm32 rcx rdx)
+   (sub-r/m64-r64 rcx rdx)
    (add-r/m64-r64 rcx rax)
    (mov-r64-imm64 rdx (bv (- (expt 2 33)) 64))
    (sub-r/m64-r64 rcx rdx)))
