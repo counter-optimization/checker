@@ -1,3 +1,4 @@
+S uarch_checker.ml
 S interval.ml
 S cfg.ml
 S var_name_scraper.ml
@@ -9,7 +10,9 @@ S common.ml
 S abstract_memory.ml
 S comp_simp.ml
 S taint.ml
+S test_main.ml
+S test_wrapping_interval.ml
 
 B _build
 
-PKG bap core_kernel stdio graphlib bignum
+PKG bap core_kernel stdio graphlib bignum ounit2
