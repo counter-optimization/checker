@@ -26,7 +26,7 @@
 ## For synth/verification stuff
 
 1. Install racket (I'm using v8.5)
-2. Install rosette. Only version 4 (should be the latest) will work.
+2. Install [rosette](https://docs.racket-lang.org/rosette-guide/index.html). Only version 4 (should be the latest) will work.
 3. Install _the local serval repo_ using the directions in the dir's
    README file
    
