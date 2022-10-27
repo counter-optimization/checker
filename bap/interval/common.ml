@@ -246,6 +246,7 @@ module AbstractInterpreter(N: NumericDomain) = struct
     let varname = Def.lhs d |> Var.name in
     let rhs = Def.rhs d in
     let denoted_rhs = denote_exp rhs state in
+    let () = Format.printf "\n%!" in
     E.set varname denoted_rhs state
 
   let denote_phi (p : phi term) : E.t -> E.t =

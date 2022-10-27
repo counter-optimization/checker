@@ -44,7 +44,86 @@ let test_high_1_bitwidth_correct _ =
   | None -> assert_failure "high_1_bitwidth_correct failed high call"
   | Some w -> OUnit2.assert_equal w 1
 
-(* TODO: test wrap, wrap_intvl, order, join, contain/interval_subset, mul, logand, logor, logxor, boollt, boolle, boolslt, boolsle, could_be_true, could_be_false, signed, unsigned, low, high, contains_pow_of_two *)
+let test_signed_result_small_intvl_correct _ =
+  let i_0_100 = i (0, 100) in
+  let res = signed 32 i_0_100 in
+  let expected = i ~width:32 (0, 100) in
+  
+  let res_width = Option.value_exn (get_width res) in
+  let exp_width = 32 in
+  let () = OUnit2.assert_equal res_width exp_width in
+
+  let () = assert_equal res expected in
+  assert_bool "result's sign is wrong" (Option.value_exn (get_sign res))
+
+let test_unsigned_result_small_intvl_correct _ =
+  let i_0_100 = i (0, 100) in
+  let res = unsigned 32 i_0_100 in
+  let expected = i ~width:32 (0, 100) in
+  
+  let res_width = Option.value_exn (get_width res) in
+  let exp_width = 32 in
+  let () = OUnit2.assert_equal res_width exp_width in
+  
+  let () = assert_equal res expected in
+  assert_bool "result's sign is wrong" (not (Option.value_exn (get_sign res)))
+
+let test_low_result_big_const_correct _ =
+  let c = of_int ~width:64 8 in
+  let res = low 3 c in
+  let expected = of_int ~width:3 0 in
+
+  let res_width = Option.value_exn (get_width res) in
+  let exp_width = 3 in
+  let () = OUnit2.assert_equal res_width exp_width in
+  
+  let () = assert_equal res expected in
+
+  let res_sign = Option.value_exn (get_sign res) in
+  let exp_sign = false in
+  OUnit2.assert_equal res_sign exp_sign
+
+let test_high_result_small_const_correct _ =
+  let c = of_int ~width:64 1 in
+  let res = high 1 c in
+  let expected = of_int ~width:1 0 in
+
+  let res_width = Option.value_exn (get_width res) in
+  let exp_width = 1 in
+  let () = OUnit2.assert_equal res_width exp_width in
+  
+  let () = assert_equal res expected in
+
+  let res_sign = Option.value_exn (get_sign res) in
+  let exp_sign = false in
+  OUnit2.assert_equal res_sign exp_sign
+
+let test_extract_middle_bits_correct _ =
+  let c = of_int ~width:64 14 in
+  
+  let res = extract c 3 1 in
+  let expected = of_int ~width:3 7 in
+  let () = assert_equal expected res in
+
+  let res_width = Option.value_exn (get_width res) in
+  let exp_width = 3 in
+  OUnit2.assert_equal exp_width res_width
+
+let test_concat_two_small_correct _ =
+  (* 0b1110.1110 = 238 *)
+  let x = of_int ~width:4 14 in
+  let y = of_int ~width:4 14 in
+
+  let res = concat x y in
+  let expected = of_int ~width:8 238 in
+  let () = assert_equal expected res in
+
+  let res_width = Option.value_exn (get_width res) in
+  let exp_width = 8 in
+  OUnit2.assert_equal exp_width res_width
+
+
+(* TODO: test wrap, wrap_intvl, order, join, contain/interval_subset, mul, logand, logor, logxor, boollt, boolle, boolslt, boolsle, could_be_true, could_be_false, contains_pow_of_two *)
 
 (** Test suite *)
 let suite = "Test_wrapping_interval test suite" >:::
@@ -53,4 +132,10 @@ let suite = "Test_wrapping_interval test suite" >:::
                "test add two const" >:: test_add_two_const;
                "test add two intvls" >:: test_add_two_intvls;
                "test 8 bit wrap" >:: test_8_bit_wrap;
-               "test high 1's result bitwidth correct" >:: test_high_1_bitwidth_correct]
+               "test high 1's result bitwidth correct" >:: test_high_1_bitwidth_correct;
+               "test signed result correct for small unsigned" >:: test_signed_result_small_intvl_correct;
+               "test unsigned result correct for small unsigned" >:: test_unsigned_result_small_intvl_correct;
+               "test low result for bigger const correct" >:: test_low_result_big_const_correct;
+               "test high result for small const correct" >:: test_high_result_small_const_correct;
+               "test extract of middle bits is correct" >:: test_extract_middle_bits_correct;
+               "test concat of two small width intvls is correct" >:: test_concat_two_small_correct]

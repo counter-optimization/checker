@@ -168,36 +168,9 @@ let iter_insns sub : unit =
 
 let check_fn (name, block, cfg) =
   let sub = Sub.lift block cfg in
+  (* Print the SSA *)
+  let sub_ssa = Sub.ssa sub in
+  let () = iter_insns sub_ssa in
+  (* Run the checkers *)
   let irg = Sub.to_cfg sub in
   sub_to_insn_graph sub
-
-let print_if_target_func (name, block, cfg) =
-  if String.(name = target_func)
-  then
-    begin
-      let sub = Sub.lift block cfg in
-      let irg = Sub.to_cfg sub in
-
-      let () = iter_insns sub in
-      sub_to_insn_graph sub
-      
-      (* Format.printf "Vars are:\n%!"; *)
-      (* let vars = Var_name_scraper.get_all_vars irg in *)
-      (* Names.Set.iter vars ~f:(fun name -> Format.printf "%s\n%!" name); *)
-
-      (* let final_sol = Interval_analysis.run sub in *)
-      (* Format.printf "Final sol is: \n%!"; *)
-      (* print_sol final_sol *)
-    end
-  else
-    ()
-
-(* let pass proj = *)
-(*   Project.symbols proj |> *)
-(*   Symtab.to_sequence |> *)
-(*     Seq.iter ~f:print_if_target_func *)
-        
-(* let () = *)
-(*   Bap_main.Extension.declare @@ fun _ctxt -> *)
-(*                                 Project.register_pass' pass; *)
-(*                                 Ok () *)

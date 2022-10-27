@@ -16,6 +16,10 @@ let get_width = function
   | Interval { lo; hi; width; signed } -> Some width
   | _ -> None
 
+let get_sign = function
+  | Interval { lo; hi; width; signed } -> Some signed
+  | _ -> None
+
 (** constants and lattice-based values *)
 let empty = Bot
 let bot = Bot
@@ -243,7 +247,7 @@ let unop op intvl =
      let x1 = op r.lo in
      let x2 = op r.hi in
      Interval { r with lo = x1; hi = x2 }
-  | _ -> Bot
+  | Bot -> Bot
 
 let shift_wrapper op x y = op x (Z.to_int y)
 
@@ -267,37 +271,35 @@ let lnot = unop Z.lognot
 let extract exp h l =
   match exp with 
   | Interval r ->
-     let width = h - l in
+     let width = h - l + 1 in
+     
      let x1 = Z.extract r.lo l width in
      let x2 = Z.extract r.hi l width in
+     
      let new_intvl = Interval { lo = Z.min x1 x2;
                                 hi = Z.max x1 x2;
                                 width;
-                                signed = r.signed }
-     in
+                                signed = r.signed } in
      let target_range = range ~width ~signed:r.signed in
+     
      wrap_intvl new_intvl target_range
   | Bot -> Bot
 
 let concat x y =
   match x, y with
-  | Interval {lo=lo1; hi=hi1; width=width1; signed=signed1},
-    Interval {lo=lo2; hi=hi2; width=width2; signed=signed2} ->
-     let final_width = width1 + width2 in
-     let final_signed = signed1 in
-     let concat_t a b =
-       let a' = Z.to_bits a in
-       let b' = Z.to_bits b in
-       Z.of_bits (String.concat [a'; b'])
-     in
-     let x1 = concat_t lo1 lo2 in
-     let x2 = concat_t lo1 hi2 in
-     let x3 = concat_t hi1 lo2 in
-     let x4 = concat_t hi1 hi2 in
-     Interval { lo = min4 x1 x2 x3 x4;
-                hi = max4 x1 x2 x3 x4;
-                width = final_width;
-                signed = final_signed }
+  | Interval l, Interval r ->
+     let final_width = l.width + r.width in
+     let final_signed = l.signed in
+     
+     let x' = Interval { l with width = final_width } in
+     let y' = Interval { r with width = final_width } in
+
+     let shift_by = Interval { lo = Z.of_int r.width;
+                               hi = Z.of_int r.width;
+                               width = final_width;
+                               signed = final_signed } in
+     let shifted = lshift x' shift_by in
+     logor shifted y'
   | _, _ -> Bot
      
 
@@ -348,13 +350,13 @@ let unsigned len x =
 let signed len x =
   match x with
   | Bot -> Bot
-  | Interval {lo; hi; width; signed} ->
+  | Interval { lo; hi; width; signed } ->
      let x1 = Z.signed_extract lo 0 (len - 1) in
      let x2 = Z.signed_extract hi 0 (len - 1) in
      Interval { lo = Z.min x1 x2;
                 hi = Z.max x1 x2;
                 width = len; 
-                signed }
+                signed = true }
 
 let low len x =
   match x with
@@ -384,7 +386,7 @@ let to_string (intvl : t) : string =
   match intvl with
   | Bot -> "_|_"
   | Interval {lo; hi; width; signed} ->
-     Format.sprintf "[%s, %s] (signed: %s, width: %s)"
+     Format.sprintf "[%s, %s] (width: %s, signed: %s)"
        (Z.to_string lo)
        (Z.to_string hi)
        (Int.to_string width)
