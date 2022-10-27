@@ -215,24 +215,28 @@ let binop op left right : t =
   match left, right with
   | Interval {lo=lo1; hi=hi1; width=width1; signed=signed1},
     Interval {lo=lo2; hi=hi2; width=width2; signed=signed2} ->
+     let () = if width1 <> width2
+              then Format.printf "Width mismatch, width1: %d, width2: %d\n%!" width1 width2
+              else () in
      let x1 = op lo1 lo2 in
      let x2 = op lo1 hi2 in
      let x3 = op hi1 lo2 in
      let x4 = op hi1 hi2 in
      let new_lo = min4 x1 x2 x3 x4 in
      let new_hi = max4 x1 x2 x3 x4 in
-     Interval {lo=new_lo; hi=new_hi; width=64; signed=false}
+     Interval {lo = new_lo;
+               hi = new_hi;
+               width = width1;
+               signed = signed1 || signed2}
   | _, _ -> Bot
 
 let unop op intvl =
   match intvl with
-  | Interval {lo; hi; width; signed} ->
-     let x1 = op lo in
-     let x2 = op hi in
-     Interval {lo=Z.min x1 x2;
-               hi=Z.max x1 x2;
-               width; signed}
-  | Bot -> Bot
+  | Interval r ->
+     let x1 = op r.lo in
+     let x2 = op r.hi in
+     Interval { r with lo = x1; hi = x2 }
+  | _ -> Bot
 
 let shift_wrapper op x y = op x (Z.to_int y)
 
@@ -252,6 +256,43 @@ let logxor = binop Z.logxor
 
 let neg = unop Z.neg
 let lnot = unop Z.lognot
+
+let extract exp h l =
+  match exp with 
+  | Interval r ->
+     let width = h - l in
+     let x1 = Z.extract r.lo l width in
+     let x2 = Z.extract r.hi l width in
+     let new_intvl = Interval { lo = Z.min x1 x2;
+                                hi = Z.max x1 x2;
+                                width;
+                                signed = r.signed }
+     in
+     let target_range = range ~width ~signed:r.signed in
+     wrap_intvl new_intvl target_range
+  | Bot -> Bot
+
+let concat x y =
+  match x, y with
+  | Interval {lo=lo1; hi=hi1; width=width1; signed=signed1},
+    Interval {lo=lo2; hi=hi2; width=width2; signed=signed2} ->
+     let final_width = width1 + width2 in
+     let final_signed = signed1 in
+     let concat_t a b =
+       let a' = Z.to_bits a in
+       let b' = Z.to_bits b in
+       Z.of_bits (String.concat [a'; b'])
+     in
+     let x1 = concat_t lo1 lo2 in
+     let x2 = concat_t lo1 hi2 in
+     let x3 = concat_t hi1 lo2 in
+     let x4 = concat_t hi1 hi2 in
+     Interval { lo = min4 x1 x2 x3 x4;
+                hi = max4 x1 x2 x3 x4;
+                width = final_width;
+                signed = final_signed }
+  | _, _ -> Bot
+     
 
 (** equality and ordering comparisons *)
 let booleq x y : t =
@@ -289,20 +330,25 @@ let could_be_false x =
 let unsigned len x =
   match x with
   | Bot -> Bot
-  | Interval {signed=false; _} -> x
-  | Interval {lo; hi; width; signed=true} ->
-     let new_range = range ~width ~signed:false in
-     wrap_intvl x new_range
+  | Interval {lo; hi; width; signed} ->
+     let x1 = Z.extract lo 0 (len - 1) in
+     let x2 = Z.extract hi 0 (len - 1) in
+     Interval { lo = Z.min x1 x2;
+                hi = Z.max x1 x2;
+                width = len;
+                signed = false }
 
 let signed len x =
   match x with
   | Bot -> Bot
-  | Interval {signed=true; _} -> x
-  | Interval {lo; hi; width; signed=false} ->
-     let new_range = range ~width ~signed:true in
-     wrap_intvl x new_range
+  | Interval {lo; hi; width; signed} ->
+     let x1 = Z.signed_extract lo 0 (len - 1) in
+     let x2 = Z.signed_extract hi 0 (len - 1) in
+     Interval { lo = Z.min x1 x2;
+                hi = Z.max x1 x2;
+                width = len; 
+                signed }
 
-(* TODO: i don't think this is sound *)
 let low len x =
   match x with
   | Bot -> Bot
@@ -311,7 +357,7 @@ let low len x =
      let x2 = Z.extract hi 0 len in
      Interval { lo = Z.min x1 x2;
                 hi = Z.max x1 x2;
-                width = width;
+                width = len;
                 signed = false }
 
 let high len x =
@@ -323,7 +369,7 @@ let high len x =
      let x2 = Z.extract hi offs len in
      Interval { lo = Z.min x1 x2;
                 hi = Z.max x1 x2;
-                width = width;
+                width = len;
                 signed = false }
 
 (** conversions *)
@@ -337,20 +383,26 @@ let to_string (intvl : t) : string =
        (Int.to_string width)
        (Bool.to_string signed)
 
-let of_int (i : int) : t =
+let of_int ?(width = 64) (i : int) : t =
   Interval { lo = Z.of_int i;
              hi = Z.of_int i;
-             width = 64;
-             signed = false }
+             width;
+             signed = i < 0 }
 
-let of_z (z : Z.t) : t =
+let of_z ?(width = 64) (z : Z.t) : t =
   Interval { lo = z;
              hi = z;
-             width = 64;
-             signed = false }
+             width;
+             signed = Z.sign z = -1 }
 
 let of_word (w : word) : t =
   Word.to_int_exn w |> of_int
+
+let of_int_tuple ?(width = 64) (x, y) =
+  Interval { lo = Z.of_int x;
+             hi = Z.of_int y;
+             width;
+             signed = x < 0 || y < 0 }
 
 (* serialization *)
 let sexp_of_t : t -> Sexp.t = function
@@ -370,7 +422,7 @@ let domain =
     ~join:(fun x y -> Ok (join x y))
     ~empty
     ~order
-    "wrapping-interval-dommain"
+    "wrapping-interval-domain"
 
 (** Checker specific *)
 let contains = interval_subset

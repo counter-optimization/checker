@@ -75,9 +75,12 @@ module Analysis : NumericDomain = struct
   let low = drop_first
   let high = drop_first
 
+  let extract exp hi lo = exp
+  let concat = join
+
   let to_string = function
     | Taint -> "Taint"
     | Notaint -> "Notaint"
-  let of_int _ = Notaint
+  let of_int ?(width = 64) _ = Notaint
   let of_word _ = Notaint
 end

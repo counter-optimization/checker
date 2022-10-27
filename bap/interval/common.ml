@@ -37,6 +37,9 @@ module type NumericDomain = sig
 
   val neg : t -> t
   val lnot : t -> t
+
+  val extract : t -> int -> int -> t
+  val concat : t -> t -> t
   
   val booleq : t -> t -> t
   val boolneq : t -> t -> t
@@ -53,7 +56,7 @@ module type NumericDomain = sig
   val high : int -> t -> t
 
   val to_string : t -> string
-  val of_int : int -> t
+  val of_int : ?width:int -> int -> t
   val of_word : word -> t
   val sexp_of_t : t -> Sexp.t
 end
@@ -187,6 +190,11 @@ module AbstractInterpreter(N: NumericDomain) = struct
     | Bil.Store (_mem, _idx, _val, _endian, size) ->
        N.make_top (Size.in_bits size) false
     | Bil.BinOp (op, x, y) ->
+       let () = Format.printf "In binop (%s %s %s), %!"
+                  (Bil.string_of_binop op)
+                  (Sexp.to_string (Bil.sexp_of_exp x))
+                  (Sexp.to_string (Bil.sexp_of_exp y))
+       in
        let x' = denote_exp x d in
        let y' = denote_exp y d in
        (denote_binop op) x' y'
@@ -225,12 +233,13 @@ module AbstractInterpreter(N: NumericDomain) = struct
        let name = Var.name var in
        let env' = E.set name binding d in
        denote_exp body env'
-    | Bil.Extract (_, _, _) ->
-       let () = Format.printf "TODO: support Bil.Extract\n%!" in
-       N.top
-    | Bil.Concat (_, _) ->
-       let () = Format.printf "TODO: support Bil.Concat\n%!" in
-       N.top
+    | Bil.Extract (hi, lo, e) ->
+       let e' = denote_exp e d in 
+       N.extract e' hi lo
+    | Bil.Concat (x, y) ->
+       let x' = denote_exp x d in
+       let y' = denote_exp y d in
+       N.concat x' y'
 
   let denote_def (d : def term) : E.t -> E.t =
     fun state ->
@@ -332,8 +341,11 @@ module DomainProduct(X : NumericDomain)(Y : NumericDomain) = struct
   let low = cast_or_extract X.low Y.low 
   let high = cast_or_extract X.high Y.high
 
+  let extract (x, y) hi lo = X.extract x hi lo, Y.extract y hi lo
+  let concat (x, y) (x', y') = X.concat x x', Y.concat y y'
+
   let to_string (x, y) = Format.sprintf "(%s, %s)" (X.to_string x) (Y.to_string y)
-  let of_int i = X.of_int i, Y.of_int i
+  let of_int ?(width = 64) i = X.of_int ~width i, Y.of_int ~width i
   let of_word w = X.of_word w, Y.of_word w
   let sexp_of_t (x, y) = Sexp.List [ X.sexp_of_t x; Y.sexp_of_t y ]
 end
