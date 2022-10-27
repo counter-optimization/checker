@@ -31,11 +31,18 @@ let test_add_two_intvls _ =
   assert_equal expected res
 
 let test_8_bit_wrap _ =
-  let i0_256 = i ~width:8 (0, 256) in
+  let i0_255 = i ~width:8 (0, 255) in
   let one8 = of_int ~width:8 1 in
-  let res = add one8 i0_256 in
-  let expected = i0_256 in
+  let res = add one8 i0_255 in
+  let expected = i0_255 in
   assert_equal expected res
+
+let test_high_1_bitwidth_correct _ =
+  let i0_1 = i (0, 1) in
+  let high_1 = high 1 i0_1 in
+  match get_width high_1 with
+  | None -> assert_failure "high_1_bitwidth_correct failed high call"
+  | Some w -> OUnit2.assert_equal w 1
 
 (* TODO: test wrap, wrap_intvl, order, join, contain/interval_subset, mul, logand, logor, logxor, boollt, boolle, boolslt, boolsle, could_be_true, could_be_false, signed, unsigned, low, high, contains_pow_of_two *)
 
@@ -45,4 +52,5 @@ let suite = "Test_wrapping_interval test suite" >:::
                "test top contains one basic" >:: test_top_contains_one;
                "test add two const" >:: test_add_two_const;
                "test add two intvls" >:: test_add_two_intvls;
-               "test 8 bit wrap" >:: test_8_bit_wrap]
+               "test 8 bit wrap" >:: test_8_bit_wrap;
+               "test high 1's result bitwidth correct" >:: test_high_1_bitwidth_correct]

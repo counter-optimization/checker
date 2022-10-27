@@ -12,6 +12,10 @@ let width = 128 (* bits *)
 type range = {lo: Z.t; hi: Z.t; width: int; signed: bool} (* [@@deriving sexp, bin_io] *)
 type t = Bot | Interval of range (* [@@deriving sexp, bin_io] *)
 
+let get_width = function
+  | Interval { lo; hi; width; signed } -> Some width
+  | _ -> None
+
 (** constants and lattice-based values *)
 let empty = Bot
 let bot = Bot
@@ -224,10 +228,13 @@ let binop op left right : t =
      let x4 = op hi1 hi2 in
      let new_lo = min4 x1 x2 x3 x4 in
      let new_hi = max4 x1 x2 x3 x4 in
-     Interval {lo = new_lo;
-               hi = new_hi;
-               width = width1;
-               signed = signed1 || signed2}
+     let res = Interval {lo = new_lo;
+                         hi = new_hi;
+                         width = width1;
+                         signed = signed1 || signed2}
+     in
+     let wrapping_range = range ~width:width1 ~signed:signed1 in
+     wrap_intvl res wrapping_range
   | _, _ -> Bot
 
 let unop op intvl =
@@ -396,7 +403,8 @@ let of_z ?(width = 64) (z : Z.t) : t =
              signed = Z.sign z = -1 }
 
 let of_word (w : word) : t =
-  Word.to_int_exn w |> of_int
+  let width = Word.bitwidth w in
+  Word.to_int_exn w |> of_int ~width
 
 let of_int_tuple ?(width = 64) (x, y) =
   Interval { lo = Z.of_int x;
