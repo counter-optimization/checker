@@ -190,11 +190,6 @@ module AbstractInterpreter(N: NumericDomain) = struct
     | Bil.Store (_mem, _idx, _val, _endian, size) ->
        N.make_top (Size.in_bits size) false
     | Bil.BinOp (op, x, y) ->
-       let () = Format.printf "In binop (%s %s %s), %!"
-                  (Bil.string_of_binop op)
-                  (Sexp.to_string (Bil.sexp_of_exp x))
-                  (Sexp.to_string (Bil.sexp_of_exp y))
-       in
        let x' = denote_exp x d in
        let y' = denote_exp y d in
        (denote_binop op) x' y'
@@ -246,7 +241,6 @@ module AbstractInterpreter(N: NumericDomain) = struct
     let varname = Def.lhs d |> Var.name in
     let rhs = Def.rhs d in
     let denoted_rhs = denote_exp rhs state in
-    let () = Format.printf "\n%!" in
     E.set varname denoted_rhs state
 
   let denote_phi (p : phi term) : E.t -> E.t =

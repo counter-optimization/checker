@@ -28,8 +28,8 @@ let make_b1 width signed = Interval {lo=Z.one; hi=Z.one; width; signed}
 let make_b0 width signed = Interval {lo=Z.zero; hi=Z.zero; width; signed}
 let b1_u64 = make_b1 64 false
 let b0_u64 = make_b0 64 false
-let b1 = make_b1 8 false
-let b0 = make_b0 8 false
+let b1 = make_b1 1 false
+let b0 = make_b0 1 false
 
 (* defaults to uint 64 range *)
 let make_top width signed : t =
@@ -305,18 +305,18 @@ let concat x y =
 (** equality and ordering comparisons *)
 let booleq x y : t =
   match order x y with
-  | KB.Order.EQ -> b1_u64
-  | _ -> b0_u64
+  | KB.Order.EQ -> b1
+  | _ -> b0
 
 let boolneq x y =
   match order x y with
-  | KB.Order.EQ -> b0_u64
-  | _ -> b1_u64
+  | KB.Order.EQ -> b0
+  | _ -> b1
 
 let boollt x y =
   match order x y with
-  | KB.Order.LT -> b1_u64
-  | _ -> b0_u64
+  | KB.Order.LT -> b1
+  | _ -> b0
 
 let boolle x y = logor (boollt x y) (booleq x y)
 let boolslt = boollt 
