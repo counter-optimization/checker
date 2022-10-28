@@ -245,7 +245,7 @@ let unop op intvl =
   | Interval r ->
      let x1 = op r.lo in
      let x2 = op r.hi in
-     Interval { r with lo = x1; hi = x2 }
+     Interval { r with lo = Z.min x1 x2; hi = Z.max x1 x2 }
   | Bot -> Bot
 
 let shift_wrapper op x y = op x (Z.to_int y)
@@ -257,9 +257,9 @@ let div = binop Z.div
 let sdiv = binop Z.div
 let umod = binop Z.rem
 let smod = binop Z.rem
-let lshift = binop (shift_wrapper Z.shift_left)
-let rshift = binop (shift_wrapper Z.shift_right)
-let arshift = binop (shift_wrapper Z.shift_right_trunc)
+let lshift = binop @@ shift_wrapper Z.shift_left
+let rshift = binop @@ shift_wrapper Z.shift_right
+let arshift = binop @@ shift_wrapper Z.shift_right_trunc
 let logand = binop Z.logand
 let logor = binop Z.logor
 let logxor = binop Z.logxor
