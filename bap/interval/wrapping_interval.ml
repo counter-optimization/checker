@@ -218,7 +218,6 @@ let type_shift_binop op left right : range = range_for_promote left
 
 (** Operators *)
 
-(* potential width/sign mismatch spot *)
 let binop op left right : t =
   match left, right with
   | Interval {lo=lo1; hi=hi1; width=width1; signed=signed1},
@@ -322,17 +321,19 @@ let boollt x y =
 let boolle x y = logor (boollt x y) (booleq x y)
 let boolslt = boollt 
 let boolsle = boolle
+
 let could_be_true x =
   match x with
   | Bot -> false
-  | Interval {lo; hi; width; signed} ->
-     let one = make_b1 width signed in
+  | Interval l ->
+     let one = make_b1 l.width l.signed in
      interval_subset one x
+
 let could_be_false x =
   match x with
   | Bot -> false
-  | Interval {lo; hi; width; signed} ->
-     let zero = make_b0 width signed in
+  | Interval l ->
+     let zero = make_b0 l.width l.signed in
      interval_subset zero x
 
 (** casts *)

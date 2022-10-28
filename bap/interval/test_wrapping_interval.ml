@@ -122,14 +122,65 @@ let test_concat_two_small_correct _ =
   let exp_width = 8 in
   OUnit2.assert_equal exp_width res_width
 
+let test_zero_contains_pow_two_false _ =
+  let x = zero in
+  let res = contains_pow_of_two x in
+  assert_bool "zero does not contain pow of two" (not res)
 
-(* TODO: test wrap, wrap_intvl, order, join, contain/interval_subset, mul, logand, logor, logxor, boollt, boolle, boolslt, boolsle, could_be_true, could_be_false, contains_pow_of_two *)
+let test_256_contains_pow_two_true _ =
+  let x = of_int ~width:64 256 in
+  contains_pow_of_two x
+  |> assert_bool "256 does contain pow of two"
+
+let test_could_be_true_false _ =
+  let x = i (14, 15) in
+  could_be_true x
+  |> not
+  |> assert_bool "(14, 15) does not contain (1, 1)"
+
+let test_could_be_true_true _ =
+  let x = i (0, 15) in
+  could_be_true x
+  |> assert_bool "(0, 15) does contain (1, 1)"
+
+let test_could_be_false_false _ =
+  let x = i (14, 15) in
+  could_be_true x
+  |> not
+  |> assert_bool "(14, 15) does not contain (0, 0)"
+
+let test_could_be_false_true _ =
+  let x = i (0, 15) in
+  could_be_true x
+  |> assert_bool "(0, 15) does contain (0, 0)"
+
+let test_mul_two_consts_returns_expected_res _ =
+  let x = i (14, 14) in
+  let y = i (15, 15) in
+  let exp = i (14 * 15, 14 * 15) in
+  assert_equal exp (mul x y)
+
+let test_mul_overflow_wraps_around_correctly _ =
+  let x = i ~width:8 (143, 143) in
+  let y = i ~width:8 (136, 136) in
+  
+  let exp_const = (143 * 136) % 256 in
+  let exp = of_int ~width:8 exp_const in
+  let res = mul x y in
+  let () = assert_equal exp res in
+
+  let exp_width = 8 in
+  let res_width = Option.value_exn (get_width res) in
+  OUnit2.assert_equal exp_width res_width
+
+(* TODO: test wrap, wrap_intvl, order, join, contain/interval_subset, mul, logand, logor, logxor, boollt, boolle, boolslt, boolsle, *)
 
 (** Test suite *)
 let suite = "Test_wrapping_interval test suite" >:::
               ["test add basic" >:: test_add_basic;
                "test top contains one basic" >:: test_top_contains_one;
                "test add two const" >:: test_add_two_const;
+               "test mul two const" >:: test_mul_two_consts_returns_expected_res;
                "test add two intvls" >:: test_add_two_intvls;
                "test 8 bit wrap" >:: test_8_bit_wrap;
                "test high 1's result bitwidth correct" >:: test_high_1_bitwidth_correct;
@@ -138,4 +189,10 @@ let suite = "Test_wrapping_interval test suite" >:::
                "test low result for bigger const correct" >:: test_low_result_big_const_correct;
                "test high result for small const correct" >:: test_high_result_small_const_correct;
                "test extract of middle bits is correct" >:: test_extract_middle_bits_correct;
-               "test concat of two small width intvls is correct" >:: test_concat_two_small_correct]
+               "test concat of two small width intvls is correct" >:: test_concat_two_small_correct;
+               "test zero contains pow of two false" >:: test_zero_contains_pow_two_false;
+               "test 256 contains pow of two true" >:: test_256_contains_pow_two_true;
+               "test could_be_true returns false if 1 not contained" >:: test_could_be_true_false;
+               "test could_be_true returns true if 1 contained" >:: test_could_be_true_true;
+               "test could_be_false returns false if 0 not contained" >:: test_could_be_false_false;
+               "test could_be_false returns true if 0 contained" >:: test_could_be_false_true]
