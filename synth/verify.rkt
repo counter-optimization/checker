@@ -23,18 +23,38 @@
 ;   (list
 ;    (sub-r/m32-r32 ecx eax)))
 
-(define attempt ; add32
-  (list
-   (mov-r64-imm64 rdx (bv (expt 2 32) 64))
-   (sub-r/m64-r64 rax rdx)
-   (sub-r/m64-r64 rcx rdx)
-   (add-r/m64-r64 rcx rax)
-   (mov-r64-imm64 rdx (bv (- (expt 2 33)) 64))
-   (sub-r/m64-r64 rcx rdx)))
+; (define attempt ; add32
+;   (list
+;    (mov-r64-imm64 rdx (bv (expt 2 32) 64))
+;    (sub-r/m64-r64 rax rdx)
+;    (sub-r/m64-r64 rcx rdx)
+;    (add-r/m64-r64 rcx rax)
+;    (mov-r64-imm64 rdx (bv (- (expt 2 33)) 64))
+;    (sub-r/m64-r64 rcx rdx)))
 
-(define spec    ; add32
+; (define spec    ; add32
+;   (list
+;    (add-r/m32-r32 ecx eax)))
+
+(define attempt ; cmov sub
   (list
-   (add-r/m32-r32 ecx eax)))
+   (mov-r/m32-imm32 edx (bv 0 32))
+   (sub-r/m32-imm32 eax (bv (expt 2 31) 32))
+   (sub-r/m32-imm32 eax (bv (expt 2 31) 32))
+   (setz dl)
+   (cmovz-r32-r32 r13d eax)
+   (cmovz-r32-r32 r12d ecx)
+   (cmovz-r32-r32 eax edx)
+   (sub-r/m32-r32 ecx eax)
+   (sub-r/m32-imm32 edx (bv (expt 2 31) 32))
+   (sub-r/m32-imm32 edx (bv (expt 2 31) 32))
+   (cmovne-r32-r32 ecx r12d)
+   (cmovne-r32-r32 eax r13d)
+   ))
+
+(define spec    ; cmov sub
+  (list
+   (sub-r/m32-r32 ecx eax)))
 
 (define (comp-simp-verify attempt)
   (define spec-cpu (comp-simp:make-x86-64-cpu))
