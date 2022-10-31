@@ -132,10 +132,12 @@ let sub_to_insn_graph sub =
       ~f:(fun acc_res (from', to', ()) ->
         let prod_from_state = Solution.get final_sol from' in
         let intvl_from_state = E.select_from_prod_env prod_from_state ProdIntvlxTaint.first in
+        (* let taint_from_state = E.select_from_prod_env prod_from_state ProdIntvlxTaint.second in *)
         let elt = TidMap.find_exn tidmap to' in
         let check_res = CompSimpChecker.check_elt elt intvl_from_state in
         CompSimpChecker.join_results acc_res check_res)
   in
+  let () = Format.printf "Comp simp checker results are:\n%!" in
   let () = CompSimpChecker.print_results comp_simp_checker_res in
 
   List.iter edges ~f:(fun (f, t, ()) ->
@@ -150,6 +152,9 @@ let sub_to_insn_graph sub =
 
 let iter_insns sub : unit =
   let irg = Sub.to_cfg sub in
+  let free_vars = Sub.free_vars sub in
+  let () = Var.Set.iter free_vars ~f:(fun v -> Format.printf "Free var: %s\n%!" (Var.name v)) in
+  
   let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
   
   let print_sub_defs graphnode =
@@ -172,5 +177,4 @@ let check_fn (name, block, cfg) =
   let sub_ssa = Sub.ssa sub in
   let () = iter_insns sub_ssa in
   (* Run the checkers *)
-  let irg = Sub.to_cfg sub in
   sub_to_insn_graph sub

@@ -12,14 +12,6 @@ let width = 128 (* bits *)
 type range = {lo: Z.t; hi: Z.t; width: int; signed: bool} (* [@@deriving sexp, bin_io] *)
 type t = Bot | Interval of range (* [@@deriving sexp, bin_io] *)
 
-let get_width = function
-  | Interval { lo; hi; width; signed } -> Some width
-  | _ -> None
-
-let get_sign = function
-  | Interval { lo; hi; width; signed } -> Some signed
-  | _ -> None
-
 (** constants and lattice-based values *)
 let empty = Bot
 let bot = Bot
@@ -447,3 +439,21 @@ let contains_pow_of_two intvl =
      List.fold_left pows ~init:false ~f:(fun acc cur_pow_two ->
          acc || (contains cur_pow_two intvl))
   | _ -> false
+
+let get_width = function
+  | Interval { lo; hi; width; signed } -> Some width
+  | _ -> None
+
+let get_sign = function
+  | Interval { lo; hi; width; signed } -> Some signed
+  | _ -> None
+
+let bitwidth x =
+  match get_width x with
+  | Some w -> w
+  | None ->
+     let err_msg = Format.sprintf
+                     "Couldn't get bitwidth for bottom value %s"
+                     (to_string x)
+     in
+     failwith err_msg

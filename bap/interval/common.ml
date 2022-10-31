@@ -58,6 +58,8 @@ module type NumericDomain = sig
   val to_string : t -> string
   val of_int : ?width:int -> int -> t
   val of_word : word -> t
+  val of_z : ?width:int -> Z.t -> t
+  val bitwidth : t -> int
   val sexp_of_t : t -> Sexp.t
 end
 
@@ -71,6 +73,8 @@ module NumericEnv(ValueDom : NumericDomain) = struct
 
   let stack_ptr = "RSP"
   let frame_ptr = "RBP"
+  let start_stack_addr = Word.of_int ~width:64 262144
+  let x86_64_default_taint = ["RDI"; "RSI"; "RDX"; "RCX"; "R8"; "R9"]
 
   let lookup name env =
     match M.find env name with
@@ -78,23 +82,32 @@ module NumericEnv(ValueDom : NumericDomain) = struct
     | None -> ValueDom.bot
 
   let set name v env : t = M.set env ~key:name ~data:v
+  
   let mem = M.mem
 
   let equal = M.equal ValueDom.equal
   
   let empty : t = M.empty
+  
   let empty_for_entry : t =
-    let zero = Word.of_int ~width:64 0 in
-    let abszero = ValueDom.of_word zero in
+    let stack_start = ValueDom.of_word start_stack_addr in
     empty
-    |> set stack_ptr abszero
-    |> set frame_ptr abszero
+    |> set stack_ptr stack_start
+    |> set frame_ptr stack_start
 
   let empty_with_args (sub : sub term) : t =
     let init = empty_for_entry in
+    
     let args = Term.enum arg_t sub in
-    let argnames = Seq.map args ~f:(fun a -> Arg.var a |> T.Var.name) in
-    Seq.fold argnames ~init ~f:(fun prev name ->
+    let argnames = Seq.map args ~f:(fun a -> Arg.var a |> T.Var.name) |> Seq.to_list in
+    
+    let frees = Sub.free_vars sub in
+    let freenames = Set.to_list frees |> List.map ~f:Var.name in
+    let is_arg arg = List.mem x86_64_default_taint arg ~equal:String.equal in
+    let actual_args = List.filter freenames ~f:is_arg in
+    
+    let all_args = List.append actual_args argnames in
+    List.fold all_args ~init ~f:(fun prev name ->
         set name ValueDom.top prev)
 
   let merge env1 env2 : t =
@@ -342,7 +355,17 @@ module DomainProduct(X : NumericDomain)(Y : NumericDomain) = struct
   let to_string (x, y) = Format.sprintf "(%s, %s)" (X.to_string x) (Y.to_string y)
   let of_int ?(width = 64) i = X.of_int ~width i, Y.of_int ~width i
   let of_word w = X.of_word w, Y.of_word w
+  let of_z ?(width = 64) z = X.of_z ~width z, Y.of_z ~width z
   let sexp_of_t (x, y) = Sexp.List [ X.sexp_of_t x; Y.sexp_of_t y ]
+  let bitwidth (x, y) =
+    let bw1 = X.bitwidth x in
+    let bw2 = Y.bitwidth y in
+    if bw1 = bw2
+    then bw1
+    else
+      if bw1 = -1
+      then bw2
+      else bw1
 end
 
 

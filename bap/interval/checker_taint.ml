@@ -83,4 +83,6 @@ module Analysis : NumericDomain = struct
     | Notaint -> "Notaint"
   let of_int ?(width = 64) _ = Notaint
   let of_word _ = Notaint
+  let of_z ?(width : int = 64) _ = Notaint
+  let bitwidth x = -1
 end
