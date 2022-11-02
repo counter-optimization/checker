@@ -128,14 +128,14 @@ let sub_to_insn_graph sub =
   let module CompSimpChecker = Comp_simp.Checker(Wrapping_interval) in
   let comp_simp_checker_res =
     List.fold edges
-      ~init:(CompSimpChecker.init_results)
+      ~init:CompSimpChecker.empty
       ~f:(fun acc_res (from', to', ()) ->
         let prod_from_state = Solution.get final_sol from' in
         let intvl_from_state = E.select_from_prod_env prod_from_state ProdIntvlxTaint.first in
         (* let taint_from_state = E.select_from_prod_env prod_from_state ProdIntvlxTaint.second in *)
         let elt = TidMap.find_exn tidmap to' in
         let check_res = CompSimpChecker.check_elt elt intvl_from_state in
-        CompSimpChecker.join_results acc_res check_res)
+        CompSimpChecker.join acc_res check_res)
   in
   let () = Format.printf "Comp simp checker results are:\n%!" in
   let () = CompSimpChecker.print_results comp_simp_checker_res in

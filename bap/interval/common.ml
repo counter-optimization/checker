@@ -5,6 +5,28 @@ open Graphlib.Std
 module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 
+let binop_to_string (b : Bil.binop) : string =
+  match b with
+   | Bil.PLUS -> "+"
+   | Bil.MINUS -> "-"
+   | Bil.TIMES -> "*"
+   | Bil.DIVIDE -> "/"
+   | Bil.SDIVIDE -> "//"
+   | Bil.MOD -> "%"
+   | Bil.SMOD -> "%%"
+   | Bil.LSHIFT -> "<<"
+   | Bil.RSHIFT -> ">>"
+   | Bil.ARSHIFT -> ">>>"
+   | Bil.AND -> "&"
+   | Bil.OR -> "|"
+   | Bil.XOR -> "^"
+   | Bil.EQ -> "="
+   | Bil.NEQ -> "<>"
+   | Bil.LT -> "<"
+   | Bil.LE -> "<="
+   | Bil.SLT -> "-<"
+   | Bil.SLE -> "-<="
+
 module type NumericDomain = sig
   type t
 
