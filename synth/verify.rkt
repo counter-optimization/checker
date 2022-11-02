@@ -41,5 +41,5 @@
   (define test (verify (bveq tester (bvsub (bvsub tester (bv (expt 2 31) 32)) (bv (expt 2 31) 32)))))
   (displayln test)
   (displayln (bv (sub1 (expt 2 32)) 32))
-  (define cex (verify (comp-simp-verify attempt-sub32 spec-sub32)))
+  (define cex (verify (comp-simp-verify attempt-and64 spec-and64)))
   cex)
