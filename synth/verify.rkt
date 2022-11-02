@@ -4,50 +4,13 @@
   rosette/lib/synthax
   rosette/lib/match
   "../serval/serval/x86.rkt"
+  "arith-transforms.rkt"
+  "bitwise-transforms.rkt"
   (prefix-in comp-simp: "synth-comp-simp-defenses-macrod.rkt"))
 
 (provide (all-defined-out))
 
-; (define attempt
-;   (list
-;    (sub-r/m32-imm32 eax (bv (expt 2 31) 32))
-;    (sub-r/m32-imm32 eax (bv (expt 2 31) 32))
-;    (setz dl)
-;    (sub-r/m64-imm32 rdx (bv (sub1 (expt 2 32)) 32))
-;    (sub-r/m64-imm32 rdx (bv 1 32))
-;    (sub-r/m64-r64 rax rdx)
-;    (sub-r/m64-r64 rcx rax)
-;    (sub-r/m64-r64 rcx rdx)))
-
-; (define spec
-;   (list
-;    (sub-r/m32-r32 ecx eax)))
-
-; (define attempt ; add32
-;   (list
-;    (mov-r64-imm64 rdx (bv (expt 2 32) 64))
-;    (sub-r/m64-r64 rax rdx)
-;    (sub-r/m64-r64 rcx rdx)
-;    (add-r/m64-r64 rcx rax)
-;    (mov-r64-imm64 rdx (bv (- (expt 2 33)) 64))
-;    (sub-r/m64-r64 rcx rdx)))
-
-; (define spec    ; add32
-;   (list
-;    (add-r/m32-r32 ecx eax)))
-
-(define attempt ; and32
-  (list
-   (mov-r64-imm64 rdx (bv (expt 2 32) 64))
-   (sub-r/m64-r64 rax rdx)
-   (sub-r/m64-r64 rcx rdx)
-   (and-r/m64-r64 rcx rax)))
-
-(define spec    ; and32
-  (list
-   (and-r/m32-r32 ecx eax)))
-
-(define (comp-simp-verify attempt)
+(define (comp-simp-verify attempt spec)
   (define spec-cpu (comp-simp:make-x86-64-cpu))
   (define attempt-cpu (comp-simp:make-x86-64-cpu))
 
@@ -78,5 +41,5 @@
   (define test (verify (bveq tester (bvsub (bvsub tester (bv (expt 2 31) 32)) (bv (expt 2 31) 32)))))
   (displayln test)
   (displayln (bv (sub1 (expt 2 32)) 32))
-  (define cex (verify (comp-simp-verify attempt)))
+  (define cex (verify (comp-simp-verify attempt-sub32 spec-sub32)))
   cex)
