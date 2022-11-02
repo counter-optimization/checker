@@ -13,7 +13,7 @@
    (mov-r/m64-r64 r10 rax) ; save rax
    (mov-r/m32-r32 ecx ecx) ; zero top 32 bits of ecx
    (mov-r/m32-r32 eax eax) ; zero top 32 bits of eax
-   (mov-r64-imm64 r11 (bv (expt 2 32) 64))
+   (mov-r64-imm64 r11 (bv (expt 2 33) 64))
    (sub-r/m64-r64 rax r11)
    (sub-r/m64-r64 rcx r11)
    (and-r/m64-r64 rcx rax) ; perform and
