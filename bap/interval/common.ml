@@ -1,4 +1,4 @@
-open Core_kernel
+open Core
 open Bap.Std
 open Graphlib.Std
 
@@ -282,6 +282,19 @@ module AbstractInterpreter(N: NumericDomain) = struct
     fun state -> failwith "denote_phi not implemented yet"
 
   let denote_jmp (j : jmp term) : E.t -> E.t =
+    let potential_label = match Jmp.kind j with
+      | Call c -> Some (Call.target c)
+      | Goto l -> Some l
+      | Ret l -> Some l
+      | Int (n, tid) -> None
+    in
+    let () = match potential_label with
+      | Some l ->
+         let ls = Label.to_string l in
+         let () = Format.printf "jmp term is : %a%! -- " Jmp.pp j in
+         Format.printf "label of jmp term is : %s\n%!" ls
+      | None -> ()
+    in
     fun state -> state
 
   let denote_elt (e : Blk.elt) : E.t -> E.t =

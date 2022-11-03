@@ -1,4 +1,4 @@
-open Core_kernel
+open Core
 open Bap.Std
 open Graphlib.Std
 open Common
@@ -58,25 +58,24 @@ let sub_to_insn_graph sub =
   in
 
   (* building graph *)
-  let edge_of_jump j =
+  let intraproc_edge_of_jump j =
     let fromtid = Term.tid j in
     match Jmp.kind j with
-    | Call _ -> failwith "call not supported for edge building yet"
     | Goto (Direct totid) ->
-    (* totid is the tid of a blk, but we need the first insn of that blk *)
+       (* totid is the tid of a blk, but we need the first insn of that blk *)
        let the_blk = Term.find_exn blk_t sub totid in
        let first_insn = Blk.elts the_blk |> Seq.hd_exn in
        Some (fromtid, tid_of_elt first_insn, ())
     | Goto (Indirect _) ->
-       Format.printf "TODO: handle indirect jumps in edge building for absint cfg\n%!";
-       None
-    | Ret _ -> failwith "ret not supported for edge building yet"
-    | Int (_, _) -> None
+       failwith "Indirect jumps not handled in edge building yet"
+    | Int (_, _)
+      | Call _
+      | Ret _ -> None
   in
   let get_jmp_edges insns =
     let edge insn =
       match insn with
-      | `Jmp j -> edge_of_jump j
+      | `Jmp j -> intraproc_edge_of_jump j
       | _ -> None
     in
     Seq.fold insns ~init:[] ~f:(fun edges insn ->
@@ -161,9 +160,9 @@ let iter_insns sub : unit =
     let bb = Graphs.Ir.Node.label graphnode in
     let insns = Blk.elts bb in
     let print_insn = function
-      | `Def d -> Format.printf "Def: %s\n%!" @@ Def.to_string d
-      | `Phi p -> Format.printf "Phi: %s\n%!" @@ Phi.to_string p
-      | `Jmp j -> Format.printf "Jmp: %s\n%!" @@ Jmp.to_string j
+      | `Def d -> Format.printf "iter_insns--Def: %s\n%!" @@ Def.to_string d
+      | `Phi p -> Format.printf "iter_insns--Phi: %s\n%!" @@ Phi.to_string p
+      | `Jmp j -> Format.printf "iter_insns--Jmp: %s\n%!" @@ Jmp.to_string j
     in
     Seq.iter insns ~f:print_insn
   in
@@ -173,8 +172,6 @@ let iter_insns sub : unit =
 
 let check_fn (name, block, cfg) =
   let sub = Sub.lift block cfg in
-  (* Print the SSA *)
-  let sub_ssa = Sub.ssa sub in
-  let () = iter_insns sub_ssa in
+  let () = iter_insns sub in
   (* Run the checkers *)
   sub_to_insn_graph sub
