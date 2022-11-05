@@ -1,4 +1,4 @@
-open Core_kernel
+open Core
 open Bap.Std
 
 module T = Bap_core_theory.Theory

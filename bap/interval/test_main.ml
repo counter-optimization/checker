@@ -1,4 +1,4 @@
-open Core_kernel
+open Core
 open OUnit2
 
 let suites = [Test_wrapping_interval.suite]

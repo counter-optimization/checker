@@ -1,4 +1,4 @@
-open Core_kernel
+open Core
 open Bap.Std
 open Graphlib.Std
 open Common
@@ -10,8 +10,6 @@ module Cfg = Bap.Std.Graphs.Cfg
 module IrCfg = Bap.Std.Graphs.Ir
 
 module Names = Var_name_scraper.VarName
-
-let target_func = "ite_xorident"
 
 let print_iml iml : unit =
   Format.printf
@@ -25,13 +23,32 @@ let print_sol sol : unit =
         Format.printf "Node (%a): \n%!" Graphs.Ir.Node.pp n;
         print_iml iml)
 
+let insns_of_node n = Blk.elts @@ Graphs.Ir.Node.label n
+
+let get_ret_insn_tid sub_nodes =
+  let num = Seq.length sub_nodes in
+  let last_node = Seq.nth_exn sub_nodes (num - 1) in
+  let insns = insns_of_node last_node in
+  let num_insns = Seq.length insns in
+  let res =
+    Seq.fold insns ~init:(None, 1) ~f:(fun (last, idx) insn ->
+        let next_idx = idx + 1 in
+        match idx, insn with
+        | n, `Jmp j when n = num_insns -> Some (Term.tid j), next_idx
+        | n, _ when n = num_insns -> failwith "Jmp/Ret was not last insn in sub"
+        | _, _ -> None, next_idx)
+  in
+  match res with
+  | Some tid, _ -> tid
+  | _, _ -> failwith "Error finding last insn in sub"
+
 let sub_to_insn_graph sub =
   let irg = Sub.to_cfg sub in
   let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
 
-  let insns_of_node node =
-    Graphs.Ir.Node.label node |> Blk.elts
-  in
+  (* let insns_of_node node = *)
+  (*   Graphs.Ir.Node.label node |> Blk.elts *)
+  (* in *)
 
   (* Create the tidmap *)
   let module TidMap = Map.Make_binable_using_comparator(Tid) in
@@ -58,6 +75,7 @@ let sub_to_insn_graph sub =
   in
 
   (* building graph *)
+  let ret_insn_tid = get_ret_insn_tid nodes in
   let intraproc_edge_of_jump j =
     let fromtid = Term.tid j in
     match Jmp.kind j with
@@ -66,6 +84,7 @@ let sub_to_insn_graph sub =
        let the_blk = Term.find_exn blk_t sub totid in
        let first_insn = Blk.elts the_blk |> Seq.hd_exn in
        Some (fromtid, tid_of_elt first_insn, ())
+    | Goto _ when Tid.equal fromtid ret_insn_tid -> None
     | Goto (Indirect _) ->
        failwith "Indirect jumps not handled in edge building yet"
     | Int (_, _)
