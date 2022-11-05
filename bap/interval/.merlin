@@ -15,4 +15,4 @@ S test_wrapping_interval.ml
 
 B _build
 
-PKG bap core_kernel stdio graphlib bignum ounit2
+PKG bap core_kernel stdio graphlib zarith ounit2
