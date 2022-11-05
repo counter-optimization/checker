@@ -46,33 +46,14 @@ let sub_to_insn_graph sub =
   let irg = Sub.to_cfg sub in
   let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
 
-  (* let insns_of_node node = *)
-  (*   Graphs.Ir.Node.label node |> Blk.elts *)
-  (* in *)
-
-  (* Create the tidmap *)
-  let module TidMap = Map.Make_binable_using_comparator(Tid) in
-  let tid_of_elt = function
-      | `Def d -> Term.tid d
-      | `Phi p -> Term.tid p
-      | `Jmp j -> Term.tid j
-  in
   let print_elt = function
       | `Def d -> Format.printf "Def: %s\n%!" @@ Def.to_string d
       | `Phi p -> Format.printf "Phi: %s\n%!" @@ Phi.to_string p
       | `Jmp j -> Format.printf "Jmp: %s\n%!" @@ Jmp.to_string j
   in
-  let add_insns_to_tid_map insns tidmap =
-    Seq.fold insns
-      ~init:tidmap
-      ~f:(fun tidmap insn ->
-        TidMap.set tidmap ~key:(tid_of_elt insn) ~data:insn)
-  in
-  let tidmap = Seq.fold nodes ~init:TidMap.empty
-                 ~f:(fun tidmap node ->
-                   let insns = insns_of_node node in
-                   add_insns_to_tid_map insns tidmap)
-  in
+
+  (* Create the tidmap *)
+  let tidmap = Tid_map.t_of_sub_nodes nodes insns_of_node in
 
   (* building graph *)
   let ret_insn_tid = get_ret_insn_tid nodes in
@@ -83,7 +64,7 @@ let sub_to_insn_graph sub =
        (* totid is the tid of a blk, but we need the first insn of that blk *)
        let the_blk = Term.find_exn blk_t sub totid in
        let first_insn = Blk.elts the_blk |> Seq.hd_exn in
-       Some (fromtid, tid_of_elt first_insn, ())
+       Some (fromtid, Tid_map.tid_of_elt first_insn, ())
     | Goto _ when Tid.equal fromtid ret_insn_tid -> None
     | Goto (Indirect _) ->
        failwith "Indirect jumps not handled in edge building yet"
@@ -103,7 +84,7 @@ let sub_to_insn_graph sub =
         | _ -> edges)
   in
   let edges_of_insns insns =
-    let tid_list = Seq.map insns ~f:tid_of_elt |> Seq.to_list in
+    let tid_list = Seq.map insns ~f:Tid_map.tid_of_elt |> Seq.to_list in
     let adjacent_tids, _ =
       List.zip_with_remainder tid_list (List.tl_exn tid_list) in
     let fallthroughs =
@@ -132,7 +113,7 @@ let sub_to_insn_graph sub =
                     ~equal:E.equal
                     ~merge:E.merge
                     ~f:(fun tid ->
-                      let elt = TidMap.find_exn tidmap tid in
+                      let elt = Tid_map.find_exn tidmap tid in
                       AbsInt.denote_elt elt)
   in
   let print_sol sol =
@@ -151,7 +132,7 @@ let sub_to_insn_graph sub =
         let prod_from_state = Solution.get final_sol from' in
         let intvl_from_state = E.select_from_prod_env prod_from_state ProdIntvlxTaint.first in
         (* let taint_from_state = E.select_from_prod_env prod_from_state ProdIntvlxTaint.second in *)
-        let elt = TidMap.find_exn tidmap to' in
+        let elt = Tid_map.find_exn tidmap to' in
         let check_res = CompSimpChecker.check_elt elt intvl_from_state in
         CompSimpChecker.join acc_res check_res)
   in
@@ -163,7 +144,7 @@ let sub_to_insn_graph sub =
       let to_str = Tid.to_string t in
       Format.printf "(%s,%s)\n%!" from_str to_str);
       
-  TidMap.iteri tidmap
+  Tid_map.iteri tidmap
     ~f:(fun ~key ~data ->
       Format.printf "TID(%s) :: %!" (Tid.to_string key);
       print_elt data)

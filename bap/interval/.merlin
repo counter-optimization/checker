@@ -10,6 +10,7 @@ S common.ml
 S abstract_memory.ml
 S comp_simp.ml
 S taint.ml
+S tid_map.ml
 S test_main.ml
 S test_wrapping_interval.ml
 
