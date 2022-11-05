@@ -1,8 +1,8 @@
 open Core
 open Bap.Std
 
-module T = Map.Make_binable_using_comparator(Tid)
-include T
+module M = Map.Make_binable_using_comparator(Tid)
+include M
 
 let tid_of_elt = function
   | `Def x -> Term.tid x
