@@ -24,6 +24,11 @@ let print_sol sol : unit =
         print_iml iml)
 
 let insns_of_node n = Blk.elts @@ Graphs.Ir.Node.label n
+let first_insn_of_blk b =
+  let insns = Blk.elts b in
+  match Seq.hd insns with
+  | Some i -> i
+  | None -> failwith "In first_insn_of_blk, couldn't find first insn"
 
 let get_ret_insn_tid sub_nodes =
   let num = Seq.length sub_nodes in
@@ -63,7 +68,7 @@ let sub_to_insn_graph sub =
     | Goto (Direct totid) ->
        (* totid is the tid of a blk, but we need the first insn of that blk *)
        let the_blk = Term.find_exn blk_t sub totid in
-       let first_insn = Blk.elts the_blk |> Seq.hd_exn in
+       let first_insn = first_insn_of_blk the_blk in
        Some (fromtid, Tid_map.tid_of_elt first_insn, ())
     | Goto _ when Tid.equal fromtid ret_insn_tid -> None
     | Goto (Indirect _) ->
@@ -96,7 +101,7 @@ let sub_to_insn_graph sub =
                   let insns = insns_of_node n in
                   List.append (edges_of_insns insns) edges)
   in
-
+  
   (* CFG *)
   let module G = Graphlib.Make(Tid)(Unit) in
   let cfg = Graphlib.create (module G) ~edges () in

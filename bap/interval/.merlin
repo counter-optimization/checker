@@ -9,6 +9,7 @@ S wrapping_interval.ml
 S common.ml
 S abstract_memory.ml
 S comp_simp.ml
+S data_section.ml
 S taint.ml
 S tid_map.ml
 S test_main.ml

@@ -146,7 +146,10 @@ module NumericEnv(ValueDom : NumericDomain) = struct
 
   let initial_solution (sub : sub term) (cfg : G.t) : (G.node, ValueDom.t M.t) Solution.t =
     let nodes = Graphlib.reverse_postorder_traverse (module G) cfg in
-    let first_node = Seq.hd_exn nodes in
+    let first_node = match Seq.hd nodes with
+      | Some n -> n
+      | None -> failwith "in Common.Env.initial_solution, couldn't get first node"
+    in
     let entry_env = empty_with_args sub in
     let with_args = G.Node.Map.empty |>
                       G.Node.Map.set ~key:first_node ~data:entry_env in
