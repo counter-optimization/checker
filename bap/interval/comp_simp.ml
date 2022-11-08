@@ -9,12 +9,17 @@ module KB = Bap_core_theory.KB
 module Checker(N : NumericDomain) = struct
   module E = NumericEnv(N)
   module AI = AbstractInterpreter(N)
+  module I = Wrapping_interval
   module SS = Set.Make_binable_using_comparator(String)
-  module DontCares = Set.Make_binable_using_comparator(String)
 
   type t = SS.t
   type expr_t = N.t * SS.t
   type env = E.t
+
+  let get_intvl : N.t -> Wrapping_interval.t =
+    match N.get Wrapping_interval.key with
+    | Some f -> f
+    | None -> failwith "Couldn't extract interval information out of product domain"
 
   let dont_care_vars = ["ZF"; "OF"; "CF"; "AF"; "PF"; "SF"]
 
@@ -24,37 +29,39 @@ module Checker(N : NumericDomain) = struct
   let empty : t = SS.empty
   let join = SS.union
 
-  let could_be_special (special : N.t -> N.t) (to_check : N.t) : bool =
-    if N.equal N.bot to_check
+  let could_be_special (special_for_bw : I.t -> I.t) (to_check : I.t) : bool =
+    if I.equal I.bot to_check
     then false
     else
-      let special_of_to_check = special to_check in
-      N.contains special_of_to_check to_check
+      let special = special_for_bw to_check in
+      I.contains special to_check
 
   let check_binop_operands (left_specials, right_specials) left right : t =
+    let left = get_intvl left in
+    let right = get_intvl right in
     let fold_checker ~is_left =
       let operand = if is_left then left else right in
-      fun acc spec ->
-      if could_be_special spec operand
-      then
-        begin
-          let special_str = N.to_string @@ spec operand in
-          let warn = Format.sprintf (if is_left then "binop_left_%s" else "binop_right_%s") special_str in
-          SS.add acc warn
-        end
-      else acc
+      let check_operand result_acc special_for_bw =
+        match could_be_special special_for_bw operand with
+        | true ->
+           let special_str = I.to_string @@ special_for_bw operand in
+           let warn = Format.sprintf (if is_left then "binop_left_%s" else "binop_right_%s") special_str in
+           SS.add result_acc warn
+        | false -> result_acc
+      in
+      check_operand
     in
     let left_res = List.fold left_specials ~init:empty ~f:(fold_checker ~is_left:true) in
     let right_res = List.fold right_specials ~init:empty ~f:(fold_checker ~is_left:false) in
     join left_res right_res
 
-  let specials_of_binop (op : binop) : (N.t -> N.t) list * (N.t -> N.t) list =
-    let one i = N.of_int ~width:(N.bitwidth i) 1 in
-    let zero i = N.of_int ~width:(N.bitwidth i) 0 in
+  let specials_of_binop (op : binop) : (I.t -> I.t) list * (I.t -> I.t) list =
+    let one i = I.of_int ~width:(I.bitwidth i) 1 in
+    let zero i = I.of_int ~width:(I.bitwidth i) 0 in
     let all_ones i =
-      let bw = N.bitwidth i in 
+      let bw = I.bitwidth i in 
       let uint_max_for_i = (Int.pow 2 bw) - 1 in
-      N.of_int ~width:bw uint_max_for_i
+      I.of_int ~width:bw uint_max_for_i
     in
     let onel = [one] in
     let zerol = [zero] in

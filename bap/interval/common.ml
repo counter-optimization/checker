@@ -220,9 +220,6 @@ module NumericEnv(ValueDom : NumericDomain) = struct
     let f = if steps < widen_threshold then merge else widen_state in
     f prev_state new_state
 
-  let select_from_prod_env (prod_env : t) selector =
-    M.map prod_env ~f:selector
-
   let pp (env : t) : unit =
     Format.printf "%a\n%!" Sexp.pp (M.sexp_of_t ValueDom.sexp_of_t env)
 end
