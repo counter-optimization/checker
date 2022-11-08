@@ -56,18 +56,6 @@ module Checker(N : NumericDomain) = struct
       let uint_max_for_i = (Int.pow 2 bw) - 1 in
       N.of_int ~width:bw uint_max_for_i
     in
-    (* let pow_two = *)
-    (*   let two = Z.of_int 2 in *)
-    (*   let potential_expts = List.init 63 ~f:succ in *)
-    (*   List.map potential_expts ~f:(fun pot_expt -> *)
-    (*       (fun i -> *)
-    (*         let bw = N.bitwidth i in *)
-    (*         let expt = if bw < pot_expt *)
-    (*                    then bw *)
-    (*                    else pot_expt *)
-    (*         in *)
-    (*         N.of_z ~width:bw @@ Z.pow two expt)) *)
-    (* in *)
     let onel = [one] in
     let zerol = [zero] in
     let zeroallonesl = [zero; all_ones] in
