@@ -5,9 +5,22 @@ open Common
 
 module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
+module Key = Common.DomainKey
 
 module Analysis : NumericDomain = struct
   type t = Notaint | Taint [@@deriving bin_io, sexp]
+
+  let key : t Key.k = Key.create "taint"
+
+  let get : type a. a Key.k -> (t -> a) option = fun k ->
+    match Key.eq_type k key with
+    | Eq -> Some (fun x -> x)
+    | Neq -> None
+
+  let set : type a. a Key.k -> a -> t -> a = fun k other replace ->
+    match Key.eq_type k key with
+    | Eq -> replace
+    | Neq -> other
 
   let bot = Notaint
   let top = Taint

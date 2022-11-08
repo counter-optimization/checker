@@ -457,3 +457,18 @@ let bitwidth x =
                      (to_string x)
      in
      failwith err_msg
+
+(** Setting up domain keys for usage in InteractableNumDom *)
+module Key = Common.DomainKey
+
+let key : t Key.k = Key.create "wrapping-interval"
+
+let get : type a. a Key.k -> (t -> a) option = fun k ->
+  match Key.eq_type k key with
+  | Eq -> Some (fun x -> x)
+  | Neq -> None
+
+let set : type a. a Key.k -> a -> t -> a = fun k other replace ->
+  match Key.eq_type k key with
+  | Eq -> replace
+  | Neq -> other

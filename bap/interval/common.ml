@@ -5,6 +5,50 @@ open Graphlib.Std
 module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 
+type (_, _) eq =
+  | Eq : ('a, 'a) eq
+  | Neq
+
+module type KeyT = sig
+  type 'a k
+  val create : string -> 'a k
+  val eq_type : 'a k -> 'b k -> ('a, 'b) eq
+  val name : 'a k -> string
+end
+
+(* This is the naive external domain key from *)
+(* EVA in the Frama-C framework. *)
+module DomainKey : KeyT = struct
+  type _ key = ..
+
+  module type K = sig
+    type t
+    type _ key += Key : t key
+    val name : string
+  end
+
+  type 'a k = (module K with type t = 'a)
+
+  let name (type a) (elt : a k) : string =
+    let module A = (val elt : K with type t = a) in
+    A.name
+
+  let create (type a) (n : string) : a k =
+    let module M = struct
+        type t = a
+        type _ key += Key : t key
+        let name = n
+      end in
+    (module M : K with type t = a)
+
+  let eq_type (type a) (type b) (x : a k) (y : b k) : (a, b) eq =
+    let module A = (val x : K with type t = a) in
+    let module B = (val y : K with type t = b) in
+    match A.Key with
+    | B.Key -> Eq
+    | _ -> Neq
+end
+
 let binop_to_string (b : Bil.binop) : string =
   match b with
    | Bil.PLUS -> "+"
@@ -29,6 +73,10 @@ let binop_to_string (b : Bil.binop) : string =
 
 module type NumericDomain = sig
   type t
+
+  val key : t DomainKey.k
+  val get : 'a DomainKey.k -> (t -> 'a) option
+  val set : 'a DomainKey.k -> 'a -> t -> 'a
 
   val bot : t
   val top : t
@@ -89,9 +137,8 @@ module NumericEnv(ValueDom : NumericDomain) = struct
   module M = Map.Make_binable_using_comparator(String)
   module G = Graphlib.Make(Tid)(Unit)
     
-  type t = ValueDom.t M.t
-  type key = string
   type v = ValueDom.t
+  type t = ValueDom.t M.t
 
   let stack_ptr = "RSP"
   let frame_ptr = "RBP"
@@ -308,8 +355,27 @@ module AbstractInterpreter(N: NumericDomain) = struct
     | `Phi p -> denote_phi p state
 end
 
-module DomainProduct(X : NumericDomain)(Y : NumericDomain) = struct
+module DomainProduct(X : NumericDomain)(Y : NumericDomain)
+       : NumericDomain = struct
   type t = X.t * Y.t
+
+  let key : t DomainKey.k =
+    let x_n = DomainKey.name X.key in
+    let y_n = DomainKey.name Y.key in 
+    let n = Format.sprintf "prod-%s-%s" x_n y_n in
+    DomainKey.create n
+
+  let get k =
+    match X.get k with
+    | Some f -> Some (fun elt -> f (fst elt))
+    | None -> match Y.get k with
+              | Some f -> Some (fun elt -> f (snd elt))
+              | None -> None
+
+  let set : type a. a DomainKey.k -> a -> t -> a = fun k other replace ->
+    match DomainKey.eq_type k key with
+    | Eq -> replace
+    | Neq -> other
 
   let first (prod : t) : X.t =
     match prod with
@@ -405,6 +471,3 @@ module DomainProduct(X : NumericDomain)(Y : NumericDomain) = struct
       then bw2
       else bw1
 end
-
-
-  
