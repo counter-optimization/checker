@@ -36,6 +36,14 @@ module Analysis : NumericDomain = struct
     | Notaint, Taint -> KB.Order.LT
     | Taint, Notaint -> KB.Order.GT
 
+  let compare x y : int =
+    let open KB.Order in
+    match order x y with
+    | LT -> -1
+    | EQ -> 0
+    | GT -> 1
+    | NC -> -1
+
   let equal x y =
     match order x y with
     | KB.Order.EQ -> true

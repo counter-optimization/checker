@@ -96,6 +96,14 @@ let order x y : KB.Order.partial =
        | 1, -1 -> LT
        | _ -> failwith "unhandled case in Wrapping_interval.order"
 
+let compare x y : int =
+  let open KB.Order in
+  match order x y with
+  | LT -> -1
+  | EQ -> 0
+  | GT -> 1
+  | NC -> -1
+
 let equal x y : bool =
   match order x y with
   | EQ -> true

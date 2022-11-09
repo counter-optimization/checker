@@ -86,6 +86,7 @@ module type NumericDomain = sig
   val b0 : t
 
   val order : t -> t -> KB.Order.partial
+  val compare : t -> t -> int
   val equal : t -> t -> bool
   val join : t -> t -> t
   val contains : t -> t -> bool (* Useful for checkers *)
@@ -396,6 +397,14 @@ module DomainProduct(X : NumericDomain)(Y : NumericDomain)
     | LT, LT -> LT
     | GT, GT -> GT
     | _ -> NC
+
+  let compare x y : int =
+    let open KB.Order in
+    match order x y with
+    | LT -> -1
+    | EQ -> 0
+    | GT -> 1
+    | NC -> -1
 
   let equal f s =
     match order f s with

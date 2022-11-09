@@ -2,6 +2,7 @@ open Core
 open Bap.Std
 open Graphlib.Std
 open Common
+open Abstract_memory
 
 module T = Bap_core_theory.Theory
 module KB = Bap_knowledge.Knowledge
