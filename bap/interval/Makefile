@@ -1,4 +1,4 @@
-TEST_SRCS = wrapping_interval.ml test_wrapping_interval.ml test_main.ml
+TEST_SRCS = common.ml checker_taint.ml wrapping_interval.ml test_wrapping_interval.ml abstract_memory.ml test_abstract_memory.ml test_main.ml
 TEST_OBJS = $(TEST_SRCS:.ml=.cmo)
 TEST_INTFS = $(TEST_SRCS:.ml=.cmi)
 TEST_MAIN = test_main
@@ -6,7 +6,7 @@ PLUGIN_NAME = uarch_checker.plugin
 
 COMP_SIMP_TEST_DIR = comp-simp-test-cases
 
-PKGS = bap,core_kernel,stdio,graphlib,bignum,zarith,ounit2
+PKGS = bap,core_kernel,stdio,graphlib,zarith,ounit2
 
 .PHONY : clean test comp-simp-test-cases bap-plugin
 
