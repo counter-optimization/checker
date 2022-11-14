@@ -10,7 +10,7 @@
 
 (provide (all-defined-out))
 
-(define (comp-simp-verify attempt spec)
+(define (comp-simp-verify attempt spec regs)
   (define spec-cpu (comp-simp:make-x86-64-cpu))
   (define attempt-cpu (comp-simp:make-x86-64-cpu))
 
@@ -32,14 +32,16 @@
   ;; (define impl-flag-state-after (comp-simp:get-all-flags #:cpu attempt-cpu))
   ;; (comp-simp:assert-flags-equiv spec-flag-state-after impl-flag-state-after)
   
-  (define spec-ecx (cpu-gpr-ref spec-cpu ecx))
-  (define impl-ecx (cpu-gpr-ref attempt-cpu ecx))
-  (assert (bveq spec-ecx impl-ecx)))
+  (for ([reg regs])
+    (define spec-reg (cpu-gpr-ref spec-cpu reg))
+    (define impl-reg (cpu-gpr-ref attempt-cpu reg))
+    (assert (bveq spec-reg impl-reg)))
+  )
 
 (module+ main
   (define-symbolic* tester (bitvector 32))
   (define test (verify (bveq tester (bvsub (bvsub tester (bv (expt 2 31) 32)) (bv (expt 2 31) 32)))))
   (displayln test)
   (displayln (bv (sub1 (expt 2 32)) 32))
-  (define cex (verify (comp-simp-verify attempt-and64 spec-and64)))
+  (define cex (verify (comp-simp-verify attempt-lshift32 spec-lshift32 regs-lshift)))
   cex)

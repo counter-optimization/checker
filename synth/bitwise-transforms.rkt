@@ -10,6 +10,10 @@
 
 ; ---------- Bitwise AND ----------
 
+; Dest rcx, src rax
+(define regs-and
+  (list rax rcx))
+
 (define attempt-and32 ; and32
   (list
    (mov-r/m64-r64 r10 rax) ; save rax
@@ -45,6 +49,10 @@
    (and-r/m64-r64 rcx rax)))
 
 ; ---------- Bitwise OR ----------
+
+; Dest rcx, src rax
+(define regs-or
+  (list rax rcx))
 
 (define attempt-or32
   (list
@@ -82,6 +90,10 @@
 
 ; ---------- Bitwise XOR ----------
 
+; Dest rcx, src rax
+(define regs-xor
+  (list rax rcx))
+
 (define attempt-xor32
   (list
    (mov-r/m64-r64 r10 rax) ; save rax
@@ -118,6 +130,10 @@
 
 ; ---------- Bitwise LSHIFT ----------
 ; TODO account for shifting by 0
+
+; Dest rax, src rcx
+(define regs-lshift
+  (list rax rcx))
 
 (define attempt-lshift64
   (list
@@ -157,6 +173,10 @@
 
 ; ---------- Bitwise RSHIFT ----------
 ; TODO account for shifting by 0
+
+; Dest rax, src rcx
+(define regs-rshift
+  (list rax rcx))
 
 (define attempt-rshift64
   (list
@@ -198,6 +218,10 @@
 
 ; ---------- Bitwise ARSHIFT ----------
 ; TODO account for shifting by 0
+
+; Dest rax, src rcx
+(define regs-arshift
+  (list rax rcx))
 
 (define attempt-arshift64
   (list

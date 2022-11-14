@@ -8,6 +8,10 @@
 
 (provide (all-defined-out))
 
+; Dest rcx, src rax
+(define regs-sub
+  (list rax rcx))
+
 (define attempt-sub32
   (list
    (mov-r/m64-r64 r11 rax) ; save rax
@@ -21,6 +25,10 @@
 (define spec-sub32
   (list
    (sub-r/m32-r32 ecx eax)))
+
+; Dest rcx, src rax
+(define regs-add
+  (list rax rcx))
 
 (define attempt-add32
   (list
