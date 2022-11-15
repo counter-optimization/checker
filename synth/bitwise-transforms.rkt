@@ -159,12 +159,15 @@
 
 (define attempt-lshift32
   (list
+   (mov-r/m64-r64 r10 rcx) ; save rcx
    (mov-r/m32-r32 eax eax)
    (mov-r64-imm64 r11 (bv (expt 2 32) 64))
    (sub-r/m64-r64 rax r11)
-   ; TODO mask cl to 5 LSB
+   ; TODO change to 8 bit AND
+   (and-r/m32-imm32 ecx (bv (- (expt 2 5) 1) 32))
    (shl-r/m64-cl rax)
    (mov-r/m32-r32 eax eax)
+   (mov-r/m64-r64 rcx r10) ; restore rcx
   ))
 
 (define spec-lshift32
@@ -204,12 +207,15 @@
 
 (define attempt-rshift32
   (list
+   (mov-r/m64-r64 r10 rcx) ; save rcx
    (mov-r/m32-r32 eax eax)
    (mov-r64-imm64 r11 (bv (expt 2 63) 64))
    (sub-r/m64-r64 rax r11)
-   ; TODO mask cl to 5 LSB
+   ; TODO change to 8 bit AND
+   (and-r/m32-imm32 ecx (bv (- (expt 2 5) 1) 32))
    (shr-r/m64-cl rax)
    (mov-r/m32-r32 eax eax)
+   (mov-r/m64-r64 rcx r10) ; restore rcx
   ))
 
 (define spec-rshift32
@@ -250,14 +256,17 @@
 
 (define attempt-arshift32
   (list
+   (mov-r/m64-r64 r10 rcx) ; save rcx
    (mov-r/m32-r32 eax eax)
    (mov-r64-imm64 r11 (bv (expt 2 63) 64))
    (sub-r/m64-r64 rax r11)
-   ; TODO mask cl to 5 LSB
+   ; TODO change to 8 bit AND
+   (and-r/m32-imm32 ecx (bv (- (expt 2 5) 1) 32))
    (rol-r/m64-imm8 rax (bv 32 8))
    (sar-r/m64-cl rax)
    (ror-r/m64-imm8 rax (bv 32 8))
    (mov-r/m32-r32 eax eax)
+   (mov-r/m64-r64 rcx r10) ; restore rcx
   ))
 
 (define spec-arshift32
