@@ -37,8 +37,9 @@ module Region = struct
     type t = (Cmp.t, Cmp.comparator_witness) Set.t
     let empty : t = Set.empty (module Cmp)
     let singleton (r : Cmp.t) = Set.add empty r
-    let fold = Set.fold
-    let map = Set.map (module Cmp)
+    let from_region (r : T.t) = singleton r 
+    (* let fold = Set.fold *)
+    (* let map = Set.map (module Cmp) *)
   end
 end
 
@@ -75,6 +76,12 @@ module Pointer(N : NumericDomain) = struct
     let of_regions ~regions ~offs ~width =
       List.map (Set.to_list regions) ~f:(fun region ->
           make ~region ~offs ~width)
+
+    let to_string {region; offs; width} =
+      let r = Region.to_string region in
+      let o = N.to_string offs in
+      let w = N.to_string width in
+      sprintf "(%s, %s, %s)" r o w
   end
 
   include T
@@ -139,6 +146,11 @@ module Cell(N : NumericDomain) = struct
           N.could_be_true (N.boolle cel_base ptr_end) ||
           N.could_be_true (N.boolle ptr_base cel_end) &&
             N.could_be_true (N.boolle cel_end ptr_end)
+
+    (** values are actually in big endian because we're in
+        ocaml land, but we want to simulate little endian
+        especially if there are overlapping reads/writes *)
+    
   end
 
   module Cmp = struct
@@ -147,6 +159,54 @@ module Cell(N : NumericDomain) = struct
   end
 
   include Cmp
+
+  (* module Overlap = struct *)
+  (*   type t = (N.t * N.t) list [@@deriving compare, sexp_of] *)
+
+  (*   let get_values_feor_indices (cell : T.t) (indices : N.t list) *)
+  (*       : N.t list = *)
+
+  (*   let rec loop_over_indices (start_idx : N.t) *)
+  (*             (end_idx : N.t) *)
+  (*             (cmp : N.t -> N.t -> bool) *)
+  (*             (next_idx : N.t -> N.t) *)
+  (*             ?(acc = [] : N.t list) : N.t list = *)
+  (*     if cmp start_idx end_idx *)
+  (*     then f (next_idx start_idx) end_idx cmp next_idx (start_idx :: acc) *)
+  (*     else acc *)
+
+  (*   (\** PRE: fromcell and tocell definitely overlap *\) *)
+  (*   let get_overlap_indices fromcell tocell : t = *)
+  (*     let {region=fromregion; *)
+  (*          width=fromwidth; *)
+  (*          offs=fromoffs; *)
+  (*          valtype=fromvaltype} = fromcell in *)
+  (*     let {region=toregion; *)
+  (*          width=towidth; *)
+  (*          offs=tooffs; *)
+  (*          valtype=tovaltype} = tocell in *)
+  (*     let to_base = tooffs in *)
+  (*     let to_end = N.add to_base towidth in *)
+  (*     let from_base = fromoffs in *)
+  (*     let from_end = N.add from_base fromwidth in *)
+  (*     if N.could_be_true (N.boolle from_base to_end) && *)
+  (*          N.could_be_true (N.boolle to_base from_base) *)
+  (*     then *)
+  (*       let overlap_indices = loop_over_indices from_base *)
+  (*                               to_end *)
+  (*                               (fun f t -> N.could_be_true (N.boolle f t)) *)
+  (*                               (fun idx -> N.add (N.of_int 1) idx) *)
+  (*       in *)
+  (*       let  *)
+  (*       (\* the left part of fromcell overlaps the rightside of tocell *)
+  (*          OR they completely overlap *\) *)
+  (*     else *)
+  (*       (\* the right part of fromcell overlaps the leftside of tocell *\) *)
+           
+
+  (*   let calculate fromcell tocell : t = *)
+      
+  (* end *)
   
   module Set = struct
     type t = (Cmp.t, comparator_witness) Set.t
@@ -167,6 +227,7 @@ module Cell(N : NumericDomain) = struct
     let fold = Set.fold
     
     let to_list = Set.to_list
+    let singleton = Set.singleton (module Cmp)
   end
 
   module Map = struct
@@ -180,8 +241,12 @@ module Cell(N : NumericDomain) = struct
     let find = Map.find
     let find_exn = Map.find_exn
 
-    
-         
+    let add_cell ptr cell m =
+      let new_cell_set = if Map.mem m ptr
+                         then Set.add (find_exn m ptr) cell
+                         else Set.singleton cell
+      in
+      Map.set m ~key:ptr ~data:new_cell_set
 
     let get_overlapping ptr m =
       Map.fold m ~init:Set.empty
@@ -194,6 +259,10 @@ module Cell(N : NumericDomain) = struct
           then Set.union overlap acc
           else acc)
 
+    (** For a newly added_cell, and all of the cells it overlaps,
+        overlap_cells, for each c in overlap_cells, add added_cell
+        to c's set of overlapping ptrs (pointer overlap is a symmetric
+        relation) *)
     let fix_overlap (added_cell : T.t) (overlap_cells : Set.t) (m : t) : t =
       Set.fold overlap_cells ~init:m
         ~f:(fun m cel ->
@@ -201,33 +270,36 @@ module Cell(N : NumericDomain) = struct
           let old_cellset = find_exn m ptr in
           let new_cellset = Set.add old_cellset added_cell in
           set ~key:ptr ~data:new_cellset m)
+
+    (* let get_overlap_correction_function (toadd : T.t) *)
+    (*       (overlapping : T.t) (m : t) :  *)
          
-    let add_cell ptr valtype m : t =
-      let ptr_base = Pointer.region ptr in
-      let ptr_offs = Pointer.offs ptr in
-      (* TODO: this should check for other similar pointers of different *)
-      (* widths *)
-      let all_ptrs = Pointer.all_widths_of_ptr ptr in
-      if Map.mem m ptr
-      then
-        begin
-          let base_str = Region.to_string ptr_base in
-          let offs_str = N.to_string ptr_offs in
-          failwith @@
-            sprintf "Cell for ptr (%s, %s) already exists" base_str offs_str
-        end
-      else
-        let ptr_width = Pointer.width ptr in
-        let new_cell = T.make
-                         ~region:ptr_base
-                         ~offs:ptr_offs
-                         ~width:ptr_width
-                         ~valtype
-        in
-        let overlapping_cells = get_overlapping ptr m in
-        let withnew = Set.add overlapping_cells new_cell in
-        let new_m = Map.set m ~key:ptr ~data:withnew in
-        fix_overlap new_cell overlapping_cells new_m
+    (* let add_cell ptr valtype m : t = *)
+    (*   let ptr_base = Pointer.region ptr in *)
+    (*   let ptr_offs = Pointer.offs ptr in *)
+    (*   (\* TODO: this should check for other similar pointers of different *\) *)
+    (*   (\* widths *\) *)
+    (*   let all_ptrs = Pointer.all_widths_of_ptr ptr in *)
+    (*   if Map.mem m ptr *)
+    (*   then *)
+    (*     begin *)
+    (*       let base_str = Region.to_string ptr_base in *)
+    (*       let offs_str = N.to_string ptr_offs in *)
+    (*       failwith @@ *)
+    (*         sprintf "Cell for ptr (%s, %s) already exists" base_str offs_str *)
+    (*     end *)
+    (*   else *)
+    (*     let ptr_width = Pointer.width ptr in *)
+    (*     let new_cell = T.make *)
+    (*                      ~region:ptr_base *)
+    (*                      ~offs:ptr_offs *)
+    (*                      ~width:ptr_width *)
+    (*                      ~valtype *)
+    (*     in *)
+    (*     let overlapping_cells = get_overlapping ptr m in *)
+    (*     let withnew = Set.add overlapping_cells new_cell in *)
+    (*     let new_m = Map.set m ~key:ptr ~data:withnew in *)
+    (*     fix_overlap new_cell overlapping_cells new_m *)
   end
 end
 
@@ -258,6 +330,11 @@ module Make(N : NumericDomain) = struct
     in
     { cells; env; bases }
 
+  let unptr ~name {cells; env; bases} : t =
+    let new_env = Env.set name N.bot env in
+    let new_bases = BaseSetMap.remove bases name in
+    {cells; env=new_env; bases=new_bases}
+
   let set_rsp (offs : int) (mem : t) : t =
     let offs = N.of_int ~width:64 offs in
     set_ptr mem
@@ -277,75 +354,122 @@ module Make(N : NumericDomain) = struct
   let is_pointer ~name {cells; env; bases} : bool =
     BaseSetMap.mem bases name
 
-  let is_scalar ~name {cells; env; bases} : bool =
-    not @@ BaseSetMap.mem bases name
+  let is_scalar ~name mem : bool =
+    not @@ is_pointer ~name mem
 
   let get_offset ~name {cells; env; bases} : N.t option =
     if is_pointer name {cells; env; bases}
     then Some (Env.lookup name env)
     else None
 
-  let lookup ~name {cells; env; bases} : N.t =
+  let lookup name {cells; env; bases} : N.t =
     Env.lookup name env
 
-  let set ~name ~data (mem : t) : t =
+  let set name data (mem : t) : t =
     { mem with env = Env.set name data mem.env }
 
-  (* let realize_cells_for_ptr (p : Ptr.t) (m : t) : t = *)
-  (*   let reg = Ptr.region p in *)
-  (*   let offs = Ptr.offs p in *)
-  (*   let width = Ptr.width p in *)
-  (*   (\* Do the cell realization *\) *)
-  (*   (\* If the cell already exists, then just return it *\) *)
-  (*   (\* otherwise, create a cell and add it to the cells and env *)
-  (*    before returning it*\) *)
-  (*   let cell = match C.Map.find m.cells p with *)
-  (*     | Some cel -> cel *)
-  (*     | None -> C.make ~region:reg ~offs ~width ~valtype:C.Scalar *)
+  let set_cell_to_top cell_name (mem : t) : t =
+    { mem with env = Env.set cell_name N.top mem.env }
 
+  (* Returns tuple of (exact cell match option, overlapping cells) *)
+  let get_cells_for_ptr ptr mem : C.t option * C.Set.t =
+    failwith "todo"
+
+  (* let get_value_at_index (c : t) (idx : N.t) = *)
+  (*     fun mem finder ->  *)
+  (*     let one = N.of_int 1 in *)
+  (*     let eight = N.of_int 8 in *)
+  (*     let zero_idx_byte_width = N.sub (N.div c.width eight) one in *)
+  (*     let shift_left_n = N.sub zero_idx_byte_width idx in *)
+  (*     let shift_right_n = zero_idx_byte_width in *)
+  (*     let cell_name = name c in *)
+  (*     let shifted_left = N.lshift (finder mem cell_name) shift_left_n in *)
+  (*     N.rshift shifted_left shift_right_n *)
+
+  (** For a given pointer, ptr, if ptr points to an existing memory
+      cell, then return the cell and memory. otherwise, if ptr does
+      not pointer to an existing memory cell, then create it,
+      initialize the cell's value to N.top, find all overlapping cells,
+      merge the overlapping values, update the cell's value based on the
+      overlapping values, and return the cell and updated memory *)
   let realize ptr mem : C.t * t =
-      let found = match C.Map.find mem.cells ptr with
-        | Some cellset -> Set.find cellset ~f:(fun c -> C.equals_ptr c ptr)
-        | None -> None
-      in
-      let cel = match found with
-        | Some c -> c
-        | None -> C.t_of_ptr ptr
-      in
-      let cell_name = C.name cel in
-      let cell_has_value = Env.mem mem.env cell_name in
-      if cell_has_value
-      then cel, mem
-      else
-        cel, { mem with env = Env.set cell_name N.top mem.env }
+    let maybe_existing_cell = match C.Map.find mem.cells ptr with
+      | Some cellset -> Set.find cellset ~f:(fun c -> C.equals_ptr c ptr)
+      | None -> None
+    in
+    let final_cell = match maybe_existing_cell with
+      | Some cel -> cel
+      | None -> C.t_of_ptr ptr
+    in
+    let final_cell_name = C.name final_cell in
+    let final_cell_already_has_value = Env.mem mem.env final_cell_name in
+    if final_cell_already_has_value
+    then final_cell, mem
+    else
+      let new_mem = set_cell_to_top final_cell_name mem in
+      final_cell, new_mem
+
+  let load_from_offs_and_regions ~offs ~regions ~width (mem : t) : N.t =
+    let ptrs = Ptr.of_regions ~regions ~offs ~width in
+    let cells = List.fold ptrs ~init:(C.Set.empty)
+                  ~f:(fun foundcells p ->
+                    match C.Map.find mem.cells p with
+                    | Some cells -> C.Set.union cells foundcells
+                    | None -> foundcells)
+    in
+    match C.Set.length cells with
+    | 0 ->
+       let ptr_strings = List.fold ptrs ~init:"" ~f:(fun acc x ->
+                             acc ^ " " ^ Ptr.to_string x)
+       in
+       failwith @@ sprintf "Didn't find cells for ptrs: %s" ptr_strings
+    | 1 ->
+       C.Set.fold cells ~init:N.bot ~f:(fun valset c ->
+           let celname = C.name c in
+           N.join valset @@ lookup celname mem)
+    | _ ->
+       let ptr_strings = List.fold ptrs ~init:"" ~f:(fun acc x ->
+                             acc ^ " " ^ Ptr.to_string x)
+       in
+       failwith @@ sprintf "No support for reading overlapping ptrs: %s" ptr_strings
 
   (** Here, name is the name of the var in the mem env that
       holds the offset of the pointer *)
-  let load ~name ~width (mem : t) : t =
-    if not (is_pointer ~name mem)
+  let load ~name ~width (mem : t) : N.t =
+    match get_offset ~name mem with
+    | Some offs ->
+       let regions = match BaseSetMap.find mem.bases name with
+         | Some regions -> regions
+         | None -> let err_msg = sprintf "Attempt to read from non-pointer: %s" name in
+                   failwith err_msg
+       in
+       load_from_offs_and_regions ~offs ~regions ~width mem
+    | None ->
+       let err_msg = sprintf "Attempt to read from non-pointer: %s" name in
+       failwith err_msg
+  
+  let store ~offs ~region ~width ~data ~valtype mem : t =
+    let ptr = Ptr.make ~region ~offs ~width in
+    let overlap = C.Map.get_overlapping ptr mem.cells in
+    if C.Set.length overlap > 1
     then
-      failwith @@ sprintf "Cannot load from pointer with offs var: %s" name
+      let overlap = C.Set.fold overlap ~init:""
+                      ~f:(fun acc c -> acc ^ " " ^ (C.name c))
+      in
+      failwith @@ sprintf "No support for storing with overlapping ptrs %s" overlap
     else
-      begin
-        (* find_exn same since is_pointer guarantees find finds something *)
-        let bases = BaseSetMap.find_exn mem.bases name in
-        let offs = match Env.find mem.env name with
-          | Some o -> o
-          | None ->
-             failwith @@ sprintf "Couldn't find offset for pointer %s" name
-        in
-        let ptrs = Ptr.of_regions ~regions:bases ~width ~offs in
-        let exact_cells = List.fold ptrs ~init:(C.Set.empty)
-                            ~f:(fun acc p ->
-                              match C.Map.find mem.cells p with
-                              | Some cels ->
-                              | None -> acc
-        let overlapping_cells = List.fold ptrs ~init:(C.Set.empty)
-                                  ~f:(fun acc p ->
-                                    C.Map.get_overlapping p mem.cells)
-        in
-        mem
-      end
+      let cel = if C.Set.length overlap = 1
+                then List.hd_exn @@ C.Set.to_list overlap
+                else C.t_of_ptr ~valtype ptr
+      in
+      let celname = C.name cel in
+      if not (C.equals_ptr cel ptr)
+      then
+        failwith @@
+          sprintf "Can't store ptr %s to cell %s" (Ptr.to_string ptr) celname
+      else
+        { mem with env = Env.set celname data mem.env;
+                   cells = C.Map.add_cell ptr cel mem.cells }
 
   (* TODO: type consistency in cell merging *)
   let merge mem1 mem2 : t =

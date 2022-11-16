@@ -89,6 +89,7 @@ module type NumericDomain = sig
   val compare : t -> t -> int
   val equal : t -> t -> bool
   val join : t -> t -> t
+  val meet : t -> t -> t
   val contains : t -> t -> bool (* Useful for checkers *)
 
   (* BIL specific *)
@@ -133,6 +134,24 @@ module type NumericDomain = sig
   val bitwidth : t -> int
   val sexp_of_t : t -> Sexp.t
 end
+
+module type NumericEnvT =
+  functor (N : NumericDomain) ->
+  sig
+    type t
+
+    val lookup : string -> t -> N.t
+    val set : string -> N.t -> t -> t
+    val mem : t -> string -> bool
+    val equal : t -> t -> bool
+    val empty : t
+    val empty_for_entry : t
+    val empty_with_args : t
+    val merge : t -> t -> t
+    val widen_threshold : int
+    val widen_with_step : int -> 'a -> t -> t -> t
+    val pp : t -> unit
+  end
 
 module NumericEnv(ValueDom : NumericDomain) = struct
   module M = Map.Make_binable_using_comparator(String)
@@ -225,10 +244,8 @@ module NumericEnv(ValueDom : NumericDomain) = struct
     Format.printf "%a\n%!" Sexp.pp (M.sexp_of_t ValueDom.sexp_of_t env)
 end
 
-(* module type AbstractInterpreterT *)
-
-module AbstractInterpreter(N: NumericDomain) = struct
-  module E = NumericEnv(N)
+module AbstractInterpreter(N: NumericDomain)(Env : NumericEnvT) = struct
+  module E = Env(N)
 
   type expr_t = N.t
 
@@ -412,6 +429,7 @@ module DomainProduct(X : NumericDomain)(Y : NumericDomain)
     | _ -> false
 
   let join (x, y) (x', y') = X.join x x', Y.join y y'
+  let meet (x, y) (x', y') = X.meet x x', Y.meet y y'
 
   (* If at least one domain says it's true, then it *could* be true *) 
   let contains (x, y) (x', y') = X.contains x x' || Y.contains y y'

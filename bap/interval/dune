@@ -4,5 +4,5 @@
 
 (library
  (name cfg)
- (libraries bap core_kernel stdio graphlib zarith)
+ (libraries bap core_kernel stdio graphlib zarith monads)
  (preprocess (pps ppx_jane ppx_deriving)))

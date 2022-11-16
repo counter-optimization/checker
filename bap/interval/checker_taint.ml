@@ -55,6 +55,12 @@ module Analysis : NumericDomain = struct
     | _, Taint -> Taint
     | _ -> Notaint
 
+  let meet x y =
+    match x, y with
+    | Notaint, _ -> Notaint
+    | _, Notaint -> Notaint
+    | _ -> Taint
+
   let contains x y =
     match order x y with
     | KB.Order.EQ -> true

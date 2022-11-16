@@ -122,6 +122,22 @@ let join x y : t =
                 width = Int.max width1 width2;
                 signed = false }
 
+let meet x y : t =
+  match x, y with
+  | Bot, _ -> Bot
+  | _, Bot -> Bot
+  | Interval {lo=lo1; hi=hi1; width=width1; signed=signed1},
+    Interval {lo=lo2; hi=hi2; width=width2; signed=signed2} ->
+     let lo = Z.max lo1 lo2 in
+     let hi = Z.min hi1 hi2 in
+     if Z.gt lo hi
+     then Bot
+     else
+       Interval {lo=lo;
+                 hi=hi;
+                 width=Int.max width1 width2;
+                 signed = false}
+
 (* Does i1 fit completely in i2? *)
 (* this is the <= subset relation on two intervals and
    only looks at interval endpoints (the values) rather

@@ -6,7 +6,7 @@ PLUGIN_NAME = uarch_checker.plugin
 
 COMP_SIMP_TEST_DIR = comp-simp-test-cases
 
-PKGS = bap,core_kernel,stdio,graphlib,zarith,ounit2
+PKGS = bap,core_kernel,stdio,graphlib,zarith,ounit2,monads
 
 .PHONY : clean test comp-simp-test-cases bap-plugin
 

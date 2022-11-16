@@ -78,14 +78,87 @@ let test_set_rbp _ =
   | None -> assert_failure "offs not offs"
 
 let test_store_rsp _ =
-  assert_bool "todo" true
+  let mem = Mem.empty in
+  
+  let mem = Mem.set_rsp 8000 mem in
 
-let test_load_rsp _ =
-  assert_bool "todo" true
+  let rsp_offs = WI.of_int 8000 in
+  let rsp_width = WI.of_int 64 in
+  let rsp_expected_value = WI.of_int 5 in
+  let mem' = Mem.store mem
+               ~offs:rsp_offs
+               ~region:AM.Region.Stack
+               ~width:rsp_width
+               ~data:rsp_expected_value
+               ~valtype:Mem.C.Scalar
+  in
+
+  let rsp_read_value = Mem.load ~name:"RSP" ~width:rsp_width mem' in
+  assert_wi_equal rsp_expected_value rsp_read_value
+
+let test_empty_mem_state_store _ =
+  let mem = Mem.empty in
+  let offs = WI.of_int 16 in
+  let region = AM.Region.Global in
+  let width = WI.of_int 8 in
+  let data = WI.of_int 77 in
+  let mem' = Mem.store mem ~valtype:Mem.C.Scalar ~offs ~region ~width ~data in
+  let read_back = Mem.load_from_offs_and_regions mem'
+                    ~offs
+                    ~regions:(AM.Region.Set.from_region region)
+                    ~width
+  in
+  assert_wi_equal data read_back
+
+let handles_overlapping_ptr_load _ =
+  let mem = Mem.empty in
+  let offs = WI.of_int 16 in
+  let region = AM.Region.Global in
+  let width = WI.of_int 8 in
+  let data = WI.of_int 77 in
+  let mem' = Mem.store mem ~valtype:Mem.C.Scalar ~offs ~region ~width ~data in
+  
+  let ptr2_offs = WI.of_int 17 in
+  let read_back = fun () ->
+    Mem.load_from_offs_and_regions mem'
+      ~offs:ptr2_offs
+      ~regions:(AM.Region.Set.from_region region)
+      ~width
+  in
+  let _ = try read_back () with
+          | Failure _ -> WI.bot
+          | _ -> assert_failure "Overlapping load should fail (for now)"
+  in
+  ()
+
+let handles_overlapping_ptr_store _ =
+  let mem = Mem.empty in
+  let offs = WI.of_int 16 in
+  let region = AM.Region.Global in
+  let width = WI.of_int 8 in
+  let data = WI.of_int 77 in
+  let mem' = Mem.store mem ~valtype:Mem.C.Scalar ~offs ~region ~width ~data in
+  
+  let ptr2_offs = WI.of_int 17 in
+  let store = fun () ->
+    Mem.store mem'
+      ~offs:ptr2_offs
+      ~region
+      ~width
+      ~data:(WI.of_int 88)
+      ~valtype:Mem.C.Scalar
+  in
+  let _ = try store () with
+          | Failure _ -> Mem.empty
+          | _ -> assert_failure "Overlapping store should fail (for now)"
+  in
+  ()
 
 let suite = "Test_abstract_memory test suite" >:::
               ["test make pointer" >:: test_add_and_query_pointer;
                "test set_rsp works" >:: test_set_rsp;
                "test set_rbp works" >:: test_set_rbp;
-               "test store to rsp works" >:: test_load_rsp;
-               "test store to rbp works" >:: test_load_rsp]
+               "test store and load to rsp works" >:: test_store_rsp;
+               "test store and load to offs+reg workd" >:: test_empty_mem_state_store;
+               "handles load overlapping previous cell" >:: handles_overlapping_ptr_load;
+               "handles store overlapping previous cell" >:: handles_overlapping_ptr_store]
