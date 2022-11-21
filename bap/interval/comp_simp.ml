@@ -7,8 +7,8 @@ module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 
 module Checker(N : NumericDomain) = struct
-  module E = NumericEnv(N)
-  module AI = AbstractInterpreter(N)
+  module E = Abstract_memory.Make(N)
+  module AI = AbstractInterpreter(N)(E)
   module I = Wrapping_interval
   module SS = Set.Make_binable_using_comparator(String)
 

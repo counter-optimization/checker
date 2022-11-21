@@ -153,7 +153,38 @@ module type NumericEnvT =
     val pp : t -> unit
   end
 
-module NumericEnv(ValueDom : NumericDomain) = struct
+module type MemoryT =
+  sig
+    type t
+    type v
+    type regions
+    type valtypes
+
+    val empty : t
+    val lookup : string -> t -> v
+    val set : string -> v -> t -> t
+    val equal : t -> t -> bool
+
+    val set_rsp : int -> t -> t
+    val set_rbp : int -> t -> t
+    val setptr : name:string -> region:regions -> offs:v -> width:v -> t -> t
+    val unptr : name:string -> t -> t
+    val load : name:string -> width:v -> t -> v
+    val load_of_bil_exp : Bil.exp -> v -> t -> v
+    val store : offs:v -> region:regions -> width:v -> data:v -> valtype:valtypes -> t -> t
+    val store_of_bil_exp : Bil.exp -> offs:v -> data:v -> t -> t
+    
+    val merge : t -> t -> t
+    val widen_threshold : int
+    val widen_with_step : int -> 'a -> t -> t -> t
+    
+    val pp : t -> unit
+  end
+
+module NumericEnv(ValueDom : NumericDomain)
+       : (MemoryT with type v := ValueDom.t
+                   and type regions := unit
+                   and type valtypes := unit) = struct
   module M = Map.Make_binable_using_comparator(String)
   module G = Graphlib.Make(Tid)(Unit)
     
@@ -171,33 +202,21 @@ module NumericEnv(ValueDom : NumericDomain) = struct
     | None -> ValueDom.bot
 
   let set name v env : t = M.set env ~key:name ~data:v
+
+  let set_rsp offs env = set "RSP" (ValueDom.of_int offs) env
+  let set_rbp offs env = set "RBP" (ValueDom.of_int offs) env
+
+  let setptr ~name ~region ~offs ~width env = env
+  let unptr ~name env = env
+
+  let load ~name ~width env = ValueDom.top
+  let load_of_bil_exp (e : Bil.exp) _offs env = ValueDom.top
+  let store ~offs ~region ~width ~data ~valtype env = env
+  let store_of_bil_exp (e : Bil.exp) ~offs ~data env = env
   
   let mem = M.mem
-
   let equal = M.equal ValueDom.equal
-  
   let empty : t = M.empty
-  
-  let empty_for_entry : t =
-    let stack_start = ValueDom.of_word start_stack_addr in
-    empty
-    |> set stack_ptr stack_start
-    |> set frame_ptr stack_start
-
-  let empty_with_args (sub : sub term) : t =
-    let init = empty_for_entry in
-    
-    let args = Term.enum arg_t sub in
-    let argnames = Seq.map args ~f:(fun a -> Arg.var a |> T.Var.name) |> Seq.to_list in
-    
-    let frees = Sub.free_vars sub in
-    let freenames = Set.to_list frees |> List.map ~f:Var.name in
-    let is_arg arg = List.mem x86_64_default_taint arg ~equal:String.equal in
-    let actual_args = List.filter freenames ~f:is_arg in
-    
-    let all_args = List.append actual_args argnames in
-    List.fold all_args ~init ~f:(fun prev name ->
-        set name ValueDom.top prev)
 
   let merge env1 env2 : t =
     let merge_helper ~key ~data prev =
@@ -211,19 +230,7 @@ module NumericEnv(ValueDom : NumericDomain) = struct
       else M.set prev ~key ~data in
     M.fold env2 ~init:env1 ~f:merge_helper
 
-  let initial_solution (sub : sub term) (cfg : G.t) : (G.node, ValueDom.t M.t) Solution.t =
-    let nodes = Graphlib.reverse_postorder_traverse (module G) cfg in
-    let first_node = match Seq.hd nodes with
-      | Some n -> n
-      | None -> failwith "in Common.Env.initial_solution, couldn't get first node"
-    in
-    let entry_env = empty_with_args sub in
-    let with_args = G.Node.Map.empty |>
-                      G.Node.Map.set ~key:first_node ~data:entry_env in
-    Solution.create with_args empty
-
   let widen_threshold = 256
-  
   let widen_with_step steps n prev_state new_state : t =
     let get_differing_keys prev_state new_state =
       M.fold prev_state ~init:Seq.empty ~f:(fun ~key ~data acc ->
@@ -244,8 +251,10 @@ module NumericEnv(ValueDom : NumericDomain) = struct
     Format.printf "%a\n%!" Sexp.pp (M.sexp_of_t ValueDom.sexp_of_t env)
 end
 
-module AbstractInterpreter(N: NumericDomain)(Env : NumericEnvT) = struct
-  module E = Env(N)
+module AbstractInterpreter(N: NumericDomain)
+         (Env : MemoryT with type v := N.t) = struct
+  module E = Env
+  module StringSet = Set.Make_binable_using_comparator(String)
 
   type expr_t = N.t
 
@@ -285,10 +294,13 @@ module AbstractInterpreter(N: NumericDomain)(Env : NumericEnvT) = struct
 
   let rec denote_exp (e : Bil.exp) (d : E.t) : expr_t =
     match e with
-    | Bil.Load (_mem, _idx, _endian, size) ->
-       N.make_top (Size.in_bits size) false
-    | Bil.Store (_mem, _idx, _val, _endian, size) ->
-       N.make_top (Size.in_bits size) false
+    | Bil.Load (_mem, idx, _endian, size) ->
+       let offs = denote_exp idx d in
+       E.load_of_bil_exp e offs d
+    | Bil.Store (_mem, idx, v, _endian, size) ->
+       let offs = denote_exp idx d in
+       let data = denote_exp v d in
+       E.store_of_bil_exp
     | Bil.BinOp (op, x, y) ->
        let x' = denote_exp x d in
        let y' = denote_exp y d in

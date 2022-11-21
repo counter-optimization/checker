@@ -8,6 +8,8 @@ open Common
 (* currently assumes: *)
 (* - little endian architecture *)
 
+type content = Ptr | Scalar [@@deriving sexp, compare, bin_io]
+
 (** Regions and basis maps *)
 module Region = struct
   module T = struct
@@ -24,6 +26,9 @@ module Region = struct
       | Global -> "global"
       | Heap -> "heap"
       | Stack -> "stack"
+
+    let pp x =
+      Format.printf "%s" @@ to_string x
   end
 
   module Cmp = struct
@@ -45,6 +50,13 @@ end
 
 module BaseSetMap = struct
   include Map.Make_binable_using_comparator(String)
+  module SS = Set.Make_binable_using_comparator(String)
+
+  let bases_of_vars (vars : SS.t) bsm : Region.Set.t =
+    SS.fold vars ~init:Region.Set.empty
+      ~f:(fun acc v -> match find bsm v with
+                       | Some bases -> Set.union acc bases
+                       | None -> acc)
   
   let merge x y =
     fold y ~init:x ~f:(fun ~key ~data merged ->
@@ -82,6 +94,9 @@ module Pointer(N : NumericDomain) = struct
       let o = N.to_string offs in
       let w = N.to_string width in
       sprintf "(%s, %s, %s)" r o w
+
+    let pp ptr : unit =
+      Format.printf "%s" @@ to_string ptr
   end
 
   include T
@@ -93,7 +108,7 @@ module Cell(N : NumericDomain) = struct
   module T = struct
     module Pointer = Pointer(N)
     (* the new environment operates over ValDom.t and pointers (PtrT of ptr) *)
-    type content = Ptr | Scalar [@@deriving sexp, compare, bin_io]
+    
     
     (* it's important that a cell knows whether it holds a pointer or a scalar. *)
     (* for our model of memory, pointers are (region * offset) pairs, so taking *)
@@ -133,6 +148,16 @@ module Cell(N : NumericDomain) = struct
       let off_str = N.to_string m.offs in
       let width_str = N.to_string m.width in
       sprintf "%s-%s-%s" reg_str off_str width_str
+
+    let to_string m : string =
+      let valtype_str = match m.valtype with
+        | Ptr -> "ptr"
+        | Scalar -> "scalar"
+      in
+      sprintf "%s-%s" (name m) valtype_str
+
+    let pp (m : t) : unit =
+      Format.printf "%s" @@ to_string m
 
     let overlaps_with_ptr cel ptr : bool =
       if not (Region.equal (Pointer.region ptr) cel.region)
@@ -241,12 +266,22 @@ module Cell(N : NumericDomain) = struct
     let find = Map.find
     let find_exn = Map.find_exn
 
+    let fold = Map.fold
+
     let add_cell ptr cell m =
       let new_cell_set = if Map.mem m ptr
                          then Set.add (find_exn m ptr) cell
                          else Set.singleton cell
       in
       Map.set m ~key:ptr ~data:new_cell_set
+
+    let merge m1 m2 : t =
+      let merge_helper ~key ~data prev =
+        match find prev key with
+        | Some cells -> set prev ~key ~data:(Set.union data cells)
+        | None -> set prev ~key ~data
+      in
+      fold m2 ~init:m1 ~f:merge_helper
 
     let get_overlapping ptr m =
       Map.fold m ~init:Set.empty
@@ -303,18 +338,24 @@ module Cell(N : NumericDomain) = struct
   end
 end
 
-module Make(N : NumericDomain) = struct
+module Make(N : NumericDomain)
+       : (MemoryT with type v := N.t
+                   and type regions = Region.t
+                   and type valtypes = content) = struct
   module Env = NumericEnv(N)
   module C = Cell(N)
   module Ptr = Pointer(N)
   module CellSet = C.Set
   module BaseSet = Region.Set
+  module SS = Set.Make_binable_using_comparator(String)
 
   type basemap = BaseSet.t BaseSetMap.t
   type cellset = CellSet.t
   type cellmap = C.Map.t
   type env = Env.t
   type t = { cells: cellmap; env: env; bases: basemap }
+  type regions = Region.t
+  type valtypes = content
 
   let empty : t = { cells = C.Map.empty;
                     env = Env.empty;
@@ -322,7 +363,50 @@ module Make(N : NumericDomain) = struct
 
   let make_pointer = Ptr.make
 
-  let set_ptr ~name ~region ~offs ~width {cells; env; bases} =
+  let get_intvl : N.t -> Wrapping_interval.t =
+    match N.get Wrapping_interval.key with
+    | Some f -> f
+    | None -> failwith "Couldn't extract interval information out of product domain"
+
+  let bap_size_to_absdom (sz : Size.t) : N.t =
+    let bitwidth = match sz with
+      | `r8 -> 8
+      | `r16 -> 16
+      | `r32 -> 32
+      | `r64 -> 64
+      | `r128 -> 128
+      | `r256 -> 256
+    in
+    N.of_int bitwidth
+
+  let rec get_var_names (e : Bil.exp) : SS.t =
+    match e with
+    | Bil.Var v -> SS.singleton @@ Var.name v
+    | Bil.Load (_, idx, _, _) -> get_var_names idx
+    | Bil.Store (_, idx, v, _, _) ->
+       SS.union (get_var_names idx) (get_var_names v)
+    | Bil.BinOp (_, x, y) ->
+       SS.union (get_var_names x) (get_var_names y)
+    | Bil.UnOp (_, x) -> get_var_names x
+    | Bil.Int _ -> SS.empty
+    | Bil.Cast (cast, n, e) -> get_var_names e
+    | Bil.Ite (cond, then', else') ->
+       SS.union (get_var_names then') (get_var_names else')
+    | Bil.Unknown (str, _) -> SS.empty
+    | Bil.Let (v, exp, body) ->
+       SS.union (SS.singleton (Var.name v)) (get_var_names exp)
+       |> SS.union (get_var_names body)
+    | Bil.Extract (hi, lo, e) -> get_var_names e
+    | Bil.Concat (x, y) ->
+       SS.union (get_var_names x) (get_var_names y)
+
+  let equal {cells=cells1; env=env1; bases=bases1}
+        {cells=cells2; env=env2; bases=bases2} =
+    Env.equal env1 env2 &&
+      Map.equal (Set.equal) cells1 cells2 &&
+      Map.equal (Set.equal) bases1 bases2
+
+  let setptr ~name ~region ~offs ~width {cells; env; bases} =
     let env = Env.set name offs env in
     let bases = BaseSetMap.set bases
                   ~key:name
@@ -337,7 +421,7 @@ module Make(N : NumericDomain) = struct
 
   let set_rsp (offs : int) (mem : t) : t =
     let offs = N.of_int ~width:64 offs in
-    set_ptr mem
+    setptr mem
       ~name:"RSP"
       ~region:Region.Stack
       ~offs
@@ -345,7 +429,7 @@ module Make(N : NumericDomain) = struct
 
   let set_rbp (offs : int) (mem : t) : t =
     let offs = N.of_int ~width:64 offs in
-    set_ptr mem
+    setptr mem
       ~name:"RBP"
       ~region:Region.Stack
       ~offs
@@ -374,40 +458,6 @@ module Make(N : NumericDomain) = struct
   (* Returns tuple of (exact cell match option, overlapping cells) *)
   let get_cells_for_ptr ptr mem : C.t option * C.Set.t =
     failwith "todo"
-
-  (* let get_value_at_index (c : t) (idx : N.t) = *)
-  (*     fun mem finder ->  *)
-  (*     let one = N.of_int 1 in *)
-  (*     let eight = N.of_int 8 in *)
-  (*     let zero_idx_byte_width = N.sub (N.div c.width eight) one in *)
-  (*     let shift_left_n = N.sub zero_idx_byte_width idx in *)
-  (*     let shift_right_n = zero_idx_byte_width in *)
-  (*     let cell_name = name c in *)
-  (*     let shifted_left = N.lshift (finder mem cell_name) shift_left_n in *)
-  (*     N.rshift shifted_left shift_right_n *)
-
-  (** For a given pointer, ptr, if ptr points to an existing memory
-      cell, then return the cell and memory. otherwise, if ptr does
-      not pointer to an existing memory cell, then create it,
-      initialize the cell's value to N.top, find all overlapping cells,
-      merge the overlapping values, update the cell's value based on the
-      overlapping values, and return the cell and updated memory *)
-  let realize ptr mem : C.t * t =
-    let maybe_existing_cell = match C.Map.find mem.cells ptr with
-      | Some cellset -> Set.find cellset ~f:(fun c -> C.equals_ptr c ptr)
-      | None -> None
-    in
-    let final_cell = match maybe_existing_cell with
-      | Some cel -> cel
-      | None -> C.t_of_ptr ptr
-    in
-    let final_cell_name = C.name final_cell in
-    let final_cell_already_has_value = Env.mem mem.env final_cell_name in
-    if final_cell_already_has_value
-    then final_cell, mem
-    else
-      let new_mem = set_cell_to_top final_cell_name mem in
-      final_cell, new_mem
 
   let load_from_offs_and_regions ~offs ~regions ~width (mem : t) : N.t =
     let ptrs = Ptr.of_regions ~regions ~offs ~width in
@@ -447,6 +497,18 @@ module Make(N : NumericDomain) = struct
     | None ->
        let err_msg = sprintf "Attempt to read from non-pointer: %s" name in
        failwith err_msg
+
+  let load_of_bil_exp (e : Bil.exp) (idx_res : N.t) (m : t) : N.t =
+    match e with
+    | Bil.Load (_mem, idx, _endian, size) ->
+       let load_from_vars = get_var_names idx in
+       let bases_to_load_from = BaseSetMap.bases_of_vars load_from_vars m.bases in
+       let width = bap_size_to_absdom size in
+       load_from_offs_and_regions m
+         ~offs:idx_res
+         ~regions:bases_to_load_from
+         ~width
+    | _ -> failwith "Not a load in load_of_bil_exp"
   
   let store ~offs ~region ~width ~data ~valtype mem : t =
     let ptr = Ptr.make ~region ~offs ~width in
@@ -471,6 +533,8 @@ module Make(N : NumericDomain) = struct
         { mem with env = Env.set celname data mem.env;
                    cells = C.Map.add_cell ptr cel mem.cells }
 
+  let store_of_bil_exp (e : Bil.exp) ~offs ~data m = m
+
   (* TODO: type consistency in cell merging *)
   let merge mem1 mem2 : t =
     let {cells=cells1; env=env1; bases=bases1} = mem1 in
@@ -479,4 +543,36 @@ module Make(N : NumericDomain) = struct
     let merged_env = Env.merge env1 env2 in
     let merged_bases = BaseSetMap.merge bases1 bases2 in
     {cells=merged_cells; env=merged_env; bases=merged_bases}
+
+  let widen_threshold = 256
+
+  let widen_with_step steps n prev next : t =
+    let widen_cell_map {cells=prev; _} {cells=next; _} : C.Map.t =
+      C.Map.merge prev next
+    in
+    let widen_bases_map {bases=prev; _} {bases=next; _} : basemap =
+      BaseSetMap.merge prev next
+    in
+    let widen_env steps n {env=prev;_} {env=next;_} : Env.t =
+      Env.widen_with_step steps n prev next
+    in
+    let widen steps n mem1 mem2 =
+      {cells = widen_cell_map prev next;
+       env = widen_env steps n prev next;
+       bases = widen_bases_map prev next}
+    in
+    widen steps n prev next
+
+  let pp {cells; env; bases}  =
+    let print_ptr_to_cells ~key ~data =
+      let cell_set_str =  Set.to_list data |> List.to_string ~f:C.to_string in
+      Format.printf "Ptr %s --> %s\n%!" (Ptr.to_string key) cell_set_str
+    in
+    let print_bases_map ~key ~data =
+      let region_set_str = Set.to_list data |> List.to_string ~f:Region.to_string in
+      Format.printf "Var %s --> %s\n%!" key region_set_str
+    in
+    Map.iteri cells ~f:print_ptr_to_cells;
+    Env.pp env;
+    Map.iteri bases ~f:print_bases_map
 end

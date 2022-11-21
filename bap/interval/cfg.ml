@@ -109,13 +109,49 @@ let sub_to_insn_graph sub =
 
   (* AbsInt *)
   let module ProdIntvlxTaint = DomainProduct(Wrapping_interval)(Checker_taint.Analysis) in
-  let module E = NumericEnv(ProdIntvlxTaint) in
-  let module AbsInt = AbstractInterpreter(ProdIntvlxTaint) in
+  let module E = Abstract_memory.Make(ProdIntvlxTaint) in
+  let module AbsInt = AbstractInterpreter(ProdIntvlxTaint)(E) in
+
+  (* set up initial solution *)
+  let empty = E.empty in
+  let stack_addr = 0x7fff_ffff in
+  
+  let free_vars = Sub.free_vars sub in
+  let freenames = Set.to_list free_vars |> List.map ~f:Var.name in
+  
+  let args = Term.enum arg_t sub in
+  let argnames = Seq.map args ~f:(fun a -> Arg.var a |> T.Var.name) |> Seq.to_list in
+  let x64_args = ["RDI"; "RSI"; "RDX"; "RCX"; "R8"; "R9"] in
+
+  (* e.g., filter out bap's 'mem' var *)
+  let true_args = List.filter freenames
+                    ~f:(fun name -> List.mem x64_args name ~equal:String.equal)
+                  |> List.append argnames
+  in
+
+  let with_rsp_rbp_set = E.set_rbp stack_addr @@ E.set_rsp stack_addr empty in
+
+  let initial_mem = List.fold true_args ~init:with_rsp_rbp_set
+                      ~f:(fun mem argname ->
+                        E.set argname ProdIntvlxTaint.top mem)
+  in
+  let () = Format.printf "Initial memory+env is: %!" in
+  let () = E.pp initial_mem in
+  let () = Format.printf "\n%!" in
+
+  let first_node = match Seq.hd (Graphlib.postorder_traverse (module G) cfg) with
+    | Some n -> n
+    | None -> failwith "in cfg building init sol, couldn't get first node"
+  in
+
+  let with_args = G.Node.Map.set G.Node.Map.empty ~key:first_node ~data:initial_mem in
+  let init_sol = Solution.create with_args empty in
+
   let final_sol = Graphlib.fixpoint
                     (module G)
                     cfg 
                     ~step:E.widen_with_step
-                    ~init:(E.initial_solution sub cfg) 
+                    ~init:init_sol
                     ~equal:E.equal
                     ~merge:E.merge
                     ~f:(fun tid ->
