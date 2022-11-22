@@ -1,6 +1,7 @@
 open Core
 open Bap.Std
 open Graphlib.Std
+open Monads.Std
 
 module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
@@ -256,9 +257,14 @@ module AbstractInterpreter(N: NumericDomain)
   module E = Env
   module StringSet = Set.Make_binable_using_comparator(String)
 
-  type expr_t = N.t
+  module ST = struct
+    include Monad.State.T1(E)(Monad.Ident)
+    include Monad.State.Make(E)(Monad.Ident) 
+  end
 
-  let denote_binop (op : binop) : expr_t -> expr_t -> expr_t =
+  open Monad.State.Syntax
+
+  let denote_binop (op : binop) : N.t -> N.t -> N.t =
     match op with
     | Bil.PLUS -> N.add
     | Bil.MINUS -> N.sub
@@ -280,85 +286,92 @@ module AbstractInterpreter(N: NumericDomain)
     | Bil.SLT -> N.boolslt
     | Bil.SLE -> N.boolsle
 
-  let denote_cast (c : cast) : int -> expr_t -> expr_t =
+  let denote_cast (c : cast) : int -> N.t -> N.t =
     match c with
     | Bil.UNSIGNED -> N.unsigned
     | Bil.SIGNED -> N.signed
     | Bil.HIGH -> N.high
     | Bil.LOW -> N.low
 
-  let denote_unop (op : unop) : expr_t -> expr_t =
+  let denote_unop (op : unop) : N.t -> N.t =
     match op with
     | Bil.NEG -> N.neg
     | Bil.NOT -> N.lnot
 
-  let rec denote_exp (e : Bil.exp) (d : E.t) : expr_t =
+  (* let rec denote_exp (e : Bil.exp) : E.t -> (N.t, E.t) = *)
+  let rec denote_exp (e : Bil.exp) : N.t ST.t =
     match e with
     | Bil.Load (_mem, idx, _endian, size) ->
-       let offs = denote_exp idx d in
-       E.load_of_bil_exp e offs d
+       denote_exp idx >>= fun offs ->
+       ST.get () >>= fun st ->
+       let res = E.load_of_bil_exp e offs st in
+       ST.return res
     | Bil.Store (_mem, idx, v, _endian, size) ->
-       let offs = denote_exp idx d in
-       let data = denote_exp v d in
-       E.store_of_bil_exp
+       denote_exp idx >>= fun offs ->
+       denote_exp v >>= fun data ->
+       ST.get () >>= fun st ->
+       let state' = Env.store_of_bil_exp e ~offs ~data st in
+       ST.put state' >>= fun st ->
+       ST.return N.bot
     | Bil.BinOp (op, x, y) ->
-       let x' = denote_exp x d in
-       let y' = denote_exp y d in
-       (denote_binop op) x' y'
+       denote_exp x >>= fun x' ->
+       denote_exp y >>= fun y' ->
+       ST.return @@ denote_binop op x' y'
     | Bil.UnOp (op, x) ->
-       let x' = denote_exp x d in
-       (denote_unop op) x'
+       denote_exp x >>= fun x' ->
+       ST.return @@ denote_unop op x' 
     | Bil.Var v ->
-       begin
-         let name = Var.name v in
-         E.lookup name d
-       end
-    | Bil.Int w -> N.of_word w
+       ST.gets @@ fun st ->
+                  let name = Var.name v in
+                  E.lookup name st
+    | Bil.Int w ->
+       ST.return @@ N.of_word w
     | Bil.Cast (cast, n, exp) ->
-       let exp' = denote_exp exp d in
-       let cast' = denote_cast cast in
-       cast' n exp'
+       denote_exp exp >>= fun exp' ->
+       ST.return @@ denote_cast cast n exp'
     | Bil.Ite (cond, ifthen, ifelse) ->
-       let cond' = denote_exp cond d in
+       denote_exp cond >>= fun cond' ->
        let truthy = N.could_be_true cond' in
        let falsy = N.could_be_false cond' in
-       let compute_then = fun () -> denote_exp ifthen d in
-       let compute_else = fun () -> denote_exp ifelse d in
        if truthy && not falsy
-       then compute_then ()
+       then denote_exp ifthen
        else
          if not truthy && falsy
-         then compute_else ()
-         else N.join (compute_then ()) (compute_else ())
+         then denote_exp ifelse
+         else
+           denote_exp ifthen >>= fun then' ->
+           denote_exp ifelse >>= fun else' ->
+           ST.return @@ N.join then' else'
     | Bil.Unknown (str, _) ->
        (* This seems to be used for at least:
           setting undefined flags (like everything
           but OF,CF after x86_64 mul) *)
-       N.bot
+       ST.return N.bot
     | Bil.Let (var, exp, body) ->
-       let binding = denote_exp exp d in
+       denote_exp exp >>= fun binding ->
        let name = Var.name var in
-       let env' = E.set name binding d in
-       denote_exp body env'
+       ST.update @@ E.set name binding >>= fun _ ->
+       denote_exp body
     | Bil.Extract (hi, lo, e) ->
-       let e' = denote_exp e d in 
-       N.extract e' hi lo
+       denote_exp e >>= fun e' ->
+       ST.return @@ N.extract e' hi lo
     | Bil.Concat (x, y) ->
-       let x' = denote_exp x d in
-       let y' = denote_exp y d in
-       N.concat x' y'
+       denote_exp x >>= fun x' ->
+       denote_exp y >>= fun y' ->
+       ST.return @@ N.concat x' y'
 
-  let denote_def (d : def term) : E.t -> E.t =
-    fun state ->
+  let denote_def (d : def term) : unit ST.t =
     let varname = Def.lhs d |> Var.name in
     let rhs = Def.rhs d in
-    let denoted_rhs = denote_exp rhs state in
-    E.set varname denoted_rhs state
+    denote_exp rhs >>= fun denoted_rhs ->
+    ST.update @@ E.set varname denoted_rhs
 
-  let denote_phi (p : phi term) : E.t -> E.t =
-    fun state -> failwith "denote_phi not implemented yet"
+  let denote_phi (p : phi term) : unit ST.t =
+    ST.get () >>= fun st ->
+    let _ = failwith "denote_phi not implemented yet" in
+    ST.return ()
 
-  let denote_jmp (j : jmp term) : E.t -> E.t =
+  let denote_jmp (j : jmp term) : unit ST.t =
     let potential_label = match Jmp.kind j with
       | Call c -> Some (Call.target c)
       | Goto l -> Some l
@@ -372,14 +385,15 @@ module AbstractInterpreter(N: NumericDomain)
          Format.printf "label of jmp term is : %s\n%!" ls
       | None -> ()
     in
-    fun state -> state
+    ST.return ()
 
-  let denote_elt (e : Blk.elt) : E.t -> E.t =
-    fun state ->
-    match e with
-    | `Def d -> denote_def d state
-    | `Jmp j -> denote_jmp j state
-    | `Phi p -> denote_phi p state
+  let denote_elt (e : Blk.elt) (st : E.t) : E.t =
+    let res = match e with
+      | `Def d -> denote_def d 
+      | `Jmp j -> denote_jmp j 
+      | `Phi p -> denote_phi p
+    in
+    ST.run res st |> snd
 end
 
 module DomainProduct(X : NumericDomain)(Y : NumericDomain)

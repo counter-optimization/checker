@@ -2,6 +2,7 @@ open Core
 open Bap.Std
 open Graphlib.Std
 open Common
+open Monads.Std
 
 module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
@@ -97,7 +98,8 @@ module Checker(N : NumericDomain) = struct
       | Bil.Var _
       | Bil.Int _
       | Bil.Unknown _->
-       (AI.denote_exp e env, empty)
+       let (e', env) = AI.denote_exp e env in
+       (, empty)
     | Bil.BinOp (op, x, y) ->
        let (x', resx) = check_exp x env in
        let (y', resy) = check_exp y env in
