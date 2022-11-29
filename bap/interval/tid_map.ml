@@ -1,4 +1,4 @@
-open Core
+open Core_kernel
 open Bap.Std
 
 module M = Map.Make_binable_using_comparator(Tid)

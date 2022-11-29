@@ -1,4 +1,4 @@
-open Core
+open Core_kernel
 open Bap.Std
 open Graphlib.Std
 open Monads.Std
@@ -192,6 +192,7 @@ module NumericEnv(ValueDom : NumericDomain)
   type v = ValueDom.t
   type t = ValueDom.t M.t
 
+  let empty : t = M.empty
   let stack_ptr = "RSP"
   let frame_ptr = "RBP"
   let start_stack_addr = Word.of_int ~width:64 262144
@@ -217,7 +218,6 @@ module NumericEnv(ValueDom : NumericDomain)
   
   let mem = M.mem
   let equal = M.equal ValueDom.equal
-  let empty : t = M.empty
 
   let merge env1 env2 : t =
     let merge_helper ~key ~data prev =
@@ -261,8 +261,7 @@ module AbstractInterpreter(N: NumericDomain)
     include Monad.State.T1(E)(Monad.Ident)
     include Monad.State.Make(E)(Monad.Ident) 
   end
-
-  open Monad.State.Syntax
+  open ST.Syntax
 
   let denote_binop (op : binop) : N.t -> N.t -> N.t =
     match op with
@@ -304,7 +303,7 @@ module AbstractInterpreter(N: NumericDomain)
     | Bil.Load (_mem, idx, _endian, size) ->
        denote_exp idx >>= fun offs ->
        ST.get () >>= fun st ->
-       let res = E.load_of_bil_exp e offs st in
+       let res = Env.load_of_bil_exp e offs st in
        ST.return res
     | Bil.Store (_mem, idx, v, _endian, size) ->
        denote_exp idx >>= fun offs ->
@@ -350,8 +349,11 @@ module AbstractInterpreter(N: NumericDomain)
     | Bil.Let (var, exp, body) ->
        denote_exp exp >>= fun binding ->
        let name = Var.name var in
-       ST.update @@ E.set name binding >>= fun _ ->
-       denote_exp body
+       ST.get () >>= fun st ->
+       ST.put @@ E.set name binding st >>= fun () ->
+       denote_exp body >>= fun body_res ->
+       ST.put st >>= fun () ->
+       ST.return body_res
     | Bil.Extract (hi, lo, e) ->
        denote_exp e >>= fun e' ->
        ST.return @@ N.extract e' hi lo
