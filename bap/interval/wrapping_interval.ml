@@ -415,6 +415,12 @@ let of_int ?(width = 64) (i : int) : t =
              width;
              signed = i < 0 }
 
+let of_int64 ?(width = 64) (i : int64) : t =
+  Interval { lo = Z.of_int64 i;
+             hi = Z.of_int64 i;
+             width;
+             signed = Int64.(i < zero) }
+
 let of_z ?(width = 64) (z : Z.t) : t =
   Interval { lo = z;
              hi = z;
@@ -423,7 +429,17 @@ let of_z ?(width = 64) (z : Z.t) : t =
 
 let of_word (w : word) : t =
   let width = Word.bitwidth w in
-  Word.to_int_exn w |> of_int ~width
+  if width = 64
+  then match Word.to_int64 w with
+       | Error _ -> failwith "in Wrapping_interval.of_word, couldn't convert word to int64"
+       | Ok i -> of_int64 i
+  else
+    if width < 64
+    then match Word.to_int w with
+         | Error _ -> failwith "in Wrapping_interval.of_word, couldn't convert word to int64"
+         | Ok i -> of_int ~width i
+    else
+      failwith "can't handle integers > 64 bits in Wrapping_interval.of_word"
 
 let of_int_tuple ?(width = 64) (x, y) =
   Interval { lo = Z.of_int x;

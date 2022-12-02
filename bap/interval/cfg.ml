@@ -10,8 +10,6 @@ module KB = Bap_knowledge.Knowledge
 module Cfg = Bap.Std.Graphs.Cfg
 module IrCfg = Bap.Std.Graphs.Ir
 
-module Names = Var_name_scraper.VarName
-
 let print_iml iml : unit =
   Format.printf
         "%a\n%!"
@@ -139,7 +137,7 @@ let sub_to_insn_graph sub =
   let () = E.pp initial_mem in
   let () = Format.printf "\n%!" in
 
-  let first_node = match Seq.hd (Graphlib.postorder_traverse (module G) cfg) with
+  let first_node = match Seq.hd (Graphlib.reverse_postorder_traverse (module G) cfg) with
     | Some n -> n
     | None -> failwith "in cfg building init sol, couldn't get first node"
   in

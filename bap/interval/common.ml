@@ -299,11 +299,14 @@ module AbstractInterpreter(N: NumericDomain)
 
   (* let rec denote_exp (e : Bil.exp) : E.t -> (N.t, E.t) = *)
   let rec denote_exp (e : Bil.exp) : N.t ST.t =
+    ST.get () >>= fun st ->
+    let () = printf "in denote_exp, e is %s\n%!" @@ Exp.pps () e in
     match e with
     | Bil.Load (_mem, idx, _endian, size) ->
        denote_exp idx >>= fun offs ->
        ST.get () >>= fun st ->
-       let res = Env.load_of_bil_exp e offs st in
+       let () = printf "in bil.load denote, offs is %s\n%!" @@ N.to_string offs in
+       let res = E.load_of_bil_exp e offs st in
        ST.return res
     | Bil.Store (_mem, idx, v, _endian, size) ->
        denote_exp idx >>= fun offs ->
@@ -321,8 +324,8 @@ module AbstractInterpreter(N: NumericDomain)
        ST.return @@ denote_unop op x' 
     | Bil.Var v ->
        ST.gets @@ fun st ->
-                  let name = Var.name v in
-                  E.lookup name st
+       let name = Var.name v in
+       E.lookup name st
     | Bil.Int w ->
        ST.return @@ N.of_word w
     | Bil.Cast (cast, n, exp) ->
@@ -349,11 +352,8 @@ module AbstractInterpreter(N: NumericDomain)
     | Bil.Let (var, exp, body) ->
        denote_exp exp >>= fun binding ->
        let name = Var.name var in
-       ST.get () >>= fun st ->
-       ST.put @@ E.set name binding st >>= fun () ->
-       denote_exp body >>= fun body_res ->
-       ST.put st >>= fun () ->
-       ST.return body_res
+       ST.update @@ E.set name binding >>= fun _ ->
+       denote_exp body
     | Bil.Extract (hi, lo, e) ->
        denote_exp e >>= fun e' ->
        ST.return @@ N.extract e' hi lo
@@ -390,12 +390,20 @@ module AbstractInterpreter(N: NumericDomain)
     ST.return ()
 
   let denote_elt (e : Blk.elt) (st : E.t) : E.t =
+    let () = printf "in-state is \n%!"; E.pp st in
     let res = match e with
-      | `Def d -> denote_def d 
+      | `Def d ->
+         begin
+           let defs = Def.pps () d in 
+           let () = printf "denoting def %s\n%!" defs in
+           denote_def d
+         end
       | `Jmp j -> denote_jmp j 
       | `Phi p -> denote_phi p
     in
-    ST.run res st |> snd
+    let (elt_res, state') = ST.run res st in
+    let () = printf "out-state is \n%!"; E.pp state' in
+    state'
 end
 
 module DomainProduct(X : NumericDomain)(Y : NumericDomain)
