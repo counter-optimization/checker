@@ -12,6 +12,7 @@ S comp_simp.ml
 S data_section.ml
 S taint.ml
 S tid_map.ml
+S edge_builder.ml
 S test_main.ml
 S test_wrapping_interval.ml
 S test_abstract_memory.ml

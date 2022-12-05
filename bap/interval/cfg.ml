@@ -46,7 +46,30 @@ let get_ret_insn_tid sub_nodes =
   | Some tid, _ -> tid
   | _, _ -> failwith "Error finding last insn in sub"
 
-let sub_to_insn_graph sub img =
+let sub_of_tid tid proj : sub Term.t =
+  let prog = Project.program proj in
+  let sub = Term.find sub_t prog tid in
+  match sub with
+  | Some sub -> sub
+  | None -> failwith "Didn't find sub with that tid in the program"
+
+let last_insn_of_sub sub : Blk.elt =
+  let irg = Sub.to_cfg sub in
+  let rev_nodes = Graphlib.postorder_traverse (module Graphs.Ir) irg in
+  let last_node = match Seq.hd rev_nodes with
+    | Some n -> n
+    | None ->
+       begin
+         let sub_name = Sub.name sub in
+         let err_s = sprintf "Couldn't get last node of sub %s in last_insns_of_sub" sub_name in
+         failwith err_s
+       end
+  in
+  let last_node_insns = insns_of_node last_node in
+  let num_insns = Seq.length last_node_insns in
+  Seq.nth_exn last_node_insns (num_insns - 1)
+
+let sub_to_insn_graph sub img ctxt proj =
   let irg = Sub.to_cfg sub in
   let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
 
@@ -57,7 +80,7 @@ let sub_to_insn_graph sub img =
   in
 
   (* Create the tidmap *)
-  let tidmap = Tid_map.t_of_sub_nodes nodes insns_of_node in
+  let tidmap = Tid_map.t_of_sub sub in
 
   (* building graph *)
   let ret_insn_tid = get_ret_insn_tid nodes in
@@ -68,13 +91,27 @@ let sub_to_insn_graph sub img =
        (* totid is the tid of a blk, but we need the first insn of that blk *)
        let the_blk = Term.find_exn blk_t sub totid in
        let first_insn = first_insn_of_blk the_blk in
-       Some (fromtid, Tid_map.tid_of_elt first_insn, ())
+       Some (fromtid, Tid_map.tid_of_elt first_insn, false)
     | Goto _ when Tid.equal fromtid ret_insn_tid -> None
-    | Goto (Indirect _) ->
-       failwith "Indirect jumps not handled in edge building yet"
+    | Goto (Indirect _expr) ->
+       failwith "Indirect jumps not handled in edge building yet (outer)"
+    | Call c ->
+       begin
+         let call_target = Call.target c in
+         match call_target with
+         | Direct totid ->
+            (
+              let () = printf "totid in call is %s\n" (Tid.to_string totid) in
+              let sub = sub_of_tid totid proj in
+              let () = printf "sub of that totid is %s\n" (Sub.name sub) in
+              None
+            )
+         (* todo: add return edge *)
+         | Indirect _expr ->
+            failwith "Indirect jumps not handled in edge building yet (call)"
+       end
     | Int (_, _)
-      | Call _
-      | Ret _ -> None
+    | Ret _ -> None
   in
   let get_jmp_edges insns =
     let edge insn =
@@ -92,7 +129,7 @@ let sub_to_insn_graph sub img =
     let adjacent_tids, _ =
       List.zip_with_remainder tid_list (List.tl_exn tid_list) in
     let fallthroughs =
-      List.map adjacent_tids ~f:(fun (from, t) -> (from, t, ())) in
+      List.map adjacent_tids ~f:(fun (from, t) -> (from, t, false)) in
     let jmp_edges = get_jmp_edges insns in
     List.append fallthroughs jmp_edges
   in
@@ -100,9 +137,16 @@ let sub_to_insn_graph sub img =
                   let insns = insns_of_node n in
                   List.append (edges_of_insns insns) edges)
   in
+  let edges, tidmap = Edge_builder.build sub proj in
+  let () = printf "edges are:\n" in
+  let () = List.iter edges ~f:(fun (from', to', is_interproc) ->
+               let from_s = Tid.to_string from' in
+               let to_s = Tid.to_string to' in
+               printf "(%s, %s, %B)\n" from_s to_s is_interproc)
+  in
   
   (* CFG *)
-  let module G = Graphlib.Make(Tid)(Unit) in
+  let module G = Graphlib.Make(Tid)(Bool) in
   let cfg = Graphlib.create (module G) ~edges () in
 
   (* AbsInt *)
@@ -145,6 +189,7 @@ let sub_to_insn_graph sub img =
     | Some n -> n
     | None -> failwith "in cfg building init sol, couldn't get first node"
   in
+  let () = printf "first node is %s\n" (Tid.to_string first_node) in
 
   let with_args = G.Node.Map.set G.Node.Map.empty ~key:first_node ~data:initial_mem in
   let init_sol = Solution.create with_args empty in
@@ -172,7 +217,7 @@ let sub_to_insn_graph sub img =
   let comp_simp_checker_res =
     List.fold edges
       ~init:CompSimpChecker.empty
-      ~f:(fun acc_res (from', to', ()) ->
+      ~f:(fun acc_res (from', to', _is_interproc) ->
         let from_state = Solution.get final_sol from' in
         let elt = Tid_map.find_exn tidmap to' in
         let check_res = CompSimpChecker.check_elt elt from_state in
@@ -181,7 +226,7 @@ let sub_to_insn_graph sub img =
   let () = Format.printf "Comp simp checker results are:\n%!" in
   let () = CompSimpChecker.print_results comp_simp_checker_res in
 
-  List.iter edges ~f:(fun (f, t, ()) ->
+  List.iter edges ~f:(fun (f, t, _is_interproc) ->
       let from_str = Tid.to_string f in
       let to_str = Tid.to_string t in
       Format.printf "(%s,%s)\n%!" from_str to_str);
@@ -212,8 +257,8 @@ let iter_insns sub : unit =
   let () = Format.printf "nodes are:\n%!" in
   Seq.iter nodes ~f:print_sub_defs
 
-let check_fn (name, block, cfg) img =
+let check_fn (name, block, cfg) img ctxt proj =
   let sub = Sub.lift block cfg in
   let () = iter_insns sub in
   (* Run the checkers *)
-  sub_to_insn_graph sub img
+  sub_to_insn_graph sub img ctxt proj

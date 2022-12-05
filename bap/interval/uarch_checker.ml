@@ -40,7 +40,7 @@ module UarchCheckerExtension = struct
       | Ok i -> i
     in
     let img = fst img_and_errs in
-    Cfg.check_fn target_fn img
+    Cfg.check_fn target_fn img ctxt proj
     
   let register_pass ctxt =
     Project.register_pass' (pass ctxt);
