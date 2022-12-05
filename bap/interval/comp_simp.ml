@@ -8,8 +8,13 @@ module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 
 module Checker(N : NumericDomain) = struct
-  module E = Abstract_memory.Make(N)
-  module AI = AbstractInterpreter(N)(E)
+  module E = struct
+    type region = Abstract_memory.Region.t
+    type regions = Abstract_memory.Region.Set.t
+    type valtypes = Common.cell_t
+    include Abstract_memory.Make(N)
+  end
+  module AI = AbstractInterpreter(N)(Abstract_memory.Region)(Abstract_memory.Region.Set)(struct type t = Common.cell_t end)(E)
   module I = Wrapping_interval
   module SS = Set.Make_binable_using_comparator(String)
 

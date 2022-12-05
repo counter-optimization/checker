@@ -108,11 +108,14 @@ let sub_to_insn_graph sub =
   (* AbsInt *)
   let module ProdIntvlxTaint = DomainProduct(Wrapping_interval)(Checker_taint.Analysis) in
   let module E = Abstract_memory.Make(ProdIntvlxTaint) in
-  let module AbsInt = AbstractInterpreter(ProdIntvlxTaint)(E) in
+  let module R = Abstract_memory.Region in
+  let module Rt = Abstract_memory.Region.Set in
+  let module Vt = struct type t = Common.cell_t end in
+  let module AbsInt = AbstractInterpreter(ProdIntvlxTaint)(R)(Rt)(Vt)(E) in
 
   (* set up initial solution *)
   let empty = E.empty in
-  let stack_addr = 0x7fff_ffff in
+  let stack_addr = 0x7fff_fff0 in
   
   let free_vars = Sub.free_vars sub in
   let freenames = Set.to_list free_vars |> List.map ~f:Var.name in

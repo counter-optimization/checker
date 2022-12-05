@@ -6,6 +6,8 @@ open Monads.Std
 module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 
+type cell_t = Scalar | Ptr [@@deriving sexp, bin_io, compare]
+
 type (_, _) eq =
   | Eq : ('a, 'a) eq
   | Neq
@@ -159,6 +161,7 @@ module type MemoryT =
     type t
     type v
     type regions
+    type region
     type valtypes
 
     val empty : t
@@ -166,14 +169,15 @@ module type MemoryT =
     val set : string -> v -> t -> t
     val equal : t -> t -> bool
 
+    val compute_type : Bil.exp -> t -> cell_t
     val set_rsp : int -> t -> t
     val set_rbp : int -> t -> t
-    val setptr : name:string -> region:regions -> offs:v -> width:v -> t -> t
+    val holds_ptr : string -> t -> bool
+    val setptr : name:string -> regions:regions -> offs:v -> width:v -> t -> t
     val unptr : name:string -> t -> t
-    val load : name:string -> width:v -> t -> v
+    val update_on_assn : lhs:Var.t -> rhs:Bil.exp -> t -> t
     val load_of_bil_exp : Bil.exp -> v -> t -> v
-    val store : offs:v -> region:regions -> width:v -> data:v -> valtype:valtypes -> t -> t
-    val store_of_bil_exp : Bil.exp -> offs:v -> data:v -> t -> t
+    val store_of_bil_exp : Bil.exp -> offs:v -> data:v -> valtype:cell_t -> t -> t
     
     val merge : t -> t -> t
     val widen_threshold : int
@@ -185,6 +189,7 @@ module type MemoryT =
 module NumericEnv(ValueDom : NumericDomain)
        : (MemoryT with type v := ValueDom.t
                    and type regions := unit
+                   and type region := unit
                    and type valtypes := unit) = struct
   module M = Map.Make_binable_using_comparator(String)
   module G = Graphlib.Make(Tid)(Unit)
@@ -198,23 +203,25 @@ module NumericEnv(ValueDom : NumericDomain)
   let start_stack_addr = Word.of_int ~width:64 262144
   let x86_64_default_taint = ["RDI"; "RSI"; "RDX"; "RCX"; "R8"; "R9"]
 
+  let holds_ptr var_name env = false
+
   let lookup name env =
     match M.find env name with
     | Some v -> v
     | None -> ValueDom.bot
 
+  let compute_type e env = Scalar
   let set name v env : t = M.set env ~key:name ~data:v
 
   let set_rsp offs env = set "RSP" (ValueDom.of_int offs) env
   let set_rbp offs env = set "RBP" (ValueDom.of_int offs) env
 
-  let setptr ~name ~region ~offs ~width env = env
+  let setptr ~name ~regions ~offs ~width env = env
   let unptr ~name env = env
+  let update_on_assn ~lhs ~rhs env = env
 
-  let load ~name ~width env = ValueDom.top
   let load_of_bil_exp (e : Bil.exp) _offs env = ValueDom.top
-  let store ~offs ~region ~width ~data ~valtype env = env
-  let store_of_bil_exp (e : Bil.exp) ~offs ~data env = env
+  let store_of_bil_exp (e : Bil.exp) ~offs ~data ~valtype env = env
   
   let mem = M.mem
   let equal = M.equal ValueDom.equal
@@ -253,7 +260,13 @@ module NumericEnv(ValueDom : NumericDomain)
 end
 
 module AbstractInterpreter(N: NumericDomain)
-         (Env : MemoryT with type v := N.t) = struct
+         (R : sig type t end)
+         (Rt : sig type t end)
+         (Vt : sig type t end)
+         (Env : MemoryT with type v := N.t
+                         and type region := R.t
+                         and type regions := Rt.t
+                         and type valtypes := Vt.t) = struct
   module E = Env
   module StringSet = Set.Make_binable_using_comparator(String)
 
@@ -311,9 +324,8 @@ module AbstractInterpreter(N: NumericDomain)
     | Bil.Store (_mem, idx, v, _endian, size) ->
        denote_exp idx >>= fun offs ->
        denote_exp v >>= fun data ->
-       ST.get () >>= fun st ->
-       let state' = Env.store_of_bil_exp e ~offs ~data st in
-       ST.put state' >>= fun st ->
+       ST.gets (Env.compute_type v) >>= fun valtype ->
+       ST.update @@ Env.store_of_bil_exp e ~offs:offs ~data ~valtype >>= fun () ->
        ST.return N.bot
     | Bil.BinOp (op, x, y) ->
        denote_exp x >>= fun x' ->
@@ -350,10 +362,14 @@ module AbstractInterpreter(N: NumericDomain)
           but OF,CF after x86_64 mul) *)
        ST.return N.bot
     | Bil.Let (var, exp, body) ->
+       ST.get () >>= fun prestate -> 
        denote_exp exp >>= fun binding ->
        let name = Var.name var in
        ST.update @@ E.set name binding >>= fun _ ->
-       denote_exp body
+       (* todo, what if a store in body *)
+       denote_exp body >>= fun v -> 
+       ST.put prestate >>= fun () ->
+       ST.return v
     | Bil.Extract (hi, lo, e) ->
        denote_exp e >>= fun e' ->
        ST.return @@ N.extract e' hi lo
@@ -363,9 +379,13 @@ module AbstractInterpreter(N: NumericDomain)
        ST.return @@ N.concat x' y'
 
   let denote_def (d : def term) : unit ST.t =
-    let varname = Def.lhs d |> Var.name in
+    let var = Def.lhs d in
+    let varname = Var.name var in
     let rhs = Def.rhs d in
+    
     denote_exp rhs >>= fun denoted_rhs ->
+    ST.get () >>= fun st ->
+    ST.update @@ E.update_on_assn ~lhs:var ~rhs >>= fun () ->
     ST.update @@ E.set varname denoted_rhs
 
   let denote_phi (p : phi term) : unit ST.t =
@@ -403,6 +423,7 @@ module AbstractInterpreter(N: NumericDomain)
     in
     let (elt_res, state') = ST.run res st in
     let () = printf "out-state is \n%!"; E.pp state' in
+    let () = printf "---------------------------\n" in
     state'
 end
 

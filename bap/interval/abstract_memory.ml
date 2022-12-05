@@ -8,8 +8,6 @@ open Common
 (* currently assumes: *)
 (* - little endian architecture *)
 
-type content = Ptr | Scalar [@@deriving sexp, compare, bin_io]
-
 (** Regions and basis maps *)
 module Region = struct
   module T = struct
@@ -70,19 +68,31 @@ end
 (** Pointers *)
 module Pointer(N : NumericDomain) = struct
   module T = struct
-    type t = { region: Region.t; offs: N.t; width: N.t }
-             [@@deriving sexp_of, compare]
+    type t = { region: Region.t;
+               offs: Wrapping_interval.t;
+               width: Wrapping_interval.t }
+               [@@deriving sexp_of, compare]
+
+    let get_intvl : N.t -> Wrapping_interval.t =
+      match N.get Wrapping_interval.key with
+      | Some f -> f
+      | None -> failwith "Couldn't extract interval information out of product domain, in module Pointer"
 
     let make ~region ~offs ~width : t = { region; offs; width }
 
     let region p = p.region
     let offs p = p.offs
-    let width p = p.width
+    
+    let width_in_bits p = p.width
+    let bits_in_byte = Wrapping_interval.of_int 8
+    let width_in_bytes p =
+      let bitwidth = width_in_bits p in
+      Wrapping_interval.div bitwidth bits_in_byte
 
     let all_widths_of_ptr {region; offs; width} =
       let possible_offs = [8; 16; 32; 64; 128; 256; 512] in
       List.map possible_offs ~f:(fun width ->
-          let width = N.of_int ~width:64 width in
+          let width = N.of_int ~width:64 width |> get_intvl in
           {region; offs; width})
 
     let of_regions ~regions ~offs ~width =
@@ -91,8 +101,8 @@ module Pointer(N : NumericDomain) = struct
 
     let to_string {region; offs; width} =
       let r = Region.to_string region in
-      let o = N.to_string offs in
-      let w = N.to_string width in
+      let o = Wrapping_interval.to_string offs in
+      let w = Wrapping_interval.to_string width in
       sprintf "(%s, %s, %s)" r o w
 
     let pp ptr : unit =
@@ -114,10 +124,21 @@ module Cell(N : NumericDomain) = struct
     (* for our model of memory, pointers are (region * offset) pairs, so taking *)
     (* e.g., the low 32 bits of a pointer doesn't type check *)
     type t = { region: Region.t;
-               offs: N.t;
-               valtype: content;
-               width: N.t }
+               offs: Wrapping_interval.t;
+               valtype: Common.cell_t;
+               width: Wrapping_interval.t }
                [@@deriving sexp_of, compare]
+
+    let bits_per_byte = Wrapping_interval.of_int 8
+    let width_in_bits c = c.width
+    let width_in_bytes c =
+      let width = width_in_bits c in
+      Wrapping_interval.div width bits_per_byte
+
+    let get_intvl : N.t -> Wrapping_interval.t =
+      match N.get Wrapping_interval.key with
+      | Some f -> f
+      | None -> failwith "Couldn't extract interval information out of product domain, in module Cell"
 
     let string_of_valtype = function
       | Ptr -> "ptr"
@@ -131,22 +152,22 @@ module Cell(N : NumericDomain) = struct
 
     let t_of_ptr ?(valtype = Scalar) p : t =
       let region = Pointer.region p in
-      let width = Pointer.width p in
+      let width = Pointer.width_in_bits p in
       let offs = Pointer.offs p in
       make ~region ~offs ~width ~valtype
 
     let equals_ptr cel ptr : bool =
       let reg = Pointer.region ptr in
       let offs = Pointer.offs ptr in
-      let width = Pointer.width ptr in
+      let width = Pointer.width_in_bits ptr in
       Region.equal cel.region reg &&
-        N.could_be_true (N.booleq cel.offs offs) &&
-          N.could_be_true (N.booleq cel.width width)
+        Wrapping_interval.could_be_true (Wrapping_interval.booleq cel.offs offs) &&
+          Wrapping_interval.could_be_true (Wrapping_interval.booleq cel.width width)
 
     let name (m : t) : string =
       let reg_str = Region.to_string m.region in
-      let off_str = N.to_string m.offs in
-      let width_str = N.to_string m.width in
+      let off_str = Wrapping_interval.to_string m.offs in
+      let width_str = Wrapping_interval.to_string m.width in
       sprintf "%s-%s-%s" reg_str off_str width_str
 
     let to_string m : string =
@@ -163,14 +184,18 @@ module Cell(N : NumericDomain) = struct
       if not (Region.equal (Pointer.region ptr) cel.region)
       then false
       else
+        let open Wrapping_interval in
+        let one = of_int 1 in
         let ptr_base = Pointer.offs ptr in
-        let ptr_end = N.add (Pointer.offs ptr) (Pointer.width ptr) in
+        let ptr_end = add (Pointer.offs ptr) (Pointer.width_in_bytes ptr) in
+        let ptr_end = sub ptr_end one in
         let cel_base = cel.offs in
-        let cel_end = N.add cel.offs cel.width in
-        N.could_be_true (N.boolle ptr_base cel_base) &&
-          N.could_be_true (N.boolle cel_base ptr_end) ||
-          N.could_be_true (N.boolle ptr_base cel_end) &&
-            N.could_be_true (N.boolle cel_end ptr_end)
+        let cel_end = add cel.offs (width_in_bytes cel) in
+        let cel_end = sub cel_end one in
+        could_be_true (boolle ptr_base cel_base) &&
+          could_be_true (boolle cel_base ptr_end) ||
+          could_be_true (boolle ptr_base cel_end) &&
+            could_be_true (boolle cel_end ptr_end)
 
     (** values are actually in big endian because we're in
         ocaml land, but we want to simulate little endian
@@ -338,15 +363,18 @@ module Cell(N : NumericDomain) = struct
   end
 end
 
+module BaseSet = Region.Set
+
 module Make(N : NumericDomain)
        : (MemoryT with type v := N.t
-                   and type regions = Region.t
-                   and type valtypes = content) = struct
+                   and type regions := BaseSet.t
+                   and type region := Region.t
+                   and type valtypes := Common.cell_t) = struct
   module Env = NumericEnv(N)
   module C = Cell(N)
   module Ptr = Pointer(N)
   module CellSet = C.Set
-  module BaseSet = Region.Set
+  
   module SS = Set.Make_binable_using_comparator(String)
 
   type basemap = BaseSet.t BaseSetMap.t
@@ -354,8 +382,8 @@ module Make(N : NumericDomain)
   type cellmap = C.Map.t
   type env = Env.t
   type t = { cells: cellmap; env: env; bases: basemap }
-  type regions = Region.t
-  type valtypes = content
+  type regions = Region.Set.t
+  type valtypes = Common.cell_t
 
   let empty : t = { cells = C.Map.empty;
                     env = Env.empty;
@@ -368,7 +396,7 @@ module Make(N : NumericDomain)
     | Some f -> f
     | None -> failwith "Couldn't extract interval information out of product domain"
 
-  let bap_size_to_absdom (sz : Size.t) : N.t =
+  let bap_size_to_absdom (sz : Size.t) : Wrapping_interval.t =
     let bitwidth = match sz with
       | `r8 -> 8
       | `r16 -> 16
@@ -377,7 +405,7 @@ module Make(N : NumericDomain)
       | `r128 -> 128
       | `r256 -> 256
     in
-    N.of_int bitwidth
+    Wrapping_interval.of_int bitwidth
 
   let rec get_var_names (e : Bil.exp) : SS.t =
     match e with
@@ -406,11 +434,11 @@ module Make(N : NumericDomain)
       Map.equal (Set.equal) cells1 cells2 &&
       Map.equal (Set.equal) bases1 bases2
 
-  let setptr ~name ~region ~offs ~width {cells; env; bases} =
+  let setptr ~(name:string) ~regions ~offs ~width {cells; env; bases} =
     let env = Env.set name offs env in
     let bases = BaseSetMap.set bases
                   ~key:name
-                  ~data:(BaseSet.singleton region)
+                  ~data:regions
     in
     { cells; env; bases }
 
@@ -423,7 +451,7 @@ module Make(N : NumericDomain)
     let offs = N.of_int ~width:64 offs in
     setptr mem
       ~name:"RSP"
-      ~region:Region.Stack
+      ~regions:(BaseSet.singleton Region.Stack)
       ~offs
       ~width:`r64
 
@@ -431,12 +459,15 @@ module Make(N : NumericDomain)
     let offs = N.of_int ~width:64 offs in
     setptr mem
       ~name:"RBP"
-      ~region:Region.Stack
+      ~regions:(BaseSet.singleton Region.Stack)
       ~offs
       ~width:`r64
 
   let is_pointer ~name {cells; env; bases} : bool =
     BaseSetMap.mem bases name
+
+  let holds_ptr (name : string) (env : t) : bool =
+    is_pointer ~name env
 
   let is_scalar ~name mem : bool =
     not @@ is_pointer ~name mem
@@ -459,14 +490,88 @@ module Make(N : NumericDomain)
   let get_cells_for_ptr ptr mem : C.t option * C.Set.t =
     failwith "todo"
 
-  let load_from_offs_and_regions ~offs ~regions ~width (mem : t) : N.t =
-    let ptrs = Ptr.of_regions ~regions ~offs ~width in
-    let cells = List.fold ptrs ~init:(C.Set.empty)
-                  ~f:(fun foundcells p ->
-                    match C.Map.find mem.cells p with
-                    | Some cells -> C.Set.union cells foundcells
-                    | None -> foundcells)
+  let rec compute_type (e : Bil.exp) (mem : t) : Common.cell_t =
+    match e with
+    | Load (_mem, idx, _endian, size) -> Scalar (* todo *)
+    | Store (_mem, idx, v, _endian, _sz) -> Scalar (* todo *)
+    | Var v ->
+       let name = Var.name v in
+       if holds_ptr name mem
+       then Ptr
+       else Scalar
+    | Int w -> Scalar (* maybe, later this may be a global *)
+    | BinOp (op, x, y) ->
+       let xt = compute_type x mem in
+       let yt = compute_type y mem in
+       begin
+         match op with
+         | Bil.PLUS -> (match xt, yt with
+                        | Ptr, _ -> Ptr
+                        | _, Ptr -> Ptr
+                        | _ -> Scalar)
+         | Bil.MINUS -> (match xt, yt with
+                         | Ptr, Ptr -> Scalar
+                         | Ptr, Scalar -> Ptr
+                         | _ -> failwith "Can't subtract these types in compute_type mem")
+         | _ -> Scalar
+            (* begin *)
+            (*   let ops = binop_to_string op in *)
+            (*   let es = Sexp.to_string @@ Bil.sexp_of_exp e in *)
+            (*   let warn_str = sprintf "Can't type exp %s (%s) in compute_type mem" es ops in *)
+            (*   failwith warn_str *)
+            (* end *)
+       end
+    | UnOp (op, x) -> compute_type x mem
+    | Cast (cast_op, size, e) -> compute_type e mem
+    | Extract (hi, lo, e) -> compute_type e mem
+    | Concat (left, right) ->
+       let left_t = compute_type left mem in
+       let right_t = compute_type right mem in
+       (match left_t, right_t with
+       | Ptr, _ -> Ptr
+       | _, Ptr -> Ptr
+       | _ -> Scalar)
+    | Let _ -> Scalar (* todo *)
+    | Ite _ -> Scalar (* todo *)
+    | _ ->
+       let es = Sexp.to_string @@ Bil.sexp_of_exp e in
+       let warn_str = sprintf "Can't type exp %s in compute_type mem" es in
+       failwith warn_str
+
+  let update_on_assn ~lhs ~rhs mem : t =
+    let name = Var.name lhs in
+    let rhs_is_store = match rhs with
+      | Bil.Store _ -> true
+      | _ -> false
     in
+    if rhs_is_store
+    then mem
+    else
+      let lhs_t = if holds_ptr name mem then Ptr else Scalar in
+      let rhs_t = compute_type rhs mem in
+      match lhs_t, rhs_t with
+      | Ptr, Scalar ->
+         unptr ~name mem
+      | Scalar, Ptr
+        | Ptr, Ptr ->
+         let vars = get_var_names rhs in
+         let bases_to_load_from = BaseSetMap.bases_of_vars vars mem.bases in
+         { mem with bases = BaseSetMap.set mem.bases ~key:name ~data:bases_to_load_from }
+      | Scalar, Scalar -> mem
+
+  let cells_of_offs_and_regions ~(offs : Wrapping_interval.t) ~regions ~(width : Wrapping_interval.t) (mem : t) : C.Set.t =
+    let ptrs = Ptr.of_regions ~regions ~offs ~width in
+    let ptr_strings = List.map ptrs ~f:Ptr.to_string in
+    let () = List.iter ptr_strings ~f:(fun s -> printf "Pointer to load from is: %s\n" s) in
+    List.fold ptrs ~init:(C.Set.empty)
+      ~f:(fun foundcells ptr ->
+        match C.Map.find mem.cells ptr with
+        | Some cells -> C.Set.union cells foundcells
+        | None -> foundcells)
+
+  let load_from_offs_and_regions ~(offs : Wrapping_interval.t) ~regions ~(width : Wrapping_interval.t) (mem : t) : N.t =
+    let ptrs = Ptr.of_regions ~regions ~offs ~width in
+    let cells = cells_of_offs_and_regions ~offs ~regions ~width mem in
     match C.Set.length cells with
     | 0 ->
        let ptr_strings = List.fold ptrs ~init:"" ~f:(fun acc x ->
@@ -485,34 +590,35 @@ module Make(N : NumericDomain)
 
   (** Here, name is the name of the var in the mem env that
       holds the offset of the pointer *)
-  let load ~name ~width (mem : t) : N.t =
-    match get_offset ~name mem with
-    | Some offs ->
-       let regions = match BaseSetMap.find mem.bases name with
-         | Some regions -> regions
-         | None -> let err_msg = sprintf "Attempt to read from non-pointer: %s" name in
-                   failwith err_msg
-       in
-       load_from_offs_and_regions ~offs ~regions ~width mem
-    | None ->
-       let err_msg = sprintf "Attempt to read from non-pointer: %s" name in
-       failwith err_msg
+  (* let load ~name ~width (mem : t) : N.t = *)
+  (*   match get_offset ~name mem with *)
+  (*   | Some offs -> *)
+  (*      let regions = match BaseSetMap.find mem.bases name with *)
+  (*        | Some regions -> regions *)
+  (*        | None -> let err_msg = sprintf "Attempt to read from non-pointer: %s" name in *)
+  (*                  failwith err_msg *)
+  (*      in *)
+  (*      load_from_offs_and_regions ~offs ~regions ~width mem *)
+  (*   | None -> *)
+  (*      let err_msg = sprintf "Attempt to read from non-pointer: %s" name in *)
+  (*      failwith err_msg *)
 
   let load_of_bil_exp (e : Bil.exp) (idx_res : N.t) (m : t) : N.t =
     match e with
     | Bil.Load (_mem, idx, _endian, size) ->
        let load_from_vars = get_var_names idx in
-       let bases_to_load_from = BaseSetMap.bases_of_vars load_from_vars m.bases in
+       let regions = BaseSetMap.bases_of_vars load_from_vars m.bases in
        let width = bap_size_to_absdom size in
-       load_from_offs_and_regions m
-         ~offs:idx_res
-         ~regions:bases_to_load_from
-         ~width
+       let offs = get_intvl idx_res in
+       load_from_offs_and_regions m ~offs ~regions ~width
     | _ -> failwith "Not a load in load_of_bil_exp"
   
-  let store ~offs ~region ~width ~data ~valtype mem : t =
+  let store ~(offs : Wrapping_interval.t) ~region ~(width : Wrapping_interval.t) ~data ~valtype mem : t =
     let ptr = Ptr.make ~region ~offs ~width in
+    let () = printf "storing to ptr %s\n" (Ptr.to_string ptr) in
     let overlap = C.Map.get_overlapping ptr mem.cells in
+    let () = Set.iter overlap ~f:(fun c ->
+                 printf "overlapping cell: %s\n" (C.to_string c)) in
     if C.Set.length overlap > 1
     then
       let overlap = C.Set.fold overlap ~init:""
@@ -533,7 +639,25 @@ module Make(N : NumericDomain)
         { mem with env = Env.set celname data mem.env;
                    cells = C.Map.add_cell ptr cel mem.cells }
 
-  let store_of_bil_exp (e : Bil.exp) ~offs ~data m = m
+  let store_of_bil_exp (e : Bil.exp) ~(offs : N.t) ~data ~valtype m =
+    let () = printf "store_of_bil_exp called\n" in
+    match e with
+    | Bil.Store (_mem, idx, v, _endian, size) -> 
+      begin
+        let vars = get_var_names idx in
+        let () = Set.iter vars ~f:(fun v ->
+                     printf "var: %s in store offs exp\n" v) in
+        let width = bap_size_to_absdom size in
+        let bases_to_load_from = BaseSetMap.bases_of_vars vars m.bases in
+        let () = Set.iter bases_to_load_from ~f:(fun b ->
+                     let reg_s = Region.to_string b in
+                     printf "Storing to base %s\n" reg_s) in
+        let offs = get_intvl offs in
+        Set.fold bases_to_load_from ~init:m ~f:(fun env base ->
+            let () = printf "Loading from base %s\n" (Region.to_string base) in
+            store ~offs ~region:base ~width ~data ~valtype env)
+      end
+    | _ -> failwith "store got non-store expression in store_of_bil_exp"
 
   (* TODO: type consistency in cell merging *)
   let merge mem1 mem2 : t =

@@ -319,22 +319,44 @@ let concat x y =
      
 
 (** equality and ordering comparisons *)
+
+(* is there any overlap at all? *)
 let booleq x y : t =
-  match order x y with
-  | KB.Order.EQ -> b1
-  | _ -> b0
+  match x, y with
+  | Interval {lo=lo1; hi=hi1; width=width1; signed=signed1},
+    Interval {lo=lo2; hi=hi2; width=width2; signed=signed2} ->
+     if Z.(leq (max lo1 lo2) (min hi1 hi2))
+     then b1
+     else b0
+  | _ -> failwith "in wrapping_interval.bool_eq, can't compare two non intervals"
 
 let boolneq x y =
-  match order x y with
-  | KB.Order.EQ -> b0
-  | _ -> b1
-
-let boollt x y =
-  match order x y with
-  | KB.Order.LT -> b1
+  match x, y with
+  | Interval {lo=lo1; hi=hi1; width=width1; signed=signed1},
+    Interval {lo=lo2; hi=hi2; width=width2; signed=signed2} ->
+     if Z.(leq (max lo1 lo2) (min hi1 hi2))
+     then b0
+     else b1
   | _ -> b0
 
-let boolle x y = logor (boollt x y) (booleq x y)
+let boollt x y =
+  match x, y with
+  | Interval {lo=lo1; hi=hi1; width=width1; signed=signed1},
+    Interval {lo=lo2; hi=hi2; width=width2; signed=signed2} ->
+     if Z.lt lo1 hi2
+     then b1
+     else b0
+  | _ -> b0
+
+let boolle x y =
+  match x, y with
+  | Interval {lo=lo1; hi=hi1; width=width1; signed=signed1},
+    Interval {lo=lo2; hi=hi2; width=width2; signed=signed2} ->
+     if Z.leq lo1 hi2
+     then b1
+     else b0
+  | _ -> b0
+
 let boolslt = boollt 
 let boolsle = boolle
 
