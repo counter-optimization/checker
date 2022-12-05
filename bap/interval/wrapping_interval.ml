@@ -431,6 +431,20 @@ let to_string (intvl : t) : string =
        (Int.to_string width)
        (Bool.to_string signed)
 
+let length : t -> int option = function
+  | Interval {lo; hi; width; signed} ->
+     let zdiff = Z.sub hi lo in
+     Some (Z.to_int zdiff)
+  | Bot -> None
+
+let to_int (intvl : t) : int option =
+  match intvl with
+  | Interval {lo; hi; width; signed} ->
+     (match length intvl with
+      | Some l when l = 0 -> Some (Z.to_int lo)
+      | _ -> None)
+  | Bot -> None
+
 let of_int ?(width = 64) (i : int) : t =
   Interval { lo = Z.of_int i;
              hi = Z.of_int i;
@@ -519,6 +533,8 @@ let bitwidth x =
                      (to_string x)
      in
      failwith err_msg
+
+
 
 (** Setting up domain keys for usage in InteractableNumDom *)
 module Key = Common.DomainKey

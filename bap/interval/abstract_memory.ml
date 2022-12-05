@@ -354,13 +354,14 @@ module Make(N : NumericDomain)
   type cellset = CellSet.t
   type cellmap = C.Map.t
   type env = Env.t
-  type t = { cells: cellmap; env: env; bases: basemap }
+  type t = { cells: cellmap; env: env; bases: basemap; img: Image.t option }
   type regions = Region.Set.t
   type valtypes = Common.cell_t
 
   let empty : t = { cells = C.Map.empty;
                     env = Env.empty;
-                    bases = BaseSetMap.empty }
+                    bases = BaseSetMap.empty;
+                    img = None }
 
   let make_pointer = Ptr.make
 
@@ -368,6 +369,9 @@ module Make(N : NumericDomain)
     match N.get Wrapping_interval.key with
     | Some f -> f
     | None -> failwith "Couldn't extract interval information out of product domain"
+
+  let set_img (mem : t) (img : Image.t) : t =
+    { mem with img = Some img }
 
   let bap_size_to_absdom (sz : Size.t) : Wrapping_interval.t =
     let bitwidth = match sz with
@@ -401,26 +405,26 @@ module Make(N : NumericDomain)
     | Bil.Concat (x, y) ->
        SS.union (get_var_names x) (get_var_names y)
 
-  let equal {cells=cells1; env=env1; bases=bases1}
-        {cells=cells2; env=env2; bases=bases2} =
+  let equal {cells=cells1; env=env1; bases=bases1; _}
+        {cells=cells2; env=env2; bases=bases2; _} =
     Env.equal env1 env2 &&
       Map.equal (Set.equal) cells1 cells2 &&
       Map.equal (Set.equal) bases1 bases2
 
-  let setptr ~(name:string) ~regions ~offs ~width {cells; env; bases} =
-    let env = Env.set name offs env in
-    let bases = BaseSetMap.set bases
+  let setptr ~(name:string) ~regions ~offs ~width m =
+    let env = Env.set name offs m.env in
+    let bases = BaseSetMap.set m.bases
                   ~key:name
                   ~data:regions
     in
-    { cells; env; bases }
+    { m with env = env; bases = bases }
 
-  let unptr ~name {cells; env; bases} : t =
-    let new_env = Env.set name N.bot env in
-    let new_bases = BaseSetMap.remove bases name in
-    {cells; env=new_env; bases=new_bases}
+  let unptr ~name mem : t =
+    let new_env = Env.set name N.bot mem.env in
+    let new_bases = BaseSetMap.remove mem.bases name in
+    { mem with env=new_env; bases=new_bases }
 
-    let is_pointer ~name {cells; env; bases} : bool =
+  let is_pointer ~name {cells; env; bases; _} : bool =
     BaseSetMap.mem bases name
 
   let holds_ptr (name : string) (env : t) : bool =
@@ -429,23 +433,19 @@ module Make(N : NumericDomain)
   let is_scalar ~name mem : bool =
     not @@ is_pointer ~name mem
 
-  let get_offset ~name {cells; env; bases} : N.t option =
-    if is_pointer name {cells; env; bases}
-    then Some (Env.lookup name env)
+  let get_offset ~name mem : N.t option =
+    if is_pointer name mem
+    then Some (Env.lookup name mem.env)
     else None
 
-  let lookup name {cells; env; bases} : N.t =
-    Env.lookup name env
+  let lookup name m : N.t =
+    Env.lookup name m.env
 
   let set name data (mem : t) : t =
     { mem with env = Env.set name data mem.env }
 
   let set_cell_to_top cell_name (mem : t) : t =
     { mem with env = Env.set cell_name N.top mem.env }
-
-  (* Returns tuple of (exact cell match option, overlapping cells) *)
-  let get_cells_for_ptr ptr mem : C.t option * C.Set.t =
-    failwith "todo"
 
   let rec compute_type (e : Bil.exp) (mem : t) : Common.cell_t =
     match e with
@@ -471,12 +471,6 @@ module Make(N : NumericDomain)
                          | Ptr, Scalar -> Ptr
                          | _ -> failwith "Can't subtract these types in compute_type mem")
          | _ -> Scalar
-            (* begin *)
-            (*   let ops = binop_to_string op in *)
-            (*   let es = Sexp.to_string @@ Bil.sexp_of_exp e in *)
-            (*   let warn_str = sprintf "Can't type exp %s (%s) in compute_type mem" es ops in *)
-            (*   failwith warn_str *)
-            (* end *)
        end
     | UnOp (op, x) -> compute_type x mem
     | Cast (cast_op, size, e) -> compute_type e mem
@@ -490,11 +484,8 @@ module Make(N : NumericDomain)
        | _ -> Scalar)
     | Let _ -> Scalar (* todo *)
     | Ite _ -> Scalar (* todo *)
-    | _ ->
-       let es = Sexp.to_string @@ Bil.sexp_of_exp e in
-       let warn_str = sprintf "Can't type exp %s in compute_type mem" es in
-       failwith warn_str
-
+    | Unknown _ -> Scalar
+ 
   let update_on_assn ~lhs ~rhs mem : t =
     let name = Var.name lhs in
     let rhs_is_store = match rhs with
@@ -528,23 +519,6 @@ module Make(N : NumericDomain)
               if Ptr.equal ptr key
               then C.Set.union acc data
               else acc))
-    (* let () = Map.iter_keys mem.cells ~f:(fun p -> *)
-    (*              let first_ptr = List.hd_exn ptrs in *)
-    (*              let ptr_s = Ptr.to_string p in *)
-    (*              let is_eq = 0 = Ptr.compare first_ptr p in *)
-    (*              printf "Ptr in cell map: %s is equal to ptr? %B\n" ptr_s is_eq) *)
-    (* in *)
-    (* List.fold ptrs ~init:(C.Set.empty) *)
-    (*   ~f:(fun foundcells ptr -> *)
-    (*     match C.Map.find mem.cells ptr with *)
-    (*     | Some cells -> *)
-    (*        (let ptr_s = Ptr.to_string ptr in *)
-    (*         let () = printf "found cells for ptr %s\n" ptr_s in *)
-    (*         C.Set.union cells foundcells) *)
-    (*     | None -> ( *)
-    (*       let ptr_s = Ptr.to_string ptr in *)
-    (*       let () = printf "didn't find any cells for ptr %s\n" ptr_s in *)
-    (*       foundcells)) *)
 
   let load_from_offs_and_regions ~(offs : Wrapping_interval.t) ~regions ~(width : Wrapping_interval.t) (mem : t) : N.t =
     let ptrs = Ptr.of_regions ~regions ~offs ~width in
@@ -565,29 +539,55 @@ module Make(N : NumericDomain)
        in
        failwith @@ sprintf "No support for reading overlapping ptrs: %s" ptr_strings
 
-  (** Here, name is the name of the var in the mem env that
-      holds the offset of the pointer *)
-  (* let load ~name ~width (mem : t) : N.t = *)
-  (*   match get_offset ~name mem with *)
-  (*   | Some offs -> *)
-  (*      let regions = match BaseSetMap.find mem.bases name with *)
-  (*        | Some regions -> regions *)
-  (*        | None -> let err_msg = sprintf "Attempt to read from non-pointer: %s" name in *)
-  (*                  failwith err_msg *)
-  (*      in *)
-  (*      load_from_offs_and_regions ~offs ~regions ~width mem *)
-  (*   | None -> *)
-  (*      let err_msg = sprintf "Attempt to read from non-pointer: %s" name in *)
-  (*      failwith err_msg *)
-
+  let load_global (offs : Wrapping_interval.t) (sz : size) (m : t) : N.t =
+    match m.img with
+    | None -> failwith "memory's image should be set before load"
+    | Some img ->
+       let segs = Image.segments img in
+       match Wrapping_interval.to_int offs with
+       | None ->
+          begin
+            let offs_s = Wrapping_interval.to_string offs in
+            failwith @@ sprintf "couldn't convert offs %s to address for image" offs_s
+          end
+       | Some addr ->
+          let addr_w = Word.of_int ~width:64 addr in
+          let target_seg = Table.find_addr segs addr_w in
+          match target_seg with
+          | None ->
+             begin
+               let addr_s = Word.to_string addr_w in
+               failwith @@ sprintf "couldn't find addr %s in image" addr_s
+             end
+          | Some (mem, seg) ->
+             match Memory.get ~addr:addr_w ~scale:sz mem with
+             | Error e ->
+                begin
+                  let segname = Image.Segment.name seg in
+                  let addr_s = Word.to_string addr_w in
+                  let err_s = Error.to_string_hum e in
+                  failwith @@ sprintf "Error reading address %s from seg %s: %s" addr_s segname err_s
+                end
+             | Ok data ->
+                let res = N.of_word data in
+                let res_s = N.to_string res in
+                let () = printf "in load_global, loaded data was %s\n" res_s in
+                res
+  
   let load_of_bil_exp (e : Bil.exp) (idx_res : N.t) (m : t) : N.t =
     match e with
     | Bil.Load (_mem, idx, _endian, size) ->
        let load_from_vars = get_var_names idx in
        let regions = BaseSetMap.bases_of_vars load_from_vars m.bases in
+       let offs_type = compute_type idx m in
        let width = bap_size_to_absdom size in
        let offs = get_intvl idx_res in
-       load_from_offs_and_regions m ~offs ~regions ~width
+       let is_scalar = match offs_type with | Scalar -> true | _ -> false in
+       if is_scalar && Set.is_empty regions
+       then
+         load_global offs size m
+       else
+         load_from_offs_and_regions m ~offs ~regions ~width
     | _ -> failwith "Not a load in load_of_bil_exp"
   
   let store ~(offs : Wrapping_interval.t) ~region ~(width : Wrapping_interval.t) ~data ~valtype mem : t =
@@ -668,14 +668,26 @@ module Make(N : NumericDomain)
       ~offs
       ~width:`r64
 
+  let merge_images img1 img2 : Image.t option =
+    if Option.is_some img1
+    then img1
+    else
+      if Option.is_some img2
+      then img2
+      else None
+
   (* TODO: type consistency in cell merging *)
   let merge mem1 mem2 : t =
-    let {cells=cells1; env=env1; bases=bases1} = mem1 in
-    let {cells=cells2; env=env2; bases=bases2} = mem2 in
+    let {cells=cells1; env=env1; bases=bases1; img=img1} = mem1 in
+    let {cells=cells2; env=env2; bases=bases2; img=img2} = mem2 in
+    let merged_img = merge_images img1 img2 in
     let merged_cells = C.Map.merge cells1 cells2 in
     let merged_env = Env.merge env1 env2 in
     let merged_bases = BaseSetMap.merge bases1 bases2 in
-    {cells=merged_cells; env=merged_env; bases=merged_bases}
+    { cells=merged_cells;
+      env=merged_env;
+      bases=merged_bases;
+      img=merged_img }
 
   let widen_threshold = 256
 
@@ -686,13 +698,14 @@ module Make(N : NumericDomain)
     let widen_bases_map {bases=prev; _} {bases=next; _} : basemap =
       BaseSetMap.merge prev next
     in
-    let widen_env steps n {env=prev;_} {env=next;_} : Env.t =
+    let widen_env steps n {env=prev; _} {env=next; _} : Env.t =
       Env.widen_with_step steps n prev next
     in
     let widen steps n mem1 mem2 =
       {cells = widen_cell_map prev next;
        env = widen_env steps n prev next;
-       bases = widen_bases_map prev next}
+       bases = widen_bases_map prev next;
+       img = merge_images prev.img next.img }
     in
     widen steps n prev next
 

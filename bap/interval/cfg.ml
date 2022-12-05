@@ -46,7 +46,7 @@ let get_ret_insn_tid sub_nodes =
   | Some tid, _ -> tid
   | _, _ -> failwith "Error finding last insn in sub"
 
-let sub_to_insn_graph sub =
+let sub_to_insn_graph sub img =
   let irg = Sub.to_cfg sub in
   let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
 
@@ -131,8 +131,9 @@ let sub_to_insn_graph sub =
   in
 
   let with_rsp_rbp_set = E.set_rbp stack_addr @@ E.set_rsp stack_addr empty in
+  let with_img_set = E.set_img with_rsp_rbp_set img in
 
-  let initial_mem = List.fold true_args ~init:with_rsp_rbp_set
+  let initial_mem = List.fold true_args ~init:with_img_set
                       ~f:(fun mem argname ->
                         E.set argname ProdIntvlxTaint.top mem)
   in
@@ -159,13 +160,13 @@ let sub_to_insn_graph sub =
                       let elt = Tid_map.find_exn tidmap tid in
                       AbsInt.denote_elt elt)
   in
-  let print_sol sol =
-    Solution.enum final_sol |>
-      Sequence.iter ~f:(fun (tid, env) ->
-          Format.printf "TID(%s) -> %!" (Tid.to_string tid);
-          E.pp env)
-  in
-  let () = print_sol final_sol in
+  (* let print_sol sol = *)
+  (*   Solution.enum final_sol |> *)
+  (*     Sequence.iter ~f:(fun (tid, env) -> *)
+  (*         Format.printf "TID(%s) -> %!" (Tid.to_string tid); *)
+  (*         E.pp env) *)
+  (* in *)
+  (* let () = print_sol final_sol in *)
 
   let module CompSimpChecker = Comp_simp.Checker(ProdIntvlxTaint) in
   let comp_simp_checker_res =
@@ -211,8 +212,8 @@ let iter_insns sub : unit =
   let () = Format.printf "nodes are:\n%!" in
   Seq.iter nodes ~f:print_sub_defs
 
-let check_fn (name, block, cfg) =
+let check_fn (name, block, cfg) img =
   let sub = Sub.lift block cfg in
   let () = iter_insns sub in
   (* Run the checkers *)
-  sub_to_insn_graph sub
+  sub_to_insn_graph sub img

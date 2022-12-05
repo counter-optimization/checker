@@ -6,7 +6,7 @@ open Monads.Std
 module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 
-type cell_t = Scalar | Ptr [@@deriving sexp, bin_io, compare]
+type cell_t = Scalar | Ptr [@@deriving sexp, bin_io, compare, equal]
 
 type (_, _) eq =
   | Eq : ('a, 'a) eq
@@ -172,6 +172,7 @@ module type MemoryT =
     val compute_type : Bil.exp -> t -> cell_t
     val set_rsp : int -> t -> t
     val set_rbp : int -> t -> t
+    val set_img : t -> Image.t -> t
     val holds_ptr : string -> t -> bool
     val setptr : name:string -> regions:regions -> offs:v -> width:v -> t -> t
     val unptr : name:string -> t -> t
@@ -215,6 +216,7 @@ module NumericEnv(ValueDom : NumericDomain)
 
   let set_rsp offs env = set "RSP" (ValueDom.of_int offs) env
   let set_rbp offs env = set "RBP" (ValueDom.of_int offs) env
+  let set_img env img = env
 
   let setptr ~name ~regions ~offs ~width env = env
   let unptr ~name env = env
