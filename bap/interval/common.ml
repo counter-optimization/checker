@@ -9,28 +9,35 @@ module KB = Bap_core_theory.KB
 module CellType = struct
   type t = Scalar | Ptr | Unknown [@@deriving sexp, bin_io, compare, equal]
 
-  let join = function
-    | Scalar, Scalar -> Scalar
-    | Ptr, Ptr -> Ptr
-    | Unknown, _ -> Unknown
-    | _, Unknown -> Unknown
+  let join t1 t2 =
+    Ok (match t1, t2 with
+        | Scalar, Scalar -> Scalar
+        | Ptr, Ptr -> Ptr
+        | Unknown, _ -> Unknown
+        | _, Unknown -> Unknown
+        | _, _ -> Unknown)
 
   let empty = Unknown
 
   let order t1 t2 =
     let open KB.Order in
     match t1, t2 with
+    | Unknown, Unknown -> EQ
     | Scalar, Scalar -> EQ
     | Ptr, Ptr -> EQ
-    | Unknown
+    | Unknown, _ -> GT
+    | _, Unknown -> LT
+    | _, _ -> NC
 
-  let domain = 
+  let domain_name = "CellType"
+  let domain = KB.Domain.define domain_name
+                 ~inspect:sexp_of_t
+                 ~join
+                 ~empty
+                 ~order
 end
 
-type cell_t = Scalar | Ptr | Unknown [@@deriving sexp, bin_io, compare, equal]
-
-let cell_t_domain = KB.Domain.define
-                      ~inspect:sexp_of_cell_t
+type cell_t = CellType.t
 
 type (_, _) eq =
   | Eq : ('a, 'a) eq
@@ -235,7 +242,7 @@ module NumericEnv(ValueDom : NumericDomain)
     | Some v -> v
     | None -> ValueDom.bot
 
-  let compute_type e env = Scalar
+  let compute_type e env = CellType.Scalar
   let set name v env : t = M.set env ~key:name ~data:v
 
   let set_rsp offs env = set "RSP" (ValueDom.of_int offs) env

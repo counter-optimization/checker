@@ -86,11 +86,12 @@ let sub_to_insn_graph sub img ctxt proj =
 
   (* AbsInt *)
   let module ProdIntvlxTaint = DomainProduct(Wrapping_interval)(Checker_taint.Analysis) in
-  let module E = Abstract_memory.Make(ProdIntvlxTaint) in
+  let module FinalDomain = DomainProduct(ProdIntvlxTaint)(Type_domain) in
+  let module E = Abstract_memory.Make(FinalDomain) in
   let module R = Abstract_memory.Region in
   let module Rt = Abstract_memory.Region.Set in
   let module Vt = struct type t = Common.cell_t end in
-  let module AbsInt = AbstractInterpreter(ProdIntvlxTaint)(R)(Rt)(Vt)(E) in
+  let module AbsInt = AbstractInterpreter(FinalDomain)(R)(Rt)(Vt)(E) in
 
   (* set up initial solution *)
   let empty = E.empty in
@@ -114,7 +115,7 @@ let sub_to_insn_graph sub img ctxt proj =
 
   let initial_mem = List.fold true_args ~init:with_img_set
                       ~f:(fun mem argname ->
-                        E.set argname ProdIntvlxTaint.top mem)
+                        E.set argname FinalDomain.top mem)
   in
   let () = Format.printf "Initial memory+env is: %!" in
   let () = E.pp initial_mem in
@@ -154,7 +155,7 @@ let sub_to_insn_graph sub img ctxt proj =
   (* in *)
   (* let () = print_sol final_sol in *)
 
-  let module CompSimpChecker = Comp_simp.Checker(ProdIntvlxTaint) in
+  let module CompSimpChecker = Comp_simp.Checker(FinalDomain) in
   let comp_simp_checker_res =
     List.fold edges
       ~init:CompSimpChecker.empty
