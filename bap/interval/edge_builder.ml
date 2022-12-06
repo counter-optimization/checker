@@ -14,8 +14,14 @@ type edges = edge list
 
 type tidmap = Blk.elt Tid_map.t
 
+module Callees = struct
+  module S = Set.Make_binable_using_comparator(Sub)
+  include S
+end
+
 module T = struct
-  type t = { edges: edges; tidmap: tidmap }
+  type t = { tidmap : tidmap;
+             callees : Callees.t }
 end
 include T
 
@@ -25,13 +31,48 @@ module ST = struct
 end
 open ST.Syntax
 
-let empty : t = { edges = []; tidmap = Tid_map.empty }
+let iter_insns sub : unit =
+  let irg = Sub.to_cfg sub in
+  let free_vars = Sub.free_vars sub in
+  let () = Var.Set.iter free_vars ~f:(fun v -> Format.printf "Free var: %s\n%!" (Var.name v)) in
+  
+  let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
+  
+  let print_sub_defs graphnode =
+    let bb = Graphs.Ir.Node.label graphnode in
+    let insns = Blk.elts bb in
+    let print_insn = function
+      | `Def d -> Format.printf "iter_insns--Def: %s\n%!" @@ Def.to_string d
+      | `Phi p -> Format.printf "iter_insns--Phi: %s\n%!" @@ Phi.to_string p
+      | `Jmp j -> Format.printf "iter_insns--Jmp: %s\n%!" @@ Jmp.to_string j
+    in
+    Seq.iter insns ~f:print_insn
+  in
+  
+  let () = Format.printf "nodes are:\n%!" in
+  Seq.iter nodes ~f:print_sub_defs
+
+let print_edge (from', to', is_interproc) : unit =
+  let from_s = Tid.to_string from' in
+  let to_s = Tid.to_string to' in
+  printf "(%s, %s, %B)\n" from_s to_s is_interproc
+
+let empty : t = { tidmap = Tid_map.empty;
+                  callees = Callees.empty }
+
 let init tidmap : t = { empty with tidmap = tidmap }
 
+let merge (st1 : t) (st2 : t) : t =
+  { tidmap = Tid_map.merge st1.tidmap st2.tidmap;
+    callees = Callees.union st1.callees st2.callees}
+
 let update_tidmap other : unit ST.t =
-  ST.update @@ fun edge_st ->
-               let merged = Tid_map.merge edge_st.tidmap other in
-               { edge_st with tidmap = merged }
+  ST.update @@ fun st ->
+               { st with tidmap = Tid_map.merge st.tidmap other }
+
+let add_callee callee : unit ST.t =
+  ST.update @@ fun st ->
+                 { st with callees = Callees.add st.callees callee }
 
 let insns_of_node n = Blk.elts @@ Graphs.Ir.Node.label n
 
@@ -59,8 +100,11 @@ let first_insn_of_blk b =
   | None -> failwith "In first_insn_of_blk, couldn't find first insn"
 
 let first_insn_of_blk_tid blk_tid sub =
-  let the_blk = Term.find_exn blk_t sub blk_tid in
-  first_insn_of_blk the_blk
+  match Term.find blk_t sub blk_tid with
+  | Some blk -> first_insn_of_blk blk
+  | None ->
+     let tid_s = Tid.to_string blk_tid in
+     failwith @@ sprintf "Couldn't get first insn of blk with tid %s" tid_s
 
 let first_blk_of_subnodes subnodes =
   match Seq.hd subnodes with
@@ -69,6 +113,22 @@ let first_blk_of_subnodes subnodes =
   | None ->
      failwith "in first_blk_of_sub, couldn't find first blk"
 
+let first_insn_tid_of_sub sub : Tid.t =
+  let blks = Term.enum blk_t sub in
+  let first_blk = match Seq.hd blks with
+    | Some blk -> blk
+    | None ->
+       let err = sprintf "Couldn't get first blk of sub in first_insns_tid_of_sub" in
+       failwith err
+  in
+  let first_insn = match Blk.elts first_blk |> Seq.hd with
+    | Some insn -> insn
+    | None ->
+       let err = sprintf "Couldn't get first insn of first blk in first_insns_tid_of_sub" in
+       failwith err
+  in
+  Tid_map.tid_of_elt first_insn
+  
 let first_insns_of_subnodes subnodes =
   first_blk_of_subnodes subnodes
   |> first_insn_of_blk
@@ -99,6 +159,7 @@ let last_insn_of_sub sub : Blk.elt =
 let edges_of_jump j sub nodes proj : edges ST.t =
   let fromtid = Term.tid j in
   let ret_insn_tid = get_ret_insn_tid nodes in
+  let () = printf "ret insn tid is %s\n" (Tid.to_string ret_insn_tid) in
   match Jmp.kind j with
   | Goto (Direct totid) ->
      let first_insn = first_insn_of_blk_tid totid sub in
@@ -109,22 +170,24 @@ let edges_of_jump j sub nodes proj : edges ST.t =
   | Goto (Indirect _expr) ->
      failwith "Indirect jumps not handled in edge building yet (outer)"
   | Call c ->
+     let () = printf "handling call\n" in
      begin
        let call_target = Call.target c in
        match call_target with
        | Direct totid ->
           begin
-            let () = printf "totid in call is %s\n" (Tid.to_string totid) in
-            let sub = sub_of_tid totid proj in
-            let () = printf "sub of that totid is %s\n" (Sub.name sub) in
-            let other_tidmap = Tid_map.t_of_sub sub in
-            update_tidmap other_tidmap >>= fun () ->
+            let () = printf "direct call target is %s\n" (Tid.to_string totid) in
+            let callee = sub_of_tid totid proj in
+            let () = printf "callee tid is %s\n" (Term.tid callee |> Tid.to_string) in
+            add_callee callee >>= fun () ->
+            
+            (* let other_tidmap = Tid_map.t_of_sub callee in *)
+            (* update_tidmap other_tidmap >>= fun () -> *)
 
-            let first_elt = first_insns_of_subnodes nodes in
-            let actual_totid = Tid_map.tid_of_elt first_elt in
+            let actual_totid = first_insn_tid_of_sub callee in
             ST.return [(fromtid, actual_totid, true)] >>= fun es ->
 
-            let last_elt = last_insn_of_sub sub in
+            let last_elt = last_insn_of_sub callee in
             let last_elt_tid = Tid_map.tid_of_elt last_elt in
             let return_tid = match Call.return c with
               | Some (Direct l) ->
@@ -135,9 +198,10 @@ let edges_of_jump j sub nodes proj : edges ST.t =
               | Some (Indirect _exp) -> failwith "in interproc edge building, can't handle indirect label..."
               | None -> failwith "in interproc edge building, call doesn't return"
             in
-            ST.return @@ List.cons (last_elt_tid, return_tid, true) es
+            ST.return @@ List.cons (last_elt_tid, return_tid, true) es 
           end
-         (* todo: add return edge *)
+       | Indirect _expr when Tid.equal fromtid ret_insn_tid ->
+          ST.return []
        | Indirect _expr ->
           failwith "Indirect jumps not handled in edge building yet (call)"
      end
@@ -164,18 +228,92 @@ let edges_of_insns insns sub nodes proj : edges ST.t =
   get_jmp_edges insns sub nodes proj >>= fun jmp_edges ->
   ST.return @@ List.append jmp_edges fallthroughs
 
-let build sub proj : (edges * tidmap) =
+(* Need to recursively build interproc edges for all callees:
+ * 1) don't build edges or tidmaps for the inside of any already seen
+ callee
+   2) still need to build interproc edges for all callees at all callsites even if they've already been seen
+   3) edges from all of them should be concatenate together into one big graph
+   4) tidmaps have to all be concatted together
+
+   Notes:
+   since edges, tidmap other are unique:
+   - edge concat is commutative, assoc
+   - tidmap concat is commutative, assoc
+ *)
+
+let get_builder_for_sub sub proj : edges ST.t =
   let irg = Sub.to_cfg sub in
   let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
   
   let lead_tidmap = Tid_map.t_of_sub sub in
-  let init_state = init lead_tidmap in
-
-  let builder = Seq.fold nodes ~init:(ST.return [])
-                  ~f:(fun st node ->
-                    let insns = insns_of_node node in
-                    edges_of_insns insns sub nodes proj)
+  let init_state = ST.put (init lead_tidmap) >>= fun () ->
+                   ST.return []
   in
-  let (edges, final_state) = ST.run builder init_state in
-  edges, final_state.tidmap
+  
+  Seq.fold nodes ~init:init_state
+    ~f:(fun st node ->
+      st >>= fun prev_edges -> 
+      let insns = insns_of_node node in
+      edges_of_insns insns sub nodes proj >>= fun new_edges ->
+      ST.return @@ List.append new_edges prev_edges)
 
+let run (outermost : Sub.t) (proj : Project.t) : (edges * tidmap) =
+  let rec loop worklist seen edges st : edges * t =
+    let eff_worklist = Callees.diff worklist seen
+                       |> Callees.to_list
+    in
+    let () = printf " in loop, worklist is: \n";
+             List.iter eff_worklist ~f:(fun c ->
+                 let tid_s = Term.tid c |> Tid.to_string in
+                 printf "%s\n" tid_s)
+    in
+    match List.hd eff_worklist with
+    | None -> (edges, st)
+    | Some sub when Callees.mem seen sub ->
+       let worklist' = Callees.remove worklist sub in
+       loop worklist' seen edges st
+    | Some sub ->
+       let () = printf "Processing sub %s\n" (Sub.name sub) in
+       let () = iter_insns sub in
+       let builder = get_builder_for_sub sub proj in
+       let (callee_edges, st') = ST.run builder st in
+       let () = printf "added callees are:\n" in
+       let () = Set.iter st'.callees ~f:(fun c ->
+                    let tid_str = Term.tid c |> Tid.to_string in
+                    printf "%s\n" tid_str)
+       in
+       
+       let edges' = List.append callee_edges edges in
+       
+       let worklist' = Callees.union worklist st'.callees in
+       let worklist' = Callees.remove worklist' sub in
+       
+       let seen' = Callees.add seen sub in
+       
+       loop worklist' seen' edges' st'
+  in
+  let init_seen = Callees.empty in
+  let init_worklist = Callees.singleton outermost in
+  let init_edges = [] in
+  let init_st = empty in
+  let (edges, st) = loop init_worklist init_seen init_edges init_st in
+  if List.is_empty edges
+  then
+    begin
+      let err_str = sprintf "in Edge_builder.run, didn't find edges for sub %s" (Sub.name outermost) in
+      failwith err_str
+    end
+  else
+    edges, st.tidmap
+  
+(* let build (sub : Sub.t) (proj : Project.t) : (edges * tidmap) = *)
+(*   (\* let builder = get_builder_for_sub sub proj in *\) *)
+(*   (\* let (edges, final_state) = ST.run builder empty in *\) *)
+(*   let initial_callees = Callees.singleton sub in *)
+(*   let initial_edges = [] in *)
+(*   let initial_state = empty in *)
+  
+(*   let (edges, final_state) = run initial_callees proj initial_edges initial_state in *)
+(*   let final_tm = final_state.tidmap in *)
+    
+(*   edges, final_tm *)

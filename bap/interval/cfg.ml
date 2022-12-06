@@ -70,80 +70,15 @@ let last_insn_of_sub sub : Blk.elt =
   Seq.nth_exn last_node_insns (num_insns - 1)
 
 let sub_to_insn_graph sub img ctxt proj =
-  let irg = Sub.to_cfg sub in
-  let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
-
   let print_elt = function
       | `Def d -> Format.printf "Def: %s\n%!" @@ Def.to_string d
       | `Phi p -> Format.printf "Phi: %s\n%!" @@ Phi.to_string p
       | `Jmp j -> Format.printf "Jmp: %s\n%!" @@ Jmp.to_string j
   in
 
-  (* Create the tidmap *)
-  let tidmap = Tid_map.t_of_sub sub in
-
-  (* building graph *)
-  let ret_insn_tid = get_ret_insn_tid nodes in
-  let intraproc_edge_of_jump j =
-    let fromtid = Term.tid j in
-    match Jmp.kind j with
-    | Goto (Direct totid) ->
-       (* totid is the tid of a blk, but we need the first insn of that blk *)
-       let the_blk = Term.find_exn blk_t sub totid in
-       let first_insn = first_insn_of_blk the_blk in
-       Some (fromtid, Tid_map.tid_of_elt first_insn, false)
-    | Goto _ when Tid.equal fromtid ret_insn_tid -> None
-    | Goto (Indirect _expr) ->
-       failwith "Indirect jumps not handled in edge building yet (outer)"
-    | Call c ->
-       begin
-         let call_target = Call.target c in
-         match call_target with
-         | Direct totid ->
-            (
-              let () = printf "totid in call is %s\n" (Tid.to_string totid) in
-              let sub = sub_of_tid totid proj in
-              let () = printf "sub of that totid is %s\n" (Sub.name sub) in
-              None
-            )
-         (* todo: add return edge *)
-         | Indirect _expr ->
-            failwith "Indirect jumps not handled in edge building yet (call)"
-       end
-    | Int (_, _)
-    | Ret _ -> None
-  in
-  let get_jmp_edges insns =
-    let edge insn =
-      match insn with
-      | `Jmp j -> intraproc_edge_of_jump j
-      | _ -> None
-    in
-    Seq.fold insns ~init:[] ~f:(fun edges insn ->
-        match edge insn with
-        | Some e -> List.cons e edges
-        | _ -> edges)
-  in
-  let edges_of_insns insns =
-    let tid_list = Seq.map insns ~f:Tid_map.tid_of_elt |> Seq.to_list in
-    let adjacent_tids, _ =
-      List.zip_with_remainder tid_list (List.tl_exn tid_list) in
-    let fallthroughs =
-      List.map adjacent_tids ~f:(fun (from, t) -> (from, t, false)) in
-    let jmp_edges = get_jmp_edges insns in
-    List.append fallthroughs jmp_edges
-  in
-  let edges = Seq.fold nodes ~init:[] ~f:(fun edges n ->
-                  let insns = insns_of_node n in
-                  List.append (edges_of_insns insns) edges)
-  in
-  let edges, tidmap = Edge_builder.build sub proj in
+  let edges, tidmap = Edge_builder.run sub proj in
   let () = printf "edges are:\n" in
-  let () = List.iter edges ~f:(fun (from', to', is_interproc) ->
-               let from_s = Tid.to_string from' in
-               let to_s = Tid.to_string to' in
-               printf "(%s, %s, %B)\n" from_s to_s is_interproc)
-  in
+  let () = List.iter edges ~f:Edge_builder.print_edge in
   
   (* CFG *)
   let module G = Graphlib.Make(Tid)(Bool) in
