@@ -228,19 +228,6 @@ let edges_of_insns insns sub nodes proj : edges ST.t =
   get_jmp_edges insns sub nodes proj >>= fun jmp_edges ->
   ST.return @@ List.append jmp_edges fallthroughs
 
-(* Need to recursively build interproc edges for all callees:
- * 1) don't build edges or tidmaps for the inside of any already seen
- callee
-   2) still need to build interproc edges for all callees at all callsites even if they've already been seen
-   3) edges from all of them should be concatenate together into one big graph
-   4) tidmaps have to all be concatted together
-
-   Notes:
-   since edges, tidmap other are unique:
-   - edge concat is commutative, assoc
-   - tidmap concat is commutative, assoc
- *)
-
 let get_builder_for_sub sub proj : edges ST.t =
   let irg = Sub.to_cfg sub in
   let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
@@ -262,28 +249,19 @@ let run (outermost : Sub.t) (proj : Project.t) : (edges * tidmap) =
     let eff_worklist = Callees.diff worklist seen
                        |> Callees.to_list
     in
-    let () = printf " in loop, worklist is: \n";
-             List.iter eff_worklist ~f:(fun c ->
-                 let tid_s = Term.tid c |> Tid.to_string in
-                 printf "%s\n" tid_s)
-    in
     match List.hd eff_worklist with
     | None -> (edges, st)
     | Some sub when Callees.mem seen sub ->
        let worklist' = Callees.remove worklist sub in
        loop worklist' seen edges st
     | Some sub ->
-       let () = printf "Processing sub %s\n" (Sub.name sub) in
-       let () = iter_insns sub in
+       let () = iter_insns sub in (* print the callee's bir for debugging *)
+       
        let builder = get_builder_for_sub sub proj in
-       let (callee_edges, st') = ST.run builder st in
-       let () = printf "added callees are:\n" in
-       let () = Set.iter st'.callees ~f:(fun c ->
-                    let tid_str = Term.tid c |> Tid.to_string in
-                    printf "%s\n" tid_str)
-       in
+       let (callee_edges, callee_st) = ST.run builder st in
        
        let edges' = List.append callee_edges edges in
+       let st' = merge st callee_st in
        
        let worklist' = Callees.union worklist st'.callees in
        let worklist' = Callees.remove worklist' sub in
@@ -305,15 +283,3 @@ let run (outermost : Sub.t) (proj : Project.t) : (edges * tidmap) =
     end
   else
     edges, st.tidmap
-  
-(* let build (sub : Sub.t) (proj : Project.t) : (edges * tidmap) = *)
-(*   (\* let builder = get_builder_for_sub sub proj in *\) *)
-(*   (\* let (edges, final_state) = ST.run builder empty in *\) *)
-(*   let initial_callees = Callees.singleton sub in *)
-(*   let initial_edges = [] in *)
-(*   let initial_state = empty in *)
-  
-(*   let (edges, final_state) = run initial_callees proj initial_edges initial_state in *)
-(*   let final_tm = final_state.tidmap in *)
-    
-(*   edges, final_tm *)

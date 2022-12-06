@@ -6,7 +6,31 @@ open Monads.Std
 module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 
-type cell_t = Scalar | Ptr [@@deriving sexp, bin_io, compare, equal]
+module CellType = struct
+  type t = Scalar | Ptr | Unknown [@@deriving sexp, bin_io, compare, equal]
+
+  let join = function
+    | Scalar, Scalar -> Scalar
+    | Ptr, Ptr -> Ptr
+    | Unknown, _ -> Unknown
+    | _, Unknown -> Unknown
+
+  let empty = Unknown
+
+  let order t1 t2 =
+    let open KB.Order in
+    match t1, t2 with
+    | Scalar, Scalar -> EQ
+    | Ptr, Ptr -> EQ
+    | Unknown
+
+  let domain = 
+end
+
+type cell_t = Scalar | Ptr | Unknown [@@deriving sexp, bin_io, compare, equal]
+
+let cell_t_domain = KB.Domain.define
+                      ~inspect:sexp_of_cell_t
 
 type (_, _) eq =
   | Eq : ('a, 'a) eq

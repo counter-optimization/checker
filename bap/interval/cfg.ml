@@ -137,7 +137,13 @@ let sub_to_insn_graph sub img ctxt proj =
                     ~equal:E.equal
                     ~merge:E.merge
                     ~f:(fun tid ->
-                      let elt = Tid_map.find_exn tidmap tid in
+                      let elt = match Tid_map.find tidmap tid with
+                        | Some elt -> elt
+                        | None ->
+                           let tid_s = Tid.to_string tid in
+                           let err_s = sprintf "in calculating final_sol, couldn't find tid %s in tidmap" tid_s in
+                           failwith err_s
+                      in
                       AbsInt.denote_elt elt)
   in
   (* let print_sol sol = *)
@@ -154,7 +160,14 @@ let sub_to_insn_graph sub img ctxt proj =
       ~init:CompSimpChecker.empty
       ~f:(fun acc_res (from', to', _is_interproc) ->
         let from_state = Solution.get final_sol from' in
-        let elt = Tid_map.find_exn tidmap to' in
+        let elt = match Tid_map.find tidmap to' with
+          | Some elt -> elt
+          | None ->
+             begin
+               let tid_s = Tid.to_string to' in
+               failwith @@ sprintf "In comp_simp_checker_res, Couldn't find tid %s in tidmap" tid_s 
+             end
+        in
         let check_res = CompSimpChecker.check_elt elt from_state in
         CompSimpChecker.join acc_res check_res)
   in

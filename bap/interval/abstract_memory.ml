@@ -303,40 +303,15 @@ module Cell(N : NumericDomain) = struct
           let old_cellset = find_exn m ptr in
           let new_cellset = Set.add old_cellset added_cell in
           set ~key:ptr ~data:new_cellset m)
-
-    (* let get_overlap_correction_function (toadd : T.t) *)
-    (*       (overlapping : T.t) (m : t) :  *)
-         
-    (* let add_cell ptr valtype m : t = *)
-    (*   let ptr_base = Pointer.region ptr in *)
-    (*   let ptr_offs = Pointer.offs ptr in *)
-    (*   (\* TODO: this should check for other similar pointers of different *\) *)
-    (*   (\* widths *\) *)
-    (*   let all_ptrs = Pointer.all_widths_of_ptr ptr in *)
-    (*   if Map.mem m ptr *)
-    (*   then *)
-    (*     begin *)
-    (*       let base_str = Region.to_string ptr_base in *)
-    (*       let offs_str = N.to_string ptr_offs in *)
-    (*       failwith @@ *)
-    (*         sprintf "Cell for ptr (%s, %s) already exists" base_str offs_str *)
-    (*     end *)
-    (*   else *)
-    (*     let ptr_width = Pointer.width ptr in *)
-    (*     let new_cell = T.make *)
-    (*                      ~region:ptr_base *)
-    (*                      ~offs:ptr_offs *)
-    (*                      ~width:ptr_width *)
-    (*                      ~valtype *)
-    (*     in *)
-    (*     let overlapping_cells = get_overlapping ptr m in *)
-    (*     let withnew = Set.add overlapping_cells new_cell in *)
-    (*     let new_m = Map.set m ~key:ptr ~data:withnew in *)
-    (*     fix_overlap new_cell overlapping_cells new_m *)
   end
 end
 
 module BaseSet = Region.Set
+
+module TypeEnv = struct
+  module M = Map.Make_binable_using_comparator(String)
+  include M
+end
 
 module Make(N : NumericDomain)
        : (MemoryT with type v := N.t
@@ -354,12 +329,17 @@ module Make(N : NumericDomain)
   type cellset = CellSet.t
   type cellmap = C.Map.t
   type env = Env.t
-  type t = { cells: cellmap; env: env; bases: basemap; img: Image.t option }
+  type t = { cells: cellmap;
+             env: env;
+             types: cell_t TypeEnv.t;
+             bases: basemap;
+             img: Image.t option }
   type regions = Region.Set.t
   type valtypes = Common.cell_t
 
   let empty : t = { cells = C.Map.empty;
                     env = Env.empty;
+                    types = TypeEnv.empty;
                     bases = BaseSetMap.empty;
                     img = None }
 
