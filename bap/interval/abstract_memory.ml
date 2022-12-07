@@ -363,8 +363,8 @@ module Make(N : NumericDomain)
     | Some f -> f
     | None -> failwith "Couldn't extract type information out of product domain"
 
-  let set_typd (typ : Type_domain.t) =
-    N.set Type_domain.key typ
+  (* let set_typd (typ : Type_domain) = *)
+  (*   N.set Type_domain.key typ *)
 
   let set_img (mem : t) (img : Image.t) : t =
     { mem with img = Some img }
@@ -391,7 +391,7 @@ module Make(N : NumericDomain)
     | Bil.UnOp (_, x) -> get_var_names x
     | Bil.Int _ -> SS.empty
     | Bil.Cast (cast, n, e) -> get_var_names e
-    | Bil.I<te (cond, then', else') ->
+    | Bil.Ite (cond, then', else') ->
        SS.union (get_var_names then') (get_var_names else')
     | Bil.Unknown (str, _) -> SS.empty
     | Bil.Let (v, exp, body) ->
