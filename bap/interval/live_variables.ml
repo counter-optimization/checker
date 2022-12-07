@@ -49,7 +49,7 @@ open Bap.Std
    (a, x, y, b)
    where
    a := the var on the rhs being used in this def or phi node's rhs
-   x := the TID of the blk elt defining x
+   x := the TID of the blk elt defining a
    y := the TID of the blk elt at which it is used
    b := the var on the lhs being defined in this def or phi node's lhs
 
@@ -142,13 +142,13 @@ module SS = Set.Make_binable_using_comparator(String)
 
 let sub_to_ssa_sub : Sub.t -> Sub.t = Sub.ssa
 
-let fold_over_elts (sub : Sub.t) ~(init : 'a) ~(f:'a -> Blk.elt -> 'a) : 'a =
+let fold_over_elts (sub : Sub.t) ~(init : 'a) ~(f:'a -> Blk.elt -> 'a) ~(cong : 'a -> 'a -> 'a) : 'a =
   let blks = Term.enum blk_t sub in
-    Seq.fold blks ~init:NameAndTid.Set.empty
+    Seq.fold blks ~init
       ~f:(fun defs blk ->
         let elts = Blk.elts blk in
         let defs' = Seq.fold elts ~init:defs ~f in
-        NameAndTid.Set.union defs defs')
+        cong defs defs')
 
 (* internal passes used for intermediate data gathering *)
 module GetPhiAssnsPass = struct
@@ -158,58 +158,172 @@ module GetPhiAssnsPass = struct
        let tid = Term.tid p in 
        NameAndTid.make ~name ~tid |> NameAndTid.Set.singleton
     | _ -> NameAndTid.Set.empty
-  
+
+  (* returns set of tuples of phi defs
+   * and the tid of the phi: this is defd here *)
   let run (sub : Sub.t) : NameAndTid.Set.t =
-    fold_over_elts sub ~init:NameAndTid.Set.empty
+    fold_over_elts sub
+      ~init:NameAndTid.Set.empty
+      ~cong:NameAndTid.Set.union
       ~f:(fun defs elt ->
         elt_to_phi_var elt |> NameAndTid.Set.union defs)
 end
 
-module GetDefsPass = struct
-  let run (sub : Sub.t) : NameAndTid.Set.t =
-    NameAndTid.Set.empty
+module GetDefsPass : sig
+  type t
+
+  val def_tid_of_var_name : t -> string -> Tid.t option
+  val run : Sub.t -> t
+end = struct
+  module M = Map.Make_plain_using_comparator(String)
+
+  type t = Tid.t M.t
+
+  let combine ~key which =
+    match which with
+    | `Both (left, right) ->
+       if Tid.equal left right
+       then Some left
+       else 
+         failwith "tids shouldn't be duplicated in GetDefsPass"
+    | `Left l -> Some l
+    | `Right r -> Some r
+
+  let add_def_to_mapping mapping elt =
+    match elt with
+    | `Def d ->
+       let lhs = Def.lhs d in
+       let name = Var.name lhs in
+       let this_tid = Term.tid d in
+       M.set mapping ~key:name ~data:this_tid
+    | `Phi p ->
+       let lhs = Phi.lhs p in
+       let name = Var.name lhs in
+       let this_tid = Term.tid p in
+       M.set mapping ~key:name ~data:this_tid
+    | _ -> mapping
+
+  let def_tid_of_var_name (m : t) (name : string) : Tid.t option =
+    M.find m name
+    (* match M.find m name with *)
+    (* | None -> *)
+    (*    let err_s = sprintf "Couldn't find tid of def/phi for var %s in  GetDefsPass.def_tid_of_var_name" name *)
+    (*    in *)
+    (*    failwith err_s *)
+    (* | Some t -> t *)
+  
+  let run (sub : Sub.t) : t =
+    fold_over_elts sub
+      ~init:M.empty
+      ~cong:(M.merge ~f:combine)
+      ~f:add_def_to_mapping
 end
 
+
+(*
+  (a, x, y, b)
+   where
+   a := the var on the rhs being used in this def or phi node's rhs
+   x := the TID of the blk elt defining a
+   y := the TID of the blk elt at which it is used
+   b := the var on the lhs being defined in this def or phi node's lhs
+  *)
 module IsUsedPass = struct
+  module T = struct
+    (* used_tid is an option type since
+       subs in SSA still have some free vars
+       like RBP, RSP, RIP, args like RDI, RSI, ..
+     *)
+    type t = { used : string;
+               used_tid : Tid.t option;
+               user_tid : Tid.t;
+               user : string }
+               [@@deriving sexp, compare, bin_io]
+  end
+  module UseRel = Set.Make(T)
+  include T
+             
   let phi_option_to_uses (_tid, opt_expr) : SS.t =
     Var_name_collector.run opt_expr
 
-  let associate_uses_with_tid (uses : SS.t) (tid : Tid.t)
-      : NameAndTid.Set.t =
-    SS.fold uses ~init:NameAndTid.Set.empty
-         ~f:(fun acc name ->
-           let name_with_tid = name, tid in
-           NameAndTid.Set.add acc name_with_tid)
-  
-  let elt_to_uses : Blk.elt -> NameAndTid.Set.t = function
+  let elt_to_uses (e : Blk.elt) (defmap : GetDefsPass.t) : t list =
+    match e with
     | `Def d ->
        let rhs = Def.rhs d in
+       let user = Def.lhs d |> Var.name in
        let used_names = Var_name_collector.run rhs in
-       let defs_tid = Term.tid d in
-       associate_uses_with_tid used_names defs_tid
+       let user_tid = Term.tid d in
+       SS.fold used_names
+         ~init:[]
+         ~f:(fun rels used ->
+           let used_tid = GetDefsPass.def_tid_of_var_name defmap used in
+           let newrel = { used;
+                          user_tid;
+                          used_tid;
+                          user }
+           in
+           List.cons newrel rels)
     | `Phi p ->
        let options = Phi.values p in
        let used_names = Seq.fold options ~init:SS.empty
                           ~f:(fun uses opt ->
                             phi_option_to_uses opt |> SS.union uses)
        in
-       let phis_tid = Term.tid p in
-       associate_uses_with_tid used_names phis_tid
-    | _ -> NameAndTid.Set.empty
+       let user_tid = Term.tid p in
+       let user = Phi.lhs p |> Var.name in
+       SS.fold used_names
+         ~init:[]
+         ~f:(fun rels used ->
+           let used_tid = GetDefsPass.def_tid_of_var_name defmap used in
+           let newrel = { used;
+                          user_tid;
+                          used_tid;
+                          user }
+           in
+           List.cons newrel rels)
+    | _ -> []
 
-  let run sub =
-    fold_over_elts sub ~init:NameAndTid.Set.empty
-      ~f:(fun uses elt ->
-        elt_to_uses elt |> NameAndTid.Set.union uses)
+  (* returns a set of tuples of vars used and the
+     tid of where it is used *)
+  (* defs mapping is map from varname -> tid of where it is defd *)
+  let run (sub : Sub.t) (defs_mapping : GetDefsPass.t) : UseRel.t =
+    let rel_list = fold_over_elts sub
+                     ~init:[]
+                     ~f:(fun rels elt ->
+                       let rels_to_add = elt_to_uses elt defs_mapping in
+                       List.append rels_to_add rels)
+                     ~cong:List.append
+    in
+    UseRel.of_list rel_list
+
+  let to_string (rel : t) : string =
+    let user_tid_s = Tid.to_string rel.user_tid in
+    let used_tid_s = match rel.used_tid with
+      | None -> "none,freevar"
+      | Some tid -> Tid.to_string tid
+    in
+    sprintf
+      "(used: %s, used_tid: %s, user_tid: %s, user: %s)"
+      rel.used
+      used_tid_s
+      user_tid_s
+      rel.user
+
+  let print_rel (rel : t) : unit =
+    printf "%s\n" @@ to_string rel
+  
+  let print_rels (rels : UseRel.t) : unit =
+    printf "Used-By relations are:\n";
+    UseRel.iter rels ~f:print_rel
 end
 
 (* the live variables analysis (Live_variables.Analysis.run) *)
 module Analysis = struct
   let run (sub : Sub.t) : unit =
     let sub_ssa = sub_to_ssa_sub sub in
-    printf "non-ssa sub insns are: \n";
-    Edge_builder.iter_insns sub;
-    printf "*****************************\n";
     printf "ssa sub insns are: \n";
-    Edge_builder.iter_insns sub_ssa
+    Edge_builder.iter_insns sub_ssa;
+    let defs_map = GetDefsPass.run sub_ssa in
+    let used_by_rels = IsUsedPass.run sub_ssa defs_map in
+    IsUsedPass.print_rels used_by_rels
 end
