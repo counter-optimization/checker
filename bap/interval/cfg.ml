@@ -91,7 +91,9 @@ let sub_to_insn_graph sub img ctxt proj =
 
   (* AbsInt *)
   let module ProdIntvlxTaint = DomainProduct(Wrapping_interval)(Checker_taint.Analysis) in
-  let module FinalDomain = DomainProduct(ProdIntvlxTaint)(Type_domain) in
+  let module WithTypes = DomainProduct(ProdIntvlxTaint)(Type_domain) in
+  let module FinalDomain = DomainProduct(WithTypes)(Bases_domain) in
+  
   let module E = Abstract_memory.Make(FinalDomain) in
   let module R = Abstract_memory.Region in
   let module Rt = Abstract_memory.Region.Set in

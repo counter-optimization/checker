@@ -14,6 +14,7 @@ S taint.ml
 S tid_map.ml
 S edge_builder.ml
 S type_domain.ml
+S bases_domain.ml
 S var_name_collector.ml
 S live_variables.ml
 S test_main.ml

@@ -17,7 +17,7 @@ module Analysis : NumericDomain = struct
     | Eq -> Some (fun x -> x)
     | Neq -> None
 
-  let set : type a. a Key.k -> a -> t -> a = fun k other replace ->
+  let set : type a. a Key.k -> t -> a -> t = fun k other replace ->
     match Key.eq_type k key with
     | Eq -> replace
     | Neq -> other

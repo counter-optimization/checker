@@ -127,7 +127,6 @@ module Cell(N : NumericDomain) = struct
     module Pointer = Pointer(N)
     (* the new environment operates over ValDom.t and pointers (PtrT of ptr) *)
     
-    
     (* it's important that a cell knows whether it holds a pointer or a scalar. *)
     (* for our model of memory, pointers are (region * offset) pairs, so taking *)
     (* e.g., the low 32 bits of a pointer doesn't type check *)
@@ -161,11 +160,6 @@ module Cell(N : NumericDomain) = struct
       | Some f -> f
       | None -> failwith "Couldn't extract interval information out of product domain, in module Cell"
 
-    let string_of_valtype = function
-      | CellType.Ptr -> "ptr"
-      | CellType.Scalar -> "scalar"
-      | CellType.Unknown -> "unknowntype"
-
     let make ~region ~offs ~width ~valtype : t =
       { region; offs; width; valtype }
 
@@ -193,7 +187,7 @@ module Cell(N : NumericDomain) = struct
       sprintf "%s-%s-%s" reg_str off_str width_str
 
     let to_string m : string =
-      let valtype_str = string_of_valtype m.valtype in
+      let valtype_str = Type_domain.to_string m.valtype in
       sprintf "%s-%s" (name m) valtype_str
 
     let pp (m : t) : unit =
@@ -306,21 +300,6 @@ end
 
 module BaseSet = Region.Set
 
-module TypeEnv = struct
-  module M = Map.Make_binable_using_comparator(String)
-  include M
-
-  let merge te1 te2 =
-    let merge_helper ~key ~data prev =
-      match find prev key with
-      | None -> set prev ~key ~data
-      | Some last ->
-         let res = CellType.join last data |> Result.ok_exn in
-         set prev ~key ~data:res
-    in
-    M.fold te1 ~init:te2 ~f:merge_helper
-end
-
 module Make(N : NumericDomain)
        : (MemoryT with type v := N.t
                    and type regions := BaseSet.t
@@ -339,7 +318,6 @@ module Make(N : NumericDomain)
   type env = Env.t
   type t = { cells: cellmap;
              env: env;
-             types: CellType.t TypeEnv.t;
              bases: basemap;
              img: Image.t option }
   type regions = Region.Set.t
@@ -347,7 +325,6 @@ module Make(N : NumericDomain)
 
   let empty : t = { cells = C.Map.empty;
                     env = Env.empty;
-                    types = TypeEnv.empty;
                     bases = BaseSetMap.empty;
                     img = None }
 
@@ -362,6 +339,11 @@ module Make(N : NumericDomain)
     match N.get Type_domain.key with
     | Some f -> f
     | None -> failwith "Couldn't extract type information out of product domain"
+
+  let get_bases : N.t -> Bases_domain.t =
+    match N.get Bases_domain.key with
+    | Some f -> f
+    | None -> failwith "Couldn't extract bases information out of product domain"
 
   (* let set_typd (typ : Type_domain) = *)
   (*   N.set Type_domain.key typ *)
@@ -386,29 +368,18 @@ module Make(N : NumericDomain)
       Map.equal (Set.equal) cells1 cells2 &&
         Map.equal (Set.equal) bases1 bases2
 
-  let set_type ~name (typ : CellType.t) m =
-    let updated_types = TypeEnv.set m.types ~key:name ~data:typ in
-    { m with types = updated_types }
-
   let setptr ~(name:string) ~regions ~offs ~width m =
     let env = Env.set name offs m.env in
     let bases = BaseSetMap.set m.bases
                   ~key:name
                   ~data:regions
     in
-    let types = TypeEnv.set m.types ~key:name ~data:CellType.Ptr in
-    { m with env = env; bases = bases; types = types }
+    { m with env = env; bases = bases }
 
-  let get_type ~name m : CellType.t =
-    match TypeEnv.find m.types name with
-    | Some typ -> typ
-    | None -> CellType.Unknown
- 
   let unptr ~name mem : t =
     let new_env = Env.set name N.bot mem.env in
     let new_bases = BaseSetMap.remove mem.bases name in
-    let new_types = TypeEnv.set ~key:name ~data:CellType.Scalar mem.types in
-    { mem with env=new_env; bases=new_bases; types=new_types }
+    { mem with env=new_env; bases=new_bases }
 
   let is_pointer ~name {cells; env; bases; _} : bool =
     BaseSetMap.mem bases name
@@ -416,13 +387,6 @@ module Make(N : NumericDomain)
   let holds_ptr (name : string) (env : t) : bool =
     is_pointer ~name env
 
-  let setunk ~(name:string) m =
-    let cleared_of_ptr = if is_pointer ~name m
-                         then unptr ~name m
-                         else m
-    in
-    set_type ~name CellType.Unknown cleared_of_ptr
-    
   let is_scalar ~name mem : bool =
     not @@ is_pointer ~name mem
 
@@ -479,41 +443,18 @@ module Make(N : NumericDomain)
     | Ite _ -> CellType.Scalar (* todo *)
     | Unknown _ -> CellType.Scalar
   
-  let update_on_assn ~lhs ~rhs mem : t =
-    let name = Var.name lhs in
-    let rhs_is_store = match rhs with
-      | Bil.Store _ -> true
-      | _ -> false
-    in
-    if rhs_is_store
-    then mem
-    else
-      let lhs_t = get_type ~name mem in
-      let rhs_t = compute_type rhs mem in
-      let move_ptrs mem : t =
-        let vars = Var_name_collector.run rhs in
-        let bases_to_load_from = BaseSetMap.bases_of_vars vars mem.bases in
-        { mem with bases = BaseSetMap.set mem.bases ~key:name ~data:bases_to_load_from }
-      in
-      match lhs_t, rhs_t with
-      | CellType.Ptr, CellType.Scalar ->
-         unptr ~name mem
-      | CellType.Scalar, CellType.Ptr
-      | CellType.Unknown, CellType.Ptr ->
-         let st' = set_type ~name CellType.Ptr mem in
-         move_ptrs st'
-      | CellType.Ptr, CellType.Ptr ->
-         move_ptrs mem
-      | CellType.Scalar, CellType.Scalar
-        | CellType.Unknown, CellType.Unknown ->
-         mem
-      | CellType.Ptr, CellType.Unknown ->
-         let st' = unptr ~name mem in
-         setunk ~name st'
-      | CellType.Scalar, CellType.Unknown ->
-         setunk ~name mem
-      | CellType.Unknown, CellType.Scalar ->
-         set_type ~name CellType.Scalar mem
+  (* let update_on_assn ~(lhs : Var.t) ~(rhs : N.t) (mem : t) : t = *)
+  (*   let name = Var.name lhs in *)
+    
+  (*   let lhs_old_val = lookup name mem in *)
+  (*   let lhs_old_type = get_typd lhs_old_val in *)
+    
+  (*   let rhs_typ = get_typd rhs in *)
+
+  (*   match lhs_old_type, rhs_typ with *)
+  (*   | CellType.Scalar, CellType.Ptr ->  *)
+  (*   | CellType.Ptr, CellType.Scalar -> *)
+    
 
   let cells_of_offs_and_regions ~(offs : Wrapping_interval.t) ~regions ~(width : Wrapping_interval.t) (mem : t) : C.Set.t =
     let ptrs = Ptr.of_regions ~regions ~offs ~width in
@@ -528,7 +469,12 @@ module Make(N : NumericDomain)
               then C.Set.union acc data
               else acc))
 
-  let load_from_offs_and_regions ~(offs : Wrapping_interval.t) ~regions ~(width : Wrapping_interval.t) (mem : t) : N.t =
+  let load_from_offs_and_regions
+        ~(offs : Wrapping_interval.t)
+        ~regions
+        ~(width : Wrapping_interval.t)
+        (mem : t)
+      : N.t =
     let ptrs = Ptr.of_regions ~regions ~offs ~width in
     let cells = cells_of_offs_and_regions ~offs ~regions ~width mem in
     match C.Set.length cells with
@@ -587,11 +533,14 @@ module Make(N : NumericDomain)
     | Bil.Load (_mem, idx, _endian, size) ->
        let load_from_vars = Var_name_collector.run idx in
        let regions = BaseSetMap.bases_of_vars load_from_vars m.bases in
-       let offs_type = compute_type idx m in
-       let width = bap_size_to_absdom size in
+       
        let offs = get_intvl idx_res in
-       let is_scalar = match offs_type with | Scalar -> true | _ -> false in
-       if is_scalar && Set.is_empty regions
+       let offs_type = compute_type idx m in
+       let offs_is_scalar = CellType.is_scalar offs_type in
+       
+       let width = bap_size_to_absdom size in
+       
+       if offs_is_scalar && Set.is_empty regions
        then
          load_global offs size m
        else
@@ -657,24 +606,36 @@ module Make(N : NumericDomain)
       | None -> failwith "RSP should be setup before calling store_init_ret_ptr"
     in
     let rsp_width = Wrapping_interval.of_int 64 in
-    store ~offs:rsp_offs_wi ~region:stack_region ~width:rsp_width ~data:N.top ~valtype:Scalar mem
+    let init_ret_ptr = N.set Type_domain.key N.top CellType.Ptr in
+    store mem
+      ~offs:rsp_offs_wi
+      ~region:stack_region
+      ~width:rsp_width
+      ~data:init_ret_ptr
+      ~valtype:CellType.Ptr
 
   let set_rsp (offs : int) (mem : t) : t =
     let offs = N.of_int ~width:64 offs in
+    let offs_as_ptr = N.set Type_domain.key offs CellType.Ptr in
+    let offs_with_base = N.set Bases_domain.key offs_as_ptr Bases_domain.stack in
+    let () = printf "in set_rsp, init RSP is: %s\n" @@ N.to_string offs_with_base in
     setptr mem
       ~name:"RSP"
       ~regions:(BaseSet.singleton Region.Stack)
-      ~offs
+      ~offs:offs_with_base
       ~width:`r64
     |> store_init_ret_ptr
-    |> set_type ~name:"RSP" CellType.Ptr
+    (* |> set_type ~name:"RSP" CellType.Ptr *)
 
   let set_rbp (offs : int) (mem : t) : t =
     let offs = N.of_int ~width:64 offs in
+    let offs_as_ptr = N.set Type_domain.key offs CellType.Ptr in
+    let offs_with_base = N.set Bases_domain.key offs_as_ptr Bases_domain.stack in
+    let () = printf "in set_rbp, init RBP is: %s\n" @@ N.to_string offs_as_ptr in
     setptr mem
       ~name:"RBP"
       ~regions:(BaseSet.singleton Region.Stack)
-      ~offs
+      ~offs:offs_with_base
       ~width:`r64
   (* |> set_type ~name:"RBP" CellType.Ptr *)
 
@@ -688,16 +649,14 @@ module Make(N : NumericDomain)
 
   (* TODO: type consistency in cell merging *)
   let merge mem1 mem2 : t =
-    let {cells=cells1; env=env1; types=types1; bases=bases1; img=img1} = mem1 in
-    let {cells=cells2; env=env2; types=types2; bases=bases2; img=img2} = mem2 in
+    let {cells=cells1; env=env1; bases=bases1; img=img1} = mem1 in
+    let {cells=cells2; env=env2; bases=bases2; img=img2} = mem2 in
     let merged_img = merge_images img1 img2 in
     let merged_cells = C.Map.merge cells1 cells2 in
     let merged_env = Env.merge env1 env2 in
-    let merged_types = TypeEnv.merge types1 types2 in
     let merged_bases = BaseSetMap.merge bases1 bases2 in
     { cells=merged_cells;
       env=merged_env;
-      types=merged_types;
       bases=merged_bases;
       img=merged_img }
 
@@ -713,13 +672,9 @@ module Make(N : NumericDomain)
     let widen_env steps n {env=prev; _} {env=next; _} : Env.t =
       Env.widen_with_step steps n prev next
     in
-    let widen_type_env steps n {types=prev; _} {types=next; _} =
-      TypeEnv.merge prev next
-    in
     let widen steps n mem1 mem2 =
       {cells = widen_cell_map prev next;
        env = widen_env steps n prev next;
-       types = widen_type_env steps n prev next;
        bases = widen_bases_map prev next;
        img = merge_images prev.img next.img }
     in
@@ -728,13 +683,15 @@ module Make(N : NumericDomain)
   let pp {cells; env; bases}  =
     let print_ptr_to_cells ~key ~data =
       let cell_set_str =  Set.to_list data |> List.to_string ~f:C.to_string in
-      Format.printf "Ptr %s --> %s\n%!" (Ptr.to_string key) cell_set_str
+      Format.printf "\t%s --> %s\n%!" (Ptr.to_string key) cell_set_str
     in
     let print_bases_map ~key ~data =
       let region_set_str = Set.to_list data |> List.to_string ~f:Region.to_string in
-      Format.printf "Var %s --> %s\n%!" key region_set_str
+      Format.printf "\t%s --> %s\n%!" key region_set_str
     in
+    printf "* Ptr->Cells map is:\n";
     Map.iteri cells ~f:print_ptr_to_cells;
     Env.pp env;
+    printf "* Var->Bases map is:\n";
     Map.iteri bases ~f:print_bases_map
 end

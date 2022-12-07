@@ -12,6 +12,7 @@ type t = CellType.t
 let p = CellType.Ptr
 let s = CellType.Scalar
 let u = CellType.Unknown
+let n = CellType.Undef
 
 let key : t Key.k = Key.create "type_domain"
 
@@ -20,12 +21,12 @@ let get : type a. a Key.k -> (t -> a) option = fun k ->
   | Eq -> Some (fun x -> x)
   | Neq -> None
 
-let set : type a. a Key.k -> a -> t -> a = fun k other replace ->
+let set : type a. a Key.k -> t -> a -> t = fun k other replace ->
   match Key.eq_type k key with
   | Eq -> replace
   | Neq -> other
 
-let bot = CellType.Unknown
+let bot = CellType.Undef
 
 let top = CellType.Unknown
 
@@ -69,6 +70,8 @@ let add x y =
   | CellType.Scalar, CellType.Scalar -> s
   | CellType.Unknown, _ -> u
   | _, CellType.Unknown -> u
+  | CellType.Undef, _ -> y
+  | _, CellType.Undef -> x
 
 let sub x y =
   match x, y with
@@ -78,6 +81,10 @@ let sub x y =
   | CellType.Scalar, CellType.Scalar -> s
   | CellType.Unknown, _ -> u
   | _, CellType.Unknown -> u
+  | CellType.Undef, _ -> y
+  | _, CellType.Undef -> x
+
+
 
 let general_binop x y = s
 
@@ -143,10 +150,11 @@ let to_string = function
   | CellType.Ptr -> "ptr"
   | CellType.Scalar -> "scalar"
   | CellType.Unknown -> "unknowntype"
+  | CellType.Undef -> "undeftype"
 
 let of_int ?width v = s
 
-let of_word w = u
+let of_word w = s
 
 let of_z ?width z = s
 

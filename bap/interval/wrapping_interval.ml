@@ -539,6 +539,12 @@ let bitwidth x =
 (** Setting up domain keys for usage in InteractableNumDom *)
 module Key = Common.DomainKey
 
+(* key is a module:
+   struct
+   type t = t
+   type _ key += Key : t key
+   let name = "wrapping-interval"
+   end *)
 let key : t Key.k = Key.create "wrapping-interval"
 
 let get : type a. a Key.k -> (t -> a) option = fun k ->
@@ -546,7 +552,7 @@ let get : type a. a Key.k -> (t -> a) option = fun k ->
   | Eq -> Some (fun x -> x)
   | Neq -> None
 
-let set : type a. a Key.k -> a -> t -> a = fun k other replace ->
+let set : type a. a Key.k -> t -> a -> t = fun k other replace ->
   match Key.eq_type k key with
   | Eq -> replace
   | Neq -> other

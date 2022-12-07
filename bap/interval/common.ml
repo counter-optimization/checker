@@ -7,7 +7,10 @@ module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 
 module CellType = struct
-  type t = Scalar | Ptr | Unknown [@@deriving sexp, bin_io, compare, equal]
+  type t = Scalar
+         | Ptr
+         | Unknown
+         | Undef [@@deriving sexp, bin_io, compare, equal]
 
   let join t1 t2 =
     Ok (match t1, t2 with
@@ -15,6 +18,8 @@ module CellType = struct
         | Ptr, Ptr -> Ptr
         | Unknown, _ -> Unknown
         | _, Unknown -> Unknown
+        | Undef, _ -> t2
+        | _, Undef -> t1
         | _, _ -> Unknown)
 
   let empty = Unknown
@@ -27,7 +32,25 @@ module CellType = struct
     | Ptr, Ptr -> EQ
     | Unknown, _ -> GT
     | _, Unknown -> LT
+    | Undef, _ -> LT
+    | _, Undef -> GT
     | _, _ -> NC
+
+  let is_scalar : t -> bool = function
+    | Scalar -> true
+    | _ -> false
+
+  let is_ptr : t -> bool = function
+    | Ptr -> true
+    | _ -> false
+
+  let is_unknown : t -> bool = function
+    | Unknown -> true
+    | _ -> false
+
+  let is_undef : t -> bool = function
+    | Undef -> true
+    | _ -> false
 
   let domain_name = "CellType"
   let domain = KB.Domain.define domain_name
@@ -110,7 +133,7 @@ module type NumericDomain = sig
 
   val key : t DomainKey.k
   val get : 'a DomainKey.k -> (t -> 'a) option
-  val set : 'a DomainKey.k -> 'a -> t -> 'a
+  val set : 'a DomainKey.k -> t -> 'a -> t
 
   val bot : t
   val top : t
@@ -207,7 +230,7 @@ module type MemoryT =
     val holds_ptr : string -> t -> bool
     val setptr : name:string -> regions:regions -> offs:v -> width:v -> t -> t
     val unptr : name:string -> t -> t
-    val update_on_assn : lhs:Var.t -> rhs:Bil.exp -> t -> t
+    (* val update_on_assn : lhs:Var.t -> rhs:v -> t -> t *)
     val load_of_bil_exp : Bil.exp -> v -> t -> v
     val store_of_bil_exp : Bil.exp -> offs:v -> data:v -> valtype:cell_t -> t -> t
     
@@ -289,7 +312,15 @@ module NumericEnv(ValueDom : NumericDomain)
     f prev_state new_state
 
   let pp (env : t) : unit =
-    Format.printf "%a\n%!" Sexp.pp (M.sexp_of_t ValueDom.sexp_of_t env)
+    let env_entry_to_string ~(key : string) ~(data: ValueDom.t)
+        : string =
+      let val_str = ValueDom.to_string data in
+      sprintf "%s --> %s" key val_str
+    in
+    printf "* Env is:\n";
+    M.iteri env ~f:(fun ~key ~data ->
+        let entry_str = env_entry_to_string ~key ~data in
+        printf "\t%s\n" entry_str)
 end
 
 module AbstractInterpreter(N: NumericDomain)
@@ -418,7 +449,7 @@ module AbstractInterpreter(N: NumericDomain)
     
     denote_exp rhs >>= fun denoted_rhs ->
     ST.get () >>= fun st ->
-    ST.update @@ E.update_on_assn ~lhs:var ~rhs >>= fun () ->
+    (* ST.update @@ E.update_on_assn ~lhs:var ~rhs:denoted_rhs >>= fun () -> *)
     ST.update @@ E.set varname denoted_rhs
 
   let denote_phi (p : phi term) : unit ST.t =
@@ -477,11 +508,9 @@ module DomainProduct(X : NumericDomain)(Y : NumericDomain)
               | Some f -> Some (fun elt -> f (snd elt))
               | None -> None
 
-  let set : type a. a DomainKey.k -> a -> t -> a = fun k other replace ->
-    match DomainKey.eq_type k key with
-    | Eq -> replace
-    | Neq -> other
-
+  let set key (x, y) newval =
+    X.set key x newval, Y.set key y newval
+    
   let first (prod : t) : X.t =
     match prod with
     | x, y -> x
