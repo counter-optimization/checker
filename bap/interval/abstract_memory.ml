@@ -379,28 +379,7 @@ module Make(N : NumericDomain)
       | `r256 -> 256
     in
     Wrapping_interval.of_int bitwidth
-
-  let rec get_var_names (e : Bil.exp) : SS.t =
-    match e with
-    | Bil.Var v -> SS.singleton @@ Var.name v
-    | Bil.Load (_, idx, _, _) -> get_var_names idx
-    | Bil.Store (_, idx, v, _, _) ->
-       SS.union (get_var_names idx) (get_var_names v)
-    | Bil.BinOp (_, x, y) ->
-       SS.union (get_var_names x) (get_var_names y)
-    | Bil.UnOp (_, x) -> get_var_names x
-    | Bil.Int _ -> SS.empty
-    | Bil.Cast (cast, n, e) -> get_var_names e
-    | Bil.Ite (cond, then', else') ->
-       SS.union (get_var_names then') (get_var_names else')
-    | Bil.Unknown (str, _) -> SS.empty
-    | Bil.Let (v, exp, body) ->
-       SS.union (SS.singleton (Var.name v)) (get_var_names exp)
-       |> SS.union (get_var_names body)
-    | Bil.Extract (hi, lo, e) -> get_var_names e
-    | Bil.Concat (x, y) ->
-       SS.union (get_var_names x) (get_var_names y)
-
+  
   let equal {cells=cells1; env=env1; bases=bases1; _}
         {cells=cells2; env=env2; bases=bases2; _} =
     Env.equal env1 env2 &&
@@ -512,7 +491,7 @@ module Make(N : NumericDomain)
       let lhs_t = get_type ~name mem in
       let rhs_t = compute_type rhs mem in
       let move_ptrs mem : t =
-        let vars = get_var_names rhs in
+        let vars = Var_name_collector.run rhs in
         let bases_to_load_from = BaseSetMap.bases_of_vars vars mem.bases in
         { mem with bases = BaseSetMap.set mem.bases ~key:name ~data:bases_to_load_from }
       in
@@ -606,7 +585,7 @@ module Make(N : NumericDomain)
   let load_of_bil_exp (e : Bil.exp) (idx_res : N.t) (m : t) : N.t =
     match e with
     | Bil.Load (_mem, idx, _endian, size) ->
-       let load_from_vars = get_var_names idx in
+       let load_from_vars = Var_name_collector.run idx in
        let regions = BaseSetMap.bases_of_vars load_from_vars m.bases in
        let offs_type = compute_type idx m in
        let width = bap_size_to_absdom size in
@@ -650,7 +629,7 @@ module Make(N : NumericDomain)
     match e with
     | Bil.Store (_mem, idx, v, _endian, size) -> 
       begin
-        let vars = get_var_names idx in
+        let vars = Var_name_collector.run idx in
         let () = Set.iter vars ~f:(fun v ->
                      printf "var: %s in store offs exp\n" v) in
         let width = bap_size_to_absdom size in

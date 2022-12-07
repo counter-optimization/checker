@@ -76,9 +76,14 @@ let sub_to_insn_graph sub img ctxt proj =
       | `Jmp j -> Format.printf "Jmp: %s\n%!" @@ Jmp.to_string j
   in
 
+  (* construct edges for converting from CFG with basic-block nodes
+     to a CFG with insn nodes *)
   let edges, tidmap = Edge_builder.run sub proj in
   let () = printf "edges are:\n" in
   let () = List.iter edges ~f:Edge_builder.print_edge in
+
+  (* run the liveness analysis *)
+  let () = Live_variables.Analysis.run sub in
   
   (* CFG *)
   let module G = Graphlib.Make(Tid)(Bool) in
