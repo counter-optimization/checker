@@ -18,14 +18,20 @@ module Checker(N : NumericDomain) = struct
   module I = Wrapping_interval
   module SS = Set.Make_binable_using_comparator(String)
 
-  type warn = SS.t
+  type warn = Alert.Set.t
   type t = warn
 
   module State = struct
-    type t = {warns: warn; env: E.t}
+    type t = { warns: warn;
+               env: E.t;
+               tid : Tid.t;
+               liveness : Live_variables.t } 
 
-    let init env = { warns = SS.empty;
-                     env }
+    let init in_state tid liveness =
+      { warns = Alert.Set.empty;
+        env = in_state;
+        tid = tid;
+        liveness = liveness }
   end
 
   module ST = struct
@@ -40,12 +46,11 @@ module Checker(N : NumericDomain) = struct
     | None -> failwith "Couldn't extract interval information out of product domain"
 
   let dont_care_vars = ["ZF"; "OF"; "CF"; "AF"; "PF"; "SF"]
+                       |> SS.of_list
 
-  let print_results : warn -> unit = SS.iter ~f:(Format.printf "%s\n%!")
-  let to_string (res : warn) : string =
-    String.concat ~sep:" " @@ SS.to_list res 
-  let empty : warn = SS.empty
-  let join = SS.union
+  
+  let empty : warn = Alert.Set.empty
+  let join = Alert.Set.union
 
   let could_be_special (special_for_bw : I.t -> I.t) (to_check : I.t) : bool =
     if I.equal I.bot to_check
@@ -171,24 +176,54 @@ module Checker(N : NumericDomain) = struct
        check_exp y >>= fun y' ->
        ST.return @@ N.concat x' y'
 
-  let check_def (d : def term) (env : E.t) : warn =
+  let check_def (d : def term)
+        (live : Live_variables.t)
+        (env : E.t)
+      : warn =
     let tid = Term.tid d in
     let tid_string = Tid.to_string tid in
     let lhs = Def.lhs d in
     let lhs_var_name = Var.name lhs in
-    if List.mem dont_care_vars lhs_var_name ~equal:String.equal
+    if SS.mem dont_care_vars lhs_var_name
     then empty
     else
-      begin
-        let rhs = Def.rhs d in
-        let (_rhs_result, final_state) = ST.run (check_exp rhs) (State.init env) in
-        let warnings = final_state.warns in
-        SS.map warnings ~f:(fun warn_str ->
-            Format.sprintf "%s::%s" tid_string warn_str)
-      end
-
-  let check_elt (e : Blk.elt) (env : E.t) : warn =
+      let init_state = State.init env tid live in
+      let rhs = Def.rhs d in
+      let _, final_state = ST.run (check_exp rhs) init_state in
+      final_state.warns
+  
+  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : E.t) : warn =
     match e with
-    | `Def d -> check_def d env
+    | `Def d -> check_def d live env
     | _ -> SS.empty
 end
+
+let run (module Domain : NumericDomain)
+      (edges: Edge_builder.edges)
+      (analysis_results : Solution.t)
+      (liveness : Live_variables.t)
+      (tidmap : Tid_map.t)
+    : warn =
+  let module Checker = Checker(Domain) in
+  let analyze_edge (e : Edge_builder.edge) : warn =
+    let from_tid = Edge_builder.from_ e in
+    let to_tid = Edge_builder.to_ e in
+    let in_state = Solution.get analysis_results from_tid in
+    let insn = match Tid_map.find tidmap to_tid with
+      | Some elt -> elt
+      | None ->
+         let tid_str = Tid.to_string to_tid in
+         failwith @@
+           sprintf "In Comp_simp.run, couldn't find tid %s" tid_str
+    in
+    Checker.check_elt insn liveness in_state
+  in
+  List.fold edges
+    ~init:Alert.Set.empty
+    ~f:(fun alerts edge ->
+      let alerts' = analyze_edge edge in
+      Alert.Set.union alerts alerts')
+
+let print_results : warn -> unit =
+  Alert.Set.iter ~f:(fun alert ->
+      printf "Comp_simp.Checker result: %s\n" @@ Alert.to_string alert)

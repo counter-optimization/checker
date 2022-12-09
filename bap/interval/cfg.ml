@@ -83,7 +83,7 @@ let sub_to_insn_graph sub img ctxt proj =
   let () = List.iter edges ~f:Edge_builder.print_edge in
 
   (* run the liveness analysis *)
-  let () = Live_variables.Analysis.run sub in
+  let liveness = Live_variables.Analysis.run sub in
   
   (* CFG *)
   let module G = Graphlib.Make(Tid)(Bool) in
@@ -154,6 +154,8 @@ let sub_to_insn_graph sub img ctxt proj =
                       in
                       AbsInt.denote_elt elt)
   in
+  let () = printf "abstract interpretation finished\n";
+           printf "starting comp simp checking\n" in
   (* let print_sol sol = *)
   (*   Solution.enum final_sol |> *)
   (*     Sequence.iter ~f:(fun (tid, env) -> *)
@@ -162,25 +164,32 @@ let sub_to_insn_graph sub img ctxt proj =
   (* in *)
   (* let () = print_sol final_sol in *)
 
-  let module CompSimpChecker = Comp_simp.Checker(FinalDomain) in
-  let comp_simp_checker_res =
-    List.fold edges
-      ~init:CompSimpChecker.empty
-      ~f:(fun acc_res (from', to', _is_interproc) ->
-        let from_state = Solution.get final_sol from' in
-        let elt = match Tid_map.find tidmap to' with
-          | Some elt -> elt
-          | None ->
-             begin
-               let tid_s = Tid.to_string to' in
-               failwith @@ sprintf "In comp_simp_checker_res, Couldn't find tid %s in tidmap" tid_s 
-             end
-        in
-        let check_res = CompSimpChecker.check_elt elt from_state in
-        CompSimpChecker.join acc_res check_res)
+  (* comp simp checking *)
+  let comp_simp_res = Comp_simp.run
+                        (module FinalDomain)
+                        edges
+                        final_sol
+                        liveness
+                        tidmap
   in
-  let () = Format.printf "Comp simp checker results are:\n%!" in
-  let () = CompSimpChecker.print_results comp_simp_checker_res in
+  (* let module CompSimpChecker = Comp_simp.Checker(FinalDomain) in *)
+  (* let comp_simp_checker_res = *)
+  (*   List.fold edges *)
+  (*     ~init:CompSimpChecker.empty *)
+  (*     ~f:(fun acc_res (from', to', _is_interproc) -> *)
+  (*       let from_state = Solution.get final_sol from' in *)
+  (*       let elt = match Tid_map.find tidmap to' with *)
+  (*         | Some elt -> elt *)
+  (*         | None -> *)
+  (*            begin *)
+  (*              let tid_s = Tid.to_string to' in *)
+  (*              failwith @@ sprintf "In comp_simp_checker_res, Couldn't find tid %s in tidmap" tid_s  *)
+  (*            end *)
+  (*       in *)
+  (*       let check_res = CompSimpChecker.check_elt elt from_state in *)
+  (*       CompSimpChecker.join acc_res check_res) *)
+  (* in *)
+  let () = Comp_simp.print_results comp_simp_res in
 
   List.iter edges ~f:(fun (f, t, _is_interproc) ->
       let from_str = Tid.to_string f in

@@ -449,11 +449,12 @@ module AbstractInterpreter(N: NumericDomain)
     
     denote_exp rhs >>= fun denoted_rhs ->
     ST.get () >>= fun st ->
-    (* ST.update @@ E.update_on_assn ~lhs:var ~rhs:denoted_rhs >>= fun () -> *)
     ST.update @@ E.set varname denoted_rhs
 
   let denote_phi (p : phi term) : unit ST.t =
     ST.get () >>= fun st ->
+    let _options = Phi.values p in
+    let _lhs_name = Phi.lhs p |> Var.name in
     let _ = failwith "denote_phi not implemented yet" in
     ST.return ()
 
@@ -477,11 +478,9 @@ module AbstractInterpreter(N: NumericDomain)
     let () = printf "in-state is \n%!"; E.pp st in
     let res = match e with
       | `Def d ->
-         begin
-           let defs = Def.pps () d in 
-           let () = printf "denoting def %s\n%!" defs in
-           denote_def d
-         end
+         let defs = Def.pps () d in 
+         let () = printf "denoting def %s\n" defs in
+         denote_def d
       | `Jmp j -> denote_jmp j 
       | `Phi p -> denote_phi p
     in

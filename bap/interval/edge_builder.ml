@@ -31,6 +31,12 @@ module ST = struct
 end
 open ST.Syntax
 
+let from_ : edge -> Tid.t = function
+  | (from', to', _is_interproc) -> from'
+
+let to_ : edge -> Tid.t = function
+  | (from', to', _is_interproc) -> to'
+
 let iter_insns sub : unit =
   let irg = Sub.to_cfg sub in
   let free_vars = Sub.free_vars sub in

@@ -317,13 +317,16 @@ module IsUsedPass = struct
     UseRel.iter rels ~f:print_rel
 end
 
+type t = IsUsedPass.UseRel.t
+
 (* the live variables analysis (Live_variables.Analysis.run) *)
 module Analysis = struct
-  let run (sub : Sub.t) : unit =
+  let run (sub : Sub.t) : t =
     let sub_ssa = sub_to_ssa_sub sub in
     printf "ssa sub insns are: \n";
     Edge_builder.iter_insns sub_ssa;
     let defs_map = GetDefsPass.run sub_ssa in
     let used_by_rels = IsUsedPass.run sub_ssa defs_map in
-    IsUsedPass.print_rels used_by_rels
+    let () = IsUsedPass.print_rels used_by_rels in
+    used_by_rels
 end
