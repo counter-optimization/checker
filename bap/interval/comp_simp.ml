@@ -18,11 +18,11 @@ module Checker(N : NumericDomain) = struct
   module I = Wrapping_interval
   module SS = Set.Make_binable_using_comparator(String)
 
-  type warn = Alert.Set.t
-  type t = warn
+  type warns = Alert.Set.t
+  type t = warns
 
   module State = struct
-    type t = { warns: warn;
+    type t = { warns: warns;
                env: E.t;
                tid : Tid.t;
                liveness : Live_variables.t } 
@@ -49,8 +49,8 @@ module Checker(N : NumericDomain) = struct
                        |> SS.of_list
 
   
-  let empty : warn = Alert.Set.empty
-  let join = Alert.Set.union
+  let empty : warns = Alert.Set.empty
+  let join : warns -> warns -> warns = Alert.Set.union
 
   let could_be_special (special_for_bw : I.t -> I.t) (to_check : I.t) : bool =
     if I.equal I.bot to_check
@@ -59,24 +59,59 @@ module Checker(N : NumericDomain) = struct
       let special = special_for_bw to_check in
       I.contains special to_check
 
-  let check_binop_operands (left_specials, right_specials) left right : warn =
+  let check_binop_operands
+        (specials : N.t list * N.t list)
+        (op : binop)
+        (left : N.t)
+        (right : N.t)
+      : unit ST.t =
+    let left_specials = fst specials in
+    let right_specials = snd specials in
     let left = get_intvl left in
     let right = get_intvl right in
     let fold_checker ~is_left =
       let operand = if is_left then left else right in
+      let problematic_operand_indice = if is_left then 0 else 1 in
       let check_operand result_acc special_for_bw =
-        match could_be_special special_for_bw operand with
-        | true ->
-           let special_str = I.to_string @@ special_for_bw operand in
-           let warn = Format.sprintf (if is_left then "binop_left_%s" else "binop_right_%s") special_str in
-           SS.add result_acc warn
-        | false -> result_acc
+        if could_be_special special_for_bw operand
+        then
+          ST.get () >>= fun st ->
+          let special_str = I.to_string @@ special_for_bw operand in
+          let binop_str = Common.binop_to_string op in
+          let left_str = if is_left
+                         then Some (I.to_string operand)
+                         else None
+          in
+          let right_str = if not is_left
+                          then Some (I.to_string operand)
+                          else None
+          in
+          let alert = { tid = st.tid;
+                        flags_live = None;
+                        reason = Alert.CompSimp;
+                        desc = binop_str;
+                        left_val = left_str;
+                        right_val = right_str;
+                        problematic_operands = Some [problematic_operand_indice] }
+          in
+          ST.update @@
+            fun old_st ->
+            { old_st with warns = Alert.Set.add old_st.warns alert }
+        else
+          result_acc
       in
       check_operand
     in
-    let left_res = List.fold left_specials ~init:empty ~f:(fold_checker ~is_left:true) in
-    let right_res = List.fold right_specials ~init:empty ~f:(fold_checker ~is_left:false) in
-    join left_res right_res
+    let left_res = List.fold left_specials
+                     ~init:(ST.return ())
+                     ~f:(fold_checker ~is_left:true)
+    in
+    let right_res = List.fold right_specials
+                      ~init:(ST.return ())
+                      ~f:(fold_checker ~is_left:false)
+    in
+    left_res >>= fun () ->
+    right_res
 
   let specials_of_binop (op : binop) : (I.t -> I.t) list * (I.t -> I.t) list =
     let one i = I.of_int ~width:(I.bitwidth i) 1 in
@@ -109,8 +144,8 @@ module Checker(N : NumericDomain) = struct
     | Bil.SLT -> [], []
     | Bil.SLE -> [], []
 
-  let check_binop (op : binop) : N.t -> N.t -> warn =
-    check_binop_operands (specials_of_binop op)
+  let check_binop (op : binop) : N.t -> N.t -> warns =
+    check_binop_operands (specials_of_binop op) op
 
   (* TODO: don't flag on constants *)
   let rec check_exp (e : Bil.exp) : N.t ST.t =
@@ -179,7 +214,7 @@ module Checker(N : NumericDomain) = struct
   let check_def (d : def term)
         (live : Live_variables.t)
         (env : E.t)
-      : warn =
+      : warns =
     let tid = Term.tid d in
     let tid_string = Tid.to_string tid in
     let lhs = Def.lhs d in
@@ -192,20 +227,20 @@ module Checker(N : NumericDomain) = struct
       let _, final_state = ST.run (check_exp rhs) init_state in
       final_state.warns
   
-  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : E.t) : warn =
+  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : E.t) : warns =
     match e with
     | `Def d -> check_def d live env
-    | _ -> SS.empty
+    | _ -> empty
 end
 
 let run (module Domain : NumericDomain)
       (edges: Edge_builder.edges)
-      (analysis_results : Solution.t)
+      (analysis_results : ('a, 'b) Solution.t)
       (liveness : Live_variables.t)
-      (tidmap : Tid_map.t)
-    : warn =
+      (tidmap : 'c Tid_map.t)
+    : Checker(Domain).warns =
   let module Checker = Checker(Domain) in
-  let analyze_edge (e : Edge_builder.edge) : warn =
+  let analyze_edge (e : Edge_builder.edge) : Checker.warns =
     let from_tid = Edge_builder.from_ e in
     let to_tid = Edge_builder.to_ e in
     let in_state = Solution.get analysis_results from_tid in

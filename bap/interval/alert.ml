@@ -14,6 +14,8 @@ module T = struct
   type t = { tid : Tid.t;
              flags_live : bool option;
              problematic_operands : int list option;
+             left_val : string option;
+             right_val : string option;
              reason : reason;
              desc : string }
              [@@deriving sexp, bin_io, compare, equal]
@@ -35,6 +37,8 @@ let t_of_reason_and_tid (reason : reason) (tid : Tid.t) : t =
   { tid;
     reason;
     flags_live = None;
+    left_val = None;
+    right_val = None;
     problematic_operands = None;
     desc = ""
   }
@@ -53,22 +57,33 @@ let add_problematic_operands (x : t) (prob_op : int list) : t =
      { x with problematic_operands = Some prob_op }
 
 let to_string (x : t) : string =
-  let { tid; problematic_operands; flags_live; reason; desc } = x in
+  let { tid;
+        problematic_operands;
+        left_val;
+        right_val;
+        flags_live;
+        reason;
+        desc } = x
+  in
   let tid_str = Tid.to_string tid in
   let po_str = match problematic_operands with
     | Some ops -> String.concat ~sep:":" @@
                     List.map ops ~f:Int.to_string
     | None -> ""
   in
+  let left_str = Option.value left_val ~default:"" in
+  let right_str = Option.value right_val ~default:"" in
   let flags_live_str = match flags_live with
     | Some fl -> Bool.to_string fl
     | None -> ""
   in
   let reason_str = string_of_reason reason in
   sprintf
-    "%s, %s, %s, %s, %s"
+    "%s, %s, %s, %s, %s, %s, %s"
     tid_str
     po_str
+    left_str
+    right_str
     flags_live_str
     reason_str
     desc
