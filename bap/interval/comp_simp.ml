@@ -60,7 +60,7 @@ module Checker(N : NumericDomain) = struct
       I.contains special to_check
 
   let check_binop_operands
-        (specials : N.t list * N.t list)
+        (specials : (I.t -> I.t) list * (I.t -> I.t) list)
         (op : binop)
         (left : N.t)
         (right : N.t)
@@ -75,6 +75,7 @@ module Checker(N : NumericDomain) = struct
       let check_operand result_acc special_for_bw =
         if could_be_special special_for_bw operand
         then
+          result_acc >>= fun () ->
           ST.get () >>= fun st ->
           let special_str = I.to_string @@ special_for_bw operand in
           let binop_str = Common.binop_to_string op in
@@ -86,13 +87,13 @@ module Checker(N : NumericDomain) = struct
                           then Some (I.to_string operand)
                           else None
           in
-          let alert = { tid = st.tid;
-                        flags_live = None;
-                        reason = Alert.CompSimp;
-                        desc = binop_str;
-                        left_val = left_str;
-                        right_val = right_str;
-                        problematic_operands = Some [problematic_operand_indice] }
+          let alert : Alert.t = { tid = st.tid;
+                                  flags_live = None;
+                                  reason = Alert.CompSimp;
+                                  desc = binop_str;
+                                  left_val = left_str;
+                                  right_val = right_str;
+                                  problematic_operands = Some [problematic_operand_indice] }
           in
           ST.update @@
             fun old_st ->
@@ -144,7 +145,7 @@ module Checker(N : NumericDomain) = struct
     | Bil.SLT -> [], []
     | Bil.SLE -> [], []
 
-  let check_binop (op : binop) : N.t -> N.t -> warns =
+  let check_binop (op : binop) : N.t -> N.t -> unit ST.t =
     check_binop_operands (specials_of_binop op) op
 
   (* TODO: don't flag on constants *)
@@ -169,9 +170,7 @@ module Checker(N : NumericDomain) = struct
     | Bil.BinOp (op, x, y) ->
        check_exp x >>= fun x' ->
        check_exp y >>= fun y' ->
-       let warnings = check_binop op x' y' in
-       ST.get () >>= fun st ->
-       ST.put { st with warns = join st.warns warnings } >>= fun _ ->
+       check_binop op x' y' >>= fun () ->
        let binop = AI.denote_binop op in
        let expr_res = binop x' y' in
        ST.return expr_res
@@ -216,7 +215,6 @@ module Checker(N : NumericDomain) = struct
         (env : E.t)
       : warns =
     let tid = Term.tid d in
-    let tid_string = Tid.to_string tid in
     let lhs = Def.lhs d in
     let lhs_var_name = Var.name lhs in
     if SS.mem dont_care_vars lhs_var_name

@@ -11,6 +11,7 @@ S domain_key.ml
 S abstract_memory.ml
 S alert.ml
 S comp_simp.ml
+S silent_stores.ml
 S data_section.ml
 S taint.ml
 S tid_map.ml

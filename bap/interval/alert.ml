@@ -28,7 +28,6 @@ end
 
 module Set = struct
   include Set.Make_binable_using_comparator(Cmp)
-  
 end
 
 include T

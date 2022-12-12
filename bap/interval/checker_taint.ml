@@ -49,6 +49,10 @@ module Analysis : NumericDomain = struct
     | KB.Order.EQ -> true
     | _ -> false
 
+  let is_tainted = function
+    | Taint -> true
+    | _ -> false
+
   let join x y =
     match x, y with
     | Taint, _ -> Taint

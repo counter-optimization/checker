@@ -191,6 +191,15 @@ let sub_to_insn_graph sub img ctxt proj =
   (* in *)
   let () = Comp_simp.print_results comp_simp_res in
 
+  let silent_store_res = Silent_stores.run
+                           (module FinalDomain)
+                           edges
+                           final_sol
+                           liveness
+                           tidmap
+  in
+  let () = Silent_stores.print_results silent_store_res in
+
   List.iter edges ~f:(fun (f, t, _is_interproc) ->
       let from_str = Tid.to_string f in
       let to_str = Tid.to_string t in
