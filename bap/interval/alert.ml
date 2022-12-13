@@ -86,3 +86,9 @@ let to_string (x : t) : string =
     flags_live_str
     reason_str
     desc
+
+let print_alert (alert : t) : unit =
+    printf "Alert: %s\n" @@ to_string alert
+
+let print_alerts : Set.t -> unit =
+  Set.iter ~f:print_alert

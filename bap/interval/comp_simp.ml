@@ -21,6 +21,8 @@ module Checker(N : NumericDomain) = struct
   type warns = Alert.Set.t
   type t = warns
 
+  let name = "comp-simp"
+
   module State = struct
     type t = { warns: warns;
                env: E.t;
