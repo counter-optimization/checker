@@ -79,7 +79,6 @@ module Checker(N : NumericDomain) = struct
         then
           result_acc >>= fun () ->
           ST.get () >>= fun st ->
-          let special_str = I.to_string @@ special_for_bw operand in
           let binop_str = Common.binop_to_string op in
           let left_str = if is_left
                          then Some (I.to_string operand)
@@ -232,33 +231,3 @@ module Checker(N : NumericDomain) = struct
     | `Def d -> check_def d live env
     | _ -> empty
 end
-
-let run (module Domain : NumericDomain)
-      (edges: Edge_builder.edges)
-      (analysis_results : ('a, 'b) Solution.t)
-      (liveness : Live_variables.t)
-      (tidmap : 'c Tid_map.t)
-    : Checker(Domain).warns =
-  let module Checker = Checker(Domain) in
-  let analyze_edge (e : Edge_builder.edge) : Checker.warns =
-    let from_tid = Edge_builder.from_ e in
-    let to_tid = Edge_builder.to_ e in
-    let in_state = Solution.get analysis_results from_tid in
-    let insn = match Tid_map.find tidmap to_tid with
-      | Some elt -> elt
-      | None ->
-         let tid_str = Tid.to_string to_tid in
-         failwith @@
-           sprintf "In Comp_simp.run, couldn't find tid %s" tid_str
-    in
-    Checker.check_elt insn liveness in_state
-  in
-  List.fold edges
-    ~init:Alert.Set.empty
-    ~f:(fun alerts edge ->
-      let alerts' = analyze_edge edge in
-      Alert.Set.union alerts alerts')
-
-let print_results : warn -> unit =
-  Alert.Set.iter ~f:(fun alert ->
-      printf "Comp_simp.Checker result: %s\n" @@ Alert.to_string alert)

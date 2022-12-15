@@ -345,6 +345,12 @@ module Make(N : NumericDomain)
     | Some f -> f
     | None -> failwith "Couldn't extract bases information out of product domain"
 
+  let set_taint (prod : N.t) : N.t =
+    N.set Checker_taint.Analysis.key prod Checker_taint.Analysis.Taint
+
+  let set_untaint (prod : N.t) : N.t =
+    N.set Checker_taint.Analysis.key prod Checker_taint.Analysis.Notaint
+
   (* let set_typd (typ : Type_domain) = *)
   (*   N.set Type_domain.key typ *)
 
@@ -482,7 +488,9 @@ module Make(N : NumericDomain)
        let ptr_strings = List.fold ptrs ~init:"" ~f:(fun acc x ->
                              acc ^ " " ^ Ptr.to_string x)
        in
-       failwith @@ sprintf "Didn't find cells for ptrs: %s" ptr_strings
+       let () = printf "Didn't find cells for ptrs: %s\n" ptr_strings in
+       let () = printf "Setting to untainted top...\n" in
+       set_untaint N.top 
     | 1 ->
        C.Set.fold cells ~init:N.bot ~f:(fun valset c ->
            let celname = C.name c in
@@ -574,7 +582,6 @@ module Make(N : NumericDomain)
                    cells = C.Map.add_cell ptr cel mem.cells }
 
   let store_of_bil_exp (e : Bil.exp) ~(offs : N.t) ~data ~valtype m =
-    let () = printf "store_of_bil_exp called\n" in
     match e with
     | Bil.Store (_mem, idx, v, _endian, size) -> 
       begin

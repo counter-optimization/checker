@@ -7,7 +7,7 @@ module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 module Key = Common.DomainKey
 
-module Analysis : NumericDomain = struct
+module Analysis = struct
   type t = Notaint | Taint [@@deriving bin_io, sexp]
 
   let key : t Key.k = Key.create "taint"
@@ -49,7 +49,7 @@ module Analysis : NumericDomain = struct
     | KB.Order.EQ -> true
     | _ -> false
 
-  let is_tainted = function
+  let is_tainted : t -> bool = function
     | Taint -> true
     | _ -> false
 

@@ -78,7 +78,7 @@ let to_string (x : t) : string =
   in
   let reason_str = string_of_reason reason in
   sprintf
-    "%s, %s, %s, %s, %s, %s, %s"
+    "%s,%s,%s,%s,%s,%s,%s"
     tid_str
     po_str
     left_str

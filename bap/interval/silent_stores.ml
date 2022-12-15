@@ -56,6 +56,9 @@ module Checker(N : NumericDomain) = struct
     | Some f -> f
     | None -> failwith "Couldn't extract taint information out of product domain in silent store checker"
 
+  let is_tainted : N.t -> bool =
+    fun n -> Taint.is_tainted @@ get_taint n
+
   let dont_care_vars = ["ZF"; "OF"; "CF"; "AF"; "PF"; "SF"]
                        |> SS.of_list
 
@@ -63,6 +66,10 @@ module Checker(N : NumericDomain) = struct
   let join : warns -> warns -> warns = Alert.Set.union
 
   (* TODO: don't flag on constants *)
+  (* cases:
+   * 1) if there has never been a store to this location and
+   *    the new value or the idx is not secret, do not alert
+   *)
   let rec check_exp (e : Bil.exp) : N.t ST.t =
     let eval_in_ai (e : Bil.exp) (st : State.t) : N.t ST.t =
       let exp_evaler = AI.denote_exp e in
@@ -77,15 +84,17 @@ module Checker(N : NumericDomain) = struct
        ST.get () >>= fun st ->
        let load_of_old_val = Bil.Load (mem, idx, endian, size) in
        eval_in_ai load_of_old_val st >>= fun old_val ->
+       let () = printf "old val is %s\n" @@ N.to_string old_val in
        check_exp idx >>= fun idx_val ->
        check_exp v >>= fun new_val ->
-       let old_tainted = Taint.is_tainted @@ get_taint old_val in
-       let new_tainted = Taint.is_tainted @@ get_taint new_val in
-       let idx_tainted = Taint.is_tainted @@ get_taint idx_val in
+       let old_tainted = is_tainted old_val in
+       let new_tainted = is_tainted new_val in
+       let idx_tainted = is_tainted idx_val in
+       let () = printf "old_tainted: %B, new_tainted: %B, idx_tainted: %B\n" old_tainted new_tainted idx_tainted in
        if old_tainted || new_tainted || idx_tainted
        then
          begin
-           let alert_desc = "Store of val, prev val, or mem idx is tainted" in
+           let alert_desc = "\"Store of val, prev val, or mem idx is tainted\"" in
            let alert : Alert.t = { tid = st.tid;
                                    flags_live = None; (* todo *)
                                    reason = Alert.SilentStores;
@@ -161,6 +170,9 @@ module Checker(N : NumericDomain) = struct
       final_state.warns
   
   let check_elt (e : Blk.elt) (live : Live_variables.t) (env : Env.t) : warns =
+    let () = printf "in state is \n";
+             Env.pp env
+    in
     match e with
     | `Def d -> check_def d live env
     | _ -> empty
