@@ -84,13 +84,11 @@ module Checker(N : NumericDomain) = struct
        ST.get () >>= fun st ->
        let load_of_old_val = Bil.Load (mem, idx, endian, size) in
        eval_in_ai load_of_old_val st >>= fun old_val ->
-       let () = printf "old val is %s\n" @@ N.to_string old_val in
        check_exp idx >>= fun idx_val ->
        check_exp v >>= fun new_val ->
        let old_tainted = is_tainted old_val in
        let new_tainted = is_tainted new_val in
        let idx_tainted = is_tainted idx_val in
-       let () = printf "old_tainted: %B, new_tainted: %B, idx_tainted: %B\n" old_tainted new_tainted idx_tainted in
        if old_tainted || new_tainted || idx_tainted
        then
          begin
@@ -170,9 +168,6 @@ module Checker(N : NumericDomain) = struct
       final_state.warns
   
   let check_elt (e : Blk.elt) (live : Live_variables.t) (env : Env.t) : warns =
-    let () = printf "in state is \n";
-             Env.pp env
-    in
     match e with
     | `Def d -> check_def d live env
     | _ -> empty
