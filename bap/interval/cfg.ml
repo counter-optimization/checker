@@ -117,7 +117,13 @@ let sub_to_insn_graph sub img ctxt proj =
                   |> List.append argnames
   in
 
-  let with_rsp_rbp_set = E.set_rbp stack_addr @@ E.set_rsp stack_addr empty in
+  let with_rsp_set = E.set_rsp stack_addr empty in 
+  let with_rsp_rbp_set = Or_error.bind with_rsp_set ~f:(fun env' ->
+                             E.set_rbp stack_addr env') in
+  let with_rsp_rbp_set = match with_rsp_rbp_set with
+    | Ok env' -> env'
+    | Error e -> failwith @@ Error.to_string_hum e
+  in
   let with_img_set = E.set_img with_rsp_rbp_set img in
 
   let initial_mem = List.fold true_args ~init:with_img_set
@@ -193,12 +199,13 @@ let sub_to_insn_graph sub img ctxt proj =
       include Silent_stores.Checker(FinalDomain)
       type env = E.t
     end in
-  let comp_simp_alerts = run_checker (module CSChecker) edges in 
+  let comp_simp_alerts = run_checker (module CSChecker) edges in
+  let delimiter = "@@@@@@@@@" in
   let () = Alert.print_alerts comp_simp_alerts in
-  let () = printf "Done with comp simp checking\n%!" in 
+  let () = printf "%sDone with comp simp checking%s\n%!" delimiter delimiter in 
   let silent_store_alerts = run_checker (module SSChecker) edges in
   let () = Alert.print_alerts silent_store_alerts in
-  let () = printf "Done with silent stores checking\n%!" in
+  let () = printf "%sDone with silent stores checking\n%s%!" delimiter delimiter in
 
   let runner = Callees.run () in
   let () =

@@ -159,7 +159,10 @@ module Checker(N : NumericDomain) = struct
     match e with
     | Bil.Load (_mem, idx, _endian, size) ->
        check_exp idx >>= fun offs ->
-       ST.gets @@ fun st -> E.load_of_bil_exp e offs st.env
+       ST.gets @@ fun st ->
+                  (match E.load_of_bil_exp e offs st.env with
+                  | Ok v -> v
+                  | Error e -> failwith @@ Error.to_string_hum e)
     | Bil.Store (_mem, idx, v, _endian, size) ->
        check_exp idx >>= fun offs ->
        check_exp v 

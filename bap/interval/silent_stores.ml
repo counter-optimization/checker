@@ -79,12 +79,23 @@ module Checker(N : NumericDomain) = struct
     match e with
     | Bil.Load (_mem, idx, _endian, size) ->
        check_exp idx >>= fun offs ->
-       ST.gets @@ fun st -> Env.load_of_bil_exp e offs st.env
+       ST.gets @@ fun st ->
+                  (match Env.load_of_bil_exp e offs st.env with
+                   | Ok v -> v
+                   | Error e -> failwith @@ Error.to_string_hum e)
     | Bil.Store (mem, idx, v, endian, size) ->
        ST.get () >>= fun st ->
-       let load_of_old_val = Bil.Load (mem, idx, endian, size) in
-       eval_in_ai load_of_old_val st >>= fun old_val ->
        check_exp idx >>= fun idx_val ->
+       let load_of_old_val = Bil.Load (mem, idx, endian, size) in
+       let eval_loaded_val = Env.load_of_bil_exp load_of_old_val idx_val st.env in
+       let old_val = match eval_loaded_val with
+         | Ok old_val -> old_val
+         | Error e ->
+            let () = printf "silentstores.check_exp: %s\n" @@
+                       Error.to_string_hum e
+            in
+            N.top
+       in
        check_exp v >>= fun new_val ->
        let old_tainted = is_tainted old_val in
        let new_tainted = is_tainted new_val in

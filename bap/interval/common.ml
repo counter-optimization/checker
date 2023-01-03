@@ -234,21 +234,23 @@ module type MemoryT =
     type region
     type valtypes
 
+    type 'a err = ('a, Error.t) Result.t
+
     val empty : t
     val lookup : string -> t -> v
     val set : string -> v -> t -> t
     val equal : t -> t -> bool
 
     val compute_type : Bil.exp -> t -> cell_t
-    val set_rsp : int -> t -> t
-    val set_rbp : int -> t -> t
+    val set_rsp : int -> t -> t err
+    val set_rbp : int -> t -> t err
     val set_img : t -> Image.t -> t
     val holds_ptr : string -> t -> bool
     val setptr : name:string -> regions:regions -> offs:v -> width:v -> t -> t
     val unptr : name:string -> t -> t
     (* val update_on_assn : lhs:Var.t -> rhs:v -> t -> t *)
-    val load_of_bil_exp : Bil.exp -> v -> t -> v
-    val store_of_bil_exp : Bil.exp -> offs:v -> data:v -> valtype:cell_t -> t -> t
+    val load_of_bil_exp : Bil.exp -> v -> t -> v err
+    val store_of_bil_exp : Bil.exp -> offs:v -> data:v -> valtype:cell_t -> t -> t err
     
     val merge : t -> t -> t
     val widen_threshold : int
@@ -268,6 +270,8 @@ module NumericEnv(ValueDom : NumericDomain)
   type v = ValueDom.t
   type t = ValueDom.t M.t
 
+  type 'a err = ('a, Error.t) Result.t
+
   let empty : t = M.empty
   let stack_ptr = "RSP"
   let frame_ptr = "RBP"
@@ -284,16 +288,16 @@ module NumericEnv(ValueDom : NumericDomain)
   let compute_type e env = CellType.Scalar
   let set name v env : t = M.set env ~key:name ~data:v
 
-  let set_rsp offs env = set "RSP" (ValueDom.of_int offs) env
-  let set_rbp offs env = set "RBP" (ValueDom.of_int offs) env
+  let set_rsp offs env = Ok (set "RSP" (ValueDom.of_int offs) env)
+  let set_rbp offs env = Ok (set "RBP" (ValueDom.of_int offs) env)
   let set_img env img = env
 
   let setptr ~name ~regions ~offs ~width env = env
   let unptr ~name env = env
   let update_on_assn ~lhs ~rhs env = env
 
-  let load_of_bil_exp (e : Bil.exp) _offs env = ValueDom.top
-  let store_of_bil_exp (e : Bil.exp) ~offs ~data ~valtype env = env
+  let load_of_bil_exp (e : Bil.exp) _offs env = Ok ValueDom.top
+  let store_of_bil_exp (e : Bil.exp) ~offs ~data ~valtype env = Ok env
   
   let mem = M.mem
   let equal = M.equal ValueDom.equal
@@ -393,20 +397,25 @@ module AbstractInterpreter(N: NumericDomain)
   (* let rec denote_exp (e : Bil.exp) : E.t -> (N.t, E.t) = *)
   let rec denote_exp (e : Bil.exp) : N.t ST.t =
     ST.get () >>= fun st ->
-    let () = printf "in denote_exp, e is %s\n%!" @@ Exp.pps () e in
     match e with
     | Bil.Load (_mem, idx, _endian, size) ->
        denote_exp idx >>= fun offs ->
        ST.get () >>= fun st ->
-       let () = printf "in bil.load denote, offs is %s\n%!" @@ N.to_string offs in
        let res = E.load_of_bil_exp e offs st in
-       ST.return res
+       begin
+         match res with
+         | Ok res -> ST.return res
+         | Error msg -> failwith @@ Error.to_string_hum msg
+       end
     | Bil.Store (_mem, idx, v, _endian, size) ->
        denote_exp idx >>= fun offs ->
        denote_exp v >>= fun data ->
        ST.gets (Env.compute_type v) >>= fun valtype ->
-       ST.update @@ Env.store_of_bil_exp e ~offs:offs ~data ~valtype >>= fun () ->
-       ST.return N.bot
+       begin
+         match Env.store_of_bil_exp e ~offs:offs ~data ~valtype st with
+         | Ok newenv -> ST.put newenv >>= fun () -> ST.return N.bot
+         | Error msg -> failwith @@ Error.to_string_hum msg
+       end
     | Bil.BinOp (op, x, y) ->
        denote_exp x >>= fun x' ->
        denote_exp y >>= fun y' ->
@@ -491,18 +500,13 @@ module AbstractInterpreter(N: NumericDomain)
     ST.return ()
 
   let denote_elt (e : Blk.elt) (st : E.t) : E.t =
-    let () = printf "in-state is \n%!"; E.pp st in
     let res = match e with
       | `Def d ->
-         let defs = Def.pps () d in 
-         let () = printf "denoting def %s\n" defs in
          denote_def d
       | `Jmp j -> denote_jmp j 
       | `Phi p -> denote_phi p
     in
     let (elt_res, state') = ST.run res st in
-    let () = printf "out-state is \n%!"; E.pp state' in
-    let () = printf "---------------------------\n" in
     state'
 end
 

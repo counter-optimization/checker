@@ -323,6 +323,8 @@ module Make(N : NumericDomain)
   type regions = Region.Set.t
   type valtypes = Common.cell_t
 
+  type 'a err = ('a, Error.t) Result.t
+
   let empty : t = { cells = C.Map.empty;
                     env = Env.empty;
                     bases = BaseSetMap.empty;
@@ -448,24 +450,9 @@ module Make(N : NumericDomain)
     | Let _ -> CellType.Scalar (* todo *)
     | Ite _ -> CellType.Scalar (* todo *)
     | Unknown _ -> CellType.Scalar
-  
-  (* let update_on_assn ~(lhs : Var.t) ~(rhs : N.t) (mem : t) : t = *)
-  (*   let name = Var.name lhs in *)
-    
-  (*   let lhs_old_val = lookup name mem in *)
-  (*   let lhs_old_type = get_typd lhs_old_val in *)
-    
-  (*   let rhs_typ = get_typd rhs in *)
-
-  (*   match lhs_old_type, rhs_typ with *)
-  (*   | CellType.Scalar, CellType.Ptr ->  *)
-  (*   | CellType.Ptr, CellType.Scalar -> *)
-    
 
   let cells_of_offs_and_regions ~(offs : Wrapping_interval.t) ~regions ~(width : Wrapping_interval.t) (mem : t) : C.Set.t =
     let ptrs = Ptr.of_regions ~regions ~offs ~width in
-    let ptr_strings = List.map ptrs ~f:Ptr.to_string in
-    let () = List.iter ptr_strings ~f:(fun s -> printf "Pointer to load from is: %s\n" s) in
     List.fold ptrs ~init:C.Set.empty
       ~f:(fun acc ptr ->
         C.Set.union acc @@
@@ -480,7 +467,7 @@ module Make(N : NumericDomain)
         ~regions
         ~(width : Wrapping_interval.t)
         (mem : t)
-      : N.t =
+      : N.t err =
     let ptrs = Ptr.of_regions ~regions ~offs ~width in
     let cells = cells_of_offs_and_regions ~offs ~regions ~width mem in
     match C.Set.length cells with
@@ -489,29 +476,29 @@ module Make(N : NumericDomain)
                              acc ^ " " ^ Ptr.to_string x)
        in
        let () = printf "Didn't find cells for ptrs: %s\n" ptr_strings in
-       let () = printf "Setting to tainted top...\n" in
-       N.top
-       (* set_untaint N.top  *)
+       let () = printf "Setting to untainted top...\n" in
+       Ok (set_untaint N.top)
     | 1 ->
-       C.Set.fold cells ~init:N.bot ~f:(fun valset c ->
-           let celname = C.name c in
-           N.join valset @@ lookup celname mem)
+       Ok (C.Set.fold cells ~init:N.bot ~f:(fun valset c ->
+               let celname = C.name c in
+               N.join valset @@ lookup celname mem))
     | _ ->
        let ptr_strings = List.fold ptrs ~init:"" ~f:(fun acc x ->
                              acc ^ " " ^ Ptr.to_string x)
        in
-       failwith @@ sprintf "No support for reading overlapping ptrs: %s" ptr_strings
+       Or_error.error_string @@
+         sprintf "in load_from_offs_and_regions: No support for reading overlapping ptrs: %s" ptr_strings
 
-  let load_global (offs : Wrapping_interval.t) (sz : size) (m : t) : N.t =
+  let load_global (offs : Wrapping_interval.t) (sz : size) (m : t) : N.t err =
     match m.img with
-    | None -> failwith "memory's image should be set before load"
+    | None -> Or_error.error_string "load_global: memory's image should be set before load"
     | Some img ->
        let segs = Image.segments img in
        match Wrapping_interval.to_int offs with
        | None ->
           begin
             let offs_s = Wrapping_interval.to_string offs in
-            failwith @@ sprintf "couldn't convert offs %s to address for image" offs_s
+            Or_error.error_string @@ sprintf "load_global: couldn't convert offs %s to address for image" offs_s
           end
        | Some addr ->
           let addr_w = Word.of_int ~width:64 addr in
@@ -520,7 +507,7 @@ module Make(N : NumericDomain)
           | None ->
              begin
                let addr_s = Word.to_string addr_w in
-               failwith @@ sprintf "In Abstract_Memory:load_global, couldn't find addr %s in image" addr_s
+               Or_error.error_string @@ sprintf "load_global: couldn't find addr %s in image" addr_s
              end
           | Some (mem, seg) ->
              match Memory.get ~addr:addr_w ~scale:sz mem with
@@ -529,15 +516,15 @@ module Make(N : NumericDomain)
                   let segname = Image.Segment.name seg in
                   let addr_s = Word.to_string addr_w in
                   let err_s = Error.to_string_hum e in
-                  failwith @@ sprintf "Error reading address %s from seg %s: %s" addr_s segname err_s
+                  Or_error.error_string @@ sprintf "load_global: Error reading address %s from seg %s: %s" addr_s segname err_s
                 end
              | Ok data ->
                 let res = N.of_word data in
                 let res_s = N.to_string res in
                 let () = printf "in load_global, loaded data was %s\n" res_s in
-                res
+                Ok res
 
-  let store ~(offs : Wrapping_interval.t) ~region ~(width : Wrapping_interval.t) ~data ~valtype mem : t =
+  let store ~(offs : Wrapping_interval.t) ~region ~(width : Wrapping_interval.t) ~data ~valtype mem : t err =
     let ptr = Ptr.make ~region ~offs ~width in
     let () = printf "storing to ptr %s\n" (Ptr.to_string ptr) in
     let overlap = C.Map.get_overlapping ptr mem.cells in
@@ -548,7 +535,8 @@ module Make(N : NumericDomain)
       let overlap = C.Set.fold overlap ~init:""
                       ~f:(fun acc c -> acc ^ " " ^ (C.name c))
       in
-      failwith @@ sprintf "No support for storing with overlapping ptrs %s" overlap
+      Or_error.error_string @@
+        sprintf "No support for storing with overlapping ptrs %s" overlap
     else
       let cel = if C.Set.length overlap = 1
                 then List.hd_exn @@ C.Set.to_list overlap
@@ -557,11 +545,11 @@ module Make(N : NumericDomain)
       let celname = C.name cel in
       if not (C.equals_ptr cel ptr)
       then
-        failwith @@
+        Or_error.error_string @@
           sprintf "Can't store ptr %s to cell %s" (Ptr.to_string ptr) celname
       else
-        { mem with env = Env.set celname data mem.env;
-                   cells = C.Map.add_cell ptr cel mem.cells }
+        Ok { mem with env = Env.set celname data mem.env;
+                      cells = C.Map.add_cell ptr cel mem.cells }
 
   let global_exists ~(offs : Wrapping_interval.t)
         ~(width : Wrapping_interval.t) (mem : t) : bool =
@@ -575,7 +563,7 @@ module Make(N : NumericDomain)
      but the cryptographic libs shouldn't do this, so ignoring
      overlap/nonalignment for now
    *)
-  let load_of_bil_exp (e : Bil.exp) (idx_res : N.t) (m : t) : N.t =
+  let load_of_bil_exp (e : Bil.exp) (idx_res : N.t) (m : t) : N.t err =
     match e with
     | Bil.Load (_mem, idx, _endian, size) ->
        let load_from_vars = Var_name_collector.run idx in
@@ -590,58 +578,62 @@ module Make(N : NumericDomain)
        let is_global = offs_is_scalar && Set.is_empty regions in
        let regions = if is_global then Set.add regions Region.Global else regions in
 
-       let (m', regions') = if is_global && not (global_exists ~offs ~width m)
-                            then
-                              let data = load_global offs size m in
-                              let region = Region.Global in
-                              let valtype = CellType.Unknown in
-                              let m' = store ~offs ~region ~width ~data ~valtype m in
-                              (m', Region.Set.from_region region)
-                            else
-                              (m, regions)
-       in
+       let open Or_error.Monad_infix in
+       
+       (if is_global && not (global_exists ~offs ~width m)
+        then
+          load_global offs size m >>= fun data ->
+          let region = Region.Global in
+          let valtype = CellType.Unknown in
+          store ~offs ~region ~width ~data ~valtype m >>= fun m' ->
+          Ok (m', Region.Set.from_region region)
+        else
+          Ok (m, regions))
+        >>= fun (m', regions') ->
        load_from_offs_and_regions m' ~offs ~regions:regions' ~width
-    | _ -> failwith "Not a load in load_of_bil_exp"
-
+    | _ -> Or_error.error_string "load_of_bil_exp: Not a load in load_of_bil_exp"
   
   (* on first store to a global, just treat it as every other store. *)
-  let store_of_bil_exp (e : Bil.exp) ~(offs : N.t) ~data ~valtype m =
+  let store_of_bil_exp (e : Bil.exp) ~(offs : N.t) ~data ~valtype m : t err =
     match e with
     | Bil.Store (_mem, idx, v, _endian, size) -> 
       begin
         let vars = Var_name_collector.run idx in
-        let () = Set.iter vars ~f:(fun v ->
-                     printf "var: %s in store offs exp\n" v) in
         let width = bap_size_to_absdom size in
         let bases_to_load_from = BaseSetMap.bases_of_vars vars m.bases in
         let bases_to_load_from = if Set.is_empty bases_to_load_from
                                  then Region.Set.from_region Region.Global
                                  else bases_to_load_from
         in
-        let () = Set.iter bases_to_load_from ~f:(fun b ->
-                     let reg_s = Region.to_string b in
-                     printf "Storing to base %s\n" reg_s) in
         let offs = get_intvl offs in
-        Set.fold bases_to_load_from ~init:m ~f:(fun env base ->
-            let () = printf "storing to base %s\n" (Region.to_string base) in
-            store ~offs ~region:base ~width ~data ~valtype env)
+        Set.fold bases_to_load_from ~init:(Ok m) ~f:(fun env base ->
+            Or_error.bind env ~f:(fun env ->
+                store ~offs ~region:base ~width ~data ~valtype env))
       end
-    | _ -> failwith "store got non-store expression in store_of_bil_exp"
+    | _ -> Or_error.error_string
+             "store_of_bil_exp: store got non-store expression"
 
   (* for init the mem on the outermost API call.
      store N.top *)
-  let store_init_ret_ptr (mem : t) : t =
+  let store_init_ret_ptr (mem : t) : t err =
+    let open Or_error.Monad_infix in 
     let rsp = "RSP" in
     let rsp_offs = Env.lookup rsp mem.env in
     let rsp_offs_wi = get_intvl rsp_offs in
-    let stack_region = match BaseSetMap.find mem.bases rsp with
-      | Some bases -> (if Set.length bases <> 1
-                      then failwith "RSP should only have stack as its base before calling store_init_ret_ptr"
-                      else Set.to_list bases |> List.hd_exn)
-      | None -> failwith "RSP should be setup before calling store_init_ret_ptr"
-    in
+
+    (match BaseSetMap.find mem.bases rsp with
+    | Some bases -> (if Set.length bases <> 1
+                     then
+                       Or_error.error_string
+                         "store_init_ret_ptr: RSP should only have stack as its base before calling store_init_ret_ptr"
+                     else
+                       Ok (Set.to_list bases |> List.hd_exn))
+    | None -> Or_error.error_string
+                "store_init_ret_ptr: RSP should be setup before calling store_init_ret_ptr")
+    >>= fun stack_region ->
     let rsp_width = Wrapping_interval.of_int 64 in
-    let init_ret_ptr = N.set Type_domain.key N.top CellType.Ptr in
+    let init_val = set_untaint N.top in
+    let init_ret_ptr = N.set Type_domain.key init_val CellType.Ptr in
     store mem
       ~offs:rsp_offs_wi
       ~region:stack_region
@@ -649,30 +641,26 @@ module Make(N : NumericDomain)
       ~data:init_ret_ptr
       ~valtype:CellType.Ptr
 
-  let set_rsp (offs : int) (mem : t) : t =
+  let set_rsp (offs : int) (mem : t) : t err =
     let offs = N.of_int ~width:64 offs in
     let offs_as_ptr = N.set Type_domain.key offs CellType.Ptr in
     let offs_with_base = N.set Bases_domain.key offs_as_ptr Bases_domain.stack in
-    let () = printf "in set_rsp, init RSP is: %s\n" @@ N.to_string offs_with_base in
     setptr mem
       ~name:"RSP"
       ~regions:(BaseSet.singleton Region.Stack)
       ~offs:offs_with_base
       ~width:`r64
     |> store_init_ret_ptr
-    (* |> set_type ~name:"RSP" CellType.Ptr *)
 
-  let set_rbp (offs : int) (mem : t) : t =
+  let set_rbp (offs : int) (mem : t) : t err =
     let offs = N.of_int ~width:64 offs in
     let offs_as_ptr = N.set Type_domain.key offs CellType.Ptr in
     let offs_with_base = N.set Bases_domain.key offs_as_ptr Bases_domain.stack in
-    let () = printf "in set_rbp, init RBP is: %s\n" @@ N.to_string offs_as_ptr in
-    setptr mem
-      ~name:"RBP"
-      ~regions:(BaseSet.singleton Region.Stack)
-      ~offs:offs_with_base
-      ~width:`r64
-  (* |> set_type ~name:"RBP" CellType.Ptr *)
+    Ok (setptr mem
+          ~name:"RBP"
+          ~regions:(BaseSet.singleton Region.Stack)
+          ~offs:offs_with_base
+          ~width:`r64)
 
   let merge_images img1 img2 : Image.t option =
     if Option.is_some img1
