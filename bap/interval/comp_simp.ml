@@ -16,7 +16,7 @@ module Checker(N : NumericDomain) = struct
   end
   module AI = AbstractInterpreter(N)(Abstract_memory.Region)(Abstract_memory.Region.Set)(struct type t = Common.cell_t end)(E)
   module I = Wrapping_interval
-  module SS = Set.Make_binable_using_comparator(String)
+  module SS = Common.SS
 
   type warns = Alert.Set.t
   type t = warns

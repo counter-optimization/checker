@@ -6,6 +6,22 @@ open Monads.Std
 module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 
+module SS = struct
+  module T = struct
+    include Set.Make_binable_using_comparator(String)
+  end
+  include T
+  include Comparator.Make(T)
+end
+
+let package = "uarch-checker"
+
+let string_powset_dom = KB.Domain.powerset
+                          (module String)
+                          ~inspect:String.sexp_of_t
+                          "string-powerset-domain"
+
+
 module CellType = struct
   type t = Scalar
          | Ptr

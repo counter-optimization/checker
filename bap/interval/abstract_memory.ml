@@ -16,8 +16,8 @@ module Region = struct
     let equal r1 r2 : bool =
       match r1, r2 with
       | Global, Global
-        | Heap, Heap
-        | Stack, Stack -> true
+      | Heap, Heap
+      | Stack, Stack -> true
       | _ -> false
 
     let to_string = function
@@ -489,8 +489,9 @@ module Make(N : NumericDomain)
                              acc ^ " " ^ Ptr.to_string x)
        in
        let () = printf "Didn't find cells for ptrs: %s\n" ptr_strings in
-       let () = printf "Setting to untainted top...\n" in
-       set_untaint N.top 
+       let () = printf "Setting to tainted top...\n" in
+       N.top
+       (* set_untaint N.top  *)
     | 1 ->
        C.Set.fold cells ~init:N.bot ~f:(fun valset c ->
            let celname = C.name c in
@@ -519,7 +520,7 @@ module Make(N : NumericDomain)
           | None ->
              begin
                let addr_s = Word.to_string addr_w in
-               failwith @@ sprintf "couldn't find addr %s in image" addr_s
+               failwith @@ sprintf "In Abstract_Memory:load_global, couldn't find addr %s in image" addr_s
              end
           | Some (mem, seg) ->
              match Memory.get ~addr:addr_w ~scale:sz mem with
@@ -535,26 +536,7 @@ module Make(N : NumericDomain)
                 let res_s = N.to_string res in
                 let () = printf "in load_global, loaded data was %s\n" res_s in
                 res
-  
-  let load_of_bil_exp (e : Bil.exp) (idx_res : N.t) (m : t) : N.t =
-    match e with
-    | Bil.Load (_mem, idx, _endian, size) ->
-       let load_from_vars = Var_name_collector.run idx in
-       let regions = BaseSetMap.bases_of_vars load_from_vars m.bases in
-       
-       let offs = get_intvl idx_res in
-       let offs_type = compute_type idx m in
-       let offs_is_scalar = CellType.is_scalar offs_type in
-       
-       let width = bap_size_to_absdom size in
-       
-       if offs_is_scalar && Set.is_empty regions
-       then
-         load_global offs size m
-       else
-         load_from_offs_and_regions m ~offs ~regions ~width
-    | _ -> failwith "Not a load in load_of_bil_exp"
-  
+
   let store ~(offs : Wrapping_interval.t) ~region ~(width : Wrapping_interval.t) ~data ~valtype mem : t =
     let ptr = Ptr.make ~region ~offs ~width in
     let () = printf "storing to ptr %s\n" (Ptr.to_string ptr) in
@@ -581,6 +563,48 @@ module Make(N : NumericDomain)
         { mem with env = Env.set celname data mem.env;
                    cells = C.Map.add_cell ptr cel mem.cells }
 
+  let global_exists ~(offs : Wrapping_interval.t)
+        ~(width : Wrapping_interval.t) (mem : t) : bool =
+    let regions = Region.Set.from_region Region.Global in 
+    let cells = cells_of_offs_and_regions ~offs ~regions ~width mem in
+    0 < C.Set.length cells
+  
+(* on first load of global, load from the image into the abstract
+     memory environment, then do the load a usual. this is unsound force
+     general programs in the case of a previous overlapping store,
+     but the cryptographic libs shouldn't do this, so ignoring
+     overlap/nonalignment for now
+   *)
+  let load_of_bil_exp (e : Bil.exp) (idx_res : N.t) (m : t) : N.t =
+    match e with
+    | Bil.Load (_mem, idx, _endian, size) ->
+       let load_from_vars = Var_name_collector.run idx in
+       let regions = BaseSetMap.bases_of_vars load_from_vars m.bases in
+       
+       let offs = get_intvl idx_res in
+       let offs_type = compute_type idx m in
+       let offs_is_scalar = CellType.is_scalar offs_type in
+       
+       let width = bap_size_to_absdom size in
+
+       let is_global = offs_is_scalar && Set.is_empty regions in
+       let regions = if is_global then Set.add regions Region.Global else regions in
+
+       let (m', regions') = if is_global && not (global_exists ~offs ~width m)
+                            then
+                              let data = load_global offs size m in
+                              let region = Region.Global in
+                              let valtype = CellType.Unknown in
+                              let m' = store ~offs ~region ~width ~data ~valtype m in
+                              (m', Region.Set.from_region region)
+                            else
+                              (m, regions)
+       in
+       load_from_offs_and_regions m' ~offs ~regions:regions' ~width
+    | _ -> failwith "Not a load in load_of_bil_exp"
+
+  
+  (* on first store to a global, just treat it as every other store. *)
   let store_of_bil_exp (e : Bil.exp) ~(offs : N.t) ~data ~valtype m =
     match e with
     | Bil.Store (_mem, idx, v, _endian, size) -> 
@@ -590,12 +614,16 @@ module Make(N : NumericDomain)
                      printf "var: %s in store offs exp\n" v) in
         let width = bap_size_to_absdom size in
         let bases_to_load_from = BaseSetMap.bases_of_vars vars m.bases in
+        let bases_to_load_from = if Set.is_empty bases_to_load_from
+                                 then Region.Set.from_region Region.Global
+                                 else bases_to_load_from
+        in
         let () = Set.iter bases_to_load_from ~f:(fun b ->
                      let reg_s = Region.to_string b in
                      printf "Storing to base %s\n" reg_s) in
         let offs = get_intvl offs in
         Set.fold bases_to_load_from ~init:m ~f:(fun env base ->
-            let () = printf "Loading from base %s\n" (Region.to_string base) in
+            let () = printf "storing to base %s\n" (Region.to_string base) in
             store ~offs ~region:base ~width ~data ~valtype env)
       end
     | _ -> failwith "store got non-store expression in store_of_bil_exp"

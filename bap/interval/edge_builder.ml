@@ -165,6 +165,7 @@ let last_insn_of_sub sub : Blk.elt =
 let edges_of_jump j sub nodes proj : edges ST.t =
   let fromtid = Term.tid j in
   let ret_insn_tid = get_ret_insn_tid nodes in
+  let () = printf "fromtid is %a\n" Tid.ppo fromtid in
   let () = printf "ret insn tid is %s\n" (Tid.to_string ret_insn_tid) in
   match Jmp.kind j with
   | Goto (Direct totid) ->
@@ -174,7 +175,7 @@ let edges_of_jump j sub nodes proj : edges ST.t =
   | Goto _ when Tid.equal fromtid ret_insn_tid ->
      ST.return []
   | Goto (Indirect _expr) ->
-     failwith "Indirect jumps not handled in edge building yet (outer)"
+     failwith "Indirect jumps not handled in edge building yet (outer goto)"
   | Call c ->
      let () = printf "handling call\n" in
      begin
@@ -214,10 +215,43 @@ let edges_of_jump j sub nodes proj : edges ST.t =
   | Int (_, _)
     | Ret _ -> ST.return []
 
+let edges_of_jump_intraproc j sub nodes proj : edges ST.t =
+  let fromtid = Term.tid j in
+  let ret_insn_tid = get_ret_insn_tid nodes in
+  let () = printf "fromtid is %a\n" Tid.ppo fromtid in
+  let () = printf "ret insn tid is %s\n" (Tid.to_string ret_insn_tid) in
+  match Jmp.kind j with
+  | Goto (Direct totid) ->
+     let first_insn = first_insn_of_blk_tid totid sub in
+     let first_insns_tid = Tid_map.tid_of_elt first_insn in
+     ST.return [(fromtid, first_insns_tid, false)]
+  | Call target ->
+     let retlabel = Call.return target in
+     begin
+       match retlabel with
+       | Some (Direct totid) ->
+          let () = printf "proccessing call fromtid %a\n%!" Tid.ppo fromtid in
+          let first_insn_of_ret_blk = first_insn_of_blk_tid totid sub in
+          let first_insns_tid = Tid_map.tid_of_elt first_insn_of_ret_blk in
+          let () = printf "In Call, adding ret edge: (%a, %a)\n%!"
+                     Tid.ppo fromtid
+                     Tid.ppo first_insns_tid
+          in
+          ST.return [(fromtid, first_insns_tid, false)]
+         | _ -> ST.return []
+      (* match tolabel with *)
+      (* | Direct totid -> ST.return [] *)
+      (* | Indirect exp -> ST.return [] *)
+     end
+  | Goto _
+  | Int (_, _)
+  | Ret _ -> ST.return []
+
 let get_jmp_edges insns sub nodes proj =
   let edges insn =
     match insn with
-    | `Jmp j -> edges_of_jump j sub nodes proj
+    (* | `Jmp j -> edges_of_jump j sub nodes proj *)
+    | `Jmp j -> edges_of_jump_intraproc j sub nodes proj
     | _ -> ST.return []
   in
   Seq.fold insns ~init:(ST.return []) ~f:(fun st insn ->
@@ -261,7 +295,7 @@ let run (outermost : Sub.t) (proj : Project.t) : (edges * tidmap) =
        let worklist' = Callees.remove worklist sub in
        loop worklist' seen edges st
     | Some sub ->
-       let () = iter_insns sub in (* print the callee's bir for debugging *)
+       (* let () = iter_insns sub in (\* print the callee's bir for debugging *\) *)
        
        let builder = get_builder_for_sub sub proj in
        let (callee_edges, callee_st) = ST.run builder st in
@@ -289,3 +323,8 @@ let run (outermost : Sub.t) (proj : Project.t) : (edges * tidmap) =
     end
   else
     edges, st.tidmap
+
+let run_one (sub : Sub.t) (proj : Project.t) : (edges * tidmap) =
+  let builder = get_builder_for_sub sub proj in
+  let (edges, st) = ST.run builder empty in
+  edges, st.tidmap

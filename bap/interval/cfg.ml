@@ -78,7 +78,7 @@ let sub_to_insn_graph sub img ctxt proj =
 
   (* construct edges for converting from CFG with basic-block nodes
      to a CFG with insn nodes *)
-  let edges, tidmap = Edge_builder.run sub proj in
+  let edges, tidmap = Edge_builder.run_one sub proj in
   let () = printf "edges are:\n" in
   let () = List.iter edges ~f:Edge_builder.print_edge in
 
@@ -154,8 +154,8 @@ let sub_to_insn_graph sub img ctxt proj =
                              in
                              AbsInt.denote_elt elt)
   in
-  let () = printf "abstract interpretation finished\n";
-           printf "starting comp simp checking\n" in
+  let () = printf "abstract interpretation finished\n%!";
+           printf "starting comp simp checking\n%!" in
 
   (* Build up checker infra and run the checkers
    * This next part is an abomination of Ocaml code
@@ -164,14 +164,15 @@ let sub_to_insn_graph sub img ctxt proj =
     let from_tid = Edge_builder.from_ e in
     let to_tid = Edge_builder.to_ e in
     let in_state = Solution.get analysis_results to_tid in
-    let insn = match Tid_map.find tidmap to_tid with
+    let insn =
+      match Tid_map.find tidmap to_tid with
       | Some elt -> elt
       | None ->
          let tid_str = Tid.to_string to_tid in
          failwith @@
            sprintf "In running checker %s, couldn't find tid %s" Chkr.name tid_str
     in
-    let () = printf "checking edge (%a, %a)\n" Tid.ppo from_tid Tid.ppo to_tid in
+    let () = printf "checking edge (%a, %a)\n%!" Tid.ppo from_tid Tid.ppo to_tid in
     Chkr.check_elt insn liveness in_state
   in
 
@@ -182,7 +183,7 @@ let sub_to_insn_graph sub img ctxt proj =
         let alerts' = analyze_edge (module Chkr) edge in
         Alert.Set.union alerts alerts')
   in
-
+  
   (* comp simp checking *)
   let module CSChecker : Checker.S with type env = E.t = struct
       include Comp_simp.Checker(FinalDomain)
@@ -194,10 +195,17 @@ let sub_to_insn_graph sub img ctxt proj =
     end in
   let comp_simp_alerts = run_checker (module CSChecker) edges in 
   let () = Alert.print_alerts comp_simp_alerts in
-  let () = printf "Done with comp simp checking\n" in 
+  let () = printf "Done with comp simp checking\n%!" in 
   let silent_store_alerts = run_checker (module SSChecker) edges in
   let () = Alert.print_alerts silent_store_alerts in
-  let () = printf "Done with silent stores checking\n" in 
+  let () = printf "Done with silent stores checking\n%!" in
+
+  let runner = Callees.run () in
+  let () =
+    match KB.run Callees.cls runner (Toplevel.current ()) with
+    | Error e -> Format.eprintf "Error: %a\n%!" KB.Conflict.pp e
+    | Ok (v, _) -> Format.printf "named labels are %a\n%!" KB.Value.pp v
+  in
 
   List.iter edges ~f:(fun (f, t, _is_interproc) ->
       let from_str = Tid.to_string f in
@@ -231,7 +239,16 @@ let iter_insns sub : unit =
   Seq.iter nodes ~f:print_sub_defs
 
 let check_fn (name, block, cfg) img ctxt proj =
+  (* let prog = Project.program proj in *)
+  (* let callgraph = Program.to_graph prog in *)
+  (* let filename = sprintf "%s.dot" name in *)
+  (* let string_of_node n = *)
+  (*   Graphs.Callgraph.Node.label n *)
+  (*   |> Tid.to_string *)
+  (*   |> String.chop_prefix_if_exists ~prefix:"%" *)
+  (* in *)
+  (* let () = Graphlib.to_dot (module Graphs.Callgraph) callgraph ~filename ~string_of_node in *)
   let sub = Sub.lift block cfg in
   let () = iter_insns sub in
   (* Run the checkers *)
-  sub_to_insn_graph sub img ctxt proj
+  sub_to_insn_graph sub img ctxt proj;
