@@ -310,10 +310,10 @@ module IsUsedPass = struct
       rel.user
 
   let print_rel (rel : t) : unit =
-    printf "%s\n" @@ to_string rel
+    printf "%s\n%!" @@ to_string rel
   
   let print_rels (rels : UseRel.t) : unit =
-    printf "Used-By relations are:\n";
+    printf "Used-By relations are:\n%!";
     UseRel.iter rels ~f:print_rel
 end
 

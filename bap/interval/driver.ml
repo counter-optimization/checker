@@ -139,7 +139,7 @@ let sub_to_insn_graph sub img ctxt proj : check_sub_result =
     | Some n -> n
     | None -> failwith "in cfg building init sol, couldn't get first node"
   in
-  let () = printf "first node is %s\n" (Tid.to_string first_node) in
+  let () = printf "first node is %s\n%!" (Tid.to_string first_node) in
 
   let with_args = G.Node.Map.set G.Node.Map.empty ~key:first_node ~data:initial_mem in
   let init_sol = Solution.create with_args empty in
@@ -224,9 +224,9 @@ let sub_to_insn_graph sub img ctxt proj : check_sub_result =
     | Ok callees -> callees
     | Error e -> failwith @@ Error.to_string_hum e
   in
-  let () = Format.printf "Callees are: \n" in
+  let () = Format.printf "Callees are: \n%!" in
   let () = List.iter callees ~f:(fun callee_sub ->
-               Format.printf "callee: %s\n" @@ Sub.name callee_sub)
+               Format.printf "callee: %s\n%!" @@ Sub.name callee_sub)
   in
   { alerts = all_alerts; callees = callees }
 

@@ -26,7 +26,7 @@ module Region = struct
       | Stack -> "stack"
 
     let pp x =
-      Format.printf "%s" @@ to_string x
+      Format.printf "%s%!" @@ to_string x
   end
 
   module Cmp = struct
@@ -114,7 +114,7 @@ module Pointer(N : NumericDomain) = struct
       sprintf "(%s, %s, %s)" r o w
 
     let pp ptr : unit =
-      Format.printf "%s" @@ to_string ptr
+      Format.printf "%s%!" @@ to_string ptr
   end
 
   include T
@@ -191,7 +191,7 @@ module Cell(N : NumericDomain) = struct
       sprintf "%s-%s" (name m) valtype_str
 
     let pp (m : t) : unit =
-      Format.printf "%s" @@ to_string m
+      Format.printf "%s%!" @@ to_string m
 
     let overlaps_with_ptr cel ptr : bool =
       if not (Region.equal (Pointer.region ptr) cel.region)
@@ -475,8 +475,8 @@ module Make(N : NumericDomain)
        let ptr_strings = List.fold ptrs ~init:"" ~f:(fun acc x ->
                              acc ^ " " ^ Ptr.to_string x)
        in
-       let () = printf "Didn't find cells for ptrs: %s\n" ptr_strings in
-       let () = printf "Setting to untainted top...\n" in
+       let () = printf "Didn't find cells for ptrs: %s\n%!" ptr_strings in
+       let () = printf "Setting to untainted top...\n%!" in
        (* Ok N.top *)
        Ok (set_untaint N.top)
     | 1 ->
@@ -522,17 +522,17 @@ module Make(N : NumericDomain)
              | Ok data ->
                 let res = N.of_word data in
                 let res_s = N.to_string res in
-                let () = printf "in load_global, loaded data was %s\n" res_s in
+                let () = printf "in load_global, loaded data was %s\n%!" res_s in
                 Ok res
 
   let store ~(offs : Wrapping_interval.t) ~region
         ~(width : Wrapping_interval.t) ~data ~valtype mem
       : t err =
     let ptr = Ptr.make ~region ~offs ~width in
-    let () = printf "storing to ptr %s\n" (Ptr.to_string ptr) in
+    let () = printf "storing to ptr %s\n%!" (Ptr.to_string ptr) in
     let overlap = C.Map.get_overlapping ptr mem.cells in
     let () = Set.iter overlap ~f:(fun c ->
-                 printf "overlapping cell: %s\n" (C.to_string c)) in
+                 printf "overlapping cell: %s\n%!" (C.to_string c)) in
     if C.Set.length overlap > 1
     then
       let overlap = C.Set.fold overlap ~init:""
@@ -736,9 +736,9 @@ module Make(N : NumericDomain)
       let region_set_str = Set.to_list data |> List.to_string ~f:Region.to_string in
       Format.printf "\t%s --> %s\n%!" key region_set_str
     in
-    printf "* Ptr->Cells map is:\n";
+    printf "* Ptr->Cells map is:\n%!";
     Map.iteri cells ~f:print_ptr_to_cells;
     Env.pp env;
-    printf "* Var->Bases map is:\n";
+    printf "* Var->Bases map is:\n%!";
     Map.iteri bases ~f:print_bases_map
 end

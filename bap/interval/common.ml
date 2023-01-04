@@ -360,10 +360,10 @@ module NumericEnv(ValueDom : NumericDomain)
       let val_str = ValueDom.to_string data in
       sprintf "%s --> %s" key val_str
     in
-    printf "* Env is:\n";
+    printf "* Env is:\n%!";
     M.iteri env ~f:(fun ~key ~data ->
         let entry_str = env_entry_to_string ~key ~data in
-        printf "\t%s\n" entry_str)
+        printf "\t%s\n%!" entry_str)
 end
 
 module AbstractInterpreter(N: NumericDomain)
