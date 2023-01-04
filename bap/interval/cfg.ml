@@ -205,14 +205,24 @@ let sub_to_insn_graph sub img ctxt proj =
   let () = printf "%sDone with comp simp checking%s\n%!" delimiter delimiter in 
   let silent_store_alerts = run_checker (module SSChecker) edges in
   let () = Alert.print_alerts silent_store_alerts in
-  let () = printf "%sDone with silent stores checking\n%s%!" delimiter delimiter in
+  let () = printf "%sDone with silent stores checking%s\n%!" delimiter delimiter in
 
-  let runner = Callees.run () in
-  let () =
-    match KB.run Callees.cls runner (Toplevel.current ()) with
-    | Error e -> Format.eprintf "Error: %a\n%!" KB.Conflict.pp e
-    | Ok (v, _) -> Format.printf "named labels are %a\n%!" KB.Value.pp v
+  (* print the callees for now *)
+  let module GetCallees = Callees.Getter(FinalDomain) in
+  let callees = match GetCallees.get sub proj analysis_results with
+    | Ok callees -> callees
+    | Error e -> failwith @@ Error.to_string_hum e
   in
+  let () = Format.printf "Callees are: \n" in
+  let () = List.iter callees ~f:(fun callee_sub ->
+               Format.printf "callee: %s\n" @@ Sub.name callee_sub)
+  in
+  (* let runner = Callees.run () in *)
+  (* let () = *)
+  (*   match KB.run Callees.cls runner (Toplevel.current ()) with *)
+  (*   | Error e -> Format.eprintf "Error: %a\n%!" KB.Conflict.pp e *)
+  (*   | Ok (v, _) -> Format.printf "named labels are %a\n%!" KB.Value.pp v *)
+  (* in *)
 
   List.iter edges ~f:(fun (f, t, _is_interproc) ->
       let from_str = Tid.to_string f in

@@ -251,6 +251,8 @@ module type MemoryT =
     (* val update_on_assn : lhs:Var.t -> rhs:v -> t -> t *)
     val load_of_bil_exp : Bil.exp -> v -> t -> v err
     val store_of_bil_exp : Bil.exp -> offs:v -> data:v -> valtype:cell_t -> t -> t err
+
+    val havoc_on_call : t -> t
     
     val merge : t -> t -> t
     val widen_threshold : int
@@ -298,6 +300,8 @@ module NumericEnv(ValueDom : NumericDomain)
 
   let load_of_bil_exp (e : Bil.exp) _offs env = Ok ValueDom.top
   let store_of_bil_exp (e : Bil.exp) ~offs ~data ~valtype env = Ok env
+
+  let havoc_on_call env = env
   
   let mem = M.mem
   let equal = M.equal ValueDom.equal
@@ -484,20 +488,11 @@ module AbstractInterpreter(N: NumericDomain)
     ST.return ()
 
   let denote_jmp (j : jmp term) : unit ST.t =
-    let potential_label = match Jmp.kind j with
-      | Call c -> Some (Call.target c)
-      | Goto l -> Some l
-      | Ret l -> Some l
-      | Int (n, tid) -> None
-    in
-    let () = match potential_label with
-      | Some l ->
-         let ls = Label.to_string l in
-         let () = Format.printf "jmp term is : %a%! -- " Jmp.pp j in
-         Format.printf "label of jmp term is : %s\n%!" ls
-      | None -> ()
-    in
-    ST.return ()
+    match Jmp.kind j with
+    | Call c -> ST.update E.havoc_on_call
+    | Goto _
+    | Ret _
+    | Int _ -> ST.return ()
 
   let denote_elt (e : Blk.elt) (st : E.t) : E.t =
     let res = match e with

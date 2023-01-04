@@ -641,6 +641,12 @@ module Make(N : NumericDomain)
       ~data:init_ret_ptr
       ~valtype:CellType.Ptr
 
+  (* have to handle:
+     1) don't havoc stack slots that hold frame ptr, return ptr
+   *)
+  let havoc_on_call (mem : t) : t = mem
+    
+
   let set_rsp (offs : int) (mem : t) : t err =
     let offs = N.of_int ~width:64 offs in
     let offs_as_ptr = N.set Type_domain.key offs CellType.Ptr in
