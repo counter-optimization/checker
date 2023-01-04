@@ -89,6 +89,7 @@ module Checker(N : NumericDomain) = struct
                           else None
           in
           let alert : Alert.t = { tid = st.tid;
+                                  sub_name = None;
                                   flags_live = None;
                                   reason = Alert.CompSimp;
                                   desc = binop_str;

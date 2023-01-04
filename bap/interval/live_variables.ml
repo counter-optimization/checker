@@ -323,10 +323,10 @@ type t = IsUsedPass.UseRel.t
 module Analysis = struct
   let run (sub : Sub.t) : t =
     let sub_ssa = sub_to_ssa_sub sub in
-    printf "ssa sub insns are: \n";
-    Edge_builder.iter_insns sub_ssa;
+    (* printf "ssa sub insns are: \n"; *)
+    (* Edge_builder.iter_insns sub_ssa; *)
     let defs_map = GetDefsPass.run sub_ssa in
     let used_by_rels = IsUsedPass.run sub_ssa defs_map in
-    let () = IsUsedPass.print_rels used_by_rels in
+    (* let () = IsUsedPass.print_rels used_by_rels in *)
     used_by_rels
 end

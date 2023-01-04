@@ -11,7 +11,8 @@ let string_of_reason = function
 module T = struct
   (* flags_live: not computed or computed and true or false *)
   (* problematic_operands: doesn't apply or a list of operand indices *)
-  type t = { tid : Tid.t;
+  type t = { sub_name : string option; 
+             tid : Tid.t;
              flags_live : bool option;
              problematic_operands : int list option;
              left_val : string option;
@@ -33,7 +34,8 @@ end
 include T
 
 let t_of_reason_and_tid (reason : reason) (tid : Tid.t) : t =
-  { tid;
+  { sub_name = None;
+    tid;
     reason;
     flags_live = None;
     left_val = None;
@@ -56,13 +58,20 @@ let add_problematic_operands (x : t) (prob_op : int list) : t =
      { x with problematic_operands = Some prob_op }
 
 let to_string (x : t) : string =
-  let { tid;
+  let { sub_name;
+        tid;
         problematic_operands;
         left_val;
         right_val;
         flags_live;
         reason;
         desc } = x
+  in
+  let sub_name_str = match sub_name with
+    | Some sub_name -> sub_name
+    | None ->
+       let err_msg = Format.sprintf "in Alert.to_string for alert for tid %a, by the time alerts are output, all alerts should have their corresponding subroutine name filled out." Tid.pps tid in
+       failwith err_msg
   in
   let tid_str = Tid.to_string tid in
   let po_str = match problematic_operands with
@@ -78,7 +87,8 @@ let to_string (x : t) : string =
   in
   let reason_str = string_of_reason reason in
   sprintf
-    "%s,%s,%s,%s,%s,%s,%s"
+    "%s,%s,%s,%s,%s,%s,%s,%s"
+    sub_name_str
     tid_str
     po_str
     left_str

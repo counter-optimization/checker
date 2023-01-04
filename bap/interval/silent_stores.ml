@@ -105,6 +105,7 @@ module Checker(N : NumericDomain) = struct
          begin
            let alert_desc = "\"Store of val, prev val, or mem idx is tainted\"" in
            let alert : Alert.t = { tid = st.tid;
+                                   sub_name = None;
                                    flags_live = None; (* todo *)
                                    reason = Alert.SilentStores;
                                    desc = alert_desc;
