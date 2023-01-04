@@ -475,7 +475,6 @@ module AbstractInterpreter(N: NumericDomain)
     let var = Def.lhs d in
     let varname = Var.name var in
     let rhs = Def.rhs d in
-    
     denote_exp rhs >>= fun denoted_rhs ->
     ST.get () >>= fun st ->
     ST.update @@ E.set varname denoted_rhs
@@ -497,11 +496,20 @@ module AbstractInterpreter(N: NumericDomain)
   let denote_elt (e : Blk.elt) (st : E.t) : E.t =
     let res = match e with
       | `Def d ->
+         let elt_tid = Term.tid d in
+         let () = printf "denoting tid %a\n" Tid.ppo elt_tid in
          denote_def d
-      | `Jmp j -> denote_jmp j 
-      | `Phi p -> denote_phi p
+      | `Jmp j ->
+         let elt_tid = Term.tid j in
+         let () = printf "denoting tid %a\n" Tid.ppo elt_tid in
+         denote_jmp j 
+      | `Phi p ->
+         let elt_tid = Term.tid p in
+         let () = printf "denoting tid %a\n" Tid.ppo elt_tid in
+         denote_phi p
     in
     let (elt_res, state') = ST.run res st in
+    let () = printf "out-state is:\n"; E.pp st in
     state'
 end
 

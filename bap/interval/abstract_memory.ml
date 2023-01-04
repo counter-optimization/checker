@@ -524,7 +524,9 @@ module Make(N : NumericDomain)
                 let () = printf "in load_global, loaded data was %s\n" res_s in
                 Ok res
 
-  let store ~(offs : Wrapping_interval.t) ~region ~(width : Wrapping_interval.t) ~data ~valtype mem : t err =
+  let store ~(offs : Wrapping_interval.t) ~region
+        ~(width : Wrapping_interval.t) ~data ~valtype mem
+      : t err =
     let ptr = Ptr.make ~region ~offs ~width in
     let () = printf "storing to ptr %s\n" (Ptr.to_string ptr) in
     let overlap = C.Map.get_overlapping ptr mem.cells in
@@ -644,8 +646,22 @@ module Make(N : NumericDomain)
   (* have to handle:
      1) don't havoc stack slots that hold frame ptr, return ptr
    *)
-  let havoc_on_call (mem : t) : t = mem
-    
+  let havoc_on_call (mem : t) : t =
+    let havoc_one_cell (mem : t) (cname : string) : t =
+      { mem with env = Env.set cname N.top mem.env }
+    in
+    let cell_name_of_ptr (p : Ptr.t) : string =
+      C.t_of_ptr p |> C.name
+    in
+    let havoc_rax (mem : t) : t =
+      let rax = "RAX" in
+      { mem with env = Env.set rax N.top mem.env }
+    in
+    let cell_map = mem.cells in
+    let cells = Map.keys cell_map in
+    let cell_names = List.map cells ~f:cell_name_of_ptr in
+    List.fold cell_names ~init:mem ~f:havoc_one_cell
+    |> havoc_rax
 
   let set_rsp (offs : int) (mem : t) : t err =
     let offs = N.of_int ~width:64 offs in
