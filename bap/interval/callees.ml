@@ -71,16 +71,7 @@ module Getter(N : NumericDomain) = struct
     match WI.to_int callee_as_intvl with
     | Some addr_int ->
        let callee_addr = addr_int |> Addr.of_int ~width:64 in
-       let () = printf "get_callee_of_indirect: callee_addr as addr is %a\n"
-                  Addr.ppo callee_addr
-       in
-       let () = printf "get_callee_of_indirect: callee_addr as Wi is %s\n"
-                @@ WI.to_string callee_as_intvl
-       in
        let callee_tid = Tid.for_addr callee_addr in
-       let () = printf "get_callee_of_indirect: callee_addr as tid is %a\n"
-                  Tid.ppo callee_tid
-       in
        let bb_tid_sub_db = get_bb_tid_sub_db prog in
        (match List.Assoc.find ~equal:Tid.equal bb_tid_sub_db callee_tid with
         | Some sub_tid -> Ok sub_tid
@@ -137,16 +128,17 @@ module Getter(N : NumericDomain) = struct
   let get_indirect_calls (sub : sub term) (proj : Project.t)
         (sol : (Tid.t, E.t) Solution.t)
       : Tid.t list Or_error.t =
+    let is_not_return_insn (j : jmp term) : bool =
+      not @@ Common.jmp_is_return j
+    in
     let is_indirect_call (j : jmp term) : bool =
       match Jmp.kind j with
-      | Call target ->
+      | Call target when is_not_return_insn j ->
          let target_label = Call.target target in
          (match target_label with
           | Direct _ -> false
           | Indirect _ -> true)
-      | Goto _
-      | Ret _ 
-      | Int (_, _) -> false
+      | _ -> false
     in
     let prog = Project.program proj in
     let all_jmps = get_all_jmps sub in

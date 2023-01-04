@@ -15,8 +15,8 @@ type check_sub_result = { callees : sub term list;
 
 type checker_alerts = Alert.Set.t
 
-module TidSet = struct
-  include Set.Make_binable_using_comparator(Tid)
+module SubSet = struct
+  include Set.Make_binable_using_comparator(Sub)
 end
 
 let print_iml iml : unit =
@@ -167,9 +167,12 @@ let sub_to_insn_graph sub img ctxt proj : check_sub_result =
    * todo: refactor this using this SO answer:
    * https://stackoverflow.com/questions/67823455/having-a-module-and-an-instance-of-it-as-parameters-to-an-ocaml-function
    *)
+  
   let analyze_edge (module Chkr : Checker.S with type env = E.t) (e : Edge_builder.edge) : Chkr.warns =
     let from_tid = Edge_builder.from_ e in
     let to_tid = Edge_builder.to_ e in
+    (* the env to run the checker in is stored in the insn to be checked
+     *)
     let in_state = Solution.get analysis_results to_tid in
     let insn =
       match Tid_map.find tidmap to_tid with
@@ -200,8 +203,12 @@ let sub_to_insn_graph sub img ctxt proj : check_sub_result =
       include Silent_stores.Checker(FinalDomain)
       type env = E.t
     end in
+  let () = printf "Starting comp simp checker...\n%!" in
   let comp_simp_alerts = run_checker (module CSChecker) edges in
+  let () = printf "Done running comp simp checker.\n%!" in
+  let () = printf "Starting silent stores checker...\n%!" in
   let silent_store_alerts = run_checker (module SSChecker) edges in
+  let () = printf "Done running silent stores checker.\n%!" in
   let all_alerts = Alert.Set.union comp_simp_alerts silent_store_alerts in
   
   (* fill out this subroutine name in all of the generated alerts for
@@ -211,6 +218,7 @@ let sub_to_insn_graph sub img ctxt proj : check_sub_result =
   in
 
   (* get callees--both direct and indirect calls--of this call *)
+  let () = Format.printf "Getting callees for sub %s\n%!" (Sub.name sub) in
   let module GetCallees = Callees.Getter(FinalDomain) in
   let callees = match GetCallees.get sub proj analysis_results with
     | Ok callees -> callees
@@ -240,63 +248,43 @@ let iter_insns sub : unit =
     Seq.iter insns ~f:print_insn
   in
   
-  let () = Format.printf "nodes are:\n%!" in
+  let () = Format.printf "nodes are:\n%!" in 
   Seq.iter nodes ~f:print_sub_defs
-
-let sub_of_tid (tid : Tid.t) (prog : Program.t) : sub term =
-  let maybe_sub = Term.find sub_t prog tid in
-  match maybe_sub with
-  | Some sub -> sub
-  | None ->
-     let err_msg = Format.sprintf
-                     "Couldn't find sub for tid %a in program %a"
-                     Tid.pps tid
-                     Program.pps prog
-     in
-     failwith err_msg
 
 (* this fn needs to have return type unit b/c BAP passes
    should have type (Project.t -> unit). here, this function
    gets curried until it has this type.
  *)
-let check_fn (name, block, cfg) img ctxt proj : unit =
-  let prog = Project.program proj in
-
+let check_fn top_level_sub img ctxt proj : unit =
   (* this is the outermost, public-facing API call of the
      current crypto libraries *)
-  let top_level_sub = Sub.lift block cfg in
-  let top_level_sub_tid = Term.tid top_level_sub in
-  
-  let () = iter_insns top_level_sub in
+  (* let top_level_sub = Sub.lift block cfg in *)
 
-  let worklist = TidSet.singleton (top_level_sub_tid) in
-  let processed = TidSet.empty in
+  let worklist = SubSet.singleton (top_level_sub) in
+  let processed = SubSet.empty in
   let init_res = Alert.Set.empty in
 
-  let rec loop ~(worklist : TidSet.t)
-            ~(processed : TidSet.t)
+  let rec loop ~(worklist : SubSet.t)
+            ~(processed : SubSet.t)
             ~(res : checker_alerts)
           : checker_alerts =
     let worklist_wo_procd = Set.diff worklist processed in
-    if TidSet.is_empty worklist_wo_procd
+    if SubSet.is_empty worklist_wo_procd
     then
-      let () = Format.printf "Done processing all functions\n" in
+      let () = Format.printf "Done processing all functions\n%!" in
       res
     else
-      let sub_tid = Set.min_elt_exn worklist_wo_procd in
+      let sub = Set.min_elt_exn worklist_wo_procd in
+      let () = iter_insns sub in
       
-      let worklist_wo_procd_wo_sub = Set.remove worklist_wo_procd sub_tid in
-      let next_processed = Set.add processed sub_tid in
+      let worklist_wo_procd_wo_sub = Set.remove worklist_wo_procd sub in
+      let next_processed = Set.add processed sub in
       
-      let sub = sub_of_tid sub_tid prog in
-      let () = Format.printf "Processing sub %s\n" (Sub.name sub) in
+      let () = Format.printf "Processing sub %s\n%!" (Sub.name sub) in
       let current_res = sub_to_insn_graph sub img ctxt proj in
       
-      let add_to_worklist = current_res.callees
-                            |> List.map ~f:Term.tid
-                            |> TidSet.of_list
-      in
-      let next_worklist = TidSet.union worklist_wo_procd_wo_sub add_to_worklist in
+      let add_to_worklist = current_res.callees |> SubSet.of_list in
+      let next_worklist = SubSet.union worklist_wo_procd_wo_sub add_to_worklist in
       let all_alerts = Alert.Set.union res current_res.alerts in
       loop ~worklist:next_worklist ~processed:next_processed ~res:all_alerts
   in

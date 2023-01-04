@@ -4,34 +4,36 @@ open Bap.Std
 
 module UarchCheckerExtension = struct
   let target_func_param = Extension.Configuration.parameter
-                            ~doc:"Used to tell the checker which function to check"
+                            ~doc:"Which top-level function to check"
                             Extension.Type.string
                             "target-function"
 
-  (* TODO: lol i forgot this just comes in through the project
-     as the target file name *)
-  let target_func_obj_file = Extension.Configuration.parameter
-                               Extension.Type.string
-                               "target-obj-file"
+  let get_target_file_name (proj : Project.t) : string =
+    match Project.get proj filename with
+    | Some file_name -> file_name
+    | None ->
+       failwith "In get_target_file_name, couldn't get target file name from project"
+
+  let sub_matches_name target_name (sub : sub term) : bool =
+    Sub.name sub |> String.equal target_name
 
   let get_target_func name proj =
-    let syms = Project.symbols proj in
-    let named_tuples = Symtab.to_sequence syms in
-    let maybe_target_funcs = Seq.filter named_tuples
-                               ~f:(fun (name', _, _) -> String.equal name name') in
-    if Seq.length maybe_target_funcs > 1
-    then
-      let possible_matches = Seq.to_list maybe_target_funcs |> List.to_string ~f:(fun (name, _, _) -> name) in
-      let err_str = Printf.sprintf "More than one matching target func found: %s\n%!" possible_matches in
-      failwith err_str
-    else
-      match Seq.hd maybe_target_funcs with
-      | Some target -> target
-      | None -> failwith "Didn't find a target function with that name"
-
+    let prog = Project.program proj in
+    let subs = Term.enum sub_t prog in
+    let maybe_sub = Seq.find subs ~f:(sub_matches_name name) in
+    match maybe_sub with
+    | Some sub -> sub
+    | None ->
+       let file_name = get_target_file_name proj in
+       let err_msg = Format.sprintf
+                       "Couldn't find subroutine with name %s in file %s\n"
+                       name file_name
+       in
+       failwith err_msg
+  
   let pass ctxt proj =
     let target_func_name = Extension.Configuration.get ctxt target_func_param in
-    let target_obj_name = Extension.Configuration.get ctxt target_func_obj_file in
+    let target_obj_name = get_target_file_name proj in
     let target_fn = get_target_func target_func_name proj in
     let i = Image.create ~backend:"llvm" target_obj_name in
     let img_and_errs = match i with

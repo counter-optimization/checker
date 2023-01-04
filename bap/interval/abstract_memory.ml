@@ -477,6 +477,7 @@ module Make(N : NumericDomain)
        in
        let () = printf "Didn't find cells for ptrs: %s\n" ptr_strings in
        let () = printf "Setting to untainted top...\n" in
+       (* Ok N.top *)
        Ok (set_untaint N.top)
     | 1 ->
        Ok (C.Set.fold cells ~init:N.bot ~f:(fun valset c ->
@@ -578,10 +579,11 @@ module Make(N : NumericDomain)
        let width = bap_size_to_absdom size in
 
        let is_global = offs_is_scalar && Set.is_empty regions in
-       let regions = if is_global then Set.add regions Region.Global else regions in
-
+       let regions = if is_global
+                     then Set.add regions Region.Global
+                     else regions
+       in
        let open Or_error.Monad_infix in
-       
        (if is_global && not (global_exists ~offs ~width m)
         then
           load_global offs size m >>= fun data ->

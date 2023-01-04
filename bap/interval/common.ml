@@ -144,6 +144,25 @@ let binop_to_string (b : Bil.binop) : string =
    | Bil.SLT -> "-<"
    | Bil.SLE -> "-<="
 
+(* technically, this way is not fully correct.
+   calling jmp_is_return on a return will always
+   return true, but if it returns true, it is
+   not guaranteed to be a return (in the case
+   of non-returning func calls. this is the
+   general case, but the cryptographic code we
+   analyze should not have these cases. the proper
+   way would be to consult the semantics property
+   "core:semantics" > "bap:insn-properties" > ":return"
+   but this comes from the KB
+ *)
+let jmp_is_return (j : jmp term) : bool =
+  (* this looks weird ("is return if Call.return is none"),
+     but an x86_64 return insn is lifted to an indirect
+     call to the saved return pointer with no return. *)
+  match Jmp.kind j with
+  | Call c -> Option.is_none @@ Call.return c
+  | _ -> false
+
 module type NumericDomain = sig
   type t
 
@@ -476,7 +495,6 @@ module AbstractInterpreter(N: NumericDomain)
     let varname = Var.name var in
     let rhs = Def.rhs d in
     denote_exp rhs >>= fun denoted_rhs ->
-    ST.get () >>= fun st ->
     ST.update @@ E.set varname denoted_rhs
 
   let denote_phi (p : phi term) : unit ST.t =
@@ -495,21 +513,11 @@ module AbstractInterpreter(N: NumericDomain)
 
   let denote_elt (e : Blk.elt) (st : E.t) : E.t =
     let res = match e with
-      | `Def d ->
-         let elt_tid = Term.tid d in
-         let () = printf "denoting tid %a\n" Tid.ppo elt_tid in
-         denote_def d
-      | `Jmp j ->
-         let elt_tid = Term.tid j in
-         let () = printf "denoting tid %a\n" Tid.ppo elt_tid in
-         denote_jmp j 
-      | `Phi p ->
-         let elt_tid = Term.tid p in
-         let () = printf "denoting tid %a\n" Tid.ppo elt_tid in
-         denote_phi p
+      | `Def d -> denote_def d
+      | `Jmp j -> denote_jmp j 
+      | `Phi p -> denote_phi p
     in
     let (elt_res, state') = ST.run res st in
-    let () = printf "out-state is:\n"; E.pp st in
     state'
 end
 
