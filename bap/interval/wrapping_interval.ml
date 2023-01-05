@@ -255,9 +255,6 @@ let binop op left right : t =
      let x2 = op lo1 hi2 in
      let x3 = op hi1 lo2 in
      let x4 = op hi1 hi2 in
-     let () = Format.printf "in WI.binop, x1, x2, x3, x4 are: %a %a %a %a\n%!"
-                Z.pp_print x1 Z.pp_print x2 Z.pp_print x3 Z.pp_print x4
-     in
      let new_lo = min4 x1 x2 x3 x4 in
      let new_hi = max4 x1 x2 x3 x4 in
      let res = Interval {lo = new_lo;
@@ -314,9 +311,6 @@ let extract exp h l =
   | Bot -> Bot
 
 let concat x y =
-  let () = Format.printf "in WI.concat, x, y are: %s, %s\n%!"
-             (to_string x) (to_string y)
-  in
   match x, y with
   | Interval l, Interval r ->
      let final_width = l.width + r.width in
