@@ -165,8 +165,8 @@ let last_insn_of_sub sub : Blk.elt =
 let edges_of_jump j sub nodes proj : edges ST.t =
   let fromtid = Term.tid j in
   let ret_insn_tid = get_ret_insn_tid nodes in
-  let () = printf "fromtid is %a\n%!" Tid.ppo fromtid in
-  let () = printf "ret insn tid is %s\n%!" (Tid.to_string ret_insn_tid) in
+  (* let () = printf "fromtid is %a\n%!" Tid.ppo fromtid in *)
+  (* let () = printf "ret insn tid is %s\n%!" (Tid.to_string ret_insn_tid) in *)
   match Jmp.kind j with
   | Goto (Direct totid) ->
      let first_insn = first_insn_of_blk_tid totid sub in
@@ -177,15 +177,15 @@ let edges_of_jump j sub nodes proj : edges ST.t =
   | Goto (Indirect _expr) ->
      failwith "Indirect jumps not handled in edge building yet (outer goto)"
   | Call c ->
-     let () = printf "handling call\n%!" in
+     (* let () = printf "handling call\n%!" in *)
      begin
        let call_target = Call.target c in
        match call_target with
        | Direct totid ->
           begin
-            let () = printf "direct call target is %s\n%!" (Tid.to_string totid) in
+            (* let () = printf "direct call target is %s\n%!" (Tid.to_string totid) in *)
             let callee = sub_of_tid totid proj in
-            let () = printf "callee tid is %s\n%!" (Term.tid callee |> Tid.to_string) in
+            (* let () = printf "callee tid is %s\n%!" (Term.tid callee |> Tid.to_string) in *)
             add_callee callee >>= fun () ->
             
             (* let other_tidmap = Tid_map.t_of_sub callee in *)
@@ -217,9 +217,9 @@ let edges_of_jump j sub nodes proj : edges ST.t =
 
 let edges_of_jump_intraproc j sub nodes proj : edges ST.t =
   let fromtid = Term.tid j in
-  let ret_insn_tid = get_ret_insn_tid nodes in
-  let () = printf "fromtid is %a\n%!" Tid.ppo fromtid in
-  let () = printf "ret insn tid is %s\n%!" (Tid.to_string ret_insn_tid) in
+  (* let ret_insn_tid = get_ret_insn_tid nodes in *)
+  (* let () = printf "fromtid is %a\n%!" Tid.ppo fromtid in *)
+  (* let () = printf "ret insn tid is %s\n%!" (Tid.to_string ret_insn_tid) in *)
   match Jmp.kind j with
   | Goto (Direct totid) ->
      let first_insn = first_insn_of_blk_tid totid sub in
@@ -230,13 +230,13 @@ let edges_of_jump_intraproc j sub nodes proj : edges ST.t =
      begin
        match retlabel with
        | Some (Direct totid) ->
-          let () = printf "proccessing call fromtid %a\n%!" Tid.ppo fromtid in
+          (* let () = printf "proccessing call fromtid %a\n%!" Tid.ppo fromtid in *)
           let first_insn_of_ret_blk = first_insn_of_blk_tid totid sub in
           let first_insns_tid = Tid_map.tid_of_elt first_insn_of_ret_blk in
-          let () = printf "In Call, adding ret edge: (%a, %a)\n%!"
-                     Tid.ppo fromtid
-                     Tid.ppo first_insns_tid
-          in
+          (* let () = printf "In Call, adding ret edge: (%a, %a)\n%!" *)
+          (*            Tid.ppo fromtid *)
+          (*            Tid.ppo first_insns_tid *)
+          (* in *)
           ST.return [(fromtid, first_insns_tid, false)]
          | _ -> ST.return []
       (* match tolabel with *)

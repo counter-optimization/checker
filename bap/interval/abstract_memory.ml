@@ -569,22 +569,41 @@ module Make(N : NumericDomain)
   let load_of_bil_exp (e : Bil.exp) (idx_res : N.t) (m : t) : N.t err =
     match e with
     | Bil.Load (_mem, idx, _endian, size) ->
+       let () = Format.printf "in load_of_bil_exp, start\n%!" in
+       let () = Format.printf "in load_of_bil_exp, exp is %s\n%!"
+                  (Sexp.to_string (Bil.sexp_of_exp e))
+       in
        let load_from_vars = Var_name_collector.run idx in
        let regions = BaseSetMap.bases_of_vars load_from_vars m.bases in
-       
+
+       let () = Format.printf "in load_of_bil_exp, getting offs\n%!" in
        let offs = get_intvl idx_res in
        let offs_type = compute_type idx m in
        let offs_is_scalar = CellType.is_scalar offs_type in
-       
-       let width = bap_size_to_absdom size in
+       let () = Format.printf "in load_of_bil_exp, done getting offs\n%!" in
 
+       let () = Format.printf "in load_of_bil_exp, getting width\n%!" in
+       let width = bap_size_to_absdom size in
+       let () = Format.printf "in load_of_bil_exp, done getting width\n%!" in
+
+       let () = Format.printf "in load_of_bil_exp, checking if global\n%!" in
        let is_global = offs_is_scalar && Set.is_empty regions in
+       let () = Format.printf "in load_of_bil_exp, is_global: %B\n%!" is_global in
+       let () = Format.printf "in load_of_bil_exp, done checking if global\n%!" in
+
+       let () = Format.printf "in load_of_bil_exp, geting regions\n%!" in
        let regions = if is_global
                      then Set.add regions Region.Global
                      else regions
        in
+       let () = Format.printf "in load_of_bil_exp, done getting regions\n%!" in
+
+       let () = Format.printf "in load_of_bil_exp, checking if global xists\n%!" in
+       let glob_xists = (global_exists ~offs ~width m) in
+       let () = Format.printf "in load_of_bil_exp, done checking if global xists\n%!" in
+       
        let open Or_error.Monad_infix in
-       (if is_global && not (global_exists ~offs ~width m)
+       (if is_global && not glob_xists
         then
           load_global offs size m >>= fun data ->
           let region = Region.Global in
@@ -593,8 +612,11 @@ module Make(N : NumericDomain)
           Ok (m', Region.Set.from_region region)
         else
           Ok (m, regions))
-        >>= fun (m', regions') ->
-       load_from_offs_and_regions m' ~offs ~regions:regions' ~width
+       >>= fun (m', regions') ->
+       let () = Format.printf "in load_of_bil_exp, calling load_from_offs_and_regions\n%!" in
+       let res = load_from_offs_and_regions m' ~offs ~regions:regions' ~width in
+       let () = Format.printf "in load_of_bil_exp, done load_from_offs_and_regions\n%!" in
+       res
     | _ -> Or_error.error_string "load_of_bil_exp: Not a load in load_of_bil_exp"
   
   (* on first store to a global, just treat it as every other store. *)

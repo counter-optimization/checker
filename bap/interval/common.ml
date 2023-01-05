@@ -422,12 +422,15 @@ module AbstractInterpreter(N: NumericDomain)
     ST.get () >>= fun st ->
     match e with
     | Bil.Load (_mem, idx, _endian, size) ->
+       let () = Format.printf "Denoting load\n%!" in
        denote_exp idx >>= fun offs ->
        ST.get () >>= fun st ->
        let res = E.load_of_bil_exp e offs st in
        begin
          match res with
-         | Ok res -> ST.return res
+         | Ok res ->
+            let () = Format.printf "Done denoting load\n%!" in
+            ST.return res
          | Error msg -> failwith @@ Error.to_string_hum msg
        end
     | Bil.Store (_mem, idx, v, _endian, size) ->
@@ -440,9 +443,16 @@ module AbstractInterpreter(N: NumericDomain)
          | Error msg -> failwith @@ Error.to_string_hum msg
        end
     | Bil.BinOp (op, x, y) ->
+       let bop_str = binop_to_string op in
+       let () = Format.printf "Denoting binop %s\n%!" bop_str in
        denote_exp x >>= fun x' ->
        denote_exp y >>= fun y' ->
-       ST.return @@ denote_binop op x' y'
+       let () = Format.printf "Denoting partially evald expression: %s %s %s\n%!"
+                  (N.to_string x') bop_str (N.to_string y')
+       in
+       ST.return @@ denote_binop op x' y' >>= fun res ->
+       let () = Format.printf "done denoting binop %s\n%!" bop_str in
+       ST.return res
     | Bil.UnOp (op, x) ->
        denote_exp x >>= fun x' ->
        ST.return @@ denote_unop op x' 
@@ -453,8 +463,11 @@ module AbstractInterpreter(N: NumericDomain)
     | Bil.Int w ->
        ST.return @@ N.of_word w
     | Bil.Cast (cast, n, exp) ->
+       let () = Format.printf "Denoting extract\n%!" in 
        denote_exp exp >>= fun exp' ->
-       ST.return @@ denote_cast cast n exp'
+       ST.return @@ denote_cast cast n exp' >>= fun res ->
+       let () = Format.printf "Done denoting extract\n%!" in
+       ST.return res
     | Bil.Ite (cond, ifthen, ifelse) ->
        denote_exp cond >>= fun cond' ->
        let truthy = N.could_be_true cond' in
@@ -483,12 +496,18 @@ module AbstractInterpreter(N: NumericDomain)
        ST.put prestate >>= fun () ->
        ST.return v
     | Bil.Extract (hi, lo, e) ->
+       let () = Format.printf "Denoting extract\n%!" in 
        denote_exp e >>= fun e' ->
-       ST.return @@ N.extract e' hi lo
+       ST.return @@ N.extract e' hi lo >>= fun res ->
+       let () = Format.printf "Done denoting extract\n%!" in
+       ST.return res
     | Bil.Concat (x, y) ->
+       let () = Format.printf "Denoting concat\n%!" in 
        denote_exp x >>= fun x' ->
        denote_exp y >>= fun y' ->
-       ST.return @@ N.concat x' y'
+       ST.return @@ N.concat x' y' >>= fun res ->
+       let () = Format.printf "Done denoting concat\n%!" in
+       ST.return res
 
   let denote_def (d : def term) : unit ST.t =
     let var = Def.lhs d in
@@ -513,11 +532,18 @@ module AbstractInterpreter(N: NumericDomain)
 
   let denote_elt (e : Blk.elt) (st : E.t) : E.t =
     let res = match e with
-      | `Def d -> denote_def d
-      | `Jmp j -> denote_jmp j 
-      | `Phi p -> denote_phi p
+      | `Def d ->
+         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid d) in *)
+         denote_def d
+      | `Jmp j ->
+         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid j) in *)
+         denote_jmp j 
+      | `Phi p ->
+         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid p) in *)
+         denote_phi p
     in
     let (elt_res, state') = ST.run res st in
+    (* let () = Format.printf "out-state is:\n%!"; E.pp state' in *)
     state'
 end
 

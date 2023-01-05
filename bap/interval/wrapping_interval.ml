@@ -37,6 +37,16 @@ let make_top width signed : t =
 let top : t =
   make_top 64 false
 
+let to_string (intvl : t) : string =
+  match intvl with
+  | Bot -> "_|_"
+  | Interval {lo; hi; width; signed} ->
+     Format.sprintf "[%s, %s] (width: %s, signed: %s)"
+       (Z.to_string lo)
+       (Z.to_string hi)
+       (Int.to_string width)
+       (Bool.to_string signed)
+
 (** Wraparound, integer semantics, etc *)
 let wrap (n : Z.t) (r : range) : Z.t =
   let {lo; hi; width; signed} = r in
@@ -245,6 +255,9 @@ let binop op left right : t =
      let x2 = op lo1 hi2 in
      let x3 = op hi1 lo2 in
      let x4 = op hi1 hi2 in
+     let () = Format.printf "in WI.binop, x1, x2, x3, x4 are: %a %a %a %a\n%!"
+                Z.pp_print x1 Z.pp_print x2 Z.pp_print x3 Z.pp_print x4
+     in
      let new_lo = min4 x1 x2 x3 x4 in
      let new_hi = max4 x1 x2 x3 x4 in
      let res = Interval {lo = new_lo;
@@ -301,6 +314,9 @@ let extract exp h l =
   | Bot -> Bot
 
 let concat x y =
+  let () = Format.printf "in WI.concat, x, y are: %s, %s\n%!"
+             (to_string x) (to_string y)
+  in
   match x, y with
   | Interval l, Interval r ->
      let final_width = l.width + r.width in
@@ -319,7 +335,6 @@ let concat x y =
      
 
 (** equality and ordering comparisons *)
-
 (* is there any overlap at all? *)
 let booleq x y : t =
   match x, y with
@@ -419,17 +434,6 @@ let high len x =
                 hi = Z.max x1 x2;
                 width = len;
                 signed = false }
-
-(** conversions *)
-let to_string (intvl : t) : string =
-  match intvl with
-  | Bot -> "_|_"
-  | Interval {lo; hi; width; signed} ->
-     Format.sprintf "[%s, %s] (width: %s, signed: %s)"
-       (Z.to_string lo)
-       (Z.to_string hi)
-       (Int.to_string width)
-       (Bool.to_string signed)
 
 let length : t -> int option = function
   | Interval {lo; hi; width; signed} ->
@@ -533,8 +537,6 @@ let bitwidth x =
                      (to_string x)
      in
      failwith err_msg
-
-
 
 (** Setting up domain keys for usage in InteractableNumDom *)
 module Key = Common.DomainKey

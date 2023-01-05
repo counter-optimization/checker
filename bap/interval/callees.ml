@@ -64,7 +64,7 @@ module Getter(N : NumericDomain) = struct
    *)
   let get_callee_of_indirect (exp : exp) (jmp_from : jmp term) (prog : Program.t) (sol : (Tid.t, E.t) Solution.t) : Tid.t Or_error.t =
     let fromtid = Term.tid jmp_from in
-    let exp_evaller = AI.denote_exp exp in
+     let exp_evaller = AI.denote_exp exp in
     let eval_in_env = Solution.get sol fromtid in
     let (callee, _new_env) = AI.ST.run exp_evaller eval_in_env in
     let callee_as_intvl = get_intvl callee in
