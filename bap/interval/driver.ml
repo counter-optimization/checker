@@ -185,16 +185,14 @@ let sub_to_insn_graph sub img ctxt proj : check_sub_result =
                      |> List.append argnames
      in
 
-     let with_rsp_set = E.set_rsp stack_addr empty in 
-     let with_rsp_rbp_set = Or_error.bind with_rsp_set ~f:(fun env' ->
-                                E.set_rbp stack_addr env') in
-     let with_rsp_rbp_set = match with_rsp_rbp_set with
-       | Ok env' -> env'
-       | Error e -> failwith @@ Error.to_string_hum e
+     let env_with_rsp_set = match E.set_rsp stack_addr empty with
+         | Ok env' -> env'
+         | Error e -> failwith @@ Error.to_string_hum e
      in
-     let with_img_set = E.set_img with_rsp_rbp_set img in
+     
+     let env_with_img_set = E.set_img env_with_rsp_set img in
 
-     let initial_mem = List.fold true_args ~init:with_img_set
+     let initial_mem = List.fold true_args ~init:env_with_img_set
                          ~f:(fun mem argname ->
                            E.set argname FinalDomain.top mem)
      in
