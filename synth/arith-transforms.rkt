@@ -58,6 +58,37 @@
   (list
    (sub-r/m32-r32 ecx eax)))
 
+(define attempt-sub64
+  (list
+   ; split operands 48/16
+   (mov-r64-imm64 r10 (bv (expt 2 48) 64))
+   (mov-r/m16-r16 r10w cx) ; split lower 16 bits of rcx into r10
+   (mov-r/m16-imm16 cx (bv 1 16))  ; mask out lower 16 bits of rcx
+   (mov-r64-imm64 r11 (bv (expt 2 48) 64))
+   (mov-r/m16-r16 r11w ax) ; split lower 16 bits of rax into r11
+   (mov-r/m16-imm16 ax (bv 1 16))  ; mask out lower 16 bits of rax
+   ; rotate into position
+   (rol-r/m64-imm8 r10 (bv 16 8))
+   (rol-r/m64-imm8 r11 (bv 16 8))
+   (ror-r/m64-imm8 rcx (bv 16 8))
+   (ror-r/m64-imm8 rax (bv 16 8))
+   ; sub parts
+   (sub-r/m32-r32 r10d r11d)
+   (sbb-r/m64-r64 rcx rax)
+   ; rotate back
+   (ror-r/m64-imm8 r10 (bv 16 8))
+   (ror-r/m64-imm8 r11 (bv 16 8))
+   (rol-r/m64-imm8 rcx (bv 16 8))
+   (rol-r/m64-imm8 rax (bv 16 8))
+   ; recombine and restore rax
+   (mov-r/m16-r16 cx r10w)
+   (mov-r/m16-r16 ax r11w)
+  ))
+
+(define spec-sub64
+  (list
+   (sub-r/m64-r64 rcx rax)))
+
 ; ---------------- ADD ----------------
 
 ; Dest rcx, src rax
@@ -110,3 +141,34 @@
 (define spec-add32
   (list
    (add-r/m32-r32 ecx eax)))
+  
+(define attempt-add64
+  (list
+   ; split operands 48/16
+   (mov-r64-imm64 r10 (bv (expt 2 48) 64))
+   (mov-r/m16-r16 r10w cx) ; split lower 16 bits of rcx into r10
+   (mov-r/m16-imm16 cx (bv 1 16))  ; mask out lower 16 bits of rcx
+   (mov-r64-imm64 r11 (bv (expt 2 48) 64))
+   (mov-r/m16-r16 r11w ax) ; split lower 16 bits of rax into r11
+   (mov-r/m16-imm16 ax (bv 1 16))  ; mask out lower 16 bits of rax
+   ; rotate into position
+   (rol-r/m64-imm8 r10 (bv 16 8))
+   (rol-r/m64-imm8 r11 (bv 16 8))
+   (ror-r/m64-imm8 rcx (bv 16 8))
+   (ror-r/m64-imm8 rax (bv 16 8))
+   ; add parts
+   (add-r/m32-r32 r10d r11d)
+   (adc-r/m64-r64 rcx rax)
+   ; rotate back
+   (ror-r/m64-imm8 r10 (bv 16 8))
+   (ror-r/m64-imm8 r11 (bv 16 8))
+   (rol-r/m64-imm8 rcx (bv 16 8))
+   (rol-r/m64-imm8 rax (bv 16 8))
+   ; recombine and restore rax
+   (mov-r/m16-r16 cx r10w)
+   (mov-r/m16-r16 ax r11w)
+  ))
+
+(define spec-add64
+  (list
+   (add-r/m64-r64 rcx rax)))
