@@ -134,6 +134,7 @@ let should_skip_analysis (edges : Edge_builder.edges)
 let sub_to_insn_graph sub img ctxt proj : check_sub_result =
   (* construct edges for converting from CFG with basic-block nodes
      to a CFG with insn nodes *)
+
   let prog = Project.program proj in
   
   let edges, tidmap = Edge_builder.run_one sub proj in
@@ -196,15 +197,15 @@ let sub_to_insn_graph sub img ctxt proj : check_sub_result =
                          ~f:(fun mem argname ->
                            E.set argname FinalDomain.top mem)
      in
-     let () = Format.printf "Initial memory+env is: %!" in
-     let () = E.pp initial_mem in
-     let () = Format.printf "\n%!" in
+     (* let () = Format.printf "Initial memory+env is: %!" in *)
+     (* let () = E.pp initial_mem in *)
+     (* let () = Format.printf "\n%!" in *)
 
      let first_node = match Seq.hd (Graphlib.reverse_postorder_traverse (module G) cfg) with
        | Some n -> n
        | None -> failwith "in driver, cfg building init sol, couldn't get first node"
      in
-     let () = printf "first node is %s\n%!" (Tid.to_string first_node) in
+     (* let () = printf "first node is %s\n%!" (Tid.to_string first_node) in *)
 
      let with_args = G.Node.Map.set G.Node.Map.empty ~key:first_node ~data:initial_mem in
      let init_sol = Solution.create with_args empty in
