@@ -326,54 +326,72 @@ module type NumericDomain = sig
   val sexp_of_t : t -> Sexp.t
 end
 
-module type NumericEnvT =
-  functor (N : NumericDomain) ->
-  sig
-    type t
+(* module type NumericEnvT = *)
+(*   functor (N : NumericDomain) -> *)
+(*   sig *)
+(*     type t *)
 
-    val lookup : string -> t -> N.t
-    val set : string -> N.t -> t -> t
-    val mem : t -> string -> bool
-    val equal : t -> t -> bool
-    val empty : t
-    val empty_for_entry : t
-    val empty_with_args : t
-    val merge : t -> t -> t
-    val widen_threshold : int
-    val widen_with_step : int -> 'a -> t -> t -> t
-    val pp : t -> unit
-  end
+(*     val lookup : string -> t -> N.t *)
+(*     val set : string -> N.t -> t -> t *)
+(*     val mem : t -> string -> bool *)
+(*     val equal : t -> t -> bool *)
+(*     val empty : t *)
+(*     val empty_for_entry : t *)
+(*     val empty_with_args : t *)
+(*     val merge : t -> t -> t *)
+(*     val widen_threshold : int *)
+(*     val widen_with_step : int -> 'a -> t -> t -> t *)
+(*     val pp : t -> unit *)
+(*   end *)
 
 module type MemoryT =
   sig
     type t
+    
     type v
+    
     type regions
+    
     type region
+    
     type valtypes
 
     type 'a err = ('a, Error.t) Result.t
 
     val empty : t
+    
     val lookup : string -> t -> v
+    
     val set : string -> v -> t -> t
+    
     val equal : t -> t -> bool
-
+    
     val compute_type : Bil.exp -> t -> cell_t
+    
     val set_rsp : int -> t -> t err
+    
     val set_rbp : int -> t -> t err
+    
     val set_img : t -> Image.t -> t
+    
     val holds_ptr : string -> t -> bool
+    
     val setptr : name:string -> regions:regions -> offs:v -> width:v -> t -> t
+    
     val unptr : name:string -> t -> t
+    
     (* val update_on_assn : lhs:Var.t -> rhs:v -> t -> t *)
+    
     val load_of_bil_exp : Bil.exp -> v -> t -> v err
+    
     val store_of_bil_exp : Bil.exp -> offs:v -> data:v -> valtype:cell_t -> t -> t err
 
     val havoc_on_call : t -> t
-    
+
     val merge : t -> t -> t
+    
     val widen_threshold : int
+    
     val widen_with_step : int -> 'a -> t -> t -> t
     
     val pp : t -> unit
@@ -384,18 +402,25 @@ module NumericEnv(ValueDom : NumericDomain)
                    and type regions := unit
                    and type region := unit
                    and type valtypes := unit) = struct
+  
   module M = Map.Make_binable_using_comparator(String)
+  
   module G = Graphlib.Make(Tid)(Unit)
     
   type v = ValueDom.t
+  
   type t = ValueDom.t M.t
 
   type 'a err = ('a, Error.t) Result.t
 
   let empty : t = M.empty
+  
   let stack_ptr = "RSP"
+  
   let frame_ptr = "RBP"
+  
   let start_stack_addr = Word.of_int ~width:64 262144
+  
   let x86_64_default_taint = ["RDI"; "RSI"; "RDX"; "RCX"; "R8"; "R9"]
 
   let holds_ptr var_name env = false
@@ -406,22 +431,29 @@ module NumericEnv(ValueDom : NumericDomain)
     | None -> ValueDom.bot
 
   let compute_type e env = CellType.Scalar
+  
   let set name v env : t = M.set env ~key:name ~data:v
 
   let set_rsp offs env = Ok (set "RSP" (ValueDom.of_int offs) env)
+  
   let set_rbp offs env = Ok (set "RBP" (ValueDom.of_int offs) env)
+  
   let set_img env img = env
 
   let setptr ~name ~regions ~offs ~width env = env
+  
   let unptr ~name env = env
+  
   let update_on_assn ~lhs ~rhs env = env
 
   let load_of_bil_exp (e : Bil.exp) _offs env = Ok ValueDom.top
+  
   let store_of_bil_exp (e : Bil.exp) ~offs ~data ~valtype env = Ok env
 
   let havoc_on_call env = env
   
   let mem = M.mem
+  
   let equal = M.equal ValueDom.equal
 
   let merge env1 env2 : t =
@@ -437,6 +469,7 @@ module NumericEnv(ValueDom : NumericDomain)
     M.fold env2 ~init:env1 ~f:merge_helper
 
   let widen_threshold = 256
+  
   let widen_with_step steps n prev_state new_state : t =
     let get_differing_keys prev_state new_state =
       M.fold prev_state ~init:Seq.empty ~f:(fun ~key ~data acc ->

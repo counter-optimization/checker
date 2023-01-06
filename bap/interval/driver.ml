@@ -187,7 +187,9 @@ let run_analyses sub img proj : check_sub_result =
                      |> List.append argnames
      in
 
-     let env_with_rsp_set = match E.set_rsp stack_addr empty with
+     let env_with_df_set = E.set "DF" FinalDomain.b0 empty in
+
+     let env_with_rsp_set = match E.set_rsp stack_addr env_with_df_set with
          | Ok env' -> env'
          | Error e -> failwith @@ Error.to_string_hum e
      in
