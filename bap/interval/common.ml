@@ -21,6 +21,40 @@ let string_powset_dom = KB.Domain.powerset
                           ~inspect:String.sexp_of_t
                           "string-powerset-domain"
 
+module CalleeRel = struct
+  module T = struct
+    type t = { caller : Tid.t; callee : Tid.t; callsite : Tid.t }
+                 [@@deriving compare, bin_io, sexp]
+
+    let print (r : t) : unit =
+      Format.printf "CalleeRel: (caller: %a, callsite: %a, callee %a)\n%!"
+        Tid.pp r.caller
+        Tid.pp r.callsite
+        Tid.pp r.callee
+  end
+
+  module Cmp = struct
+    include T
+    include Comparator.Make(T)
+  end
+
+  include Cmp
+
+  module Set = struct
+    include Set.Make_binable_using_comparator(Cmp)
+
+    let print (s : t) : unit =
+      Format.printf "CalleeRel.Set:\n%!";
+      iter s ~f:T.print
+  end
+end
+
+let sub_of_tid_for_prog (p : Program.t) (t : Tid.t) : sub term Or_error.t =
+  match Term.find sub_t p t with
+  | Some callee_sub -> Ok callee_sub
+  | None ->
+     Or_error.error_string @@
+       Format.sprintf "Couldn't find callee sub for tid %a" Tid.pps t
 
 module CellType = struct
   type t = Scalar

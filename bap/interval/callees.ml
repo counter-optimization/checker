@@ -33,7 +33,8 @@ module Getter(N : NumericDomain) = struct
 
   open Or_error.Monad_infix
   
-  type t = Tid.t list
+  type rel = Common.CalleeRel.t
+  type t = rel list
 
   let name = "get-callees"
 
@@ -62,10 +63,13 @@ module Getter(N : NumericDomain) = struct
      using normal disassembly from the project init will leave tids and labels
      as corresponding to the address (so both should be equal).
    *)
-  let get_callee_of_indirect (exp : exp) (jmp_from : jmp term) (prog : Program.t) (sol : (Tid.t, E.t) Solution.t) : Tid.t Or_error.t =
+  let get_callee_of_indirect (exp : exp) (jmp_from : jmp term)
+        (prog : Program.t) (sub : sub term)
+        sol : rel Or_error.t =
     let fromtid = Term.tid jmp_from in
-     let exp_evaller = AI.denote_exp exp in
-    let eval_in_env = Solution.get sol fromtid in
+    let fromcc = Calling_context.of_tid fromtid in
+    let exp_evaller = AI.denote_exp exp in
+    let eval_in_env = Solution.get sol fromcc in
     let (callee, _new_env) = AI.ST.run exp_evaller eval_in_env in
     let callee_as_intvl = get_intvl callee in
     match WI.to_int callee_as_intvl with
@@ -74,17 +78,28 @@ module Getter(N : NumericDomain) = struct
        let callee_tid = Tid.for_addr callee_addr in
        let bb_tid_sub_db = get_bb_tid_sub_db prog in
        (match List.Assoc.find ~equal:Tid.equal bb_tid_sub_db callee_tid with
-        | Some sub_tid -> Ok sub_tid
+        | Some sub_tid ->
+           let caller_tid = Term.tid sub in
+           Ok { callee = sub_tid ;
+                caller = caller_tid ;
+                callsite = fromtid }
         | None -> Or_error.error_string
                     "get_callee_of_indirect_exn: Couldn't find callee sub tid for that addr")
     | None ->
        Or_error.error_string
          "get_callee_of_indirect_exn: Couldn't get callee as a single integer in Callees.Getter.get_callee_of_indirect_exn"
 
-  let of_jmp_term (j : jmp term) (prog : Program.t) (sol : (Tid.t, E.t) Solution.t) : Tid.t Or_error.t =
+  let of_jmp_term (j : jmp term)
+        (sub : sub term)
+        (prog : Program.t)
+        sol : rel Or_error.t =
+    let caller_tid = Term.tid sub in
+    let callsite_tid = Term.tid j in
     match Jmp.kind j with
-    | Goto (Direct totid) -> Ok totid
-    | Goto (Indirect exp) -> get_callee_of_indirect exp j prog sol
+    | Goto (Direct totid) -> Ok { caller = caller_tid ;
+                                  callee = totid ;
+                                  callsite = callsite_tid }
+    | Goto (Indirect exp) -> get_callee_of_indirect exp j prog sub sol
     | Int (interrupt_no, return_tid) ->
        Or_error.error_string
          "interrupts not handled in Callee.Getter.of_jmp_term_exn"
@@ -92,21 +107,26 @@ module Getter(N : NumericDomain) = struct
        let target = Call.target callee in
        begin
          match target with
-         | Direct totid -> Ok totid
-         | Indirect exp -> get_callee_of_indirect exp j prog sol
+         | Direct totid -> Ok { caller = caller_tid ;
+                                  callee = totid ;
+                                  callsite = callsite_tid }
+         | Indirect exp -> get_callee_of_indirect exp j prog sub sol
        end
     | Ret _ -> Or_error.error_string
                  "of_jmp_term_exn: returns not handled in Callee.Getter.of_jmp_term_exn" 
 
-  let of_jmp_term_list (js : jmp term list) (prog : Program.t) (sol : (Tid.t, E.t) Solution.t) : Tid.t list Or_error.t =
+  let of_jmp_term_list (js : jmp term list)
+        (sub : sub term)
+        (prog : Program.t)
+        sol : rel list Or_error.t =
     List.fold js ~init:(Ok []) ~f:(fun tids j ->
         tids >>= fun tids ->
-        let new_tid = of_jmp_term j prog sol in
+        let new_tid = of_jmp_term j sub prog sol in
         new_tid >>= fun new_tid ->
         Ok (List.cons new_tid tids))
 
   (* here, the edges of CG.t are a list of jmp terms *)
-  let get_direct_calls sub proj (sol : (Tid.t, E.t) Solution.t) : Tid.t list Or_error.t =
+  let get_direct_calls sub proj sol : rel list Or_error.t =
     let prog = Project.program proj in
     let callgraph : CG.t = Program.to_graph prog in
     let callee_edges = CG.edges callgraph in
@@ -115,7 +135,7 @@ module Getter(N : NumericDomain) = struct
       ~f:(fun callees edge ->
         let jmps = CG.Edge.label edge in
         callees >>= fun callees ->
-        let jmp_to_tids = of_jmp_term_list jmps prog sol in
+        let jmp_to_tids = of_jmp_term_list jmps sub prog sol in
         jmp_to_tids >>= fun jmp_to_tids ->
         Ok (List.append jmp_to_tids callees))
 
@@ -125,9 +145,8 @@ module Getter(N : NumericDomain) = struct
     let jmps_list = Seq.to_list jmps in
     List.join jmps_list
 
-  let get_indirect_calls (sub : sub term) (proj : Project.t)
-        (sol : (Tid.t, E.t) Solution.t)
-      : Tid.t list Or_error.t =
+  let get_indirect_calls (sub : sub term) (proj : Project.t) sol
+      : rel list Or_error.t =
     let is_not_return_insn (j : jmp term) : bool =
       not @@ Common.jmp_is_return j
     in
@@ -147,27 +166,13 @@ module Getter(N : NumericDomain) = struct
     List.fold indirect_jmps ~init:(Ok [])
       ~f:(fun tids jmp ->
         tids >>= fun tids ->
-        of_jmp_term jmp prog sol >>= fun callee_tid ->
+        of_jmp_term jmp sub prog sol >>= fun callee_tid ->
         Ok (List.cons callee_tid tids))
 
-  let sub_of_tid_for_prog (p : Program.t) (t : Tid.t) : sub term Or_error.t =
-    match Term.find sub_t p t with
-        | Some callee_sub -> Ok callee_sub
-        | None ->
-           Or_error.error_string @@
-             Format.sprintf "Couldn't find callee sub for tid %a" Tid.pps t
-    
   (* returns list of sub term of callees *)
-  let get (sub : sub term) (proj : Project.t)
-        (sol : (Tid.t, E.t) Solution.t)
-      : sub term list Or_error.t =
-    let prog = Project.program proj in
+  let get (sub : sub term) (proj : Project.t) sol : CalleeRel.Set.t Or_error.t =
     get_direct_calls sub proj sol >>= fun direct_callees ->
     get_indirect_calls sub proj sol >>= fun indirect_callees ->
     let all_callees = List.append indirect_callees direct_callees in
-    List.fold all_callees ~init:(Ok [])
-      ~f:(fun subs tid ->
-        subs >>= fun subs ->
-        sub_of_tid_for_prog prog tid >>= fun newsub ->
-        Ok (List.cons newsub subs))
+    Ok (CalleeRel.Set.of_list all_callees)
 end

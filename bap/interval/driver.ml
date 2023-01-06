@@ -9,8 +9,10 @@ module KB = Bap_knowledge.Knowledge
 
 module Cfg = Bap.Std.Graphs.Cfg
 module IrCfg = Bap.Std.Graphs.Ir
+module CR = Common.CalleeRel
+module CRS = CR.Set
 
-type check_sub_result = { callees : sub term list;
+type check_sub_result = { callees : CRS.t;
                           alerts : Alert.Set.t }
 
 type checker_alerts = Alert.Set.t
@@ -55,7 +57,7 @@ let get_ret_insn_tid sub_nodes =
   | Some tid, _ -> tid
   | _, _ -> failwith "Error finding last insn in sub"
 
-let sub_of_tid tid proj : sub Term.t =
+let sub_of_tid_exn tid proj : sub Term.t =
   let prog = Project.program proj in
   let sub = Term.find sub_t prog tid in
   match sub with
@@ -93,6 +95,7 @@ let last_insn_of_sub sub : Blk.elt =
  *)
 let should_skip_analysis (edges : Edge_builder.edges)
       (tidmap : Blk.elt Tid_map.t)
+      (sub : sub term)
       (prog : Program.t) : check_sub_result option =
   let has_no_edges = List.is_empty edges in
   let insns = Map.data tidmap in
@@ -116,33 +119,23 @@ let should_skip_analysis (edges : Edge_builder.edges)
          match totid with
          | None -> failwith "todo"
          | Some totid ->
-            let maybe_sub = Term.find sub_t prog totid in
-            begin
-              match maybe_sub with
-              | Some sub -> Some { callees = [sub]; alerts = Alert.Set.empty }
-              | None ->
-                 let err_msg = Format.sprintf
-                                 "in should_skip_analysis, couldn't find sub for tid %a in prog %a" Tid.pps totid Program.pps prog
-                 in
-                 failwith err_msg
-            end
+            let callee_rels = CRS.singleton { callee = totid ;
+                                              caller = Term.tid sub ;
+                                              callsite = Term.tid j }
+            in
+            let empty_alerts = Alert.Set.empty in
+            Some { alerts = empty_alerts ; callees = callee_rels }
        end
        | _ -> failwith "in should_skip_analysis, subroutine is single instruction but non jump instruction. this case is not yet handled." 
   else
     None
 
-let sub_to_insn_graph sub img ctxt proj : check_sub_result =
-  (* construct edges for converting from CFG with basic-block nodes
-     to a CFG with insn nodes *)
-
+let run_analyses sub img proj : check_sub_result =
   let prog = Project.program proj in
   
   let edges, tidmap = Edge_builder.run_one sub proj in
-
-  let () = Format.printf "edges are:\n%!";
-           List.iter edges ~f:Edge_builder.print_edge
-  in
-  match should_skip_analysis edges tidmap prog with
+  
+  match should_skip_analysis edges tidmap sub prog with
   | Some res ->
      let sub_name = Sub.name sub in
      let () = Format.printf
@@ -155,7 +148,8 @@ let sub_to_insn_graph sub img ctxt proj : check_sub_result =
      let liveness = Live_variables.Analysis.run sub in
      
      (* CFG *)
-     let module G = Graphlib.Make(Tid)(Bool) in
+     let edges = List.map edges ~f:(Calling_context.of_edge) in
+     let module G = Graphlib.Make(Calling_context)(Bool) in
      let cfg = Graphlib.create (module G) ~edges () in
 
      (* AbsInt *)
@@ -217,7 +211,8 @@ let sub_to_insn_graph sub img ctxt proj : check_sub_result =
                               ~init:init_sol
                               ~equal:E.equal
                               ~merge:E.merge
-                              ~f:(fun tid ->
+                              ~f:(fun cc ->
+                                let tid = Calling_context.to_insn_tid cc in
                                 let elt = match Tid_map.find tidmap tid with
                                   | Some elt -> elt
                                   | None ->
@@ -234,12 +229,16 @@ let sub_to_insn_graph sub img ctxt proj : check_sub_result =
       * https://stackoverflow.com/questions/67823455/having-a-module-and-an-instance-of-it-as-parameters-to-an-ocaml-function
       *)
      
-     let analyze_edge (module Chkr : Checker.S with type env = E.t) (e : Edge_builder.edge) : Chkr.warns =
-       let from_tid = Edge_builder.from_ e in
-       let to_tid = Edge_builder.to_ e in
+     let analyze_edge (module Chkr : Checker.S with type env = E.t)
+           (e : 'a Calling_context.Edge.t) : Chkr.warns =
+       let from_cc = Calling_context.Edge.from_ e in
+       let to_cc = Calling_context.Edge.to_ e in
+       let to_tid = Calling_context.to_insn_tid to_cc in
        (* the env to run the checker in is stored in the insn to be checked
+          here, the solution envs are stored/keyed by calling context,
+          the instructions are still just by tid though.
         *)
-       let in_state = Solution.get analysis_results to_tid in
+       let in_state = Solution.get analysis_results to_cc in
        let insn =
          match Tid_map.find tidmap to_tid with
          | Some elt -> elt
@@ -248,11 +247,14 @@ let sub_to_insn_graph sub img ctxt proj : check_sub_result =
             failwith @@
               sprintf "In running checker %s, couldn't find tid %s" Chkr.name tid_str
        in
-       let () = printf "checking edge (%a, %a)\n%!" Tid.ppo from_tid Tid.ppo to_tid in
+       let () = Format.printf
+                  "checking edge (%a, %a)\n%!"
+                  Calling_context.pp from_cc
+                  Calling_context.pp to_cc in
        Chkr.check_elt insn liveness in_state
      in
 
-     let run_checker (module Chkr : Checker.S with type env = E.t) (es : Edge_builder.edges) : Chkr.warns =
+     let run_checker (module Chkr : Checker.S with type env = E.t) (es : 'a Calling_context.edges) : Chkr.warns =
        List.fold edges
          ~init:Alert.Set.empty
          ~f:(fun alerts edge ->
@@ -264,11 +266,13 @@ let sub_to_insn_graph sub img ctxt proj : check_sub_result =
      let module CSChecker : Checker.S with type env = E.t = struct
          include Comp_simp.Checker(FinalDomain)
          type env = E.t
-       end in
+       end
+     in
      let module SSChecker : Checker.S with type env = E.t = struct
          include Silent_stores.Checker(FinalDomain)
          type env = E.t
-       end in
+       end
+     in
      let () = printf "Starting comp simp checker...\n%!" in
      let comp_simp_alerts = run_checker (module CSChecker) edges in
      let () = printf "Done running comp simp checker.\n%!" in
@@ -291,9 +295,7 @@ let sub_to_insn_graph sub img ctxt proj : check_sub_result =
        | Error e -> failwith @@ Error.to_string_hum e
      in
      let () = Format.printf "Callees are: \n%!" in
-     let () = List.iter callees ~f:(fun callee_sub ->
-                  Format.printf "callee: %s\n%!" @@ Sub.name callee_sub)
-     in
+     let () = CRS.print callees in
      { alerts = all_alerts; callees = callees }
 
 let iter_insns sub : unit =
@@ -322,10 +324,6 @@ let iter_insns sub : unit =
    gets curried until it has this type.
  *)
 let check_fn top_level_sub img ctxt proj : unit =
-  (* this is the outermost, public-facing API call of the
-     current crypto libraries *)
-  (* let top_level_sub = Sub.lift block cfg in *)
-
   let worklist = SubSet.singleton (top_level_sub) in
   let processed = SubSet.empty in
   let init_res = Alert.Set.empty in
@@ -347,10 +345,14 @@ let check_fn top_level_sub img ctxt proj : unit =
       let next_processed = Set.add processed sub in
       
       let () = Format.printf "Processing sub %s\n%!" (Sub.name sub) in
-      let current_res = sub_to_insn_graph sub img ctxt proj in
+      let current_res = run_analyses sub img proj in
+
+      let callee_subs = CRS.to_list current_res.callees
+                        |> List.map ~f:(fun (r : CR.t) -> sub_of_tid_exn r.callee proj)
+                        |> SubSet.of_list
+      in
       
-      let add_to_worklist = current_res.callees |> SubSet.of_list in
-      let next_worklist = SubSet.union worklist_wo_procd_wo_sub add_to_worklist in
+      let next_worklist = SubSet.union worklist_wo_procd_wo_sub callee_subs in
       let all_alerts = Alert.Set.union res current_res.alerts in
       loop ~worklist:next_worklist ~processed:next_processed ~res:all_alerts
   in
