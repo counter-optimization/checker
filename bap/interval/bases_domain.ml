@@ -4,30 +4,10 @@ open Common
 
 module KB = Bap_core_theory.KB
 
-module MBase = struct
-  module T = struct
-    type t = Global | Heap | Stack [@@deriving sexp, bin_io, compare, equal]
-  end
+module MBase = Region
+module Bases = Region.Set
 
-  module Cmp = struct
-    include T
-    include Comparator.Make(T)
-  end
-
-  include Cmp
-
-  let to_string : t -> string = function
-    | Global -> "global"
-    | Heap -> "heap"
-    | Stack -> "stack"
-end
-
-
-module Bases = struct
-  include Set.Make_binable_using_comparator(MBase)
-end
-
-type t = Bases.t
+type t = Region.Set.t
 
 module Key = Common.DomainKey
 

@@ -66,6 +66,55 @@ let sub_of_tid_for_prog (p : Program.t) (t : Tid.t) : sub term Or_error.t =
      Or_error.error_string @@
        Format.sprintf "Couldn't find callee sub for tid %a" Tid.pps t
 
+module AnalysisBlackList = struct
+  let blacklisted_func_names : string list = ["interrupt"]
+
+  let contains_blacklisted_func_name (subname : string) : bool =
+    List.fold blacklisted_func_names ~init:false ~f:(fun any_bld blname ->
+        any_bld || (String.is_substring subname ~substring:blname))
+
+  let sub_is_blacklisted (sub : sub term) : bool =
+    Sub.name sub |> contains_blacklisted_func_name
+
+  let sub_is_not_linked (sub : sub term) : bool =
+    let blks = Term.enum blk_t sub in
+    Seq.is_empty blks
+end
+
+(** Regions and basis maps *)
+module Region = struct
+  module T = struct
+    type t = Global | Heap | Stack [@@deriving sexp, bin_io, compare]
+
+    let equal r1 r2 : bool =
+      match r1, r2 with
+      | Global, Global
+      | Heap, Heap
+      | Stack, Stack -> true
+      | _ -> false
+
+    let to_string = function
+      | Global -> "global"
+      | Heap -> "heap"
+      | Stack -> "stack"
+
+    let pp x =
+      Format.printf "%s%!" @@ to_string x
+  end
+
+  module Cmp = struct
+    include T
+    include Comparator.Make(T)
+  end
+
+  include Cmp
+
+  module Set = struct
+    include Set.Make_binable_using_comparator(Cmp)
+    let from_region (r : T.t) = singleton r
+  end
+end
+
 module CellType = struct
   type t = Scalar
          | Ptr
@@ -187,6 +236,12 @@ let binop_to_string (b : Bil.binop) : string =
    | Bil.LE -> "<="
    | Bil.SLT -> "-<"
    | Bil.SLE -> "-<="
+
+let elt_to_tid (e : Blk.elt) : tid =
+  match e with
+  | `Jmp j -> Term.tid j
+  | `Def d -> Term.tid d
+  | `Phi p -> Term.tid p
 
 (* technically, this way is not fully correct.
    calling jmp_is_return on a return will always
@@ -461,103 +516,125 @@ module AbstractInterpreter(N: NumericDomain)
     | Bil.NEG -> N.neg
     | Bil.NOT -> N.lnot
 
-  (* let rec denote_exp (e : Bil.exp) : E.t -> (N.t, E.t) = *)
   let rec denote_exp (e : Bil.exp) : N.t ST.t =
+    let () = printf "denoting exp: %a\n%!" Exp.ppo e in
     ST.get () >>= fun st ->
-    match e with
-    | Bil.Load (_mem, idx, _endian, size) ->
-       (* let () = Format.printf "Denoting load\n%!" in *)
-       denote_exp idx >>= fun offs ->
-       ST.get () >>= fun st ->
-       let res = E.load_of_bil_exp e offs st in
-       begin
-         match res with
-         | Ok res ->
-            (* let () = Format.printf "Done denoting load\n%!" in *)
-            ST.return res
-         | Error msg -> failwith @@ Error.to_string_hum msg
-       end
-    | Bil.Store (_mem, idx, v, _endian, size) ->
-       denote_exp idx >>= fun offs ->
-       denote_exp v >>= fun data ->
-       ST.gets (Env.compute_type v) >>= fun valtype ->
-       begin
-         match Env.store_of_bil_exp e ~offs:offs ~data ~valtype st with
-         | Ok newenv -> ST.put newenv >>= fun () -> ST.return N.bot
-         | Error msg -> failwith @@ Error.to_string_hum msg
-       end
-    | Bil.BinOp (op, x, y) ->
-       (* let bop_str = binop_to_string op in *)
-       (* let () = Format.printf "Denoting binop %s\n%!" bop_str in *)
-       denote_exp x >>= fun x' ->
-       denote_exp y >>= fun y' ->
-       (* let () = Format.printf "Denoting partially evald expression: %s %s %s\n%!" *)
-                  (* (N.to_string x') bop_str (N.to_string y') *)
-       (* in *)
-       ST.return @@ denote_binop op x' y' >>= fun res ->
-       (* let () = Format.printf "done denoting binop %s\n%!" bop_str in *)
-       ST.return res
-    | Bil.UnOp (op, x) ->
-       denote_exp x >>= fun x' ->
-       ST.return @@ denote_unop op x' 
-    | Bil.Var v ->
-       ST.gets @@ fun st ->
-       let name = Var.name v in
-       E.lookup name st
-    | Bil.Int w ->
-       ST.return @@ N.of_word w
-    | Bil.Cast (cast, n, exp) ->
-       (* let () = Format.printf "Denoting extract\n%!" in  *)
-       denote_exp exp >>= fun exp' ->
-       ST.return @@ denote_cast cast n exp' >>= fun res ->
-       (* let () = Format.printf "Done denoting extract\n%!" in *)
-       ST.return res
-    | Bil.Ite (cond, ifthen, ifelse) ->
-       denote_exp cond >>= fun cond' ->
-       let truthy = N.could_be_true cond' in
-       let falsy = N.could_be_false cond' in
-       if truthy && not falsy
-       then denote_exp ifthen
-       else
-         if not truthy && falsy
-         then denote_exp ifelse
-         else
-           denote_exp ifthen >>= fun then' ->
-           denote_exp ifelse >>= fun else' ->
-           ST.return @@ N.join then' else'
-    | Bil.Unknown (str, _) ->
-       (* This seems to be used for at least:
-          setting undefined flags (like everything
-          but OF,CF after x86_64 mul) *)
-       ST.return N.bot
-    | Bil.Let (var, exp, body) ->
-       ST.get () >>= fun prestate -> 
-       denote_exp exp >>= fun binding ->
-       let name = Var.name var in
-       ST.update @@ E.set name binding >>= fun _ ->
-       (* todo, what if a store in body *)
-       denote_exp body >>= fun v -> 
-       ST.put prestate >>= fun () ->
-       ST.return v
-    | Bil.Extract (hi, lo, e) ->
-       (* let () = Format.printf "Denoting extract\n%!" in  *)
-       denote_exp e >>= fun e' ->
-       ST.return @@ N.extract e' hi lo >>= fun res ->
-       (* let () = Format.printf "Done denoting extract\n%!" in *)
-       ST.return res
-    | Bil.Concat (x, y) ->
-       (* let () = Format.printf "Denoting concat\n%!" in  *)
-       denote_exp x >>= fun x' ->
-       denote_exp y >>= fun y' ->
-       ST.return @@ N.concat x' y' >>= fun res ->
-       (* let () = Format.printf "Done denoting concat\n%!" in *)
-       ST.return res
+    try
+      begin
+        match e with
+        | Bil.Load (_mem, idx, _endian, size) ->
+           let () = Format.printf "Denoting load\n%!" in
+           denote_exp idx >>= fun offs ->
+           ST.get () >>= fun st ->
+           let () = Format.printf "doing load in denote of load\n%!" in 
+           let res = E.load_of_bil_exp e offs st in
+           begin
+             match res with
+             | Ok res ->
+                let () = Format.printf "Done denoting load\n%!" in
+                ST.return res
+             | Error msg -> failwith @@ Error.to_string_hum msg
+           end
+        | Bil.Store (_mem, idx, v, _endian, size) ->
+           let () = printf "in denote_exp of store, denoting idx\n%!" in
+           denote_exp idx >>= fun offs ->
+           let () = printf "in denote_exp of store, denoting data\n%!" in
+           denote_exp v >>= fun data ->
+           let () = printf "in denote_exp of store, computing type\n%!" in
+           ST.gets (Env.compute_type v) >>= fun valtype ->
+           begin
+             let () = printf "in denote_exp of store, doing store\n%!" in 
+             match Env.store_of_bil_exp e ~offs:offs ~data ~valtype st with
+             | Ok newenv -> ST.put newenv >>= fun () -> ST.return N.bot
+             | Error msg -> failwith @@ Error.to_string_hum msg
+           end
+        | Bil.BinOp (op, x, y) ->
+           (* let bop_str = binop_to_string op in *)
+           (* let () = Format.printf "Denoting binop %s\n%!" bop_str in *)
+           denote_exp x >>= fun x' ->
+           denote_exp y >>= fun y' ->
+           (* let () = Format.printf "Denoting partially evald expression: %s %s %s\n%!" *)
+           (* (N.to_string x') bop_str (N.to_string y') *)
+           (* in *)
+           ST.return @@ denote_binop op x' y' >>= fun res ->
+           (* let () = Format.printf "done denoting binop %s\n%!" bop_str in *)
+           ST.return res
+        | Bil.UnOp (op, x) ->
+           denote_exp x >>= fun x' ->
+           ST.return @@ denote_unop op x' 
+        | Bil.Var v ->
+           ST.gets @@ fun st ->
+                      let name = Var.name v in
+                      E.lookup name st
+        | Bil.Int w ->
+           ST.return @@ N.of_word w
+        | Bil.Cast (cast, n, exp) ->
+           (* let () = Format.printf "Denoting extract\n%!" in  *)
+           denote_exp exp >>= fun exp' ->
+           ST.return @@ denote_cast cast n exp' >>= fun res ->
+           (* let () = Format.printf "Done denoting extract\n%!" in *)
+           ST.return res
+        | Bil.Ite (cond, ifthen, ifelse) ->
+           denote_exp cond >>= fun cond' ->
+           let truthy = N.could_be_true cond' in
+           let falsy = N.could_be_false cond' in
+           if truthy && not falsy
+           then denote_exp ifthen
+           else
+             if not truthy && falsy
+             then denote_exp ifelse
+             else
+               denote_exp ifthen >>= fun then' ->
+               denote_exp ifelse >>= fun else' ->
+               ST.return @@ N.join then' else'
+        | Bil.Unknown (str, _) ->
+           (* This seems to be used for at least:
+              setting undefined flags (like everything
+              but OF,CF after x86_64 mul) *)
+           ST.return N.bot
+        | Bil.Let (var, exp, body) ->
+           ST.get () >>= fun prestate -> 
+           denote_exp exp >>= fun binding ->
+           let name = Var.name var in
+           ST.update @@ E.set name binding >>= fun _ ->
+           (* todo, what if a store in body *)
+           denote_exp body >>= fun v -> 
+           ST.put prestate >>= fun () ->
+           ST.return v
+        | Bil.Extract (hi, lo, e) ->
+           (* let () = Format.printf "Denoting extract\n%!" in  *)
+           denote_exp e >>= fun e' ->
+           ST.return @@ N.extract e' hi lo >>= fun res ->
+           (* let () = Format.printf "Done denoting extract\n%!" in *)
+           ST.return res
+        | Bil.Concat (x, y) ->
+           (* let () = Format.printf "Denoting concat\n%!" in  *)
+           denote_exp x >>= fun x' ->
+           denote_exp y >>= fun y' ->
+           ST.return @@ N.concat x' y' >>= fun res ->
+           (* let () = Format.printf "Done denoting concat\n%!" in *)
+           ST.return res
+      end
+    with
+    | Z.Overflow ->
+       let err = Format.sprintf
+                  "in AI.denote_elt, Z.Overflow in denoting exp: %a\n%!"
+                  Exp.pps e
+       in
+       failwith err
 
   let denote_def (d : def term) : unit ST.t =
     let var = Def.lhs d in
     let varname = Var.name var in
     let rhs = Def.rhs d in
-    denote_exp rhs >>= fun denoted_rhs ->
+    (try denote_exp rhs with
+    | Z.Overflow ->
+       let elt_tid = Term.tid d in
+       let e = Format.sprintf
+                 "In AI.denote_def, Z.Overflow in denoting %a\n%!"
+                 Tid.pps elt_tid
+       in
+       failwith e) >>= fun denoted_rhs ->
     ST.update @@ E.set varname denoted_rhs
 
   let denote_phi (p : phi term) : unit ST.t =
@@ -577,17 +654,17 @@ module AbstractInterpreter(N: NumericDomain)
   let denote_elt (e : Blk.elt) (st : E.t) : E.t =
     let res = match e with
       | `Def d ->
-         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid d) in *)
+         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid d) in
          denote_def d
       | `Jmp j ->
-         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid j) in *)
+         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid j) in
          denote_jmp j 
       | `Phi p ->
-         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid p) in *)
+         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid p) in
          denote_phi p
     in
     let (elt_res, state') = ST.run res st in
-    (* let () = Format.printf "out-state is:\n%!"; E.pp state' in *)
+    let () = Format.printf "out-state is:\n%!"; E.pp state' in
     state'
 end
 

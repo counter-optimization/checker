@@ -8,44 +8,6 @@ open Common
 (* currently assumes: *)
 (* - little endian architecture *)
 
-(** Regions and basis maps *)
-module Region = struct
-  module T = struct
-    type t = Global | Heap | Stack [@@deriving sexp, bin_io, compare]
-
-    let equal r1 r2 : bool =
-      match r1, r2 with
-      | Global, Global
-      | Heap, Heap
-      | Stack, Stack -> true
-      | _ -> false
-
-    let to_string = function
-      | Global -> "global"
-      | Heap -> "heap"
-      | Stack -> "stack"
-
-    let pp x =
-      Format.printf "%s%!" @@ to_string x
-  end
-
-  module Cmp = struct
-    include T
-    include Comparator.Make(T)
-  end
-
-  include Cmp
-  
-  module Set = struct
-    type t = (Cmp.t, Cmp.comparator_witness) Set.t
-    let empty : t = Set.empty (module Cmp)
-    let singleton (r : Cmp.t) = Set.add empty r
-    let from_region (r : T.t) = singleton r 
-    (* let fold = Set.fold *)
-    (* let map = Set.map (module Cmp) *)
-  end
-end
-
 module BaseSetMap = struct
   include Map.Make_binable_using_comparator(String)
   module SS = Set.Make_binable_using_comparator(String)
@@ -559,7 +521,7 @@ module Make(N : NumericDomain)
     let regions = Region.Set.from_region Region.Global in 
     let cells = cells_of_offs_and_regions ~offs ~regions ~width mem in
     0 < C.Set.length cells
-  
+
 (* on first load of global, load from the image into the abstract
      memory environment, then do the load a usual. this is unsound force
      general programs in the case of a previous overlapping store,
@@ -569,73 +531,77 @@ module Make(N : NumericDomain)
   let load_of_bil_exp (e : Bil.exp) (idx_res : N.t) (m : t) : N.t err =
     match e with
     | Bil.Load (_mem, idx, _endian, size) ->
-       let () = Format.printf "in load_of_bil_exp, start\n%!" in
-       let () = Format.printf "in load_of_bil_exp, exp is %s\n%!"
-                  (Sexp.to_string (Bil.sexp_of_exp e))
-       in
+       let () = printf "in load_of_bil_exp, getting load from vars\n%!" in
        let load_from_vars = Var_name_collector.run idx in
+       let () = printf "in load_of_bil_exp, load from vars: \n%!" in
+       let () = SS.iter load_from_vars ~f:(fun v -> printf "%s\n%!" v) in
+       let () = printf "in load_of_bil_exp, getting regions\n%!" in
        let regions = BaseSetMap.bases_of_vars load_from_vars m.bases in
+       let regions : Region.Set.t = get_bases idx_res in
+       let () = printf "in load_of_bil_exp, regions to load from:\n%!" in
+       let () = Set.iter regions ~f:Region.pp in
 
-       let () = Format.printf "in load_of_bil_exp, getting offs\n%!" in
+       let () = printf "in load_of_bil_exp, getting offs intvl\n%!" in
        let offs = get_intvl idx_res in
+       let () = printf "in load_of_bil_exp, computing type\n%!" in
        let offs_type = compute_type idx m in
+       let () = printf "in load_of_bil_exp, computing is scalar\n%!" in
        let offs_is_scalar = CellType.is_scalar offs_type in
-       let () = Format.printf "in load_of_bil_exp, done getting offs\n%!" in
 
-       let () = Format.printf "in load_of_bil_exp, getting width\n%!" in
+       let () = printf "in load_of_bil_exp, computing width\n%!" in
        let width = bap_size_to_absdom size in
-       let () = Format.printf "in load_of_bil_exp, done getting width\n%!" in
 
-       let () = Format.printf "in load_of_bil_exp, checking if global\n%!" in
+       let () = printf "in load_of_bil_exp, computing is_global\n%!" in
        let is_global = offs_is_scalar && Set.is_empty regions in
-       let () = Format.printf "in load_of_bil_exp, is_global: %B\n%!" is_global in
-       let () = Format.printf "in load_of_bil_exp, done checking if global\n%!" in
 
-       let () = Format.printf "in load_of_bil_exp, geting regions\n%!" in
+       let () = printf "in load_of_bil_exp, computing region\n%!" in
        let regions = if is_global
                      then Set.add regions Region.Global
                      else regions
        in
-       let () = Format.printf "in load_of_bil_exp, done getting regions\n%!" in
 
-       let () = Format.printf "in load_of_bil_exp, checking if global xists\n%!" in
+       let () = printf "in load_of_bil_exp, computing glob_xists\n%!" in
        let glob_xists = (global_exists ~offs ~width m) in
-       let () = Format.printf "in load_of_bil_exp, done checking if global xists\n%!" in
        
        let open Or_error.Monad_infix in
+       
        (if is_global && not glob_xists
         then
+          let () = printf "in load_of_bil_exp, doing load_global\n%!" in
           load_global offs size m >>= fun data ->
           let region = Region.Global in
           let valtype = CellType.Unknown in
+          let () = printf "in load_of_bil_exp, doing store\n%!" in
           store ~offs ~region ~width ~data ~valtype m >>= fun m' ->
           Ok (m', Region.Set.from_region region)
         else
           Ok (m, regions))
        >>= fun (m', regions') ->
-       let () = Format.printf "in load_of_bil_exp, calling load_from_offs_and_regions\n%!" in
-       let res = load_from_offs_and_regions m' ~offs ~regions:regions' ~width in
-       let () = Format.printf "in load_of_bil_exp, done load_from_offs_and_regions\n%!" in
-       res
+       let () = printf "in load_of_bil_exp, load_from_vars2\n%!" in
+       load_from_offs_and_regions m' ~offs ~regions:regions' ~width
     | _ -> Or_error.error_string "load_of_bil_exp: Not a load in load_of_bil_exp"
   
   (* on first store to a global, just treat it as every other store. *)
   let store_of_bil_exp (e : Bil.exp) ~(offs : N.t) ~data ~valtype m : t err =
     match e with
-    | Bil.Store (_mem, idx, v, _endian, size) -> 
-      begin
-        let vars = Var_name_collector.run idx in
-        let width = bap_size_to_absdom size in
-        let bases_to_load_from = BaseSetMap.bases_of_vars vars m.bases in
-        let bases_to_load_from = if Set.is_empty bases_to_load_from
-                                 then Region.Set.from_region Region.Global
-                                 else bases_to_load_from
-        in
-        let offs = get_intvl offs in
-        Set.fold bases_to_load_from ~init:(Ok m) ~f:(fun env base ->
-            Or_error.bind env ~f:(fun env ->
-                store ~offs ~region:base ~width ~data ~valtype env))
-      end
+    | Bil.Store (_mem, idx, v, _endian, size) ->
+       let () = printf "in store_of_bil_exp, getting var names\n%!" in
+       let vars = Var_name_collector.run idx in
+       let () = printf "in store_of_bil_exp, getting width\n%!" in
+       let width = bap_size_to_absdom size in
+       let () = printf "in store_of_bil_exp, getting bases_to_load_from\n%!" in
+       let bases_to_load_from = BaseSetMap.bases_of_vars vars m.bases in
+       let () = printf "in store_of_bil_exp, getting bases_to_load_from final\n%!" in
+       let bases_to_load_from = if Set.is_empty bases_to_load_from
+                                then Region.Set.from_region Region.Global
+                                else bases_to_load_from
+       in
+       let () = printf "in store_of_bil_exp, getting intvl offs\n%!" in
+       let offs = get_intvl offs in
+       let () = printf "in store_of_bil_exp, doing stores\n%!" in
+       Set.fold bases_to_load_from ~init:(Ok m) ~f:(fun env base ->
+           Or_error.bind env ~f:(fun env ->
+               store ~offs ~region:base ~width ~data ~valtype env))
     | _ -> Or_error.error_string
              "store_of_bil_exp: store got non-store expression"
 

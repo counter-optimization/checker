@@ -62,7 +62,12 @@ let sub_of_tid_exn tid proj : sub Term.t =
   let sub = Term.find sub_t prog tid in
   match sub with
   | Some sub -> sub
-  | None -> failwith "Didn't find sub with that tid in the program"
+  | None ->
+     let e = Format.sprintf
+               "In sub_of_tid_exn, didn't find sub with tid %a in the program"
+               Tid.pps tid
+     in
+     failwith e
 
 let last_insn_of_sub sub : Blk.elt =
   let irg = Sub.to_cfg sub in
@@ -145,7 +150,8 @@ let run_analyses sub img proj : check_sub_result =
      res
   | None ->
      (* run the liveness analysis *)
-     let liveness = Live_variables.Analysis.run sub in
+     let () = printf "Running liveness analysis\n%!" in
+     (* let liveness = Live_variables.Analysis.run sub in *)
      
      (* CFG *)
      let edges = List.map edges ~f:(Calling_context.of_edge) in
@@ -158,12 +164,13 @@ let run_analyses sub img proj : check_sub_result =
      let module FinalDomain = DomainProduct(WithTypes)(Bases_domain) in
      
      let module E = Abstract_memory.Make(FinalDomain) in
-     let module R = Abstract_memory.Region in
-     let module Rt = Abstract_memory.Region.Set in
+     let module R = Region in
+     let module Rt = Region.Set in
      let module Vt = struct type t = Common.cell_t end in
      let module AbsInt = AbstractInterpreter(FinalDomain)(R)(Rt)(Vt)(E) in
 
      (* set up initial solution *)
+     let () = printf "Setting up initial solution \n%!" in
      let empty = E.empty in
      let stack_addr = 0x7fff_fff0 in
      
@@ -204,6 +211,7 @@ let run_analyses sub img proj : check_sub_result =
      let with_args = G.Node.Map.set G.Node.Map.empty ~key:first_node ~data:initial_mem in
      let init_sol = Solution.create with_args empty in
 
+     let () = printf "Running abstract interpreter \n%!" in
      let analysis_results = Graphlib.fixpoint
                               (module G)
                               cfg 
@@ -229,38 +237,38 @@ let run_analyses sub img proj : check_sub_result =
       * https://stackoverflow.com/questions/67823455/having-a-module-and-an-instance-of-it-as-parameters-to-an-ocaml-function
       *)
      
-     let analyze_edge (module Chkr : Checker.S with type env = E.t)
-           (e : 'a Calling_context.Edge.t) : Chkr.warns =
-       let from_cc = Calling_context.Edge.from_ e in
-       let to_cc = Calling_context.Edge.to_ e in
-       let to_tid = Calling_context.to_insn_tid to_cc in
-       (* the env to run the checker in is stored in the insn to be checked
-          here, the solution envs are stored/keyed by calling context,
-          the instructions are still just by tid though.
-        *)
-       let in_state = Solution.get analysis_results to_cc in
-       let insn =
-         match Tid_map.find tidmap to_tid with
-         | Some elt -> elt
-         | None ->
-            let tid_str = Tid.to_string to_tid in
-            failwith @@
-              sprintf "In running checker %s, couldn't find tid %s" Chkr.name tid_str
-       in
-       let () = Format.printf
-                  "checking edge (%a, %a)\n%!"
-                  Calling_context.pp from_cc
-                  Calling_context.pp to_cc in
-       Chkr.check_elt insn liveness in_state
-     in
+     (* let analyze_edge (module Chkr : Checker.S with type env = E.t) *)
+     (*       (e : 'a Calling_context.Edge.t) : Chkr.warns = *)
+     (*   let from_cc = Calling_context.Edge.from_ e in *)
+     (*   let to_cc = Calling_context.Edge.to_ e in *)
+     (*   let to_tid = Calling_context.to_insn_tid to_cc in *)
+     (*   (\* the env to run the checker in is stored in the insn to be checked *)
+     (*      here, the solution envs are stored/keyed by calling context, *)
+     (*      the instructions are still just by tid though. *)
+     (*    *\) *)
+     (*   let in_state = Solution.get analysis_results to_cc in *)
+     (*   let insn = *)
+     (*     match Tid_map.find tidmap to_tid with *)
+     (*     | Some elt -> elt *)
+     (*     | None -> *)
+     (*        let tid_str = Tid.to_string to_tid in *)
+     (*        failwith @@ *)
+     (*          sprintf "In running checker %s, couldn't find tid %s" Chkr.name tid_str *)
+     (*   in *)
+     (*   let () = Format.printf *)
+     (*              "checking edge (%a, %a)\n%!" *)
+     (*              Calling_context.pp from_cc *)
+     (*              Calling_context.pp to_cc in *)
+     (*   Chkr.check_elt insn liveness in_state *)
+     (* in *)
 
-     let run_checker (module Chkr : Checker.S with type env = E.t) (es : 'a Calling_context.edges) : Chkr.warns =
-       List.fold edges
-         ~init:Alert.Set.empty
-         ~f:(fun alerts edge ->
-           let alerts' = analyze_edge (module Chkr) edge in
-           Alert.Set.union alerts alerts')
-     in
+     (* let run_checker (module Chkr : Checker.S with type env = E.t) (es : 'a Calling_context.edges) : Chkr.warns = *)
+     (*   List.fold edges *)
+     (*     ~init:Alert.Set.empty *)
+     (*     ~f:(fun alerts edge -> *)
+     (*       let alerts' = analyze_edge (module Chkr) edge in *)
+     (*       Alert.Set.union alerts alerts') *)
+     (* in *)
      
      (* comp simp checking *)
      (* let module CSChecker : Checker.S with type env = E.t = struct *)
@@ -296,9 +304,7 @@ let run_analyses sub img proj : check_sub_result =
        | Error e -> failwith @@ Error.to_string_hum e
      in
      let () = Format.printf "Callees are: \n%!" in
-     let () = CRS.print_hum callees ~f:(fun tid ->
-                sub_of_tid_exn tid proj |> Sub.name)
-     in
+     let () = CRS.print callees in
      { alerts = all_alerts; callees = callees }
 
 let iter_insns sub : unit =
@@ -337,9 +343,7 @@ let check_fn top_level_sub img ctxt proj : unit =
           : checker_alerts =
     let worklist_wo_procd = Set.diff worklist processed in
     if SubSet.is_empty worklist_wo_procd
-    then
-      let () = Format.printf "Done processing all functions\n%!" in
-      res
+    then res
     else
       let sub = Set.min_elt_exn worklist_wo_procd in
       let () = iter_insns sub in
@@ -347,21 +351,34 @@ let check_fn top_level_sub img ctxt proj : unit =
       let worklist_wo_procd_wo_sub = Set.remove worklist_wo_procd sub in
       let next_processed = Set.add processed sub in
       
-      let () = Format.printf "Processing sub %s\n%!" (Sub.name sub) in
-      let current_res = run_analyses sub img proj in
-
-      let callee_subs = CRS.to_list current_res.callees
-                        |> List.map ~f:(fun (r : CR.t) -> sub_of_tid_exn r.callee proj)
-                        |> SubSet.of_list
+      let () = Format.printf "Processing sub %s (%a)\n%!"
+                 (Sub.name sub)
+                 Tid.pp (Term.tid sub)
       in
-      
-      let next_worklist = SubSet.union worklist_wo_procd_wo_sub callee_subs in
-      let all_alerts = Alert.Set.union res current_res.alerts in
-      loop ~worklist:next_worklist ~processed:next_processed ~res:all_alerts
+      if AnalysisBlackList.sub_is_blacklisted sub ||
+           AnalysisBlackList.sub_is_not_linked sub
+      then
+        let () = Format.printf "Sub %s is blacklisted or not linked into the object file, skipping...\n%!"
+                   (Sub.name sub)
+        in
+        loop ~worklist:worklist_wo_procd_wo_sub ~processed:next_processed ~res
+      else
+        let current_res = run_analyses sub img proj in
+
+        let callee_subs = CRS.to_list current_res.callees
+                          |> List.map ~f:(fun (r : CR.t) -> sub_of_tid_exn r.callee proj)
+                          |> SubSet.of_list
+        in
+        
+        let next_worklist = SubSet.union worklist_wo_procd_wo_sub callee_subs in
+        let all_alerts = Alert.Set.union res current_res.alerts in
+        loop ~worklist:next_worklist ~processed:next_processed ~res:all_alerts
   in
   
   (* Run the analyses and checkers *)
   let checker_alerts = loop ~worklist ~processed ~res:init_res in
+
+  let () = Format.printf "Done processing all functions\n%!" in
 
   (* just print to stdout for now *)
   Alert.print_alerts checker_alerts

@@ -20,13 +20,13 @@ module KB = Bap_knowledge.Knowledge
    as a relation. *)
 module Getter(N : NumericDomain) = struct
   module E = struct
-    type region = Abstract_memory.Region.t
-    type regions = Abstract_memory.Region.Set.t
+    type region = Region.t
+    type regions = Region.Set.t
     type valtypes = Common.cell_t
     include Abstract_memory.Make(N)
   end
   
-  module AI = AbstractInterpreter(N)(Abstract_memory.Region)(Abstract_memory.Region.Set)(struct type t = Common.cell_t end)(E)
+  module AI = AbstractInterpreter(N)(Region)(Region.Set)(struct type t = Common.cell_t end)(E)
   module WI = Wrapping_interval
   module SS = Common.SS
   module CG = Graphs.Callgraph
