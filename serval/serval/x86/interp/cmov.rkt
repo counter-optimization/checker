@@ -5,7 +5,9 @@
 
 (provide 
   cmovz-r32-r32
-  cmovne-r32-r32)
+  cmovne-r32-r32
+  cmovz-r64-r64
+  cmovne-r64-r64)
 
 ; cnd should be a bool
 ; dst and src should be gpr structs as defined in
@@ -23,6 +25,13 @@
     (define zf (cpu-flag-ref cpu 'ZF))
     (interp-cmov cpu dst src (! (bvzero? zf)))))
 
+(define-insn cmovz-r64-r64 (dst src)
+  #:decode [((rex.w/r r b) (byte #x0f) (byte #x44) (/r reg r/m))
+            (list (gpr64-no-rex reg) (gpr64-no-rex r/m))]
+  #:encode [(list (byte #x0f) (byte #x44) (rex.w/r dst src))]
+  (lambda (cpu dst src)
+    (define zf (cpu-flag-ref cpu 'ZF))
+    (interp-cmov cpu dst src (! (bvzero? zf)))))
 
 (define-insn cmovne-r32-r32 (dst src)
   #:decode [((byte #x0f) (byte #x45) (/r reg r/m))
@@ -31,3 +40,12 @@
   (lambda (cpu dst src)
     (define zf (cpu-flag-ref cpu 'ZF))
     (interp-cmov cpu dst src (bvzero? zf))))
+
+(define-insn cmovne-r64-r64 (dst src)
+  #:decode [((rex.w/r r b) (byte #x0f) (byte #x45) (/r reg r/m))
+            (list (gpr64-no-rex reg) (gpr64-no-rex r/m))]
+  #:encode [(list (byte #x0f) (byte #x45) (rex.w/r dst src))]
+  (lambda (cpu dst src)
+    (define zf (cpu-flag-ref cpu 'ZF))
+    (interp-cmov cpu dst src (! (bvzero? zf)))))
+

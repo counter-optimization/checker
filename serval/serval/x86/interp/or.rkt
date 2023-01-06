@@ -10,6 +10,8 @@
   or-r/m64-imm32
   or-r/m32-imm8
   or-r/m64-imm8
+  or-r/m8-r8
+  or-r/m16-r16
   or-r/m32-r32
   or-r/m64-r64)
 
@@ -72,6 +74,26 @@
   #:encode (list (rex.w/r dst) (byte #x83) (/1 dst) (encode-imm imm8))
   (lambda (cpu dst imm32)
     (interpret-or cpu dst (sign-extend imm8 (bitvector 64)))))
+
+; 08 /r
+(define-insn or-r/m8-r8 (dst src)
+  #:decode [((byte #x08) (/r reg r/m))
+            (list (gpr8-no-rex r/m) (gpr8-no-rex reg))]
+           [((rex/r r b) (byte #x08) (/r reg r/m))
+            (list (gpr8 b r/m) (gpr8 r reg))]
+  #:encode (list (rex/r src dst) (byte #x08) (/r src dst))
+  (lambda (cpu dst src)
+    (interpret-or cpu dst (cpu-gpr-ref cpu src))))
+
+; 09 /r
+(define-insn or-r/m16-r16 (dst src)
+  #:decode [((byte #x09) (/r reg r/m))
+            (list (gpr16-no-rex r/m) (gpr16-no-rex reg))]
+           [((rex/r r b) (byte #x09) (/r reg r/m))
+            (list (gpr16 b r/m) (gpr16 r reg))]
+  #:encode (list (rex/r src dst) (byte #x09) (/r src dst))
+  (lambda (cpu dst src)
+    (interpret-or cpu dst (cpu-gpr-ref cpu src))))
 
 ; 09 /r
 (define-insn or-r/m32-r32 (dst src)

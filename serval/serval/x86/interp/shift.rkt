@@ -4,15 +4,15 @@
   "common.rkt")
 
 (provide
-  sar-r/m32-1 sar-r/m64-1
-  shl-r/m32-1 shl-r/m64-1
-  shr-r/m32-1 shr-r/m64-1
-  sar-r/m32-cl sar-r/m64-cl
-  shl-r/m32-cl shl-r/m64-cl
-  shr-r/m32-cl shr-r/m64-cl
-  sar-r/m32-imm8 sar-r/m64-imm8
-  shl-r/m32-imm8 shl-r/m64-imm8
-  shr-r/m32-imm8 shr-r/m64-imm8)
+  sar-r/m8-1  sar-r/m16-1  sar-r/m32-1 sar-r/m64-1
+  shl-r/m8-1  shl-r/m16-1  shl-r/m32-1 shl-r/m64-1
+  shr-r/m8-1  shr-r/m16-1  shr-r/m32-1 shr-r/m64-1
+  sar-r/m8-cl sar-r/m16-cl sar-r/m32-cl sar-r/m64-cl
+  shl-r/m8-cl shl-r/m16-cl shl-r/m32-cl shl-r/m64-cl
+  shr-r/m8-cl shr-r/m16-cl shr-r/m32-cl shr-r/m64-cl
+  sar-r/m8-imm8 sar-r/m16-imm8 sar-r/m32-imm8 sar-r/m64-imm8
+  shl-r/m8-imm8 shl-r/m16-imm8 shl-r/m32-imm8 shl-r/m64-imm8
+  shr-r/m8-imm8 shr-r/m16-imm8 shr-r/m32-imm8 shr-r/m64-imm8)
 
 
 (define (interpret-shift cpu dst count proc)
@@ -52,9 +52,27 @@
 (define-syntax (define-shift-1 stx)
   (syntax-case stx ()
     [(_ id opcode /n bvop)
-     (with-syntax ([id-r/m32 (format-id stx "~a-r/m32-1" (syntax-e #'id))]
+     (with-syntax ([id-r/m8 (format-id stx "~a-r/m8-1" (syntax-e #'id))]
+                   [id-r/m16 (format-id stx "~a-r/m16-1" (syntax-e #'id))]
+                   [id-r/m32 (format-id stx "~a-r/m32-1" (syntax-e #'id))]
                    [id-r/m64 (format-id stx "~a-r/m64-1" (syntax-e #'id))])
        #'(begin
+           (define-insn id-r/m8 (dst)
+             #:decode [((byte (- opcode 1)) (/n r/m))
+                       (list (gpr8-no-rex r/m))]
+                      [((rex/r b) (byte (- opcode 1)) (/n r/m))
+                       (list (gpr8 b r/m))]
+             #:encode (list (rex/r dst) (byte (- opcode 1)) (/n dst))
+             (lambda (cpu dst)
+               (interpret-shift cpu dst (bv 1 8) bvop)))
+           (define-insn id-r/m16 (dst)
+             #:decode [((byte opcode) (/n r/m))
+                       (list (gpr16-no-rex r/m))]
+                      [((rex/r b) (byte opcode) (/n r/m))
+                       (list (gpr16 b r/m))]
+             #:encode (list (rex/r dst) (byte opcode) (/n dst))
+             (lambda (cpu dst)
+               (interpret-shift cpu dst (bv 1 16) bvop)))
            (define-insn id-r/m32 (dst)
              #:decode [((byte opcode) (/n r/m))
                        (list (gpr32-no-rex r/m))]
@@ -86,9 +104,27 @@
 (define-syntax (define-shift-cl stx)
   (syntax-case stx ()
     [(_ id opcode /n bvop)
-     (with-syntax ([id-r/m32 (format-id stx "~a-r/m32-cl" (syntax-e #'id))]
+     (with-syntax ([id-r/m8 (format-id stx "~a-r/m8-cl" (syntax-e #'id))]
+                   [id-r/m16 (format-id stx "~a-r/m16-cl" (syntax-e #'id))]
+                   [id-r/m32 (format-id stx "~a-r/m32-cl" (syntax-e #'id))]
                    [id-r/m64 (format-id stx "~a-r/m64-cl" (syntax-e #'id))])
        #'(begin
+           (define-insn id-r/m8 (dst)
+             #:decode [((byte (- opcode 1)) (/n r/m))
+                       (list (gpr8-no-rex r/m))]
+                      [((rex/r b) (byte (- opcode 1)) (/n r/m))
+                       (list (gpr8 b r/m))]
+             #:encode (list (rex/r dst) (byte (- opcode 1)) (/n dst))
+             (lambda (cpu dst)
+               (interpret-shift cpu dst (zero-extend (cpu-gpr-ref cpu cl) (bitvector 8)) bvop)))
+           (define-insn id-r/m16 (dst)
+             #:decode [((byte opcode) (/n r/m))
+                       (list (gpr16-no-rex r/m))]
+                      [((rex/r b) (byte opcode) (/n r/m))
+                       (list (gpr16 b r/m))]
+             #:encode (list (rex/r dst) (byte opcode) (/n dst))
+             (lambda (cpu dst)
+               (interpret-shift cpu dst (zero-extend (cpu-gpr-ref cpu cl) (bitvector 16)) bvop)))
            (define-insn id-r/m32 (dst)
              #:decode [((byte opcode) (/n r/m))
                        (list (gpr32-no-rex r/m))]
@@ -120,9 +156,27 @@
 (define-syntax (define-shift-imm8 stx)
   (syntax-case stx ()
     [(_ id opcode /n bvop)
-     (with-syntax ([id-r/m32 (format-id stx "~a-r/m32-imm8" (syntax-e #'id))]
+     (with-syntax ([id-r/m8 (format-id stx "~a-r/m8-imm8" (syntax-e #'id))]
+                   [id-r/m16 (format-id stx "~a-r/m16-imm8" (syntax-e #'id))]
+                   [id-r/m32 (format-id stx "~a-r/m32-imm8" (syntax-e #'id))]
                    [id-r/m64 (format-id stx "~a-r/m64-imm8" (syntax-e #'id))])
        #'(begin
+           (define-insn id-r/m8 (dst imm8)
+             #:decode [((byte (- opcode 1)) (/n r/m) i0)
+                       (list (gpr8-no-rex r/m) (decode-imm i0))]
+                      [((rex/r b) (byte (- opcode 1)) (/n r/m) i0)
+                       (list (gpr8 b r/m) (decode-imm i0))]
+             #:encode (list (rex/r dst) (byte (- opcode 1)) (/n dst) (encode-imm imm8))
+             (lambda (cpu dst imm8)
+               (interpret-shift cpu dst (zero-extend imm8 (bitvector 8)) bvop)))
+           (define-insn id-r/m16 (dst imm8)
+             #:decode [((byte opcode) (/n r/m) i0)
+                       (list (gpr16-no-rex r/m) (decode-imm i0))]
+                      [((rex/r b) (byte opcode) (/n r/m) i0)
+                       (list (gpr16 b r/m) (decode-imm i0))]
+             #:encode (list (rex/r dst) (byte opcode) (/n dst) (encode-imm imm8))
+             (lambda (cpu dst imm8)
+               (interpret-shift cpu dst (zero-extend imm8 (bitvector 16)) bvop)))
            (define-insn id-r/m32 (dst imm8)
              #:decode [((byte opcode) (/n r/m) i0)
                        (list (gpr32-no-rex r/m) (decode-imm i0))]

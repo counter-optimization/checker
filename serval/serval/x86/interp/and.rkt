@@ -6,10 +6,13 @@
 (provide
   and-eax-imm32
   and-rax-imm32
+  and-r/m8-imm8
   and-r/m32-imm32
   and-r/m64-imm32
   and-r/m32-imm8
   and-r/m64-imm8
+  and-r/m8-r8
+  and-r/m16-r16
   and-r/m32-r32
   and-r/m64-r64
   and-r32-r/m32
@@ -89,6 +92,26 @@
   #:encode (list (rex.w/r dst) (byte #x83) (/4 dst) (encode-imm imm8))
   (lambda (cpu dst imm32)
     (interpret-and cpu dst (sign-extend imm8 (bitvector 64)))))
+
+; 20 /r
+(define-insn and-r/m8-r8 (dst src)
+  #:decode [((byte #x20) (/r reg r/m))
+            (list (gpr8-no-rex r/m) (gpr8-no-rex reg))]
+           [((rex/r r b) (byte #x20) (/r reg r/m))
+            (list (gpr8 b r/m) (gpr8 r reg))]
+  #:encode (list (rex/r src dst) (byte #x20) (/r src dst))
+  (lambda (cpu dst src)
+    (interpret-and cpu dst (cpu-gpr-ref cpu src))))
+
+; 21 /r
+(define-insn and-r/m16-r16 (dst src)
+  #:decode [((byte #x21) (/r reg r/m))
+            (list (gpr16-no-rex r/m) (gpr16-no-rex reg))]
+           [((rex/r r b) (byte #x21) (/r reg r/m))
+            (list (gpr16 b r/m) (gpr16 r reg))]
+  #:encode (list (rex/r src dst) (byte #x21) (/r src dst))
+  (lambda (cpu dst src)
+    (interpret-and cpu dst (cpu-gpr-ref cpu src))))
 
 ; 21 /r
 (define-insn and-r/m32-r32 (dst src)
