@@ -263,23 +263,24 @@ let run_analyses sub img proj : check_sub_result =
      in
      
      (* comp simp checking *)
-     let module CSChecker : Checker.S with type env = E.t = struct
-         include Comp_simp.Checker(FinalDomain)
-         type env = E.t
-       end
-     in
-     let module SSChecker : Checker.S with type env = E.t = struct
-         include Silent_stores.Checker(FinalDomain)
-         type env = E.t
-       end
-     in
-     let () = printf "Starting comp simp checker...\n%!" in
-     let comp_simp_alerts = run_checker (module CSChecker) edges in
-     let () = printf "Done running comp simp checker.\n%!" in
-     let () = printf "Starting silent stores checker...\n%!" in
-     let silent_store_alerts = run_checker (module SSChecker) edges in
-     let () = printf "Done running silent stores checker.\n%!" in
-     let all_alerts = Alert.Set.union comp_simp_alerts silent_store_alerts in
+     (* let module CSChecker : Checker.S with type env = E.t = struct *)
+     (*     include Comp_simp.Checker(FinalDomain) *)
+     (*     type env = E.t *)
+     (*   end *)
+     (* in *)
+     (* let module SSChecker : Checker.S with type env = E.t = struct *)
+     (*     include Silent_stores.Checker(FinalDomain) *)
+     (*     type env = E.t *)
+     (*   end *)
+     (* in *)
+     (* let () = printf "Starting comp simp checker...\n%!" in *)
+     (* let comp_simp_alerts = run_checker (module CSChecker) edges in *)
+     (* let () = printf "Done running comp simp checker.\n%!" in *)
+     (* let () = printf "Starting silent stores checker...\n%!" in *)
+     (* let silent_store_alerts = run_checker (module SSChecker) edges in *)
+     (* let () = printf "Done running silent stores checker.\n%!" in *)
+     (* let all_alerts = Alert.Set.union comp_simp_alerts silent_store_alerts in *)
+     let all_alerts = Alert.Set.empty in
      
      (* fill out this subroutine name in all of the generated alerts for
         this sub *)
@@ -295,7 +296,9 @@ let run_analyses sub img proj : check_sub_result =
        | Error e -> failwith @@ Error.to_string_hum e
      in
      let () = Format.printf "Callees are: \n%!" in
-     let () = CRS.print callees in
+     let () = CRS.print_hum callees ~f:(fun tid ->
+                sub_of_tid_exn tid proj |> Sub.name)
+     in
      { alerts = all_alerts; callees = callees }
 
 let iter_insns sub : unit =
