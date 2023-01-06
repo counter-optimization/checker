@@ -14,6 +14,36 @@
 (define regs-and
   (list rax rcx))
 
+(define attempt-and8
+  (list
+    (mov-r/m64-imm32 r10 (bv (expt 2 16) 32))
+    (mov-r/m8-r8 r10b cl) ; split lower 8 bits of rcx into r10
+    (mov-r/m64-imm32 r11 (bv (expt 2 16) 32))
+    (mov-r/m8-r8 r11b al) ; split lower 8 bits of rax into r11
+    (and-r/m64-r64 r10 r11) ; perform AND
+    (mov-r/m8-r8 cl r10b) ; recombine result
+    (mov-r/m8-r8 al r11b) ; restore rax
+   ))
+
+(define spec-and8
+  (list
+   (and-r/m8-r8 cl al)))
+
+(define attempt-and16
+  (list
+    (mov-r/m64-imm32 r10 (bv (expt 2 16) 32))
+    (mov-r/m16-r16 r10w cx) ; split lower 16 bits of rcx into r10
+    (mov-r/m64-imm32 r11 (bv (expt 2 16) 32))
+    (mov-r/m16-r16 r11w ax) ; split lower 16 bits of rax into r11
+    (and-r/m64-r64 r10 r11) ; perform AND
+    (mov-r/m16-r16 cx r10w) ; recombine result
+    (mov-r/m16-r16 ax r11w) ; restore rax
+   ))
+
+(define spec-and16
+  (list
+   (and-r/m16-r16 cx ax)))
+
 (define attempt-and32 ; and32
   (list
    (mov-r/m64-r64 r10 rax) ; save rax
@@ -54,6 +84,36 @@
 (define regs-or
   (list rax rcx))
 
+(define attempt-or8
+  (list
+    (mov-r/m64-imm32 r10 (bv (expt 2 16) 32))
+    (mov-r/m8-r8 r10b cl) ; split lower 8 bits of rcx into r10
+    (mov-r/m64-imm32 r11 (bv (expt 2 16) 32))
+    (mov-r/m8-r8 r11b al) ; split lower 8 bits of rax into r11
+    (or-r/m64-r64 r10 r11) ; perform OR
+    (mov-r/m8-r8 cl r10b) ; recombine result
+    (mov-r/m8-r8 al r11b) ; restore rax
+   ))
+
+(define spec-or8
+  (list
+   (or-r/m8-r8 cl al)))
+
+(define attempt-or16
+  (list
+    (mov-r/m64-imm32 r10 (bv (expt 2 16) 32))
+    (mov-r/m16-r16 r10w cx) ; split lower 16 bits of rcx into r10
+    (mov-r/m64-imm32 r11 (bv (expt 2 16) 32))
+    (mov-r/m16-r16 r11w ax) ; split lower 16 bits of rax into r11
+    (or-r/m64-r64 r10 r11) ; perform OR
+    (mov-r/m16-r16 cx r10w) ; recombine result
+    (mov-r/m16-r16 ax r11w) ; restore rax
+   ))
+
+(define spec-or16
+  (list
+   (or-r/m16-r16 cx ax)))
+
 (define attempt-or32
   (list
    (mov-r/m64-r64 r10 rax) ; save rax
@@ -93,6 +153,36 @@
 ; Dest rcx, src rax
 (define regs-xor
   (list rax rcx))
+
+(define attempt-xor8
+  (list
+    (mov-r/m64-imm32 r10 (bv (expt 2 16) 32))
+    (mov-r/m8-r8 r10b cl) ; split lower 8 bits of rcx into r10
+    (mov-r/m64-imm32 r11 (bv (expt 2 16) 32))
+    (mov-r/m8-r8 r11b al) ; split lower 8 bits of rax into r11
+    (xor-r/m64-r64 r10 r11) ; perform XOR
+    (mov-r/m8-r8 cl r10b) ; recombine result
+    (mov-r/m8-r8 al r11b) ; restore rax
+   ))
+
+(define spec-xor8
+  (list
+   (xor-r/m8-r8 cl al)))
+
+(define attempt-xor16
+  (list
+    (mov-r/m64-imm32 r10 (bv (expt 2 16) 32))
+    (mov-r/m16-r16 r10w cx) ; split lower 16 bits of rcx into r10
+    (mov-r/m64-imm32 r11 (bv (expt 2 16) 32))
+    (mov-r/m16-r16 r11w ax) ; split lower 16 bits of rax into r11
+    (xor-r/m64-r64 r10 r11) ; perform XOR
+    (mov-r/m16-r16 cx r10w) ; recombine result
+    (mov-r/m16-r16 ax r11w) ; restore rax
+   ))
+
+(define spec-xor16
+  (list
+   (xor-r/m16-r16 cx ax)))
 
 (define attempt-xor32
   (list
