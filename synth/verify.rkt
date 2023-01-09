@@ -6,6 +6,7 @@
   "../serval/serval/x86.rkt"
   "arith-transforms.rkt"
   "bitwise-transforms.rkt"
+  "shift-transforms.rkt"
   (prefix-in comp-simp: "synth-comp-simp-defenses-macrod.rkt"))
 
 (provide (all-defined-out))
@@ -43,5 +44,5 @@
   (define test (verify (bveq tester (bvsub (bvsub tester (bv (expt 2 31) 32)) (bv (expt 2 31) 32)))))
   (displayln test)
   (displayln (bv (sub1 (expt 2 32)) 32))
-  (define cex (verify (comp-simp-verify attempt-lshift32 spec-lshift32 regs-lshift)))
+  (define cex (verify (comp-simp-verify attempt-arshift8 spec-arshift8 regs-arshift)))
   cex)
