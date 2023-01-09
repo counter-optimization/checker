@@ -1,4 +1,4 @@
-open Core_kernel
+open Core
 open Bap.Std
 
 (* what does it mean for a var in BAP IR SSA to be live?

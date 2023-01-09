@@ -1,4 +1,4 @@
-open Core_kernel
+open Core
 open Bap.Std
 open Graphlib.Std
 open Monads.Std
@@ -382,9 +382,9 @@ module type MemoryT =
     
     (* val update_on_assn : lhs:Var.t -> rhs:v -> t -> t *)
     
-    val load_of_bil_exp : Bil.exp -> v -> t -> v err
+    val load_of_bil_exp : Bil.exp -> v -> Size.t -> t -> v err
     
-    val store_of_bil_exp : Bil.exp -> offs:v -> data:v -> valtype:cell_t -> t -> t err
+    val store_of_bil_exp : Bil.exp -> offs:v -> data:v -> valtype:cell_t -> size:Size.t -> t -> t err
 
     val havoc_on_call : t -> t
 
@@ -446,9 +446,9 @@ module NumericEnv(ValueDom : NumericDomain)
   
   let update_on_assn ~lhs ~rhs env = env
 
-  let load_of_bil_exp (e : Bil.exp) _offs env = Ok ValueDom.top
+  let load_of_bil_exp (e : Bil.exp) _offs _sz env = Ok ValueDom.top
   
-  let store_of_bil_exp (e : Bil.exp) ~offs ~data ~valtype env = Ok env
+  let store_of_bil_exp (e : Bil.exp) ~offs ~data ~valtype ~size env = Ok env
 
   let havoc_on_call env = env
   
@@ -560,7 +560,7 @@ module AbstractInterpreter(N: NumericDomain)
            denote_exp idx >>= fun offs ->
            ST.get () >>= fun st ->
            let () = Format.printf "doing load in denote of load\n%!" in 
-           let res = E.load_of_bil_exp e offs st in
+           let res = E.load_of_bil_exp e offs size st in
            begin
              match res with
              | Ok res ->
@@ -571,13 +571,19 @@ module AbstractInterpreter(N: NumericDomain)
         | Bil.Store (_mem, idx, v, _endian, size) ->
            let () = printf "in denote_exp of store, denoting idx\n%!" in
            denote_exp idx >>= fun offs ->
+           let () = printf "in denote_Exp of store, idx is: %s\n%!"
+                      (N.to_string offs)
+           in
+           let () = printf "in denote_exp of store, size is: %a\n%!"
+                      Size.ppo size
+           in
            let () = printf "in denote_exp of store, denoting data\n%!" in
            denote_exp v >>= fun data ->
            let () = printf "in denote_exp of store, computing type\n%!" in
            ST.gets (Env.compute_type v) >>= fun valtype ->
            begin
              let () = printf "in denote_exp of store, doing store\n%!" in 
-             match Env.store_of_bil_exp e ~offs:offs ~data ~valtype st with
+             match Env.store_of_bil_exp e ~offs ~data ~valtype ~size st with
              | Ok newenv -> ST.put newenv >>= fun () -> ST.return N.bot
              | Error msg -> failwith @@ Error.to_string_hum msg
            end

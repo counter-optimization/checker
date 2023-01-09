@@ -1,4 +1,4 @@
-open Core_kernel
+open Core
 open Bap.Std
 open Graphlib.Std
 open Common
@@ -135,7 +135,7 @@ let should_skip_analysis (edges : Edge_builder.edges)
   else
     None
 
-let run_analyses sub img proj : check_sub_result =
+let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
   let prog = Project.program proj in
   
   let edges, tidmap = Edge_builder.run_one sub proj in
@@ -181,13 +181,67 @@ let run_analyses sub img proj : check_sub_result =
      let argnames = Seq.map args ~f:(fun a -> Arg.var a |> T.Var.name) |> Seq.to_list in
      let x64_args = ["RDI"; "RSI"; "RDX"; "RCX"; "R8"; "R9"] in
 
+     (* crypto_sign argument setup:
+        arg 1: ptr to signedmessage
+        arg 2: ptr to signedmessage length (set by libsodium)
+        arg 3: ptr to message
+        arg 4: message len
+        arg 5: ptr to secret key
+      *)
+     (* let with_all_args = match is_toplevel with *)
+     (*   | true -> *)
+     (*      let heap = Region.Set.singleton Common.Region.Heap in *)
+     (*      let heap_start = 0x1000_1000 in *)
+     (*      let byte_width = FinalDomain.of_int 1 in *)
+     (*      let long_long_width = FinalDomain.of_int 8 in *)
+     (*      let arg1 = E.setptr *)
+     (*                   ~name:(List.nth_exn x64_args 0) *)
+     (*                   ~regions:heap *)
+     (*                   ~offs:(FinalDomain.of_int heap_start) *)
+     (*                   ~width:byte_width *)
+     (*                   empty *)
+     (*      in *)
+          
+     (*      let arg2 = E.setptr *)
+     (*                   ~name:(List.nth_exn x64_args 1) *)
+     (*                   ~regions:heap *)
+     (*                   ~offs:(FinalDomain.of_int (heap_start + 128)) *)
+     (*                   ~width:long_long_width *)
+     (*                   arg1 *)
+     (*      in *)
+
+
+     (*      let arg3 = E.setptr *)
+     (*                   ~name:(List.nth_exn x64_args 2) *)
+     (*                   ~regions:heap *)
+     (*                   ~offs:(FinalDomain.of_int (heap_start + 400)) *)
+     (*                   ~width:byte_width *)
+     (*                   arg2 *)
+     (*      in *)
+
+     (*      let arg4 = E.set (List.nth_exn x64_args 3) (FinalDomain.of_int 32) arg3 in *)
+
+     (*      let arg5 = E.setptr *)
+     (*                   ~name:(List.nth_exn x64_args 4) *)
+     (*                   ~regions:heap *)
+     (*                   ~offs:(FinalDomain.of_int (heap_start + 500)) *)
+     (*                   ~width:byte_width *)
+     (*                   arg4 *)
+     (*      in *)
+     (*      arg5 *)
+     (*   | false -> empty *)
+     (* in *)
+
+     let with_all_args = empty in
+
      (* e.g., filter out bap's 'mem' var *)
+     (* todo: handle vector registers *)
      let true_args = List.filter freenames
                        ~f:(fun name -> List.mem x64_args name ~equal:String.equal)
                      |> List.append argnames
      in
 
-     let env_with_df_set = E.set "DF" FinalDomain.b0 empty in
+     let env_with_df_set = E.set "DF" FinalDomain.b0 with_all_args in
 
      let env_with_rsp_set = match E.set_rsp stack_addr env_with_df_set with
          | Ok env' -> env'
@@ -200,9 +254,9 @@ let run_analyses sub img proj : check_sub_result =
                          ~f:(fun mem argname ->
                            E.set argname FinalDomain.top mem)
      in
-     (* let () = Format.printf "Initial memory+env is: %!" in *)
-     (* let () = E.pp initial_mem in *)
-     (* let () = Format.printf "\n%!" in *)
+     let () = Format.printf "Initial memory+env is: %!" in
+     let () = E.pp initial_mem in
+     let () = Format.printf "\n%!" in
 
      let first_node = match Seq.hd (Graphlib.reverse_postorder_traverse (module G) cfg) with
        | Some n -> n
@@ -342,6 +396,7 @@ let check_fn top_level_sub img ctxt proj : unit =
   let rec loop ~(worklist : SubSet.t)
             ~(processed : SubSet.t)
             ~(res : checker_alerts)
+            ~(is_toplevel : bool)
           : checker_alerts =
     let worklist_wo_procd = Set.diff worklist processed in
     if SubSet.is_empty worklist_wo_procd
@@ -363,9 +418,12 @@ let check_fn top_level_sub img ctxt proj : unit =
         let () = Format.printf "Sub %s is blacklisted or not linked into the object file, skipping...\n%!"
                    (Sub.name sub)
         in
-        loop ~worklist:worklist_wo_procd_wo_sub ~processed:next_processed ~res
+        loop ~worklist:worklist_wo_procd_wo_sub
+          ~processed:next_processed
+          ~res
+          ~is_toplevel:false
       else
-        let current_res = run_analyses sub img proj in
+        let current_res = run_analyses sub img proj ~is_toplevel in
 
         let callee_subs = CRS.to_list current_res.callees
                           |> List.map ~f:(fun (r : CR.t) -> sub_of_tid_exn r.callee proj)
@@ -374,11 +432,16 @@ let check_fn top_level_sub img ctxt proj : unit =
         
         let next_worklist = SubSet.union worklist_wo_procd_wo_sub callee_subs in
         let all_alerts = Alert.Set.union res current_res.alerts in
-        loop ~worklist:next_worklist ~processed:next_processed ~res:all_alerts
+        loop ~worklist:next_worklist
+          ~processed:next_processed
+          ~res:all_alerts
+          ~is_toplevel:false
   in
   
   (* Run the analyses and checkers *)
-  let checker_alerts = loop ~worklist ~processed ~res:init_res in
+  let checker_alerts = loop ~worklist ~processed
+                         ~res:init_res ~is_toplevel:true
+  in
 
   let () = Format.printf "Done processing all functions\n%!" in
 

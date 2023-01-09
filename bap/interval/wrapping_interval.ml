@@ -1,4 +1,4 @@
-open Core_kernel
+open Core
 open Bap.Std
 
 module T = Bap_core_theory.Theory
@@ -443,6 +443,24 @@ let to_int (intvl : t) : int option =
       | _ -> None)
   | Bot -> None
 
+let to_z (intvl : t) : Z.t option =
+  match intvl with
+  | Interval {lo; hi; width; signed} ->
+     (match length intvl with
+      | Some l when l = 0 -> Some lo
+      | _ -> None)
+  | Bot -> None
+
+let to_z_lo (intvl : t) : Z.t option =
+  match intvl with
+  | Interval {lo; hi; width; signed} -> Some lo
+  | Bot -> None
+
+let to_z_hi (intvl : t) : Z.t option =
+  match intvl with
+  | Interval {lo; hi; width; signed} -> Some hi
+  | Bot -> None
+
 let of_int ?(width = 64) (i : int) : t =
   Interval { lo = Z.of_int i;
              hi = Z.of_int i;
@@ -531,6 +549,12 @@ let bitwidth x =
                      (to_string x)
      in
      failwith err_msg
+
+let size intvl : Z.t option =
+  match intvl with
+  | Bot -> None
+  | Interval {lo; hi; width; signed} ->
+     Some (Z.sub hi lo)
 
 (** Setting up domain keys for usage in InteractableNumDom *)
 module Key = Common.DomainKey

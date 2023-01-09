@@ -1,4 +1,4 @@
-open Core_kernel
+open Core
 open Bap.Std
 open Common
 
@@ -242,9 +242,7 @@ module Cell(N : NumericDomain) = struct
           let overlap = Set.filter cellset
                           ~f:(fun c -> overlaps_with_ptr c ptr)
           in
-          if Set.length overlap <> 0
-          then Set.union overlap acc
-          else acc)
+          Set.union overlap acc)
 
     (** For a newly added_cell, and all of the cells it overlaps,
         overlap_cells, for each c in overlap_cells, add added_cell
@@ -309,6 +307,11 @@ module Make(N : NumericDomain)
     | Some f -> f
     | None -> failwith "Couldn't extract bases information out of product domain"
 
+  let get_taint : N.t -> Checker_taint.Analysis.t =
+    match N.get Checker_taint.Analysis.key with
+    | Some f -> f
+    | None -> failwith "Couldn't extract taint information out of product domain"
+
   let set_taint (prod : N.t) : N.t =
     N.set Checker_taint.Analysis.key prod Checker_taint.Analysis.Taint
 
@@ -361,7 +364,7 @@ module Make(N : NumericDomain)
     not @@ is_pointer ~name mem
 
   let get_offset ~name mem : N.t option =
-    if is_pointer name mem
+    if is_pointer ~name mem
     then Some (Env.lookup name mem.env)
     else None
 
@@ -489,32 +492,70 @@ module Make(N : NumericDomain)
 
   let store ~(offs : Wrapping_interval.t) ~region
         ~(width : Wrapping_interval.t) ~data ~valtype mem
-      : t err =
+    : t err =
+    let open Or_error.Monad_infix in
+    
     let ptr = Ptr.make ~region ~offs ~width in
+    
+    let cel = C.t_of_ptr ~valtype ptr in
+    let celname = C.name cel in
+    
     let () = printf "storing to ptr %s\n%!" (Ptr.to_string ptr) in
+
     let overlap = C.Map.get_overlapping ptr mem.cells in
+
+    let () = printf "in store, overlapping cells are:\n%!" in
     let () = Set.iter overlap ~f:(fun c ->
-                 printf "overlapping cell: %s\n%!" (C.to_string c)) in
-    if C.Set.length overlap > 1
+        printf "overlapping cell: %s\n%!" (C.to_string c)) in
+
+    let tainter = match get_taint data with
+      | Checker_taint.Analysis.Taint -> set_taint
+      | Checker_taint.Analysis.Notaint -> set_untaint
+    in
+
+    let untainted_top = tainter N.top in
+    
+    let mem_overlaps_havocd = C.Set.fold overlap ~init:mem
+        ~f:(fun m ovc ->
+            let ovc_name = C.name ovc in
+            let () = printf
+              "in store, setting previous overlap cell, %s, to top with overriding cell %s's taint value"
+                ovc_name celname
+            in
+            let old_env = mem.env in
+            { mem with env = Env.set ovc_name untainted_top old_env })
+    in
+
+    if not (C.equals_ptr cel ptr)
     then
-      let overlap = C.Set.fold overlap ~init:""
-                      ~f:(fun acc c -> acc ^ " " ^ (C.name c))
-      in
       Or_error.error_string @@
-        sprintf "No support for storing with overlapping ptrs %s" overlap
+      sprintf "Can't store ptr %s to cell %s" (Ptr.to_string ptr) celname
     else
-      let cel = if C.Set.length overlap = 1
-                then List.hd_exn @@ C.Set.to_list overlap
-                else C.t_of_ptr ~valtype ptr
-      in
-      let celname = C.name cel in
-      if not (C.equals_ptr cel ptr)
-      then
-        Or_error.error_string @@
-          sprintf "Can't store ptr %s to cell %s" (Ptr.to_string ptr) celname
-      else
-        Ok { mem with env = Env.set celname data mem.env;
-                      cells = C.Map.add_cell ptr cel mem.cells }
+      let old_env = mem_overlaps_havocd.env in
+      let old_cells = mem_overlaps_havocd.cells in
+      Ok { mem_overlaps_havocd with env = Env.set celname data old_env;
+                                    cells = C.Map.add_cell ptr cel old_cells }
+    
+    (* if C.Set.length overlap > 1 *)
+    (* then *)
+    (*   let overlap = C.Set.fold overlap ~init:"" *)
+    (*                   ~f:(fun acc c -> acc ^ " " ^ (C.name c)) *)
+    (*   in *)
+    (*   Or_error.error_string @@ *)
+    (*     sprintf "No support for storing with overlapping ptrs %s" overlap *)
+    (* else *)
+    (*   let cel = if C.Set.length overlap = 1 *)
+    (*             then List.hd_exn @@ C.Set.to_list overlap *)
+    (*             else C.t_of_ptr ~valtype ptr *)
+    (*   in *)
+    (*   let celname = C.name cel in *)
+    (*   if not (C.equals_ptr cel ptr) *)
+    (*   then *)
+    (*     Or_error.error_string @@ *)
+    (*       sprintf "Can't store ptr %s to cell %s" (Ptr.to_string ptr) celname *)
+    (*   else *)
+    (*     Ok { mem with env = Env.set celname data mem.env; *)
+    (*                   cells = C.Map.add_cell ptr cel mem.cells } *)
 
   let global_exists ~(offs : Wrapping_interval.t)
         ~(width : Wrapping_interval.t) (mem : t) : bool =
@@ -528,13 +569,16 @@ module Make(N : NumericDomain)
      but the cryptographic libs shouldn't do this, so ignoring
      overlap/nonalignment for now
    *)
-  let load_of_bil_exp (e : Bil.exp) (idx_res : N.t) (m : t) : N.t err =
+  let load_of_bil_exp (e : Bil.exp) (idx_res : N.t)
+        (size : Size.t) (m : t) : N.t err =
     match e with
     | Bil.Load (_mem, idx, _endian, size) ->
        let () = printf "in load_of_bil_exp, getting load from vars\n%!" in
        let load_from_vars = Var_name_collector.run idx in
+       
        let () = printf "in load_of_bil_exp, load from vars: \n%!" in
        let () = SS.iter load_from_vars ~f:(fun v -> printf "%s\n%!" v) in
+       
        let () = printf "in load_of_bil_exp, getting regions\n%!" in
        let regions = BaseSetMap.bases_of_vars load_from_vars m.bases in
        let regions : Region.Set.t = get_bases idx_res in
@@ -543,8 +587,10 @@ module Make(N : NumericDomain)
 
        let () = printf "in load_of_bil_exp, getting offs intvl\n%!" in
        let offs = get_intvl idx_res in
+       
        let () = printf "in load_of_bil_exp, computing type\n%!" in
        let offs_type = compute_type idx m in
+       
        let () = printf "in load_of_bil_exp, computing is scalar\n%!" in
        let offs_is_scalar = CellType.is_scalar offs_type in
 
@@ -580,28 +626,134 @@ module Make(N : NumericDomain)
        let () = printf "in load_of_bil_exp, load_from_vars2\n%!" in
        load_from_offs_and_regions m' ~offs ~regions:regions' ~width
     | _ -> Or_error.error_string "load_of_bil_exp: Not a load in load_of_bil_exp"
+
+  (* don't let pointers point to too many locations. right now,
+     this will error if the pointer points to more than 8 members
+     of ~width~
+   *)
+  let ensure_offs_range_is_ok ~(offs : Wrapping_interval.t)
+        ~(width : Wrapping_interval.t)
+      : Z.t err =
+    let open Or_error.Monad_infix in 
+    (match Wrapping_interval.size offs with
+      | Some sz -> Ok sz
+      | None ->
+         Or_error.error_string "Couldn't get size of offs in ensure_offs_range_is_ok")
+  
+    >>= fun intvl_size ->
+    
+    (match Wrapping_interval.to_z width with
+      | Some w -> Ok w
+      | None ->
+         Or_error.error_string "Couldn't convert width to int in ensure_offs_range_is_ok")
+  
+    >>= fun width ->
+    
+    let num_members = Z.div intvl_size width in
+    let max_num_members = Z.of_int 8 in
+    if Z.gt num_members max_num_members
+    then
+      Or_error.error_string
+        "in ensure_offs_range_is_ok, pointer points to too many data members, probably an unconstrained pointer"
+    else
+      Ok num_members
+
+  let get_all_offs ~(offs : Wrapping_interval.t)
+        ~(width : Wrapping_interval.t)
+      : Wrapping_interval.t list err =
+    let open Or_error.Monad_infix in
+    
+    (match Wrapping_interval.to_z width with
+      | Some w -> Ok w
+      | None ->
+         Or_error.error_string "Couldn't convert width to int in get_all_offs")
+  
+    >>= fun z_width ->
+
+    let mem_idx_to_offs (mnum : Z.t) : Wrapping_interval.t err =
+      let offs_offs = Z.mul mnum z_width in
+      let base = Wrapping_interval.to_z_lo offs in
+      match base with
+      | Some l ->
+         let new_base = Z.add l offs_offs in
+         Ok (Wrapping_interval.of_z new_base)
+      | None ->
+         Or_error.error_string
+           "in get_all_offs, couldn't get lo part of offs interval"
+    in
+    
+    ensure_offs_range_is_ok ~offs ~width >>= fun num_members ->
+
+    (* because we should also store to the last pointer aka the
+       hi part of the offs interval *)
+    let num_members = Z.add num_members Z.one in
+
+    let num_members_int = Z.to_int num_members in
+
+    List.init num_members_int ~f:(fun mem_idx ->
+        Z.of_int mem_idx |> mem_idx_to_offs)
+
+    |> List.fold ~init:(Ok []) ~f:(fun acc offs ->
+           offs >>= fun offs ->
+           acc >>= fun offs_list ->
+           Ok (List.cons offs offs_list))
   
   (* on first store to a global, just treat it as every other store. *)
-  let store_of_bil_exp (e : Bil.exp) ~(offs : N.t) ~data ~valtype m : t err =
+  let store_of_bil_exp (e : Bil.exp) ~(offs : N.t) ~data ~valtype ~size m
+      : t err =
     match e with
     | Bil.Store (_mem, idx, v, _endian, size) ->
        let () = printf "in store_of_bil_exp, getting var names\n%!" in
        let vars = Var_name_collector.run idx in
+       
        let () = printf "in store_of_bil_exp, getting width\n%!" in
        let width = bap_size_to_absdom size in
+
        let () = printf "in store_of_bil_exp, getting bases_to_load_from\n%!" in
        let bases_to_load_from = BaseSetMap.bases_of_vars vars m.bases in
        let () = printf "in store_of_bil_exp, getting bases_to_load_from final\n%!" in
-       let bases_to_load_from = if Set.is_empty bases_to_load_from
+       let bases_to_load_from = (if Set.is_empty bases_to_load_from
                                 then Region.Set.from_region Region.Global
-                                else bases_to_load_from
+                                 else bases_to_load_from)
+                              |> Region.Set.to_list
        in
+       
        let () = printf "in store_of_bil_exp, getting intvl offs\n%!" in
        let offs = get_intvl offs in
-       let () = printf "in store_of_bil_exp, doing stores\n%!" in
-       Set.fold bases_to_load_from ~init:(Ok m) ~f:(fun env base ->
-           Or_error.bind env ~f:(fun env ->
-               store ~offs ~region:base ~width ~data ~valtype env))
+
+       (match ensure_offs_range_is_ok ~offs ~width with
+       | Error e ->
+          let () = printf "in store_of_bil_exp, error: %s\n%!"
+                     (Error.to_string_hum e)
+          in
+          Ok m
+       | Ok _ ->
+          let all_offs = get_all_offs ~offs ~width in
+
+          Or_error.bind all_offs ~f:(fun all_offs ->
+
+          let () = printf "in store_of_bil_exp, all offsets are:\n%!" in
+          let () = List.iter all_offs ~f:(fun offswi ->
+                       printf "%s\n%!" 
+                         (Wrapping_interval.to_string offswi))
+          in
+
+          let () = printf "in store_of_bil_exp, doing stores\n%!" in
+          let () = printf "in store_of_bil_exp, store to offs %s\n%!"
+                     (Wrapping_interval.to_string offs)
+          in
+          let () = printf "in store_of_bil_exp, store to bases:\n%!" in
+          let () = List.iter bases_to_load_from ~f:Region.pp in
+
+          let () = printf "in store_of_bil_exp, data is %s\n%!"
+                     (N.to_string data)
+          in
+
+          let base_offs_pairs = List.cartesian_product bases_to_load_from all_offs in
+
+          List.fold base_offs_pairs ~init:(Ok m) ~f:(fun env (base, offs) ->
+              Or_error.bind env ~f:(fun env ->
+                  store ~offs ~region:base ~width ~data ~valtype env))))
     | _ -> Or_error.error_string
              "store_of_bil_exp: store got non-store expression"
 

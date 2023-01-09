@@ -1,4 +1,4 @@
-open Core_kernel
+open Core
 open Bap.Std
 
 (* TODO: after mem domain *)

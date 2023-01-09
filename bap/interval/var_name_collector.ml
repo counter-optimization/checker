@@ -1,4 +1,4 @@
-open Core_kernel
+open Core
 open Bap.Std
 
 module SS = Set.Make_binable_using_comparator(String)
