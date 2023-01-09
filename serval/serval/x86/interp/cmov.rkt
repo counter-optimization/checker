@@ -47,5 +47,5 @@
   #:encode [(list (byte #x0f) (byte #x45) (rex.w/r dst src))]
   (lambda (cpu dst src)
     (define zf (cpu-flag-ref cpu 'ZF))
-    (interp-cmov cpu dst src (! (bvzero? zf)))))
+    (interp-cmov cpu dst src (bvzero? zf))))
 
