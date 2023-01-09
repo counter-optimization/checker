@@ -1,2 +1,2 @@
 clean:
-	rm *.csv
+	-rm *.csv

@@ -26,9 +26,9 @@ $(TEST_OBJS) &: $(TEST_SRCS)
 	ocamlfind ocamlc -package $(PKGS) -c $(TEST_SRCS)
 
 clean :
-	rm $(TEST_MAIN) || true
-	rm $(TEST_OBJS) || true
-	rm $(TEST_INTFS) || true
-	rm *.plugin || true
-	yes | rm -r _build/ || true
-	$(MAKE) -C $(COMP_SIMP_TEST_DIR) clean || true
+	-rm $(TEST_MAIN)
+	-rm $(TEST_OBJS)
+	-rm $(TEST_INTFS)
+	-rm *.plugin
+	-rm -r _build/
+	-$(MAKE) -C $(COMP_SIMP_TEST_DIR) clean
