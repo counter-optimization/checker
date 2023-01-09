@@ -227,20 +227,39 @@
 
 (define attempt-lshift64
   (list
-   ; split up rax
-   (mov-r64-imm64 r10 (bv (expt 2 63) 64))
-   (mov-r/m64-r64 r11 r10)
-   (mov-r/m16-r16 r11w ax) ; r11 contains lower 16 bits
-   (mov-r/m16-imm16 ax (bv 1 16)) ; rax contains upper 48 bits
-   ; perform shifts
-   (shl-r/m64-cl r11)
-   (shl-r/m64-cl rax)
-   ; mutate r11 to make adding safe
-   (rol-r/m64-cl r10)
-   (sub-r/m64-r64 r11 r10)
-   ; recombine
-   (add-r/m64-r64 rax r11)
-   (sub-r/m64-r64 rax r10)
+   ; save rcx
+   (mov-r/m64-r64 r14 rcx) ; TODO: replace with push
+   ; move and shift cl
+   (mov-r/m32-imm32 r13d (bv (expt 2 31) 32))
+   (mov-r/m8-r8 r13b cl)
+   (shl-r/m64-imm8 r13 (bv (- 32 6) 8))
+   ; test for masked cl bits = 0
+   (mov-r64-imm64 r12 (bv 0 64))
+   (cmp-r/m32-imm8 r13d (bv 0 8))
+   (setz r12b)
+   ; save rax, set rcx if shift amt = 0
+   (cmovz-r64-r64 r13 rax)
+   (cmovz-r64-r64 rcx r12)
+   ; perform safe shift
+      ; split up rax
+      (mov-r64-imm64 r10 (bv (expt 2 63) 64))
+      (mov-r/m64-r64 r11 r10)
+      (mov-r/m16-r16 r11w ax) ; r11 contains lower 16 bits
+      (mov-r/m16-imm16 ax (bv 1 16)) ; rax contains upper 48 bits
+      ; perform shifts
+      (shl-r/m64-cl r11)
+      (shl-r/m64-cl rax)
+      ; mutate r11 to make adding safe
+      (rol-r/m64-cl r10)
+      (sub-r/m64-r64 r11 r10)
+      ; recombine
+      (add-r/m64-r64 rax r11)
+      (sub-r/m64-r64 rax r10)
+   ; restore eax if r12 =/ 0
+   (cmp-r/m32-imm8 r12d (bv 0 8))
+   (cmovne-r64-r64 rax r13)
+   ; restore rcx
+   (mov-r/m64-r64 rcx r14) ; TODO: replace with pop
   ))
 
 (define spec-lshift64
@@ -249,15 +268,31 @@
 
 (define attempt-lshift32
   (list
-   (mov-r/m64-r64 r10 rcx) ; save rcx
-   (mov-r/m32-r32 eax eax)
-   (mov-r64-imm64 r11 (bv (expt 2 32) 64))
-   (sub-r/m64-r64 rax r11)
-   ; TODO change to 8 bit AND
-   (and-r/m32-imm32 ecx (bv (- (expt 2 5) 1) 32))
-   (shl-r/m64-cl rax)
-   (mov-r/m32-r32 eax eax)
-   (mov-r/m64-r64 rcx r10) ; restore rcx
+   ; save rcx
+   (mov-r/m64-r64 r12 rcx) ; TODO: replace with push
+   ; move and shift cl
+   (mov-r/m32-imm32 r10d (bv (expt 2 31) 32))
+   (mov-r/m8-r8 r10b cl)
+   (shl-r/m64-imm8 r10 (bv (- 32 5) 8))
+   ; test for masked cl bits = 0
+   (mov-r64-imm64 r11 (bv 0 64))
+   (cmp-r/m32-imm8 r10d (bv 0 8))
+   (setz r11b)
+   ; save eax, set rcx if shift amt = 0
+   (cmovz-r32-r32 r10d eax)
+   (cmovz-r64-r64 rcx r11)
+      ; perform safe shift
+      (mov-r/m32-r32 eax eax)
+      (sub-r/m64-imm32 rax (bv (expt 2 31) 64))
+      (sub-r/m64-imm32 rax (bv (expt 2 31) 64))
+      (and-r/m8-imm8 cl (bv (- (expt 2 5) 1) 8))
+      (shl-r/m64-cl rax)
+      (mov-r/m32-r32 eax eax)
+   ; restore eax if r11 =/ 0
+   (cmp-r/m32-imm8 r11d (bv 0 8))
+   (cmovne-r32-r32 eax r10d)
+   ; restore rcx
+   (mov-r/m64-r64 rcx r12) ; TODO: replace with pop
   ))
 
 (define spec-lshift32
