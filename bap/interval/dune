@@ -3,6 +3,6 @@
    (flags (:standard -warn-error -K-27))))
 
 (library
- (name cfg)
+ (name uarch_checker)
  (libraries bap core_kernel stdio graphlib zarith monads)
  (preprocess (pps ppx_jane ppx_deriving)))
