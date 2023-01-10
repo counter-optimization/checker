@@ -1,0 +1,828 @@
+
+abstract_memory.ml,3477
+open CoreAbstract_memory1,0
+module BaseSetMap = structBaseSetMap11,258
+  module SS = Set.Make_binable_using_comparator(String)SS13,337
+  let bases_of_vars (vars : SS.t) bsm : Region.Set.t =bases_of_vars15,394
+module Pointer(N : NumericDomain) = structPointer31,905
+  module T = structT32,948
+    type t = { region: Region.t;t33,968
+    type t = { region: Region.t;region33,968
+               offs: Wrapping_interval.t;offs34,1001
+               width: Wrapping_interval.t }width35,1043
+    let equal x y =equal38,1124
+    let compare x y = if equal x y then 0 else -1compare44,1359
+    let get_intvl : N.t -> Wrapping_interval.t =get_intvl46,1410
+    let make ~region ~offs ~width : t = { region; offs; width }make51,1631
+    let region p = p.regionregion53,1696
+    let offs p = p.offsoffs54,1724
+    let width_in_bits p = p.widthwidth_in_bits56,1753
+    let bits_in_byte = Wrapping_interval.of_int 8bits_in_byte57,1787
+    let width_in_bytes p =width_in_bytes58,1837
+    let all_widths_of_ptr {region; offs; width} =all_widths_of_ptr62,1955
+    let of_regions ~regions ~offs ~width =of_regions68,2208
+    let to_string {region; offs; width} =to_string72,2344
+    let pp ptr : unit =pp78,2564
+module Cell(N : NumericDomain) = structCell87,2698
+  module T = structT88,2738
+    module Pointer = Pointer(N)Pointer89,2758
+    type t = { region: Region.t;t95,3105
+    type t = { region: Region.t;region95,3105
+               offs: Wrapping_interval.t;offs96,3138
+               valtype: CellType.t;valtype97,3180
+               width: Wrapping_interval.t }width98,3216
+    let compare x y =compare101,3297
+    let bits_per_byte = Wrapping_interval.of_int 8bits_per_byte114,3726
+    let width_in_bits c = c.widthwidth_in_bits115,3777
+    let width_in_bytes c =width_in_bytes116,3811
+    let get_intvl : N.t -> Wrapping_interval.t =get_intvl120,3924
+    let make ~region ~offs ~width ~valtype : t =make125,4142
+    let ptr_of_t { region; offs; width; valtype } : Pointer.t =ptr_of_t128,4231
+    let t_of_ptr ?(valtype = CellType.Scalar) p : t =t_of_ptr131,4336
+    let equals_ptr cel ptr : bool =equals_ptr137,4551
+    let name (m : t) : string =name145,4916
+    let to_string m : string =to_string151,5168
+    let pp (m : t) : unit =pp155,5302
+    let overlaps_with_ptr cel ptr : bool =overlaps_with_ptr158,5373
+  module Cmp = structCmp181,6267
+  module Set = structSet188,6358
+    type t = (Cmp.t, comparator_witness) Set.tt189,6380
+    let empty : t = Set.empty (module Cmp)empty191,6428
+    let empty : t = Set.empty (module Cmp)Cmp191,6428
+  module Map = structMap210,6860
+    type t = (Pointer.t, Set.t, Pointer.comparator_witness) Map.tt211,6882
+    let empty = Map.empty (module Pointer)empty213,6953
+    let empty = Map.empty (module Pointer)Pointer213,6953
+module BaseSet = Region.SetBaseSet261,8706
+module Make(N : NumericDomain)Make263,8735
+       let left_t = compute_type left mem inleft_t409,13509
+  let cells_of_offs_and_regions ~(offs : Wrapping_interval.t) ~regions ~(width : Wrapping_intervcells_of_offs_and_regions419,13869
+  let load_from_offs_and_regionsload_from_offs_and_regions430,14323
+       let ptr_strings = List.fold ptrs ~init:"" ~f:(fun acc x ->ptr_strings452,15154
+  let load_global (offs : Wrapping_interval.t) (sz : size) (m : t) : N.t err =load_global458,15427
+  let store ~(offs : Wrapping_interval.t) ~regionstore493,17002
+
+alert.ml,888
+open CoreAlert1,0
+type reason = CompSimp | SilentStoresreason4,24
+type reason = CompSimp | SilentStoresCompSimp4,24
+type reason = CompSimp | SilentStoresSilentStores4,24
+let string_of_reason = functionstring_of_reason7,132
+module T = structT11,229
+  type t = { sub_name : string option; t14,383
+  type t = { sub_name : string option; sub_name14,383
+             tid : Tid.t;tid15,423
+             flags_live : bool option;flags_live16,449
+             problematic_operands : int list option;problematic_operands17,488
+             left_val : string option;left_val18,541
+             right_val : string option;right_val19,580
+             reason : reason;reason20,620
+             desc : string }desc21,650
+module Cmp = structCmp25,739
+module Set = structSet30,805
+let t_of_reason_and_tid (reason : reason) (tid : Tid.t) : t =t_of_reason_and_tid36,890
+
+bases_domain.ml,2482
+open CoreBases_domain1,0
+module KB = Bap_core_theory.KBKB5,36
+module MBase = RegionMBase7,68
+module Bases = Region.SetBases8,90
+type t = Region.Set.tt10,117
+module Key = Common.DomainKeyKey12,140
+let key : t Key.k = Key.create "bases_domain"key14,171
+let get : type a. a Key.k -> (t -> a) option = fun k ->get16,218
+let set : type a. a Key.k -> t -> a -> t = fun k other replace ->set21,350
+let stack = Bases.singleton MBase.Stackstack26,483
+let global = Bases.singleton MBase.Globalglobal28,524
+let heap = Bases.singleton MBase.Heapheap30,567
+let bot = Bases.emptybot32,606
+let top = Bases.of_list [MBase.Global; MBase.Heap; MBase.Stack]top34,629
+let make_top _sz _signed = topmake_top36,694
+let not_callable_exception fn_name =not_callable_exception38,726
+let b1 = Bases.emptyb141,829
+let b0 = Bases.emptyb043,851
+let order x y =order45,873
+let compare = Bases.comparecompare55,1119
+let equal = Bases.equalequal57,1148
+let join = Bases.unionjoin59,1173
+let meet = Bases.intermeet61,1197
+let contains x y =contains63,1221
+let add = joinadd70,1326
+let sub = joinsub72,1342
+let mul = joinmul74,1358
+let div = joindiv76,1374
+let sdiv = joinsdiv78,1390
+let umod = joinumod80,1407
+let smod = joinsmod82,1424
+let lshift = joinlshift84,1441
+let rshift = joinrshift86,1460
+let arshift = joinarshift88,1479
+let logand = joinlogand90,1499
+let logor = joinlogor92,1518
+let logxor = joinlogxor94,1536
+let neg = fun x -> xneg96,1555
+let lnot = fun x -> xlnot98,1577
+let extract v hi lo = vextract100,1600
+let concat = joinconcat102,1625
+let booleq x y = Bases.emptybooleq104,1644
+let boolneq x y = Bases.emptyboolneq106,1674
+let boollt x y = Bases.emptyboollt108,1705
+let boolle x y = Bases.emptyboolle110,1735
+let boolslt x y = Bases.emptyboolslt112,1765
+let boolsle x y = Bases.emptyboolsle114,1796
+let could_be_true _ = truecould_be_true116,1827
+let could_be_false _ = truecould_be_false118,1855
+let unsigned n v = Bases.emptyunsigned120,1884
+let signed n v = Bases.emptysigned122,1916
+let low n v = Bases.emptylow124,1946
+let high n v = Bases.emptyhigh126,1973
+let to_string (bases : Bases.t) : string =to_string128,2001
+let of_int ?width v = Bases.emptyof_int142,2437
+let of_word w = Bases.emptyof_word144,2472
+let of_z ?width z = Bases.emptyof_z146,2501
+let bitwidth v = not_callable_exception "bitwidth"bitwidth148,2534
+let sexp_of_t = Bases.sexp_of_tsexp_of_t150,2586
+
+callees.ml,965
+open CoreCallees1,0
+module T = Bap_core_theory.TheoryT7,70
+module KB = Bap_knowledge.KnowledgeKB8,104
+module Getter(N : NumericDomain) = structGetter21,739
+  module AI = AbstractInterpreter(N)(Region)(Region.Set)(struct type t = Common.cell_t end)(E)AI29,939
+  module AI = AbstractInterpreter(N)(Region)(Region.Set)(struct type t = Common.cell_t end)(E)t29,939
+  module WI = Wrapping_intervalWI30,1034
+  module SS = Common.SSSS31,1066
+  module CG = Graphs.CallgraphCG32,1090
+  type rel = Common.CalleeRel.trel36,1153
+  type t = rel listt37,1185
+  let name = "get-callees"name39,1206
+  let get_intvl : N.t -> Wrapping_interval.t =get_intvl41,1234
+  let sub_name_of_tid_exn (proj : Project.t) (tid : Tid.t) : string =sub_name_of_tid_exn46,1447
+  let get_bb_tid_sub_db (prog : Program.t) : (Tid.t, Tid.t) List.Assoc.t =get_bb_tid_sub_db58,1772
+  let get_callee_of_indirect (exp : exp) (jmp_from : jmp term)get_callee_of_indirect80,2509
+
+calling_context.ml,874
+open CoreCalling_context1,0
+module KB = Bap_knowledge.KnowledgeKB8,87
+module T = structT10,124
+  type t = Tid.t list [@@deriving compare, bin_io, sexp, hash]t11,142
+  let module_name = Some "Calling_context"module_name13,206
+  let version = "0.0.0"version15,250
+  let pp ppf cc =pp17,275
+module Regular = structRegular30,550
+module Edge = structEdge34,605
+  type 'a t = T.t * T.t * 'at35,626
+  let from_ (e : 'a t) : T.t =from_37,656
+  let to_ (e : 'a t) : T.t =to_41,729
+type 'a edges = 'a Edge.t listedges46,802
+let to_insn_tid (ctxt : t) : Tid.t =to_insn_tid51,861
+let add_callsite (cs : Tid.t) (ctxt : t) : t = List.cons cs ctxtadd_callsite57,1044
+let add_node (n : Tid.t) (ctxt : t) : t = List.cons n ctxtadd_node59,1110
+let of_tid (t : Tid.t) : t = [t]of_tid61,1170
+let of_edge (e : Edge_builder.edge) : bool Edge.t =of_edge63,1204
+
+checker.ml,244
+open CoreChecker1,0
+module type S = sigS6,54
+  type warns = Alert.Set.twarns7,74
+  type t = warnst8,101
+  type envenv9,118
+  val check_elt : Blk.elt -> Live_variables.t -> env -> warnscheck_elt11,130
+  val name : stringname12,192
+
+checker_taint.ml,2432
+open CoreChecker_taint1,0
+module T = Bap_core_theory.TheoryT6,54
+module KB = Bap_core_theory.KBKB7,88
+module Key = Common.DomainKeyKey8,119
+module Analysis = structAnalysis10,150
+  type t = Notaint | Taint [@@deriving bin_io, sexp]t11,175
+  type t = Notaint | Taint [@@deriving bin_io, sexp]Notaint11,175
+  type t = Notaint | Taint [@@deriving bin_io, sexp]Taint11,175
+  let key : t Key.k = Key.create "taint"key13,229
+  let get : type a. a Key.k -> (t -> a) option = fun k ->get15,271
+  let set : type a. a Key.k -> t -> a -> t = fun k other replace ->set20,411
+  let bot = Notaintbot25,552
+  let top = Tainttop26,572
+  let make_top _width _signed = topmake_top27,590
+  let b1 = topb129,627
+  let b0 = botb030,642
+  let order x y =order32,658
+  let compare x y : int =compare39,841
+  let equal x y =equal47,976
+  let is_tainted : t -> bool = functionis_tainted52,1063
+  let join x y =join56,1141
+  let meet x y =meet62,1246
+  let contains x y =contains68,1357
+  let binop = joinbinop74,1473
+  let add = binopadd75,1492
+  let sub = binopsub76,1510
+  let mul = binopmul77,1528
+  let div = binopdiv78,1546
+  let sdiv = binopsdiv79,1564
+  let umod = binopumod80,1583
+  let smod = binopsmod81,1602
+  let lshift = binoplshift82,1621
+  let rshift = binoprshift83,1642
+  let arshift = binoparshift84,1663
+  let logand = binoplogand85,1685
+  let logor = binoplogor86,1706
+  let logxor = binoplogxor87,1726
+  let ident = fun x -> xident89,1748
+  let neg = identneg90,1773
+  let lnot = identlnot91,1791
+  let booleq = binopbooleq93,1811
+  let boolneq = binopboolneq94,1832
+  let boollt = binopboollt95,1854
+  let boolle = binopboolle96,1875
+  let boolslt = binopboolslt97,1896
+  let boolsle = binopboolsle98,1918
+  let could_be_true _ = truecould_be_true100,1941
+  let could_be_false _ = truecould_be_false101,1970
+  let drop_first x y = ydrop_first103,2001
+  let unsigned = drop_firstunsigned104,2026
+  let signed = drop_firstsigned105,2054
+  let low = drop_firstlow106,2080
+  let high = drop_firsthigh107,2103
+  let extract exp hi lo = expextract109,2128
+  let concat = joinconcat110,2158
+  let to_string = functionto_string112,2179
+  let of_int ?(width = 64) _ = Notaintof_int115,2256
+  let of_word _ = Notaintof_word116,2295
+  let of_z ?(width : int = 64) _ = Notaintof_z117,2321
+  let bitwidth x = -1bitwidth118,2364
+
+common.ml,8948
+open CoreCommon1,0
+module T = Bap_core_theory.TheoryT6,58
+module KB = Bap_core_theory.KBKB7,92
+module SS = structSS9,124
+  module T = structT10,143
+let package = "uarch-checker"package17,269
+let string_powset_dom = KB.Domain.powersetstring_powset_dom19,300
+                          (module String)String20,343
+  module Cmp = structCmp42,1040
+  module Set = structSet49,1129
+    let print (s : t) : unit =print52,1203
+    let print_hum (s : t) ~(f : Tid.t -> string) : unit =print_hum56,1301
+let sub_of_tid_for_prog (p : Program.t) (t : Tid.t) : sub term Or_error.t =sub_of_tid_for_prog62,1456
+module AnalysisBlackList = structAnalysisBlackList69,1715
+  let blacklisted_func_names : string list = ["interrupt"]blacklisted_func_names70,1749
+  let contains_blacklisted_func_name (subname : string) : bool =contains_blacklisted_func_name72,1809
+  let sub_is_blacklisted (sub : sub term) : bool =sub_is_blacklisted76,2018
+  let sub_is_not_linked (sub : sub term) : bool =sub_is_not_linked79,2121
+module Region = structRegion85,2266
+  module T = structT86,2289
+    type t = Global | Heap | Stack [@@deriving sexp, bin_io, compare]t87,2309
+    type t = Global | Heap | Stack [@@deriving sexp, bin_io, compare]Global87,2309
+    type t = Global | Heap | Stack [@@deriving sexp, bin_io, compare]Heap87,2309
+    type t = Global | Heap | Stack [@@deriving sexp, bin_io, compare]Stack87,2309
+    let equal r1 r2 : bool =equal89,2380
+    let to_string = functionto_string96,2524
+    let pp x =pp101,2629
+  module Cmp = structCmp105,2693
+  module Set = structSet112,2782
+    let from_region (r : T.t) = singleton rfrom_region114,2855
+module CellType = structCellType118,2910
+  type t = Scalart119,2935
+  type t = ScalarScalar119,2935
+         | PtrPtr120,2953
+         | UnknownUnknown121,2968
+         | Undef [@@deriving sexp, bin_io, compare, equal]Undef122,2987
+  let join t1 t2 =join124,3047
+  let is_scalar : t -> bool = functionis_scalar148,3568
+  let is_ptr : t -> bool = functionis_ptr152,3646
+  let is_unknown : t -> bool = functionis_unknown156,3718
+  let is_undef : t -> bool = functionis_undef160,3798
+  let domain_name = "CellType"domain_name164,3874
+  let domain = KB.Domain.define domain_namedomain165,3905
+type cell_t = CellType.tcell_t172,4061
+type (_, _) eq =eq174,4087
+  | Eq : ('a, 'a) eqEq175,4104
+module type KeyT = sigKeyT178,4134
+  type 'a kk179,4157
+  val create : string -> 'a kcreate180,4169
+  val eq_type : 'a k -> 'b k -> ('a, 'b) eqeq_type181,4199
+  val name : 'a k -> stringname182,4243
+module DomainKey : KeyT = structDomainKey187,4361
+  type _ key = ..key188,4394
+  module type K = sigK190,4413
+    type tt191,4435
+    type _ key += Key : t keykey192,4446
+    val name : stringname193,4476
+  type 'a k = (module K with type t = 'a)k196,4505
+  type 'a k = (module K with type t = 'a)K196,4505
+  type 'a k = (module K with type t = 'a)t196,4505
+  let name (type a) (elt : a k) : string =name198,4548
+    let module A = (val elt : K with type t = a) inelt199,4591
+    let module A = (val elt : K with type t = a) int199,4591
+  let create (type a) (n : string) : a k =create202,4655
+        type t = at204,4724
+        type _ key += Key : t keykey205,4743
+        let name = nname206,4777
+    (module M : K with type t = a)M208,4811
+    (module M : K with type t = a)t208,4811
+  let eq_type (type a) (type b) (x : a k) (y : b k) : (a, b) eq =eq_type210,4847
+    let module A = (val x : K with type t = a) inx211,4913
+    let module A = (val x : K with type t = a) int211,4913
+    let module B = (val y : K with type t = b) iny212,4963
+    let module B = (val y : K with type t = b) int212,4963
+let binop_to_string (b : Bil.binop) : string =binop_to_string218,5072
+let elt_to_tid (e : Blk.elt) : tid =elt_to_tid240,5545
+let jmp_is_return (j : jmp term) : bool =jmp_is_return257,6143
+module type NumericDomain = sigNumericDomain265,6444
+  type tt266,6476
+  val key : t DomainKey.kkey268,6486
+  val get : 'a DomainKey.k -> (t -> 'a) optionget269,6512
+  val set : 'a DomainKey.k -> t -> 'a -> tset270,6559
+  val bot : tbot272,6603
+  val top : ttop273,6617
+  val make_top : int -> bool -> t make_top274,6631
+  val b1 : tb1276,6667
+  val b0 : tb0277,6680
+  val order : t -> t -> KB.Order.partialorder279,6694
+  val compare : t -> t -> intcompare280,6735
+  val equal : t -> t -> boolequal281,6765
+  val join : t -> t -> tjoin282,6794
+  val meet : t -> t -> tmeet283,6819
+  val contains : t -> t -> bool (* Useful for checkers *)contains284,6844
+  val add : t -> t -> tadd287,6924
+  val sub : t -> t -> tsub288,6948
+  val mul : t -> t -> tmul289,6972
+  val div : t -> t -> tdiv290,6996
+  val sdiv : t -> t -> tsdiv291,7020
+  val umod : t -> t -> tumod292,7045
+  val smod : t -> t -> tsmod293,7070
+  val lshift : t -> t -> tlshift294,7095
+  val rshift : t -> t -> trshift295,7122
+  val arshift : t -> t -> tarshift296,7149
+  val logand : t -> t -> tlogand297,7177
+  val logor : t -> t -> tlogor298,7204
+  val logxor : t -> t -> tlogxor299,7230
+  val neg : t -> tneg301,7258
+  val lnot : t -> tlnot302,7277
+  val extract : t -> int -> int -> textract304,7298
+  val concat : t -> t -> tconcat305,7335
+  val booleq : t -> t -> tbooleq307,7365
+  val boolneq : t -> t -> tboolneq308,7392
+  val boollt : t -> t -> tboollt309,7420
+  val boolle : t -> t -> tboolle310,7447
+  val boolslt : t -> t -> tboolslt311,7474
+  val boolsle : t -> t -> tboolsle312,7502
+  val could_be_true : t -> boolcould_be_true313,7530
+  val could_be_false : t -> boolcould_be_false314,7562
+  val unsigned : int -> t -> tunsigned316,7596
+  val signed : int -> t -> tsigned317,7627
+  val low : int -> t -> tlow318,7656
+  val high : int -> t -> thigh319,7682
+  val to_string : t -> stringto_string321,7710
+  val of_int : ?width:int -> int -> tof_int322,7740
+  val of_word : word -> tof_word323,7778
+  val of_z : ?width:int -> Z.t -> tof_z324,7804
+  val bitwidth : t -> intbitwidth325,7840
+  val sexp_of_t : t -> Sexp.tsexp_of_t326,7866
+module type MemoryT =MemoryT347,8426
+    type tt349,8454
+    type vv351,8470
+    type regionsregions353,8486
+    type regionregion355,8508
+    type valtypesvaltypes357,8529
+    type 'a err = ('a, Error.t) Result.terr359,8548
+    val empty : tempty361,8590
+    val lookup : string -> t -> vlookup363,8613
+    val set : string -> v -> t -> tset365,8652
+    val equal : t -> t -> boolequal367,8693
+    val compute_type : Bil.exp -> t -> cell_tcompute_type369,8729
+    val set_rsp : int -> t -> t errset_rsp371,8780
+    val set_rbp : int -> t -> t errset_rbp373,8821
+    val set_img : t -> Image.t -> tset_img375,8862
+    val holds_ptr : string -> t -> boolholds_ptr377,8903
+    val setptr : name:string -> regions:regions -> offs:v -> width:v -> t -> tsetptr379,8948
+    val unptr : name:string -> t -> tunptr381,9032
+    val load_of_bil_exp : Bil.exp -> v -> Size.t -> t -> v errload_of_bil_exp385,9140
+    val store_of_bil_exp : Bil.exp -> offs:v -> data:v -> valtype:cell_t -> size:Size.t -> t -> store_of_bil_exp387,9208
+    val havoc_on_call : t -> thavoc_on_call389,9311
+    val merge : t -> t -> tmerge391,9343
+    val widen_threshold : intwiden_threshold393,9376
+    val widen_with_step : int -> 'a -> t -> t -> twiden_with_step395,9411
+    val pp : t -> unitpp397,9467
+module NumericEnv(ValueDom : NumericDomain)NumericEnv400,9497
+  let widen_threshold = 256widen_threshold471,11253
+  let widen_with_step steps n prev_state new_state : t =widen_with_step473,11284
+  let pp (env : t) : unit =pp489,11929
+module AbstractInterpreter(N: NumericDomain)AbstractInterpreter501,12298
+         (Rt : sig type t end)t503,12373
+         (Vt : sig type t end)t504,12404
+         (Env : MemoryT with type v := N.tv505,12435
+                         and type region := R.tregion506,12478
+                         and type regions := Rt.tregions507,12526
+                         and type valtypes := Vt.t) = structvaltypes508,12576
+  module E = EnvE509,12637
+  module StringSet = Set.Make_binable_using_comparator(String)StringSet510,12654
+  module ST = structST512,12718
+  let denote_binop (op : binop) : N.t -> N.t -> N.t =denote_binop518,12852
+  let denote_cast (c : cast) : int -> N.t -> N.t =denote_cast540,13423
+  let denote_unop (op : unop) : N.t -> N.t =denote_unop547,13602
+  let rec denote_exp (e : Bil.exp) : N.t ST.t =denote_exp552,13713
+  let denote_def (d : def term) : unit ST.t =denote_def665,18608
+  let denote_phi (p : phi term) : unit ST.t =denote_phi679,19052
+  let denote_jmp (j : jmp term) : unit ST.t =denote_jmp686,19281
+  let denote_elt (e : Blk.elt) (st : E.t) : E.t =denote_elt693,19449
+module DomainProduct(X : NumericDomain)(Y : NumericDomain)DomainProduct710,20033
+
+comp_simp.ml,1440
+open CoreComp_simp1,0
+module T = Bap_core_theory.TheoryT7,70
+module KB = Bap_core_theory.KBKB8,104
+module Checker(N : NumericDomain) = structChecker10,136
+  module AI = AbstractInterpreter(N)(Abstract_memory.Region)(Abstract_memory.Region.Set)(struct AI17,366
+  module AI = AbstractInterpreter(N)(Abstract_memory.Region)(Abstract_memory.Region.Set)(struct t17,366
+  module I = Wrapping_intervalI18,493
+  module SS = Common.SSSS19,524
+  type warns = Alert.Set.twarns21,549
+  type t = warnst22,576
+  let name = "comp-simp"name24,594
+  module State = structState26,620
+    type t = { warns: warns;t27,644
+    type t = { warns: warns;warns27,644
+               env: E.t;env28,673
+               tid : Tid.t;tid29,698
+               liveness : Live_variables.t } liveness30,726
+    let init in_state tid liveness =init32,773
+  module ST = structST39,923
+  let get_intvl : N.t -> Wrapping_interval.t =get_intvl45,1065
+  let dont_care_vars = ["ZF"; "OF"; "CF"; "AF"; "PF"; "SF"]dont_care_vars50,1259
+  let empty : warns = Alert.Set.emptyempty54,1360
+  let join : warns -> warns -> warns = Alert.Set.unionjoin55,1398
+  let could_be_special (special_for_bw : I.t -> I.t) (to_check : I.t) : bool =could_be_special57,1454
+      let special = special_for_bw to_check inspecial61,1587
+  let check_binop_operandscheck_binop_operands64,1669
+    let left_specials = fst specials inleft_specials70,1839
+
+data_section.ml,27
+open CoreData_section1,0
+
+domain_key.ml,1422
+open CoreDomain_key1,0
+module KB = Bap_core_theory.KBKB4,23
+type (_, _) eq =eq6,55
+  | Eq : ('a, 'a) eqEq7,72
+module type KeyT = sigKeyT10,102
+  type 'a kk11,125
+  val create : string -> 'a kcreate12,137
+  val eq_type : 'a k -> 'b k -> ('a, 'b) eqeq_type13,167
+  val name : 'a k -> stringname14,211
+module DomainKey : KeyT = structDomainKey19,329
+  type _ key = ..key20,362
+  module type K = sigK22,381
+    type tt23,403
+    type _ key += Key : t keykey24,414
+    val name : stringname25,444
+  type 'a k = (module K with type t = 'a)k28,473
+  type 'a k = (module K with type t = 'a)K28,473
+  type 'a k = (module K with type t = 'a)t28,473
+  let name (type a) (elt : a k) : string =name30,516
+    let module A = (val elt : K with type t = a) inelt31,559
+    let module A = (val elt : K with type t = a) int31,559
+  let create (type a) (n : string) : a k =create34,623
+        type t = at36,692
+        type _ key += Key : t keykey37,711
+        let name = nname38,745
+    (module M : K with type t = a)M40,779
+    (module M : K with type t = a)t40,779
+  let eq_type (type a) (type b) (x : a k) (y : b k) : (a, b) eq =eq_type42,815
+    let module A = (val x : K with type t = a) inx43,881
+    let module A = (val x : K with type t = a) int43,881
+    let module B = (val y : K with type t = b) iny44,931
+    let module B = (val y : K with type t = b) int44,931
+
+driver.ml,1611
+open CoreDriver1,0
+module T = Bap_core_theory.TheoryT7,75
+module KB = Bap_knowledge.KnowledgeKB8,109
+module Cfg = Bap.Std.Graphs.CfgCfg10,146
+module IrCfg = Bap.Std.Graphs.IrIrCfg11,178
+module CR = Common.CalleeRelCR12,211
+module CRS = CR.SetCRS13,240
+type check_sub_result = { callees : CRS.t;check_sub_result15,261
+type check_sub_result = { callees : CRS.t;callees15,261
+                          alerts : Alert.Set.t }alerts16,304
+type checker_alerts = Alert.Set.tchecker_alerts18,354
+module SubSet = structSubSet20,389
+let print_iml iml : unit =print_iml24,466
+let print_sol sol : unit =print_sol30,618
+let insns_of_node n = Blk.elts @@ Graphs.Ir.Node.label ninsns_of_node36,791
+let first_insn_of_blk b =first_insn_of_blk37,848
+let get_ret_insn_tid sub_nodes =get_ret_insn_tid43,1015
+let sub_of_tid_exn tid proj : sub Term.t =sub_of_tid_exn60,1639
+let last_insn_of_sub sub : Blk.elt =last_insn_of_sub72,1967
+  let rev_nodes = Graphlib.postorder_traverse (module Graphs.Ir) irg inGraphs74,2034
+  let last_node_insns = insns_of_node last_node inlast_node_insns84,2374
+let should_skip_analysis (edges : Edge_builder.edges)should_skip_analysis101,3172
+let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =run_analyses138,4482
+     let edges = List.map edges ~f:(Calling_context.of_edge) inedges159,5164
+     let cfg = Graphlib.create (module G) ~edges () inG161,5288
+     let () = printf "Setting up initial solution \n%!" in()175,5900
+     let first_node = match Seq.hd (Graphlib.reverse_postorder_traverse (module G) cfg) withG263,9241
+
+edge_builder.ml,1445
+open CoreEdge_builder1,0
+module KB = Bap_knowledge.KnowledgeKB6,58
+module Cfg = Bap.Std.Graphs.CfgCfg8,95
+module IrCfg = Bap.Std.Graphs.IrIrCfg9,127
+type edge = (Tid.t * Tid.t * bool)edge11,161
+type edges = edge listedges13,197
+type tidmap = Blk.elt Tid_map.ttidmap15,221
+module Callees = structCallees17,254
+  module S = Set.Make_binable_using_comparator(Sub)S18,278
+module T = structT22,347
+  type t = { tidmap : tidmap;t23,365
+  type t = { tidmap : tidmap;tidmap23,365
+             callees : Callees.t }callees24,395
+module ST = structST28,445
+let from_ : edge -> Tid.t = functionfrom_34,569
+let to_ : edge -> Tid.t = functionto_37,648
+let iter_insns sub : unit =iter_insns40,723
+  let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg inGraphs45,920
+  let last_node_insns = insns_of_node last_node inlast_node_insns161,4739
+let edges_of_jump j sub nodes proj : edges ST.t =edges_of_jump165,4887
+let edges_of_jump_intraproc j sub nodes proj : edges ST.t =edges_of_jump_intraproc218,7184
+let get_jmp_edges insns sub nodes proj =get_jmp_edges250,8505
+let edges_of_insns insns sub nodes proj : edges ST.t =edges_of_insns262,8878
+let get_builder_for_sub sub proj : edges ST.t =get_builder_for_sub271,9291
+  let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg inGraphs273,9369
+let run_one (sub : Sub.t) (proj : Project.t) : (edges * tidmap) =run_one327,11219
+
+interval_analysis.ml,1437
+open CoreInterval_analysis1,0
+module KB = Bap_knowledge.KnowledgeKB5,42
+module IML = Map_lattice.IntervalIML6,78
+module T = Bap_core_theory.TheoryT7,112
+type result = Wrapping_interval.tresult9,147
+type state = result IML.tstate11,182
+let denote_binop (op : binop) : result -> result -> result =denote_binop14,242
+  let open Wrapping_interval inopen16,332
+let denote_cast (c : cast) : int -> result -> result =denote_cast38,822
+  let open Wrapping_interval inopen39,877
+let denote_unop (op : unop) : result -> result =denote_unop46,1023
+let rec denote_exp (e : Bil.exp) (d : state) : result =denote_exp51,1178
+     let () = Format.printf "TODO: support Bil.Concat\n%!" in()95,2701
+let denote_def (d : def term) : state -> state =denote_def98,2791
+let denote_phi (p : phi term) : state -> state =denote_phi105,3013
+let denote_jmp (j : jmp term) : state -> state =denote_jmp110,3150
+let denote_blk (b : blk term) : state -> state =denote_blk114,3223
+let denote_node (n : Graphs.Ir.node) : state -> state =denote_node120,3399
+let default_elt_value : result = Wrapping_interval.botdefault_elt_value125,3518
+let setup_initial_state (sub : sub term) (irg : Graphs.Ir.t)setup_initial_state127,3574
+  let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg inGraphs134,3844
+let run (s : sub term) : (Graphs.Ir.node, state) Solution.t =run209,6680
+    (module Graphs.Ir)Graphs231,7498
+
+live_variables.ml,2008
+open CoreLive_variables1,0
+module T = Bap_core_theory.TheoryT119,6208
+module NameAndTid = structNameAndTid121,6243
+  module T = structT122,6270
+    type t = string * Tid.t [@@deriving compare, sexp, equal, bin_io]t123,6290
+  module Cmp = structCmp126,6367
+  let make ~name ~tid : t = (name, tid)make134,6468
+  module Set = structSet136,6509
+module SS = Set.Make_binable_using_comparator(String)SS141,6593
+let sub_to_ssa_sub : Sub.t -> Sub.t = Sub.ssasub_to_ssa_sub143,6648
+let fold_over_elts (sub : Sub.t) ~(init : 'a) ~(f:'a -> Blk.elt -> 'a) ~(cong : 'a -> 'a -> 'a) fold_over_elts145,6695
+module GetPhiAssnsPass = structGetPhiAssnsPass154,7055
+  let elt_to_phi_var : Blk.elt -> NameAndTid.Set.t = functionelt_to_phi_var155,7087
+  let run (sub : Sub.t) : NameAndTid.Set.t =run164,7428
+module GetDefsPass : sigGetDefsPass172,7650
+  type tt173,7675
+  val def_tid_of_var_name : t -> string -> Tid.t optiondef_tid_of_var_name175,7685
+  val run : Sub.t -> trun176,7741
+  module M = Map.Make_plain_using_comparator(String)M178,7777
+  type t = Tid.t M.tt180,7831
+  let combine ~key which =combine182,7853
+  let add_def_to_mapping mapping elt =add_def_to_mapping192,8110
+  let def_tid_of_var_name (m : t) (name : string) : Tid.t option =def_tid_of_var_name206,8512
+  let run (sub : Sub.t) : t =run215,8839
+module IsUsedPass = structIsUsedPass231,9243
+  module T = structT232,9270
+    type t = { used : string;t237,9433
+    type t = { used : string;used237,9433
+               used_tid : Tid.t option;used_tid238,9463
+               user_tid : Tid.t;user_tid239,9503
+               user : string }user240,9536
+  module UseRel = Set.Make(T)UseRel243,9623
+  let phi_option_to_uses (_tid, opt_expr) : SS.t =phi_option_to_uses246,9679
+  let elt_to_uses (e : Blk.elt) (defmap : GetDefsPass.t) : t list =elt_to_uses249,9767
+type t = IsUsedPass.UseRel.tt320,12093
+module Analysis = structAnalysis323,12187
+  let run (sub : Sub.t) : t =run324,12212
+
+map_lattice.ml,205
+open CoreMap_lattice1,0
+module KB = Bap_knowledge.Knowledge KB3,11
+module Interval = structInterval11,263
+  module K = StringK12,288
+  module M = Map.Make_binable_using_comparator(String)M14,309
+
+silent_store_checker.ml,121
+open CoreSilent_store_checker1,0
+let check_store _mem _idx _val _endian _size could_be_equal : bool =check_store5,53
+
+silent_stores.ml,1337
+open CoreSilent_stores1,0
+module Checker(N : NumericDomain) = structChecker7,70
+  module AI = AbstractInterpreter(N)(Abstract_memory.Region)(Abstract_memory.Region.Set)(struct AI16,306
+  module AI = AbstractInterpreter(N)(Abstract_memory.Region)(Abstract_memory.Region.Set)(struct t16,306
+  module I = Wrapping_intervalI18,438
+  module Taint = Checker_taint.AnalysisTaint20,470
+  module SS = Set.Make_binable_using_comparator(String)SS23,530
+  type warns = Alert.Set.twarns25,589
+  type t = warnst26,616
+  let name = "silent-stores"name28,634
+  module State = structState30,664
+    type t = { warns: warns;t31,688
+    type t = { warns: warns;warns31,688
+               env: Env.t;env32,717
+               tid : Tid.t;tid33,744
+               liveness : Live_variables.t } liveness34,772
+    let init in_state tid liveness =init36,819
+  module ST = structST43,973
+  let get_intvl : N.t -> Wrapping_interval.t =get_intvl49,1115
+  let get_taint : N.t -> Taint.t =get_taint54,1333
+  let is_tainted : N.t -> bool =is_tainted59,1524
+  let dont_care_vars = ["ZF"; "OF"; "CF"; "AF"; "PF"; "SF"]dont_care_vars62,1603
+  let empty : warns = Alert.Set.emptyempty65,1701
+  let join : warns -> warns -> warns = Alert.Set.unionjoin66,1739
+  let rec check_exp (e : Bil.exp) : N.t ST.t =check_exp73,1973
+
+subroutine_getter.ml,238
+open CoreSubroutine_getter1,0
+module T = Bap_core_theory.TheoryT6,54
+ module KB = Bap_knowledge.KnowledgeKB7,88
+type name = stringname9,126
+type addr = wordaddr10,145
+type t = (name, addr) List.Assoc.tt12,163
+let _ =_14,199
+
+test_abstract_memory.ml,652
+open CoreTest_abstract_memory1,0
+module WI = Wrapping_intervalWI6,48
+module T = Checker_taint.AnalysisT7,78
+module ProdWIT = DomainProduct(WI)(T)ProdWIT8,112
+module AM = Abstract_memoryAM10,151
+module PtrWI = AM.Pointer(WI)PtrWI12,180
+module Mem = AM.Make(WI)Mem13,210
+module PtrWIT = AM.Pointer(ProdWIT)PtrWIT15,236
+module MemWIT = AM.Make(ProdWIT)MemWIT16,272
+let assert_wi_equal = OUnit2.assert_equal ~cmp:WI.equal ~printer:WI.to_stringassert_wi_equal18,306
+let get_intvl : ProdWIT.t -> WI.t =get_intvl20,385
+let get_taint : ProdWIT.t -> T.t =get_taint25,553
+let suite = "Test_abstract_memory test suite" >:::suite157,5162
+
+test_main.ml,98
+open CoreTest_main1,0
+let suites = [Test_wrapping_interval.suite;suites4,23
+let () =()7,110
+
+test_wrapping_interval.ml,1823
+open CoreTest_wrapping_interval1,0
+module WI = Wrapping_intervalWI5,36
+let one = b1one9,90
+let zero = b0zero10,103
+let assert_equal = OUnit2.assert_equalassert_equal11,117
+let i ?(width = 64) x = of_int_tuple ~width xi14,228
+let test_add_basic _ = assert_equal (add one zero) onetest_add_basic17,293
+let test_top_contains_one _ =test_top_contains_one19,349
+let test_add_two_const _ =test_add_two_const23,468
+let test_add_two_intvls _ =test_add_two_intvls26,530
+let test_8_bit_wrap _ =test_8_bit_wrap33,720
+let test_high_1_bitwidth_correct _ =test_high_1_bitwidth_correct40,903
+let test_signed_result_small_intvl_correct _ =test_signed_result_small_intvl_correct47,1134
+let test_unsigned_result_small_intvl_correct _ =test_unsigned_result_small_intvl_correct59,1535
+let test_low_result_big_const_correct _ =test_low_result_big_const_correct71,1948
+let test_high_result_small_const_correct _ =test_high_result_small_const_correct86,2378
+let test_extract_middle_bits_correct _ =test_extract_middle_bits_correct101,2812
+let test_concat_two_small_correct _ =test_concat_two_small_correct112,3117
+let test_zero_contains_pow_two_false _ =test_zero_contains_pow_two_false125,3473
+let test_256_contains_pow_two_true _ =test_256_contains_pow_two_true130,3629
+let test_could_be_true_false _ =test_could_be_true_false135,3774
+let test_could_be_true_true _ =test_could_be_true_true141,3911
+let test_could_be_false_false _ =test_could_be_false_false146,4032
+let test_could_be_false_true _ =test_could_be_false_true152,4170
+let test_mul_two_consts_returns_expected_res _ =test_mul_two_consts_returns_expected_res157,4292
+let test_mul_overflow_wraps_around_correctly _ =test_mul_overflow_wraps_around_correctly163,4455
+let suite = "Test_wrapping_interval test suite" >:::suite179,4990
+
+tid_map.ml,424
+open CoreTid_map1,0
+module M = Map.Make_binable_using_comparator(Tid)M5,42
+let tid_of_elt = functiontid_of_elt8,103
+let elt_same (e1 : Blk.elt) (e2 : Blk.elt) : bool =elt_same13,205
+let add_insns insns tidmap =add_insns20,416
+let t_of_sub_nodes nodes insns_of_node =t_of_sub_nodes26,559
+let t_of_sub sub =t_of_sub33,721
+  let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg inGraphs35,770
+
+type_domain.ml,2542
+open CoreType_domain1,0
+module T = Bap_core_theory.TheoryT5,36
+module KB = Bap_core_theory.KBKB6,70
+module Key = Common.DomainKeyKey9,164
+type t = CellType.tt11,195
+let p = CellType.Ptrp12,215
+let s = CellType.Scalars13,236
+let u = CellType.Unknownu14,260
+let n = CellType.Undefn15,285
+let key : t Key.k = Key.create "type_domain"key17,309
+let get : type a. a Key.k -> (t -> a) option = fun k ->get19,355
+let set : type a. a Key.k -> t -> a -> t = fun k other replace ->set24,487
+let bot = CellType.Undefbot29,620
+let top = CellType.Unknowntop31,646
+let make_top _sz _signed = topmake_top33,674
+let b1 = CellType.Unknownb135,706
+let b0 = CellType.Unknownb037,733
+let order = CellType.orderorder39,760
+let compare x y =compare41,788
+let equal x y = 0 = compare x yequal49,903
+let join x y = CellType.join x y |> Result.ok_exnjoin51,936
+let meet x y =meet53,987
+let contains x y =contains61,1218
+let add x y =add65,1281
+let sub x y =sub76,1582
+let general_binop x y = sgeneral_binop89,1885
+let mul = general_binopmul91,1912
+let div = general_binopdiv93,1937
+let sdiv = general_binopsdiv95,1962
+let umod = general_binopumod97,1988
+let smod = general_binopsmod99,2014
+let lshift = general_binoplshift101,2040
+let rshift = general_binoprshift103,2068
+let arshift = general_binoparshift105,2096
+let logand = general_binoplogand107,2125
+let logor = general_binoplogor109,2153
+let logxor = general_binoplogxor111,2180
+let general_unop x = sgeneral_unop113,2208
+let neg = general_unopneg115,2232
+let lnot = general_unoplnot117,2256
+let extract x hi lo = sextract119,2281
+let concat = general_binopconcat121,2306
+let booleq = general_binopbooleq123,2334
+let boolneq = general_binopboolneq125,2362
+let boollt = general_binopboollt127,2391
+let boolle = general_binopboolle129,2419
+let boolslt = general_binopboolslt131,2447
+let boolsle = general_binopboolsle133,2476
+let could_be_true _ = truecould_be_true135,2505
+let could_be_false _ = truecould_be_false137,2533
+let general_cast n x = sgeneral_cast139,2562
+let unsigned = general_castunsigned141,2588
+let signed = general_castsigned143,2617
+let low = general_castlow145,2644
+let high = general_casthigh147,2668
+let to_string = functionto_string149,2693
+let of_int ?width v = sof_int155,2849
+let of_word w = sof_word157,2874
+let of_z ?width z = sof_z159,2893
+let bitwidth typ = failwith "can't bitwidth on type"bitwidth161,2916
+let sexp_of_t = CellType.sexp_of_tsexp_of_t163,2970
+
+uarch_checker.ml,562
+open CoreUarch_checker1,0
+module UarchCheckerExtension = structUarchCheckerExtension5,38
+  let target_func_param = Extension.Configuration.parametertarget_func_param6,76
+  let get_target_file_name (proj : Project.t) : string =get_target_file_name11,302
+  let sub_matches_name target_name (sub : sub term) : bool =sub_matches_name17,535
+  let get_target_func name proj =get_target_func20,642
+  let pass ctxt proj =pass34,1118
+  let register_pass ctxt =register_pass47,1636
+let () = Extension.declare UarchCheckerExtension.register_pass()52,1718
+
+var_name_collector.ml,160
+open CoreVar_name_collector1,0
+module SS = Set.Make_binable_using_comparator(String)SS4,24
+type t = SS.tt6,79
+let rec run (e : Bil.exp) : SS.t =run8,94
+
+wrapping_interval.ml,1183
+open CoreWrapping_interval1,0
+module T = Bap_core_theory.TheoryT4,24
+module KB = Bap_core_theory.KBKB5,58
+let package = "uarch-checker"package7,90
+let name = "interval"name8,120
+let desc = "Interval type/domain for abstract interpretation"desc9,142
+let width = 128 (* bits *)width10,204
+type range = {lo: Z.t; hi: Z.t; width: int; signed: bool} (* [@@deriving sexp, bin_io] *)range12,232
+type range = {lo: Z.t; hi: Z.t; width: int; signed: bool} (* [@@deriving sexp, bin_io] *)lo12,232
+type range = {lo: Z.t; hi: Z.t; width: int; signed: bool} (* [@@deriving sexp, bin_io] *)hi12,232
+type range = {lo: Z.t; hi: Z.t; width: int; signed: bool} (* [@@deriving sexp, bin_io] *)width12,232
+type range = {lo: Z.t; hi: Z.t; width: int; signed: bool} (* [@@deriving sexp, bin_io] *)signed12,232
+type t = Bot | Interval of range (* [@@deriving sexp, bin_io] *)t13,322
+type t = Bot | Interval of range (* [@@deriving sexp, bin_io] *)Bot13,322
+type t = Bot | Interval of range (* [@@deriving sexp, bin_io] *)Interval13,322
+let empty = Botempty16,430
+let bot = Botbot17,446
+let make_b1 width signed = Interval {lo=Z.one; hi=Z.one; width; signed}make_b119,461
+
+/Users/mkf727/repos/bap,include
+
+/Users/mkf727/.opam/bap-alpha/lib/zarith,include

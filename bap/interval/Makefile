@@ -3,6 +3,8 @@ TEST_OBJS = $(TEST_SRCS:.ml=.cmo)
 TEST_INTFS = $(TEST_SRCS:.ml=.cmi)
 TEST_MAIN = test_main
 PLUGIN_NAME = uarch_checker.plugin
+BAP_MASTER_REPO=/Users/mkf727/repos/bap
+Z_PLUGIN_LIB_BASE=/Users/mkf727/.opam/bap-alpha/lib/zarith
 
 COMP_SIMP_TEST_DIR = comp-simp-test-cases
 
@@ -10,11 +12,25 @@ PKGS = bap,core_kernel,stdio,graphlib,zarith,ounit2,monads
 
 .PHONY : clean test comp-simp-test-cases bap-plugin
 
-bap-plugin : *.ml
+bap-plugin : *.ml tags
 	bapbuild $(PLUGIN_NAME)
+
+libna_crypto_sign : bap-plugin
+	@echo -n "Starting analysis of crypto_sign "
+
+	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
+
+	bap --plugin-path=/home/bapuser/project/bap/interval/ --pass=uarch-checker --uarch-checker-target-function=crypto_sign --no-optimization --bil-optimization=0 ~/project/test/libna/bap_ld_scalar_mult.o > libna.debug.log 2>&1
+
+	@echo -n "Done with analysis of crypto_sign "
+
+	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 
 test : $(TEST_MAIN) comp-simp-test-cases
 	./$(TEST_MAIN)
+
+tags : *.ml
+	-ctags -e --etags-include=$(BAP_MASTER_REPO) --etags-include=$(Z_PLUGIN_LIB_BASE) -R *.ml
 
 comp-simp-test-cases :
 	$(MAKE) -C $(COMP_SIMP_TEST_DIR)
