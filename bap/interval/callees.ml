@@ -43,17 +43,32 @@ module Getter(N : NumericDomain) = struct
     | Some f -> f
     | None -> failwith "callees.get_intvl: Couldn't extract interval information out of product domain"
 
+  let sub_name_of_tid_exn (proj : Project.t) (tid : Tid.t) : string =
+    
+    let prog = Project.program proj in
+    
+    match Term.find sub_t prog tid with
+      
+    | Some sub -> Sub.name sub
+  
+    | None -> failwith @@
+      Format.sprintf 
+        "in sub_name_of_tid_exn, couldn't find sub with tid %a" Tid.pps tid
+
   let get_bb_tid_sub_db (prog : Program.t) : (Tid.t, Tid.t) List.Assoc.t =
+    
     let blk_tids_of_sub (s : sub term) : Tid.t list =
       Term.enum blk_t s
       |> Seq.to_list
       |> List.map ~f:(Term.tid)
     in
+    
     let db_of_one_sub (s : sub term) : (Tid.t, Tid.t) List.Assoc.t =
       let sub_tid = Term.tid s in
       blk_tids_of_sub s
       |> List.map ~f:(fun blk_tid -> (blk_tid, sub_tid))
     in
+    
     Term.enum sub_t prog
     |> Seq.to_list
     |> List.map ~f:db_of_one_sub
@@ -61,118 +76,124 @@ module Getter(N : NumericDomain) = struct
 
   (* So this is an address. According to gitter chat with benjamin and ivan,
      using normal disassembly from the project init will leave tids and labels
-     as corresponding to the address (so both should be equal).
-   *)
+     as corresponding to the address (so both should be equal). *)
   let get_callee_of_indirect (exp : exp) (jmp_from : jmp term)
         (prog : Program.t) (sub : sub term)
         sol : rel Or_error.t =
+    let () = printf "in get_callee_of_indirect\n%!" in
+    
     let fromtid = Term.tid jmp_from in
     let fromcc = Calling_context.of_tid fromtid in
+    
     let exp_evaller = AI.denote_exp exp in
     let eval_in_env = Solution.get sol fromcc in
     let (callee, _new_env) = AI.ST.run exp_evaller eval_in_env in
-    let callee_as_intvl = get_intvl callee in
-    match WI.to_int callee_as_intvl with
-    | Some addr_int ->
-       let callee_addr = addr_int |> Addr.of_int ~width:64 in
-       let callee_tid = Tid.for_addr callee_addr in
-       let bb_tid_sub_db = get_bb_tid_sub_db prog in
-       (match List.Assoc.find ~equal:Tid.equal bb_tid_sub_db callee_tid with
-        | Some sub_tid ->
-           let caller_tid = Term.tid sub in
-           Ok { callee = sub_tid ;
-                caller = caller_tid ;
-                callsite = fromtid }
-        | None -> Or_error.error_string
-                    "get_callee_of_indirect_exn: Couldn't find callee sub tid for that addr")
-    | None ->
-       Or_error.error_string
-         "get_callee_of_indirect_exn: Couldn't get callee as a single integer in Callees.Getter.get_callee_of_indirect_exn"
 
-  let of_jmp_term (j : jmp term)
-        (sub : sub term)
-        (prog : Program.t)
-        sol : rel Or_error.t =
+    let callee_as_intvl = get_intvl callee in
+    
+    let points_to_only_one_addr = Wrapping_interval.is_const callee_as_intvl in
+
+    if points_to_only_one_addr
+    then
+      Or_error.error_string @@
+        Format.sprintf "in get_callee_of_indirect, jmp indirect exp %a points to more than one location" Jmp.pps jmp_from
+    else
+      match WI.to_int callee_as_intvl with
+      | Some addr_int ->
+         let callee_addr = addr_int |> Addr.of_int ~width:64 in
+         
+         let callee_tid = Tid.for_addr callee_addr in
+         
+         let bb_tid_sub_db = get_bb_tid_sub_db prog in
+         
+         (match List.Assoc.find ~equal:Tid.equal bb_tid_sub_db callee_tid with
+          | Some sub_tid ->
+             let caller_tid = Term.tid sub in
+             Ok { callee = sub_tid ;
+                  caller = caller_tid ;
+                  callsite = fromtid }
+          | None -> Or_error.error_string
+                      "get_callee_of_indirect_exn: Couldn't find callee sub tid for that addr")
+      | None ->
+         Or_error.error_string
+           "get_callee_of_indirect_exn: Couldn't get callee as a single integer in Callees.Getter.get_callee_of_indirect_exn"
+
+  let of_jmp_term (j : jmp term) (sub : sub term)
+        (prog : Program.t) (last_jmp_tid : tid) sol : rel option Or_error.t =
+
+    let open Or_error.Monad_infix in
+    
+    let () = printf "in of_jmp_term, jmp term: %a\n%!" Jmp.ppo j in
+    
     let caller_tid = Term.tid sub in
+    
     let callsite_tid = Term.tid j in
+    
     match Jmp.kind j with
-    | Goto (Direct totid) -> Ok { caller = caller_tid ;
-                                  callee = totid ;
-                                  callsite = callsite_tid }
-    | Goto (Indirect exp) -> get_callee_of_indirect exp j prog sub sol
+    | _ when Tid.equal (Term.tid j) last_jmp_tid -> Ok None
+
+    (* for now, direct jmps not considered a direct or indirect call *)
+    | Goto (Direct totid) -> Ok None
+  
+    | Goto (Indirect exp) ->
+       get_callee_of_indirect exp j prog sub sol >>= fun callee ->
+       
+       Ok (Some callee)
+  
     | Int (interrupt_no, return_tid) ->
        Or_error.error_string
          "interrupts not handled in Callee.Getter.of_jmp_term_exn"
+  
     | Call callee ->
        let target = Call.target callee in
-       begin
-         match target with
-         | Direct totid -> Ok { caller = caller_tid ;
-                                  callee = totid ;
-                                  callsite = callsite_tid }
-         | Indirect exp -> get_callee_of_indirect exp j prog sub sol
-       end
-    | Ret _ -> Or_error.error_string
-                 "of_jmp_term_exn: returns not handled in Callee.Getter.of_jmp_term_exn" 
-
-  let of_jmp_term_list (js : jmp term list)
-        (sub : sub term)
-        (prog : Program.t)
-        sol : rel list Or_error.t =
-    List.fold js ~init:(Ok []) ~f:(fun tids j ->
-        tids >>= fun tids ->
-        let new_tid = of_jmp_term j sub prog sol in
-        new_tid >>= fun new_tid ->
-        Ok (List.cons new_tid tids))
-
-  (* here, the edges of CG.t are a list of jmp terms *)
-  let get_direct_calls sub proj sol : rel list Or_error.t =
+       
+       (match target with
+        | Direct totid -> Ok (Some { caller = caller_tid ;
+                                     callee = totid ;
+                                     callsite = callsite_tid })
+        | Indirect exp ->
+           get_callee_of_indirect exp j prog sub sol >>= fun callee ->
+           
+           Ok (Some callee))
+  
+    | Ret _ ->
+       Or_error.error_string
+         "of_jmp_term_exn: returns not handled in Callee.Getter.of_jmp_term_exn" 
+  let get_callees sub proj sol : rel list Or_error.t =
+    let () = printf "in get_direct_calls\n%!" in
+                     
     let prog = Project.program proj in
-    let callgraph : CG.t = Program.to_graph prog in
-    let callee_edges = CG.edges callgraph in
-    Seq.fold callee_edges
-      ~init:(Ok [])
-      ~f:(fun callees edge ->
-        let jmps = CG.Edge.label edge in
-        callees >>= fun callees ->
-        let jmp_to_tids = of_jmp_term_list jmps sub prog sol in
-        jmp_to_tids >>= fun jmp_to_tids ->
-        Ok (List.append jmp_to_tids callees))
-
-  let get_all_jmps (sub : sub term) : jmp term list =
+    
     let blks = Term.enum blk_t sub in
-    let jmps = Seq.map blks ~f:(fun b -> Term.enum jmp_t b |> Seq.to_list) in
-    let jmps_list = Seq.to_list jmps in
-    List.join jmps_list
+    
+    let jmp_terms = Seq.map blks ~f:(fun b -> Term.enum jmp_t b |> Seq.to_list)
+                    |> Seq.to_list
+                    |> List.join in
 
-  let get_indirect_calls (sub : sub term) (proj : Project.t) sol
-      : rel list Or_error.t =
-    let is_not_return_insn (j : jmp term) : bool =
-      not @@ Common.jmp_is_return j
-    in
-    let is_indirect_call (j : jmp term) : bool =
-      match Jmp.kind j with
-      | Call target when is_not_return_insn j ->
-         let target_label = Call.target target in
-         (match target_label with
-          | Direct _ -> false
-          | Indirect _ -> true)
-      | _ -> false
-    in
-    let prog = Project.program proj in
-    let all_jmps = get_all_jmps sub in
-    let indirect_jmps = List.filter all_jmps ~f:is_indirect_call
-    in
-    List.fold indirect_jmps ~init:(Ok [])
-      ~f:(fun tids jmp ->
-        tids >>= fun tids ->
-        of_jmp_term jmp sub prog sol >>= fun callee_tid ->
-        Ok (List.cons callee_tid tids))
-
+    let last_jmp_tid = match List.last jmp_terms with
+      | None ->
+         failwith @@ sprintf "in get_direct_calls, no jmp terms in sub %a\n%!"
+                              Tid.pps (Term.tid sub)
+      | Some j -> Term.tid j in
+    
+    let callees = List.map jmp_terms ~f:(fun jt ->
+                             of_jmp_term jt sub prog last_jmp_tid sol) in
+    
+    let open Or_error.Monad_infix in
+    
+    List.fold callees
+              ~init:(Ok [])
+              ~f:(fun acc cr ->
+                acc >>= fun acc ->
+                cr >>=  fun cr ->
+                match cr with
+                | Some cr -> Ok (List.cons cr acc)
+                | None -> Ok acc)
+    
   (* returns list of sub term of callees *)
   let get (sub : sub term) (proj : Project.t) sol : CalleeRel.Set.t Or_error.t =
-    get_direct_calls sub proj sol >>= fun direct_callees ->
-    get_indirect_calls sub proj sol >>= fun indirect_callees ->
-    let all_callees = List.append indirect_callees direct_callees in
-    Ok (CalleeRel.Set.of_list all_callees)
+    
+    get_callees sub proj sol >>= fun callees ->
+    
+    Ok (CalleeRel.Set.of_list callees)
 end

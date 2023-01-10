@@ -136,6 +136,9 @@ let should_skip_analysis (edges : Edge_builder.edges)
     None
 
 let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
+  
+  let () = printf "Running analysis on sub %s\n%!" (Sub.name sub) in
+    
   let prog = Project.program proj in
   
   let edges, tidmap = Edge_builder.run_one sub proj in
@@ -145,12 +148,11 @@ let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
      let sub_name = Sub.name sub in
      let () = Format.printf
                 "Skipping analysis of single jmp subroutine %s\n%!"
-                sub_name
-     in
+                sub_name in
      res
   | None ->
      (* run the liveness analysis *)
-     let () = printf "Running liveness analysis\n%!" in
+     (* let () = printf "Running liveness analysis\n%!" in *)
      (* let liveness = Live_variables.Analysis.run sub in *)
      
      (* CFG *)
@@ -267,7 +269,8 @@ let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
      let with_args = G.Node.Map.set G.Node.Map.empty ~key:first_node ~data:initial_mem in
      let init_sol = Solution.create with_args empty in
 
-     let () = printf "Running abstract interpreter \n%!" in
+     let () = printf "Running abstract interpreter\n%!" in
+     
      let analysis_results = Graphlib.fixpoint
                               (module G)
                               cfg 
@@ -284,8 +287,9 @@ let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
                                      let err_s = sprintf "in calculating analysis_results, couldn't find tid %s in tidmap" tid_s in
                                      failwith err_s
                                 in
-                                AbsInt.denote_elt elt)
-     in
+                                AbsInt.denote_elt elt) in
+
+     let () = printf "Done running abstract interpreter\n%!" in
 
      (* Build up checker infra and run the checkers
       * This next part is an abomination of Ocaml code
@@ -349,18 +353,20 @@ let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
      (* fill out this subroutine name in all of the generated alerts for
         this sub *)
      let all_alerts = Alert.Set.map all_alerts ~f:(fun alert ->
-                          { alert with sub_name = Some (Sub.name sub) })
-     in
-
+                          { alert with sub_name = Some (Sub.name sub) }) in
+     
      (* get callees--both direct and indirect calls--of this call *)
      let () = Format.printf "Getting callees for sub %s\n%!" (Sub.name sub) in
+     
      let module GetCallees = Callees.Getter(FinalDomain) in
+     
      let callees = match GetCallees.get sub proj analysis_results with
        | Ok callees -> callees
-       | Error e -> failwith @@ Error.to_string_hum e
-     in
+       | Error e -> failwith @@ Error.to_string_hum e in
+     
      let () = Format.printf "Callees are: \n%!" in
      let () = CRS.print callees in
+     
      { alerts = all_alerts; callees = callees }
 
 let iter_insns sub : unit =
@@ -428,6 +434,10 @@ let check_fn top_level_sub img ctxt proj : unit =
         let callee_subs = CRS.to_list current_res.callees
                           |> List.map ~f:(fun (r : CR.t) -> sub_of_tid_exn r.callee proj)
                           |> SubSet.of_list
+        in
+
+        let () = SubSet.iter callee_subs ~f:(fun callee ->
+            printf "CallOf: (%s, %s)\n%!" (Sub.name sub) (Sub.name callee))
         in
         
         let next_worklist = SubSet.union worklist_wo_procd_wo_sub callee_subs in

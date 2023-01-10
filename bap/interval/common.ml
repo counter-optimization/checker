@@ -550,39 +550,39 @@ module AbstractInterpreter(N: NumericDomain)
     | Bil.NOT -> N.lnot
 
   let rec denote_exp (e : Bil.exp) : N.t ST.t =
-    let () = printf "denoting exp: %a\n%!" Exp.ppo e in
+    (* let () = printf "denoting exp: %a\n%!" Exp.ppo e in *)
     ST.get () >>= fun st ->
     try
       begin
         match e with
         | Bil.Load (_mem, idx, _endian, size) ->
-           let () = Format.printf "Denoting load\n%!" in
+           (* let () = Format.printf "Denoting load\n%!" in *)
            denote_exp idx >>= fun offs ->
            ST.get () >>= fun st ->
-           let () = Format.printf "doing load in denote of load\n%!" in 
+           (* let () = Format.printf "doing load in denote of load\n%!" in  *)
            let res = E.load_of_bil_exp e offs size st in
            begin
              match res with
              | Ok res ->
-                let () = Format.printf "Done denoting load\n%!" in
+                (* let () = Format.printf "Done denoting load\n%!" in *)
                 ST.return res
              | Error msg -> failwith @@ Error.to_string_hum msg
            end
         | Bil.Store (_mem, idx, v, _endian, size) ->
-           let () = printf "in denote_exp of store, denoting idx\n%!" in
+           (* let () = printf "in denote_exp of store, denoting idx\n%!" in *)
            denote_exp idx >>= fun offs ->
-           let () = printf "in denote_Exp of store, idx is: %s\n%!"
-                      (N.to_string offs)
-           in
-           let () = printf "in denote_exp of store, size is: %a\n%!"
-                      Size.ppo size
-           in
-           let () = printf "in denote_exp of store, denoting data\n%!" in
+           (* let () = printf "in denote_Exp of store, idx is: %s\n%!" *)
+           (*            (N.to_string offs) *)
+           (* in *)
+           (* let () = printf "in denote_exp of store, size is: %a\n%!" *)
+           (*            Size.ppo size *)
+           (* in *)
+           (* let () = printf "in denote_exp of store, denoting data\n%!" in *)
            denote_exp v >>= fun data ->
-           let () = printf "in denote_exp of store, computing type\n%!" in
+           (* let () = printf "in denote_exp of store, computing type\n%!" in *)
            ST.gets (Env.compute_type v) >>= fun valtype ->
            begin
-             let () = printf "in denote_exp of store, doing store\n%!" in 
+             (* let () = printf "in denote_exp of store, doing store\n%!" in  *)
              match Env.store_of_bil_exp e ~offs ~data ~valtype ~size st with
              | Ok newenv -> ST.put newenv >>= fun () -> ST.return N.bot
              | Error msg -> failwith @@ Error.to_string_hum msg

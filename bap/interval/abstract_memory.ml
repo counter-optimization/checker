@@ -500,13 +500,13 @@ module Make(N : NumericDomain)
     let cel = C.t_of_ptr ~valtype ptr in
     let celname = C.name cel in
     
-    let () = printf "storing to ptr %s\n%!" (Ptr.to_string ptr) in
+    (* let () = printf "storing to ptr %s\n%!" (Ptr.to_string ptr) in *)
 
     let overlap = C.Map.get_overlapping ptr mem.cells in
 
-    let () = printf "in store, overlapping cells are:\n%!" in
-    let () = Set.iter overlap ~f:(fun c ->
-        printf "overlapping cell: %s\n%!" (C.to_string c)) in
+    (* let () = printf "in store, overlapping cells are:\n%!" in *)
+    (* let () = Set.iter overlap ~f:(fun c -> *)
+    (*     printf "overlapping cell: %s\n%!" (C.to_string c)) in *)
 
     let tainter = match get_taint data with
       | Checker_taint.Analysis.Taint -> set_taint
@@ -573,57 +573,57 @@ module Make(N : NumericDomain)
         (size : Size.t) (m : t) : N.t err =
     match e with
     | Bil.Load (_mem, idx, _endian, size) ->
-       let () = printf "in load_of_bil_exp, getting load from vars\n%!" in
+       (* let () = printf "in load_of_bil_exp, getting load from vars\n%!" in *)
        let load_from_vars = Var_name_collector.run idx in
        
-       let () = printf "in load_of_bil_exp, load from vars: \n%!" in
-       let () = SS.iter load_from_vars ~f:(fun v -> printf "%s\n%!" v) in
+       (* let () = printf "in load_of_bil_exp, load from vars: \n%!" in *)
+       (* let () = SS.iter load_from_vars ~f:(fun v -> printf "%s\n%!" v) in *)
        
-       let () = printf "in load_of_bil_exp, getting regions\n%!" in
+       (* let () = printf "in load_of_bil_exp, getting regions\n%!" in *)
        let regions = BaseSetMap.bases_of_vars load_from_vars m.bases in
        let regions : Region.Set.t = get_bases idx_res in
-       let () = printf "in load_of_bil_exp, regions to load from:\n%!" in
-       let () = Set.iter regions ~f:Region.pp in
+       (* let () = printf "in load_of_bil_exp, regions to load from:\n%!" in *)
+       (* let () = Set.iter regions ~f:Region.pp in *)
 
-       let () = printf "in load_of_bil_exp, getting offs intvl\n%!" in
+       (* let () = printf "in load_of_bil_exp, getting offs intvl\n%!" in *)
        let offs = get_intvl idx_res in
        
-       let () = printf "in load_of_bil_exp, computing type\n%!" in
+       (* let () = printf "in load_of_bil_exp, computing type\n%!" in *)
        let offs_type = compute_type idx m in
        
-       let () = printf "in load_of_bil_exp, computing is scalar\n%!" in
+       (* let () = printf "in load_of_bil_exp, computing is scalar\n%!" in *)
        let offs_is_scalar = CellType.is_scalar offs_type in
 
-       let () = printf "in load_of_bil_exp, computing width\n%!" in
+       (* let () = printf "in load_of_bil_exp, computing width\n%!" in *)
        let width = bap_size_to_absdom size in
 
-       let () = printf "in load_of_bil_exp, computing is_global\n%!" in
+       (* let () = printf "in load_of_bil_exp, computing is_global\n%!" in *)
        let is_global = offs_is_scalar && Set.is_empty regions in
 
-       let () = printf "in load_of_bil_exp, computing region\n%!" in
+       (* let () = printf "in load_of_bil_exp, computing region\n%!" in *)
        let regions = if is_global
                      then Set.add regions Region.Global
                      else regions
        in
 
-       let () = printf "in load_of_bil_exp, computing glob_xists\n%!" in
+       (* let () = printf "in load_of_bil_exp, computing glob_xists\n%!" in *)
        let glob_xists = (global_exists ~offs ~width m) in
        
        let open Or_error.Monad_infix in
        
        (if is_global && not glob_xists
         then
-          let () = printf "in load_of_bil_exp, doing load_global\n%!" in
+          (* let () = printf "in load_of_bil_exp, doing load_global\n%!" in *)
           load_global offs size m >>= fun data ->
           let region = Region.Global in
           let valtype = CellType.Unknown in
-          let () = printf "in load_of_bil_exp, doing store\n%!" in
+          (* let () = printf "in load_of_bil_exp, doing store\n%!" in *)
           store ~offs ~region ~width ~data ~valtype m >>= fun m' ->
           Ok (m', Region.Set.from_region region)
         else
           Ok (m, regions))
        >>= fun (m', regions') ->
-       let () = printf "in load_of_bil_exp, load_from_vars2\n%!" in
+       (* let () = printf "in load_of_bil_exp, load_from_vars2\n%!" in *)
        load_from_offs_and_regions m' ~offs ~regions:regions' ~width
     | _ -> Or_error.error_string "load_of_bil_exp: Not a load in load_of_bil_exp"
 
@@ -703,22 +703,22 @@ module Make(N : NumericDomain)
       : t err =
     match e with
     | Bil.Store (_mem, idx, v, _endian, size) ->
-       let () = printf "in store_of_bil_exp, getting var names\n%!" in
+       (* let () = printf "in store_of_bil_exp, getting var names\n%!" in *)
        let vars = Var_name_collector.run idx in
        
-       let () = printf "in store_of_bil_exp, getting width\n%!" in
+       (* let () = printf "in store_of_bil_exp, getting width\n%!" in *)
        let width = bap_size_to_absdom size in
 
-       let () = printf "in store_of_bil_exp, getting bases_to_load_from\n%!" in
+       (* let () = printf "in store_of_bil_exp, getting bases_to_load_from\n%!" in *)
        let bases_to_load_from = BaseSetMap.bases_of_vars vars m.bases in
-       let () = printf "in store_of_bil_exp, getting bases_to_load_from final\n%!" in
+       (* let () = printf "in store_of_bil_exp, getting bases_to_load_from final\n%!" in *)
        let bases_to_load_from = (if Set.is_empty bases_to_load_from
                                 then Region.Set.from_region Region.Global
                                  else bases_to_load_from)
                               |> Region.Set.to_list
        in
        
-       let () = printf "in store_of_bil_exp, getting intvl offs\n%!" in
+       (* let () = printf "in store_of_bil_exp, getting intvl offs\n%!" in *)
        let offs = get_intvl offs in
 
        (match ensure_offs_range_is_ok ~offs ~width with
@@ -732,22 +732,22 @@ module Make(N : NumericDomain)
 
           Or_error.bind all_offs ~f:(fun all_offs ->
 
-          let () = printf "in store_of_bil_exp, all offsets are:\n%!" in
-          let () = List.iter all_offs ~f:(fun offswi ->
-                       printf "%s\n%!" 
-                         (Wrapping_interval.to_string offswi))
-          in
+          (* let () = printf "in store_of_bil_exp, all offsets are:\n%!" in *)
+          (* let () = List.iter all_offs ~f:(fun offswi -> *)
+          (*              printf "%s\n%!"  *)
+          (*                (Wrapping_interval.to_string offswi)) *)
+          (* in *)
 
-          let () = printf "in store_of_bil_exp, doing stores\n%!" in
-          let () = printf "in store_of_bil_exp, store to offs %s\n%!"
-                     (Wrapping_interval.to_string offs)
-          in
-          let () = printf "in store_of_bil_exp, store to bases:\n%!" in
-          let () = List.iter bases_to_load_from ~f:Region.pp in
+          (* let () = printf "in store_of_bil_exp, doing stores\n%!" in *)
+          (* let () = printf "in store_of_bil_exp, store to offs %s\n%!" *)
+          (*            (Wrapping_interval.to_string offs) *)
+          (* in *)
+          (* let () = printf "in store_of_bil_exp, store to bases:\n%!" in *)
+          (* let () = List.iter bases_to_load_from ~f:Region.pp in *)
 
-          let () = printf "in store_of_bil_exp, data is %s\n%!"
-                     (N.to_string data)
-          in
+          (* let () = printf "in store_of_bil_exp, data is %s\n%!" *)
+          (*            (N.to_string data) *)
+          (* in *)
 
           let base_offs_pairs = List.cartesian_product bases_to_load_from all_offs in
 
