@@ -373,6 +373,8 @@ module type MemoryT =
     val set_rbp : int -> t -> t err
     
     val set_img : t -> Image.t -> t
+
+    val set_stack_canary : t -> t
     
     val holds_ptr : string -> t -> bool
     
@@ -441,6 +443,8 @@ module NumericEnv(ValueDom : NumericDomain)
   let set_img env img = env
 
   let setptr ~name ~regions ~offs ~width env = env
+
+  let set_stack_canary env = env
   
   let unptr ~name env = env
   

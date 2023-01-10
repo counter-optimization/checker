@@ -236,6 +236,8 @@ let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
 
      let with_all_args = empty in
 
+     let with_canary_set = E.set_stack_canary with_all_args in
+
      (* e.g., filter out bap's 'mem' var *)
      (* todo: handle vector registers *)
      let true_args = List.filter freenames
@@ -243,7 +245,7 @@ let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
                      |> List.append argnames
      in
 
-     let env_with_df_set = E.set "DF" FinalDomain.b0 with_all_args in
+     let env_with_df_set = E.set "DF" FinalDomain.b0 with_canary_set in
 
      let env_with_rsp_set = match E.set_rsp stack_addr env_with_df_set with
          | Ok env' -> env'

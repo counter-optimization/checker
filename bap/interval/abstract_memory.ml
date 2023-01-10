@@ -697,7 +697,34 @@ module Make(N : NumericDomain)
            offs >>= fun offs ->
            acc >>= fun offs_list ->
            Ok (List.cons offs offs_list))
-  
+
+  let set_stack_canary (mem : t) : t =
+    let fs_base = 0x0000_4000 in
+    
+    let stack_canary_width = Wrapping_interval.of_int 8 in
+    
+    let stack_canary = N.of_int 0x123456 in
+
+    let with_fs_base_set = setptr
+                             ~name:"FS_BASE"
+                             ~regions:(Region.Set.singleton Common.Region.Global)
+                             ~offs:(N.of_int fs_base)
+                             ~width:stack_canary_width
+                             empty in
+
+    let env_with_canary_set = store
+                                ~offs:(Wrapping_interval.of_int (fs_base + 0x28))
+                                ~region:Common.Region.Global
+                                ~width:stack_canary_width
+                                ~data:stack_canary
+                                ~valtype:CellType.Scalar
+                                with_fs_base_set in
+
+    match env_with_canary_set with
+    | Ok env' -> env'
+    | Error e ->
+       failwith "in set_stack_canary, couldn't set value of canary"
+    
   (* on first store to a global, just treat it as every other store. *)
   let store_of_bil_exp (e : Bil.exp) ~(offs : N.t) ~data ~valtype ~size m
       : t err =
