@@ -110,7 +110,9 @@ module Cell(N : NumericDomain) = struct
       else -1
 
     let bits_per_byte = Wrapping_interval.of_int 8
+    
     let width_in_bits c = c.width
+    
     let width_in_bytes c =
       let width = width_in_bits c in
       Wrapping_interval.div width bits_per_byte
@@ -198,16 +200,21 @@ module Cell(N : NumericDomain) = struct
     let merge s1 s2 : t = Set.union s1 s2
 
     let of_list = Set.of_list (module Cmp)
+    
     let add = Set.add
 
     let length = Set.length
+    
     let union = Set.union
 
     let find = Set.find
+    
     let filter = Set.filter
+    
     let fold = Set.fold
     
     let to_list = Set.to_list
+    
     let singleton = Set.singleton (module Cmp)
   end
 
@@ -215,11 +222,15 @@ module Cell(N : NumericDomain) = struct
     type t = (Pointer.t, Set.t, Pointer.comparator_witness) Map.t
     
     let empty = Map.empty (module Pointer)
+    
     let set (m : t) = Map.set m
+    
     let merge (m1 : t) (m2 : t) : t =
       let combine ~key v1 v2 = Set.merge v1 v2 in
       Map.merge_skewed m1 m2 ~combine
+    
     let find : t -> Pointer.t -> Set.t option = Map.find
+    
     let find_exn : t -> Pointer.t -> Set.t = Map.find_exn
 
     let fold : t -> init:'a -> f:(key:Pointer.t -> data:Set.t -> 'a -> 'a) -> 'a = Map.fold
@@ -290,7 +301,7 @@ module Make(N : NumericDomain)
     
     type env = Env.t
     
-    type t = { cells: cellmap; env: env; bases: basemap; img: Image.t option }
+    type t = { cells: cellset; env: env; bases: basemap; img: Image.t option }
     
     type regions = Region.Set.t
     
@@ -392,6 +403,21 @@ module Make(N : NumericDomain)
 
   include T
 
+  let pp {cells; env; bases}  =
+    let print_ptr_to_cells ~key ~data =
+      let cell_set_str =  Set.to_list data |> List.to_string ~f:C.to_string in
+      Format.printf "\t%s --> %s\n%!" (Ptr.to_string key) cell_set_str
+    in
+    let print_bases_map ~key ~data =
+      let region_set_str = Set.to_list data |> List.to_string ~f:Region.to_string in
+      Format.printf "\t%s --> %s\n%!" key region_set_str
+    in
+    printf "* Ptr->Cells map is:\n%!";
+    Map.iteri cells ~f:print_ptr_to_cells;
+    Env.pp env;
+    printf "* Var->Bases map is:\n%!";
+    Map.iteri bases ~f:print_bases_map
+
   let empty : t = { cells = C.Map.empty;
                     env = Env.empty;
                     bases = BaseSetMap.empty;
@@ -425,8 +451,8 @@ module Make(N : NumericDomain)
   let set_untaint (prod : N.t) : N.t =
     N.set Checker_taint.Analysis.key prod Checker_taint.Analysis.Notaint
 
-  (* let set_typd (typ : Type_domain) = *)
-  (*   N.set Type_domain.key typ *)
+  let set_typd (prod : N.t) (typ : Type_domain.t) : N.t =
+    N.set Type_domain.key prod typ
 
   let set_img (mem : t) (img : Image.t) : t =
     { mem with img = Some img }
@@ -481,6 +507,9 @@ module Make(N : NumericDomain)
   let set name data (mem : t) : t =
     { mem with env = Env.set name data mem.env }
 
+  let unset name (mem : t) : t =
+    { mem with env = Env.unset name mem.env }
+
   let set_cell_to_top cell_name (mem : t) : t =
     { mem with env = Env.set cell_name N.top mem.env }
 
@@ -534,12 +563,8 @@ module Make(N : NumericDomain)
               then C.Set.union acc data
               else acc))
 
-  let load_from_offs_and_regions
-        ~(offs : Wrapping_interval.t)
-        ~regions
-        ~(width : Wrapping_interval.t)
-        (mem : t)
-      : N.t err =
+  let load_from_offs_and_regions ~(offs : Wrapping_interval.t) ~regions
+        ~(width : Wrapping_interval.t) (mem : t) : N.t err =
     let ptrs = Ptr.of_regions ~regions ~offs ~width in
     let cells = cells_of_offs_and_regions ~offs ~regions ~width mem in
     match C.Set.length cells with
@@ -599,51 +624,98 @@ module Make(N : NumericDomain)
                 let () = printf "in load_global, loaded data was %s\n%!" res_s in
                 Ok res
 
+  let set_cell_to_top (c : C.t) (mem : t) ?(secret : bool = false) : t =
+    let top = if secret then set_taint N.top else set_untaint N.top in
+    { mem with env = Env.set (C.name c) top mem.env }
+
+  let propagate_unstore_to_overlap (overlapping : C.Set.t) ~(secret : bool) (mem : t) : t =
+    let rec loop (overlapping : C.Set.t) (done_ : C.Set.t) (mem : t) : t =
+      if Set.is_empty overlapping
+      then mem
+      else
+        let current_cell = Set.nth overlapping 0 |> Option.value_exn in
+        let should_process_current = not (Set.mem done_ current_cell) in
+        let overlapping' = Set.remove overlapping current_cell in
+        if should_process_current
+        then 
+          let current_ptr = C.ptr_of_t current_cell in
+          let current_overlap = C.Map.get_overlapping current_ptr mem.cells in
+          let done_' = Set.add done_ current_cell in
+          let overlapping' = Set.union overlapping' current_overlap in
+          let mem' = set_cell_to_top current_cell mem ~secret in
+          loop overlapping' done_' mem'
+        else
+          loop overlapping' done_ mem
+    in
+    loop overlapping C.Set.empty mem
+
+  let remove_cell (c : C.t) (mem : t) : t =
+    let () = printf "in remove_cell, removing cell %s\n%!" (C.name c) in
+    let is_not_c (other : C.t) : bool = C.compare c other <> 0 in
+    let cells' = Map.map mem.cells ~f:(fun cells -> Set.filter cells ~f:is_not_c) in
+    let env' = Env.unset (C.name c) mem.env in
+    { mem with cells = cells'; env = env' }
+
   let store ~(offs : Wrapping_interval.t) ~region
-        ~(width : Wrapping_interval.t) ~data ~valtype mem
-    : t err =
+        ~(width : Wrapping_interval.t) ~data ~valtype mem : t err =
     let open Or_error.Monad_infix in
     
     let ptr = Ptr.make ~region ~offs ~width in
-    
     let cel = C.t_of_ptr ~valtype ptr in
     let celname = C.name cel in
     
-    (* let () = printf "storing to ptr %s\n%!" (Ptr.to_string ptr) in *)
+    let () = printf "storing to ptr %s\n%!" (Ptr.to_string ptr) in
 
     let overlap = C.Map.get_overlapping ptr mem.cells in
 
-    (* let () = printf "in store, overlapping cells are:\n%!" in *)
-    (* let () = Set.iter overlap ~f:(fun c -> *)
-    (*     printf "overlapping cell: %s\n%!" (C.to_string c)) in *)
+    let () = printf "in store, overlapping cells are:\n%!" in
+    let () = Set.iter overlap ~f:(fun c ->
+                        printf "overlapping cell: %s\n%!" (C.to_string c)) in
+    let () = printf "in store, deleting overlapping cells\n%!" in
 
-    let tainter = match get_taint data with
-      | Checker_taint.Analysis.Taint -> set_taint
-      | Checker_taint.Analysis.Notaint -> set_untaint
-    in
+    (* let mem' = if Set.length overlap > 1 *)
+    (*            then *)
+    (*              let () = printf "in store: more than one overlap, propagating unstores\n%!" in *)
+    (*              propagate_unstore_to_overlap overlap ~secret:true mem *)
+    (*            else mem in *)
+    
+    let mem' = Set.fold overlap ~init:mem ~f:(fun mem' c -> remove_cell c mem') in
 
-    let untainted_top = tainter N.top in
+    (* todo: finer grained secret tainting for cell forgetting *)
+    (* let secret = match get_taint data with *)
+    (*   | Checker_taint.Analysis.Taint -> true *)
+    (*   | Checker_taint.Analysis.Notaint -> false *)
+    (* in *)
 
-    let mem_overlaps_havocd = C.Set.fold overlap ~init:mem
-        ~f:(fun m ovc ->
-            let ovc_name = C.name ovc in
-            let () = printf
-              "in store, setting previous overlap cell, %s, to top with overriding cell %s's taint value"
-                ovc_name celname
-            in
-            let old_env = mem.env in
-            { mem with env = Env.set ovc_name untainted_top old_env })
-    in
+    (* let untainted_top = tainter N.top in *)
+
+    (* let mem_overlaps_havocd = C.Set.fold overlap ~init:mem *)
+    (*     ~f:(fun m ovc -> *)
+    (*         let ovc_name = C.name ovc in *)
+    (*         let () = printf *)
+    (*           "in store, setting previous overlap cell, %s, to top with overriding cell %s's taint value" *)
+    (*             ovc_name celname *)
+    (*         in *)
+    (*         let old_env = mem.env in *)
+    (*         { mem with env = Env.set ovc_name untainted_top old_env }) *)
+    (* in *)
 
     if not (C.equals_ptr cel ptr)
     then
       Or_error.error_string @@
       sprintf "Can't store ptr %s to cell %s" (Ptr.to_string ptr) celname
     else
-      let old_env = mem_overlaps_havocd.env in
-      let old_cells = mem_overlaps_havocd.cells in
-      Ok { mem_overlaps_havocd with env = Env.set celname data old_env;
-                                    cells = C.Map.add_cell ptr cel old_cells }
+      let old_env = mem'.env in
+      let old_cells = mem'.cells in
+      let res = Ok { mem' with env = Env.set celname data old_env;
+                               cells = C.Map.add_cell ptr cel old_cells } in
+      if Set.length overlap > 1
+      then
+        let () = printf "in store: did propagate unstore, here is the out state:\n%!" in
+        let () = pp mem' in
+        res
+      else
+        res
     
     (* if C.Set.length overlap > 1 *)
     (* then *)
@@ -689,16 +761,17 @@ module Make(N : NumericDomain)
        (* let () = SS.iter load_from_vars ~f:(fun v -> printf "%s\n%!" v) in *)
        
        (* let () = printf "in load_of_bil_exp, getting regions\n%!" in *)
-       let regions = BaseSetMap.bases_of_vars load_from_vars m.bases in
+       (* let regions = BaseSetMap.bases_of_vars load_from_vars m.bases in *)
        let regions : Region.Set.t = get_bases idx_res in
-       (* let () = printf "in load_of_bil_exp, regions to load from:\n%!" in *)
-       (* let () = Set.iter regions ~f:Region.pp in *)
+       let () = printf "in load_of_bil_exp, regions to load from:\n%!" in
+       let () = Set.iter regions ~f:Region.pp in
 
        (* let () = printf "in load_of_bil_exp, getting offs intvl\n%!" in *)
        let offs = get_intvl idx_res in
        
        (* let () = printf "in load_of_bil_exp, computing type\n%!" in *)
-       let offs_type = compute_type idx m in
+       (* let offs_type = compute_type idx m in *)
+       let offs_type = get_typd idx_res in
        
        (* let () = printf "in load_of_bil_exp, computing is scalar\n%!" in *)
        let offs_is_scalar = CellType.is_scalar offs_type in
@@ -743,29 +816,20 @@ module Make(N : NumericDomain)
   let ensure_offs_range_is_ok ~(offs : Wrapping_interval.t)
         ~(width : Wrapping_interval.t)
       : Z.t err =
-    let open Or_error.Monad_infix in 
-    (match Wrapping_interval.size offs with
-      | Some sz -> Ok sz
-      | None ->
-         Or_error.error_string "Couldn't get size of offs in ensure_offs_range_is_ok")
-  
-    >>= fun intvl_size ->
-    
-    (match Wrapping_interval.to_z width with
-      | Some w -> Ok w
-      | None ->
-         Or_error.error_string "Couldn't convert width to int in ensure_offs_range_is_ok")
-  
-    >>= fun width ->
-    
-    let num_members = Z.div intvl_size width in
-    let max_num_members = Z.of_int 8 in
-    if Z.gt num_members max_num_members
+    let size = match Wrapping_interval.size offs with
+    | Some sz -> Ok sz
+    | None ->
+       Or_error.error_string @@
+         sprintf "in ensure_offs_range_is_ok, can't get size of offs (WI.t): %s"
+                 (Wrapping_interval.to_string offs) in
+    Or_error.bind size ~f:(fun size ->
+    let max_pointers = Z.of_int 256 in
+    if Z.gt size max_pointers
     then
       Or_error.error_string
         "in ensure_offs_range_is_ok, pointer points to too many data members, probably an unconstrained pointer"
     else
-      Ok num_members
+      Ok size)
 
   let get_all_offs ~(offs : Wrapping_interval.t)
         ~(width : Wrapping_interval.t)
@@ -793,10 +857,6 @@ module Make(N : NumericDomain)
     
     ensure_offs_range_is_ok ~offs ~width >>= fun num_members ->
 
-    (* because we should also store to the last pointer aka the
-       hi part of the offs interval *)
-    let num_members = Z.add num_members Z.one in
-
     let num_members_int = Z.to_int num_members in
 
     List.init num_members_int ~f:(fun mem_idx ->
@@ -809,15 +869,17 @@ module Make(N : NumericDomain)
 
   let set_stack_canary (mem : t) : t =
     let fs_base = 0x0000_4000 in
+
+    let fs_ptr = set_typd (N.of_int fs_base) CellType.Ptr in
     
     let stack_canary_width = Wrapping_interval.of_int 8 in
     
-    let stack_canary = N.of_int 0x123456 in
+    let stack_canary_value = N.of_int 0x123456 in
 
     let with_fs_base_set = setptr
                              ~name:"FS_BASE"
                              ~regions:(Region.Set.singleton Common.Region.Global)
-                             ~offs:(N.of_int fs_base)
+                             ~offs:fs_ptr
                              ~width:stack_canary_width
                              empty in
 
@@ -825,7 +887,7 @@ module Make(N : NumericDomain)
                                 ~offs:(Wrapping_interval.of_int (fs_base + 0x28))
                                 ~region:Common.Region.Global
                                 ~width:stack_canary_width
-                                ~data:stack_canary
+                                ~data:stack_canary_value
                                 ~valtype:CellType.Scalar
                                 with_fs_base_set in
 
@@ -859,9 +921,11 @@ module Make(N : NumericDomain)
        let offs = get_intvl offs in
 
        (match ensure_offs_range_is_ok ~offs ~width with
-       | Error e ->
-          let () = printf "in store_of_bil_exp, error: %s\n%!"
-                     (Error.to_string_hum e)
+       | Error err ->
+          let () = printf "in store_of_bil_exp, denote of exp %s, offs: %s : %s\n%!"
+                          (Exp.to_string e)
+                          (Wrapping_interval.to_string offs)
+                          (Error.to_string_hum err)
           in
           Ok m
        | Ok _ ->
@@ -1003,19 +1067,4 @@ module Make(N : NumericDomain)
        img = merge_images prev.img next.img }
     in
     widen steps n prev next
-
-  let pp {cells; env; bases}  =
-    let print_ptr_to_cells ~key ~data =
-      let cell_set_str =  Set.to_list data |> List.to_string ~f:C.to_string in
-      Format.printf "\t%s --> %s\n%!" (Ptr.to_string key) cell_set_str
-    in
-    let print_bases_map ~key ~data =
-      let region_set_str = Set.to_list data |> List.to_string ~f:Region.to_string in
-      Format.printf "\t%s --> %s\n%!" key region_set_str
-    in
-    printf "* Ptr->Cells map is:\n%!";
-    Map.iteri cells ~f:print_ptr_to_cells;
-    Env.pp env;
-    printf "* Var->Bases map is:\n%!";
-    Map.iteri bases ~f:print_bases_map
 end

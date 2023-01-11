@@ -84,8 +84,6 @@ let sub x y =
   | CellType.Undef, _ -> y
   | _, CellType.Undef -> x
 
-
-
 let general_binop x y = s
 
 let mul = general_binop

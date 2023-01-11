@@ -15,7 +15,7 @@ PKGS = bap,core_kernel,stdio,graphlib,zarith,ounit2,monads
 
 .PHONY : clean test comp-simp-test-cases bap-plugin
 
-bap-plugin : *.ml tags
+bap-plugin : *.ml
 	bapbuild $(PLUGIN_NAME)
 
 libna_crypto_sign : bap-plugin

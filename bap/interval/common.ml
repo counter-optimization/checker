@@ -363,6 +363,8 @@ module type MemoryT =
     val lookup : string -> t -> v
     
     val set : string -> v -> t -> t
+
+    val unset : string -> t -> t
     
     val equal : t -> t -> bool
     
@@ -435,6 +437,8 @@ module NumericEnv(ValueDom : NumericDomain)
   let compute_type e env = CellType.Scalar
   
   let set name v env : t = M.set env ~key:name ~data:v
+
+  let unset name env : t = M.remove env name 
 
   let set_rsp offs env = Ok (set "RSP" (ValueDom.of_int offs) env)
   
@@ -554,10 +558,8 @@ module AbstractInterpreter(N: NumericDomain)
     | Bil.NOT -> N.lnot
 
   let rec denote_exp (e : Bil.exp) : N.t ST.t =
-    let () = printf "denoting exp: %a\n%!" Exp.ppo e in
-
-    ST.get () >>= fun st ->
-    
+    (* let () = printf "denoting exp: %a\n%!" Exp.ppo e interval_analysis.ml *)
+    (* ST.get () >>= fun st -> *)
     try
       begin
         match e with
@@ -590,6 +592,7 @@ module AbstractInterpreter(N: NumericDomain)
            ST.gets (Env.compute_type v) >>= fun valtype ->
            begin
              (* let () = printf "in denote_exp of store, doing store\n%!" in  *)
+             ST.get () >>= fun st ->
              match Env.store_of_bil_exp e ~offs ~data ~valtype ~size st with
              | Ok newenv -> ST.put newenv >>= fun () -> ST.return N.bot
              | Error msg -> failwith @@ Error.to_string_hum msg
@@ -705,7 +708,7 @@ module AbstractInterpreter(N: NumericDomain)
     | Int _ -> ST.return ()
 
   let denote_elt (e : Blk.elt) (st : E.t) : E.t =
-    let () = printf "in-state is:\n%!"; E.pp st in
+    (* let () = printf "in-state is:\n%!"; E.pp st in *)
     
     let res = match e with
       | `Def d ->
