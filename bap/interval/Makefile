@@ -3,8 +3,11 @@ TEST_OBJS = $(TEST_SRCS:.ml=.cmo)
 TEST_INTFS = $(TEST_SRCS:.ml=.cmi)
 TEST_MAIN = test_main
 PLUGIN_NAME = uarch_checker.plugin
+
+# for building ocaml tags
 BAP_MASTER_REPO=/Users/mkf727/repos/bap
 Z_PLUGIN_LIB_BASE=/Users/mkf727/.opam/bap-alpha/lib/zarith
+JANESTREET_CORE_BASE=/Users/mkf727/.opam/bap-alpha/lib/core
 
 COMP_SIMP_TEST_DIR = comp-simp-test-cases
 
@@ -30,7 +33,7 @@ test : $(TEST_MAIN) comp-simp-test-cases
 	./$(TEST_MAIN)
 
 tags : *.ml
-	-ctags -e --etags-include=$(BAP_MASTER_REPO) --etags-include=$(Z_PLUGIN_LIB_BASE) -R *.ml
+	-ctags -e --etags-include=$(BAP_MASTER_REPO) --etags-include=$(Z_PLUGIN_LIB_BASE) --etags-include=$(JANESTREET_CORE_BASE) -R *.ml
 
 comp-simp-test-cases :
 	$(MAKE) -C $(COMP_SIMP_TEST_DIR)
