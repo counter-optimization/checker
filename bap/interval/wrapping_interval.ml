@@ -435,13 +435,25 @@ let length : t -> int option = function
      Some (Z.to_int zdiff)
   | Bot -> None
 
-let to_int (intvl : t) : int option =
+let to_int (intvl : t) : int Or_error.t =
   match intvl with
   | Interval {lo; hi; width; signed} ->
      (match length intvl with
-      | Some l when l = 0 -> Some (Z.to_int lo)
-      | _ -> None)
-  | Bot -> None
+      | Some l when l = 0 && Z.fits_int lo -> Ok (Z.to_int lo)
+      
+      | Some l when l = 0 ->
+         Or_error.error_string @@
+           sprintf "in WI.to_int, intvl %s does not fit in ocaml int"
+                   (to_string intvl)
+      
+      | _ ->
+         Or_error.error_string @@
+           sprintf "in WI.to_int, intvl %s is not a constant"
+                   (to_string intvl))
+  | Bot ->
+     Or_error.error_string @@
+       sprintf "in WI.to_int, intvl %s is domain bottom value"
+               (to_string intvl) 
 
 let to_z (intvl : t) : Z.t option =
   match intvl with
@@ -481,17 +493,23 @@ let of_z ?(width = 64) (z : Z.t) : t =
 
 let of_word (w : word) : t =
   let width = Word.bitwidth w in
-  if width = 64
-  then match Word.to_int64 w with
-       | Error _ -> failwith "in Wrapping_interval.of_word, couldn't convert word to int64"
-       | Ok i -> of_int64 i
-  else
-    if width < 64
-    then match Word.to_int w with
-         | Error _ -> failwith "in Wrapping_interval.of_word, couldn't convert word to int64"
-         | Ok i -> of_int ~width i
-    else
-      failwith "can't handle integers > 64 bits in Wrapping_interval.of_word"
+  
+  let z_val = Word.to_bitvec w |> Bitvec.to_bigint in
+
+  of_z ~width z_val
+
+
+  (* if width = 64 *)
+  (* then match Word.to_int64 w with *)
+  (*      | Error _ -> failwith "in Wrapping_interval.of_word, couldn't convert word to int64" *)
+  (*      | Ok i -> of_int64 i *)
+  (* else *)
+  (*   if width < 64 *)
+  (*   then match Word.to_int w with *)
+  (*        | Error _ -> failwith "in Wrapping_interval.of_word, couldn't convert word to int64" *)
+  (*        | Ok i -> of_int ~width i *)
+  (*   else *)
+  (*     failwith "can't handle integers > 64 bits in Wrapping_interval.of_word" *)
 
 let of_int_tuple ?(width = 64) (x, y) =
   Interval { lo = Z.of_int x;

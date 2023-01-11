@@ -461,12 +461,13 @@ module Make(N : NumericDomain)
     | Some img ->
        let segs = Image.segments img in
        match Wrapping_interval.to_int offs with
-       | None ->
-          begin
-            let offs_s = Wrapping_interval.to_string offs in
-            Or_error.error_string @@ sprintf "load_global: couldn't convert offs %s to address for image" offs_s
-          end
-       | Some addr ->
+       | Error e ->
+          let offs_s = Wrapping_interval.to_string offs in
+          Or_error.error_string @@
+            sprintf
+              "load_global: couldn't convert offs %s to address for image: %s" offs_s (Error.to_string_hum e)
+
+       | Ok addr ->
           let addr_w = Word.of_int ~width:64 addr in
           let target_seg = Table.find_addr segs addr_w in
           match target_seg with

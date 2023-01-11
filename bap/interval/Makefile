@@ -20,7 +20,7 @@ libna_crypto_sign : bap-plugin
 
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 
-	bap --plugin-path=/home/bapuser/project/bap/interval/ --pass=uarch-checker --uarch-checker-target-function=crypto_sign --no-optimization --bil-optimization=0 ~/project/test/libna/bap_ld_scalar_mult.o > libna.debug.log 2>&1
+	-bap --plugin-path=/home/bapuser/project/bap/interval/ --pass=uarch-checker --uarch-checker-target-function=crypto_sign --no-optimization --bil-optimization=0 ~/project/test/libna/bap_ld_scalar_mult.o > libna.debug.log 2>&1
 
 	@echo -n "Done with analysis of crypto_sign "
 

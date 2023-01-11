@@ -99,7 +99,7 @@ module Getter(N : NumericDomain) = struct
         Format.sprintf "in get_callee_of_indirect, jmp indirect exp %a points to more than one location" Jmp.pps jmp_from
     else
       match WI.to_int callee_as_intvl with
-      | Some addr_int ->
+      | Ok addr_int ->
          let callee_addr = addr_int |> Addr.of_int ~width:64 in
          
          let callee_tid = Tid.for_addr callee_addr in
@@ -114,9 +114,10 @@ module Getter(N : NumericDomain) = struct
                   callsite = fromtid }
           | None -> Or_error.error_string
                       "get_callee_of_indirect_exn: Couldn't find callee sub tid for that addr")
-      | None ->
-         Or_error.error_string
-           "get_callee_of_indirect_exn: Couldn't get callee as a single integer in Callees.Getter.get_callee_of_indirect_exn"
+      | Error e ->
+         let wi_err_msg = Error.to_string_hum e in
+         let err_msg = sprintf "get_callee_of_indirect_exn: Couldn't get callee as a single integer in Callees.Getter.get_callee_of_indirect_exn: %s" wi_err_msg in
+         Or_error.error_string err_msg
 
   let of_jmp_term (j : jmp term) (sub : sub term)
         (prog : Program.t) (last_jmp_tid : tid) sol : rel option Or_error.t =
