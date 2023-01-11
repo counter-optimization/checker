@@ -85,13 +85,11 @@ end
 
 (** Cells *)
 module Cell(N : NumericDomain) = struct
+  
   module T = struct
-    module Pointer = Pointer(N)
-    (* the new environment operates over ValDom.t and pointers (PtrT of ptr) *)
     
-    (* it's important that a cell knows whether it holds a pointer or a scalar. *)
-    (* for our model of memory, pointers are (region * offset) pairs, so taking *)
-    (* e.g., the low 32 bits of a pointer doesn't type check *)
+    module Pointer = Pointer(N)
+    
     type t = { region: Region.t;
                offs: Wrapping_interval.t;
                valtype: CellType.t;
@@ -116,6 +114,12 @@ module Cell(N : NumericDomain) = struct
     let width_in_bytes c =
       let width = width_in_bits c in
       Wrapping_interval.div width bits_per_byte
+
+    let width_in_bytes_int (cell : t) : int Or_error.t =
+      Or_error.(
+        Wrapping_interval.to_int cell.width >>= fun width ->
+        Ok (width / 8)
+      )
 
     let get_intvl : N.t -> Wrapping_interval.t =
       match N.get Wrapping_interval.key with
@@ -167,10 +171,10 @@ module Cell(N : NumericDomain) = struct
         let cel_base = cel.offs in
         let cel_end = add cel.offs (width_in_bytes cel) in
         let cel_end = sub cel_end one in
-        could_be_true (boolle ptr_base cel_base) &&
-          could_be_true (boolle cel_base ptr_end) ||
-          could_be_true (boolle ptr_base cel_end) &&
-            could_be_true (boolle cel_end ptr_end)
+        (could_be_true (boolle ptr_base cel_base) &&
+           could_be_true (boolle cel_base ptr_end)) ||
+          (could_be_true (boolle ptr_base cel_end) &&
+             could_be_true (boolle cel_end ptr_end))
 
     (** values are actually in big endian because we're in
         ocaml land, but we want to simulate little endian
@@ -266,24 +270,127 @@ module Make(N : NumericDomain)
                    and type region := Region.t
                    and type valtypes := Common.cell_t) = struct
   module Env = NumericEnv(N)
+  
   module C = Cell(N)
+  
   module Ptr = Pointer(N)
+  
   module CellSet = C.Set
   
   module SS = Set.Make_binable_using_comparator(String)
 
-  type basemap = BaseSet.t BaseSetMap.t
-  type cellset = CellSet.t
-  type cellmap = C.Map.t
-  type env = Env.t
-  type t = { cells: cellmap;
-             env: env;
-             bases: basemap;
-             img: Image.t option }
-  type regions = Region.Set.t
-  type valtypes = Common.cell_t
+  module WI = Wrapping_interval
 
-  type 'a err = ('a, Error.t) Result.t
+  module T = struct
+    type basemap = BaseSet.t BaseSetMap.t
+  
+    type cellset = CellSet.t
+    
+    type cellmap = C.Map.t
+    
+    type env = Env.t
+    
+    type t = { cells: cellmap; env: env; bases: basemap; img: Image.t option }
+    
+    type regions = Region.Set.t
+    
+    type valtypes = Common.cell_t
+
+    type 'a err = ('a, Error.t) Result.t
+  end
+
+  module Overlap = struct
+    type offs = WI.t list
+      
+    type t = { cell : C.t ; offsets : offs ; data : N.t }
+
+    let of_cell (cell : C.t) (mem : T.t) : t =
+      let int_width = match C.width_in_bytes_int cell with
+        | Ok i -> i
+        | Error e ->
+           failwith @@
+             sprintf "in Overlap.of_cell, Couldn't turn cell width WI into Int: %s" @@
+               Error.to_string_hum e in
+
+      (* e.g., if a pointer points to offs, X, and points to a value of width u32, then
+         generate a list containing [X; X+1; X+2; X+3] *)
+      let relative_offsets = List.init int_width ~f:(fun x -> x) in
+      let absolute_offsets = List.map relative_offsets ~f:(fun reloffs ->
+                                        let wi_offs = Wrapping_interval.of_int reloffs in
+                                        WI.add cell.offs wi_offs) in
+
+      let cellname = C.name cell in
+      let data = Env.lookup cellname mem.env in
+
+      { cell ; offsets = absolute_offsets ; data }
+
+    let extract_byte (data : N.t) (byte_offs : int) : N.t =
+      let low_bit_idx = 8 * byte_offs in
+      let high_bit_idx = low_bit_idx + 7 in
+      N.extract data high_bit_idx low_bit_idx
+
+    let merge_bytes = N.join
+
+    let shift_byte (data : N.t) (count_as_bits : int) : N.t =
+      let count_as_abstract_value = N.of_int count_as_bits in
+      N.lshift data count_as_abstract_value
+
+    let data_from_little_endian_bytes (le_bytes : N.t list) : N.t =
+      let rec loop (bytes : N.t list) (acc : N.t) ?(idx : int = 0) : N.t =
+        match bytes with
+        | [] -> acc
+        | byte :: bytes' ->
+           let to_add = shift_byte byte idx in
+           let new_acc = N.logor to_add acc in
+           loop bytes' new_acc ~idx:(idx + 1)
+      in
+      let start = N.of_int 0 in
+      loop le_bytes start ~idx:0
+
+    let get_merge_lists ~(this : t) ~(other : t) : (N.t * N.t) list =
+      let lt x y = WI.could_be_true (WI.boollt x y) in
+      let gt x y = WI.could_be_true (WI.boollt y x) in
+      
+      let rec loop (toffs : WI.t list) (ooffs : WI.t list)
+                   ?(tidx : int = 0) ?(oidx : int = 0)
+                   ?(rev_acc : (N.t * N.t) list = []) : (N.t * N.t) list =
+        match toffs, ooffs with
+        | [], [] -> List.rev rev_acc
+        | [], _ -> List.rev rev_acc
+        | t :: ts, [] ->
+           let this_byte = extract_byte this.data tidx in
+           loop ts ooffs ~tidx:(tidx + 1) ~oidx ~rev_acc:(List.cons (this_byte, this_byte) rev_acc)
+        | t :: ts, o :: os ->
+           if lt t o
+           then
+             let this_byte = extract_byte this.data tidx in
+             loop ts ooffs ~tidx:(tidx + 1) ~oidx ~rev_acc:(List.cons (this_byte, this_byte) rev_acc)
+           else
+             if gt t o
+             then
+               loop toffs os ~tidx ~oidx:(oidx + 1) ~rev_acc
+             else
+               let this_byte = extract_byte this.data tidx in
+               let other_byte = extract_byte other.data oidx in
+               loop ts os ~tidx:(tidx + 1) ~oidx:(oidx + 1) ~rev_acc:(List.cons (this_byte, other_byte) rev_acc)
+             
+      in
+      loop this.offsets other.offsets ~tidx:0 ~oidx:0 ~rev_acc:[]
+
+    (* returns ~this merged with ~other. where the final overlap value is based on
+       ~this. i.e., if merging memory cell C1 (as ~this) that contains u64 with overlapping memory
+       cell C2 (as ~other) that contains u64, then this will return a value of overlap.t type
+       representing the C1's contents with C2 overlain as a value that contains both contents (but
+       from the viewpoint of C1).
+     *)
+    let merge ~(this : t) ~(other : t) : t =
+      let bytes_to_merge = get_merge_lists ~this ~other in
+      let merged_le_bytes = List.map bytes_to_merge ~f:(fun (tb, ob) -> merge_bytes tb ob) in
+      let merged_data = data_from_little_endian_bytes merged_le_bytes in
+      { this with data = merged_data }
+  end
+
+  include T
 
   let empty : t = { cells = C.Map.empty;
                     env = Env.empty;
@@ -473,6 +580,7 @@ module Make(N : NumericDomain)
           match target_seg with
           | None ->
              begin
+               
                let addr_s = Word.to_string addr_w in
                Or_error.error_string @@ sprintf "load_global: couldn't find addr %s in image" addr_s
              end
@@ -515,7 +623,7 @@ module Make(N : NumericDomain)
     in
 
     let untainted_top = tainter N.top in
-    
+
     let mem_overlaps_havocd = C.Set.fold overlap ~init:mem
         ~f:(fun m ovc ->
             let ovc_name = C.name ovc in
@@ -739,6 +847,7 @@ module Make(N : NumericDomain)
 
        (* let () = printf "in store_of_bil_exp, getting bases_to_load_from\n%!" in *)
        let bases_to_load_from = BaseSetMap.bases_of_vars vars m.bases in
+       
        (* let () = printf "in store_of_bil_exp, getting bases_to_load_from final\n%!" in *)
        let bases_to_load_from = (if Set.is_empty bases_to_load_from
                                 then Region.Set.from_region Region.Global
