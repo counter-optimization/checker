@@ -159,29 +159,23 @@ module Getter(N : NumericDomain) = struct
   
     | Ret _ ->
        Or_error.error_string
-         "of_jmp_term_exn: returns not handled in Callee.Getter.of_jmp_term_exn" 
+         "of_jmp_term_exn: returns not handled in Callee.Getter.of_jmp_term_exn"
+  
   let get_callees sub proj sol : rel list Or_error.t =
-    let () = printf "in get_direct_calls\n%!" in
-                     
     let prog = Project.program proj in
-    
     let blks = Term.enum blk_t sub in
-    
     let jmp_terms = Seq.map blks ~f:(fun b -> Term.enum jmp_t b |> Seq.to_list)
                     |> Seq.to_list
                     |> List.join in
-
     let last_jmp_tid = match List.last jmp_terms with
       | None ->
          failwith @@ sprintf "in get_direct_calls, no jmp terms in sub %a\n%!"
                               Tid.pps (Term.tid sub)
       | Some j -> Term.tid j in
-    
+    let () = printf "in get_callees, last_jmp_tid is: %a\n%!" Tid.ppo last_jmp_tid in
     let callees = List.map jmp_terms ~f:(fun jt ->
                              of_jmp_term jt sub prog last_jmp_tid sol) in
-    
     let open Or_error.Monad_infix in
-    
     List.fold callees
               ~init:(Ok [])
               ~f:(fun acc cr ->
@@ -193,8 +187,6 @@ module Getter(N : NumericDomain) = struct
     
   (* returns list of sub term of callees *)
   let get (sub : sub term) (proj : Project.t) sol : CalleeRel.Set.t Or_error.t =
-    
     get_callees sub proj sol >>= fun callees ->
-    
     Ok (CalleeRel.Set.of_list callees)
 end

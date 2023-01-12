@@ -1,68 +1,65 @@
 
-abstract_memory.ml,3477
+abstract_memory.ml,3503
 open CoreAbstract_memory1,0
 module BaseSetMap = structBaseSetMap11,258
   module SS = Set.Make_binable_using_comparator(String)SS13,337
   let bases_of_vars (vars : SS.t) bsm : Region.Set.t =bases_of_vars15,394
-module Pointer(N : NumericDomain) = structPointer31,905
-  module T = structT32,948
-    type t = { region: Region.t;t33,968
-    type t = { region: Region.t;region33,968
-               offs: Wrapping_interval.t;offs34,1001
-               width: Wrapping_interval.t }width35,1043
-    let equal x y =equal38,1124
-    let compare x y = if equal x y then 0 else -1compare44,1359
-    let get_intvl : N.t -> Wrapping_interval.t =get_intvl46,1410
-    let make ~region ~offs ~width : t = { region; offs; width }make51,1631
-    let region p = p.regionregion53,1696
-    let offs p = p.offsoffs54,1724
-    let width_in_bits p = p.widthwidth_in_bits56,1753
-    let bits_in_byte = Wrapping_interval.of_int 8bits_in_byte57,1787
-    let width_in_bytes p =width_in_bytes58,1837
-    let all_widths_of_ptr {region; offs; width} =all_widths_of_ptr62,1955
-    let of_regions ~regions ~offs ~width =of_regions68,2208
-    let to_string {region; offs; width} =to_string72,2344
-    let pp ptr : unit =pp78,2564
-module Cell(N : NumericDomain) = structCell87,2698
-  module T = structT88,2738
-    module Pointer = Pointer(N)Pointer89,2758
-    type t = { region: Region.t;t95,3105
-    type t = { region: Region.t;region95,3105
-               offs: Wrapping_interval.t;offs96,3138
-               valtype: CellType.t;valtype97,3180
-               width: Wrapping_interval.t }width98,3216
-    let compare x y =compare101,3297
-    let bits_per_byte = Wrapping_interval.of_int 8bits_per_byte114,3726
-    let width_in_bits c = c.widthwidth_in_bits115,3777
-    let width_in_bytes c =width_in_bytes116,3811
-    let get_intvl : N.t -> Wrapping_interval.t =get_intvl120,3924
-    let make ~region ~offs ~width ~valtype : t =make125,4142
-    let ptr_of_t { region; offs; width; valtype } : Pointer.t =ptr_of_t128,4231
-    let t_of_ptr ?(valtype = CellType.Scalar) p : t =t_of_ptr131,4336
-    let equals_ptr cel ptr : bool =equals_ptr137,4551
-    let name (m : t) : string =name145,4916
-    let to_string m : string =to_string151,5168
-    let pp (m : t) : unit =pp155,5302
-    let overlaps_with_ptr cel ptr : bool =overlaps_with_ptr158,5373
-  module Cmp = structCmp181,6267
-  module Set = structSet188,6358
-    type t = (Cmp.t, comparator_witness) Set.tt189,6380
-    let empty : t = Set.empty (module Cmp)empty191,6428
-    let empty : t = Set.empty (module Cmp)Cmp191,6428
-  module Map = structMap210,6860
-    type t = (Pointer.t, Set.t, Pointer.comparator_witness) Map.tt211,6882
-    let empty = Map.empty (module Pointer)empty213,6953
-    let empty = Map.empty (module Pointer)Pointer213,6953
-module BaseSet = Region.SetBaseSet261,8706
-module Make(N : NumericDomain)Make263,8735
-       let left_t = compute_type left mem inleft_t409,13509
-  let cells_of_offs_and_regions ~(offs : Wrapping_interval.t) ~regions ~(width : Wrapping_intervcells_of_offs_and_regions419,13869
-  let load_from_offs_and_regionsload_from_offs_and_regions430,14323
-       let ptr_strings = List.fold ptrs ~init:"" ~f:(fun acc x ->ptr_strings452,15154
-  let load_global (offs : Wrapping_interval.t) (sz : size) (m : t) : N.t err =load_global458,15427
-  let store ~(offs : Wrapping_interval.t) ~regionstore493,17002
+module Cell(N : NumericDomain) = structCell31,902
+  module T = structT32,942
+    type t = { region: Region.t;t33,962
+    type t = { region: Region.t;region33,962
+               offs: Wrapping_interval.t;offs34,995
+               valtype: CellType.t;valtype35,1037
+               width: Wrapping_interval.t } [@@deriving sexp_of]width36,1073
+    let compare x y =compare38,1139
+    let same_address c1 c2 : bool =same_address54,1658
+    let same_cell c1 c2 : bool =same_cell58,1785
+    let bits_per_byte = Wrapping_interval.of_int 8bits_per_byte62,1897
+    let width_in_bits c = c.widthwidth_in_bits64,1953
+    let width_in_bytes c =width_in_bytes66,1992
+    let width_in_bytes_int (cell : t) : int Or_error.t =width_in_bytes_int70,2105
+    let get_intvl : N.t -> Wrapping_interval.t =get_intvl76,2272
+    let make ~region ~offs ~width ~valtype : t =make81,2490
+    let name (m : t) : string =name101,3348
+    let to_string m : string =to_string107,3600
+    let pp (m : t) : unit =pp111,3734
+    let overlaps cel other : bool =overlaps131,4614
+  module Cmp = structCmp152,5339
+  module Set = structSet159,5430
+    type t = (Cmp.t, comparator_witness) Set.tt161,5509
+    let empty : t = Set.empty (module Cmp)empty163,5557
+    let empty : t = Set.empty (module Cmp)Cmp163,5557
+module BaseSet = Region.SetBaseSet225,7833
+module Make(N : NumericDomain)Make227,7862
+  module Overlap = structOverlap262,8677
+    type offs = WI.t listoffs263,8703
+    type t = { cell : C.t ; offsets : offs ; data : N.t }t265,8736
+    type t = { cell : C.t ; offsets : offs ; data : N.t }cell265,8736
+    type t = { cell : C.t ; offsets : offs ; data : N.t }offsets265,8736
+    type t = { cell : C.t ; offsets : offs ; data : N.t }data265,8736
+    let of_existing_cell (cell : C.t) (mem : T.t) : t =of_existing_cell267,8795
+  let pp {cells; env; bases; globals_read}  =pp369,13416
+  let empty : t = { cells = C.Set.empty;empty386,14106
+                  let segname = Image.Segment.name seg insegname586,21862
+                let res = N.of_word data inres592,22205
+  let set_cell_to_top (c : C.t) ?(secret : bool = false) (mem : t) : t =set_cell_to_top597,22414
+  let load_of_bil_exp (e : Bil.exp) (idx_res : N.t)load_of_bil_exp764,29578
+  let ensure_offs_range_is_ok ~(offs : Wrapping_interval.t)ensure_offs_range_is_ok849,33625
+  let get_all_offs ~(offs : Wrapping_interval.t)get_all_offs867,34283
+  let set_stack_canary (mem : t) : t =set_stack_canary903,35434
+  let store_of_bil_exp (e : Bil.exp) ~(offs : N.t) ~data ~size mstore_of_bil_exp934,36630
+          let all_offs = get_all_offs ~offs ~width inall_offs966,38063
+  let store_init_ret_ptr (mem : t) : t err =store_init_ret_ptr997,39416
+  let havoc_on_call (mem : t) : t =havoc_on_call1023,40443
+  let set_rsp (offs : int) (mem : t) : t err =set_rsp1037,40914
+  let set_rbp (offs : int) (mem : t) : t err =set_rbp1048,41277
+  let merge_images img1 img2 : Image.t option =merge_images1058,41635
+  let merge mem1 mem2 : t =merge1067,41842
+    let merged_globals_read = Set.union gr1 gr2 inmerged_globals_read1070,42040
+  let widen_threshold = 256widen_threshold1081,42427
+  let widen_with_step steps n prev next : t =widen_with_step1083,42456
 
-alert.ml,888
+alert.ml,1325
 open CoreAlert1,0
 type reason = CompSimp | SilentStoresreason4,24
 type reason = CompSimp | SilentStoresCompSimp4,24
@@ -81,6 +78,13 @@ module T = structT11,229
 module Cmp = structCmp25,739
 module Set = structSet30,805
 let t_of_reason_and_tid (reason : reason) (tid : Tid.t) : t =t_of_reason_and_tid36,890
+let set_flags_live (x : t) : t =set_flags_live47,1112
+let set_flags_live (x : t) : t =set_flags_live50,1182
+let add_problematic_operands (x : t) (prob_op : int list) : t =add_problematic_operands53,1252
+let to_string (x : t) : string =to_string60,1505
+  let sub_name_str = match sub_name withsub_name_str70,1696
+let print_alert (alert : t) : unit =print_alert100,2617
+let print_alerts : Set.t -> unit =print_alerts103,2701
 
 bases_domain.ml,2482
 open CoreBases_domain1,0
@@ -143,11 +147,15 @@ let of_z ?width z = Bases.emptyof_z146,2501
 let bitwidth v = not_callable_exception "bitwidth"bitwidth148,2534
 let sexp_of_t = Bases.sexp_of_tsexp_of_t150,2586
 
-callees.ml,965
+callees.ml,1279
 open CoreCallees1,0
 module T = Bap_core_theory.TheoryT7,70
 module KB = Bap_knowledge.KnowledgeKB8,104
 module Getter(N : NumericDomain) = structGetter21,739
+  module E = structE22,781
+    type region = Region.tregion23,801
+    type regions = Region.Set.tregions24,828
+    type valtypes = Common.cell_tvaltypes25,860
   module AI = AbstractInterpreter(N)(Region)(Region.Set)(struct type t = Common.cell_t end)(E)AI29,939
   module AI = AbstractInterpreter(N)(Region)(Region.Set)(struct type t = Common.cell_t end)(E)t29,939
   module WI = Wrapping_intervalWI30,1034
@@ -160,26 +168,29 @@ module Getter(N : NumericDomain) = structGetter21,739
   let sub_name_of_tid_exn (proj : Project.t) (tid : Tid.t) : string =sub_name_of_tid_exn46,1447
   let get_bb_tid_sub_db (prog : Program.t) : (Tid.t, Tid.t) List.Assoc.t =get_bb_tid_sub_db58,1772
   let get_callee_of_indirect (exp : exp) (jmp_from : jmp term)get_callee_of_indirect80,2509
+  let of_jmp_term (j : jmp term) (sub : sub term)of_jmp_term122,4245
+  let get_callees sub proj sol : rel list Or_error.t =get_callees163,5583
 
-calling_context.ml,874
+calling_context.ml,934
 open CoreCalling_context1,0
 module KB = Bap_knowledge.KnowledgeKB8,87
 module T = structT10,124
   type t = Tid.t list [@@deriving compare, bin_io, sexp, hash]t11,142
   let module_name = Some "Calling_context"module_name13,206
   let version = "0.0.0"version15,250
-  let pp ppf cc =pp17,275
-module Regular = structRegular30,550
-module Edge = structEdge34,605
-  type 'a t = T.t * T.t * 'at35,626
-  let from_ (e : 'a t) : T.t =from_37,656
-  let to_ (e : 'a t) : T.t =to_41,729
-type 'a edges = 'a Edge.t listedges46,802
-let to_insn_tid (ctxt : t) : Tid.t =to_insn_tid51,861
-let add_callsite (cs : Tid.t) (ctxt : t) : t = List.cons cs ctxtadd_callsite57,1044
-let add_node (n : Tid.t) (ctxt : t) : t = List.cons n ctxtadd_node59,1110
-let of_tid (t : Tid.t) : t = [t]of_tid61,1170
-let of_edge (e : Edge_builder.edge) : bool Edge.t =of_edge63,1204
+  let to_string (cc : t) : string =to_string17,275
+  let pp ppf (cc : t) =pp25,451
+module Regular = structRegular38,732
+module Edge = structEdge42,787
+  type 'a t = T.t * T.t * 'at43,808
+  let from_ (e : 'a t) : T.t =from_45,838
+  let to_ (e : 'a t) : T.t =to_49,911
+type 'a edges = 'a Edge.t listedges54,984
+let to_insn_tid (ctxt : t) : Tid.t =to_insn_tid59,1043
+let add_callsite (cs : Tid.t) (ctxt : t) : t = List.cons cs ctxtadd_callsite65,1226
+let add_node (n : Tid.t) (ctxt : t) : t = List.cons n ctxtadd_node67,1292
+let of_tid (t : Tid.t) : t = [t]of_tid69,1352
+let of_edge (e : Edge_builder.edge) : bool Edge.t =of_edge71,1386
 
 checker.ml,244
 open CoreChecker1,0
@@ -252,7 +263,7 @@ module Analysis = structAnalysis10,150
   let of_z ?(width : int = 64) _ = Notaintof_z117,2321
   let bitwidth x = -1bitwidth118,2364
 
-common.ml,8948
+common.ml,12340
 open CoreCommon1,0
 module T = Bap_core_theory.TheoryT6,58
 module KB = Bap_core_theory.KBKB7,92
@@ -391,50 +402,112 @@ module type MemoryT =MemoryT347,8426
     val empty : tempty361,8590
     val lookup : string -> t -> vlookup363,8613
     val set : string -> v -> t -> tset365,8652
-    val equal : t -> t -> boolequal367,8693
-    val compute_type : Bil.exp -> t -> cell_tcompute_type369,8729
-    val set_rsp : int -> t -> t errset_rsp371,8780
-    val set_rbp : int -> t -> t errset_rbp373,8821
-    val set_img : t -> Image.t -> tset_img375,8862
-    val holds_ptr : string -> t -> boolholds_ptr377,8903
-    val setptr : name:string -> regions:regions -> offs:v -> width:v -> t -> tsetptr379,8948
-    val unptr : name:string -> t -> tunptr381,9032
-    val load_of_bil_exp : Bil.exp -> v -> Size.t -> t -> v errload_of_bil_exp385,9140
-    val store_of_bil_exp : Bil.exp -> offs:v -> data:v -> valtype:cell_t -> size:Size.t -> t -> store_of_bil_exp387,9208
-    val havoc_on_call : t -> thavoc_on_call389,9311
-    val merge : t -> t -> tmerge391,9343
-    val widen_threshold : intwiden_threshold393,9376
-    val widen_with_step : int -> 'a -> t -> t -> twiden_with_step395,9411
-    val pp : t -> unitpp397,9467
-module NumericEnv(ValueDom : NumericDomain)NumericEnv400,9497
-  let widen_threshold = 256widen_threshold471,11253
-  let widen_with_step steps n prev_state new_state : t =widen_with_step473,11284
-  let pp (env : t) : unit =pp489,11929
-module AbstractInterpreter(N: NumericDomain)AbstractInterpreter501,12298
-         (Rt : sig type t end)t503,12373
-         (Vt : sig type t end)t504,12404
-         (Env : MemoryT with type v := N.tv505,12435
-                         and type region := R.tregion506,12478
-                         and type regions := Rt.tregions507,12526
-                         and type valtypes := Vt.t) = structvaltypes508,12576
-  module E = EnvE509,12637
-  module StringSet = Set.Make_binable_using_comparator(String)StringSet510,12654
-  module ST = structST512,12718
-  let denote_binop (op : binop) : N.t -> N.t -> N.t =denote_binop518,12852
-  let denote_cast (c : cast) : int -> N.t -> N.t =denote_cast540,13423
-  let denote_unop (op : unop) : N.t -> N.t =denote_unop547,13602
-  let rec denote_exp (e : Bil.exp) : N.t ST.t =denote_exp552,13713
-  let denote_def (d : def term) : unit ST.t =denote_def665,18608
-  let denote_phi (p : phi term) : unit ST.t =denote_phi679,19052
-  let denote_jmp (j : jmp term) : unit ST.t =denote_jmp686,19281
-  let denote_elt (e : Blk.elt) (st : E.t) : E.t =denote_elt693,19449
-module DomainProduct(X : NumericDomain)(Y : NumericDomain)DomainProduct710,20033
+    val unset : string -> t -> tunset367,8689
+    val equal : t -> t -> boolequal369,8727
+    val set_rsp : int -> t -> t errset_rsp371,8763
+    val set_rbp : int -> t -> t errset_rbp373,8804
+    val set_img : t -> Image.t -> tset_img375,8845
+    val set_stack_canary : t -> tset_stack_canary377,8882
+    val holds_ptr : string -> t -> boolholds_ptr379,8921
+    val setptr : name:string -> regions:regions -> offs:v -> width:v -> t -> tsetptr381,8966
+    val unptr : name:string -> t -> tunptr383,9050
+    val load_of_bil_exp : Bil.exp -> v -> Size.t -> t -> (v * t) errload_of_bil_exp387,9158
+    val store_of_bil_exp : Bil.exp -> offs:v -> data:v -> size:Size.t -> t -> t errstore_of_bil_exp389,9232
+    val havoc_on_call : t -> thavoc_on_call391,9317
+    val merge : t -> t -> tmerge393,9349
+    val widen_threshold : intwiden_threshold395,9382
+    val widen_with_step : int -> 'a -> t -> t -> twiden_with_step397,9417
+    val pp : t -> unitpp399,9473
+module NumericEnv(ValueDom : NumericDomain)NumericEnv402,9503
+  let widen_threshold = 10widen_threshold475,11292
+  let widen_with_step steps n prev_state new_state : t =widen_with_step477,11322
+  let pp (env : t) : unit =pp496,12207
+module AbstractInterpreter(N: NumericDomain)AbstractInterpreter508,12576
+         (Rt : sig type t end)t510,12651
+         (Vt : sig type t end)t511,12682
+         (Env : MemoryT with type v := N.tv512,12713
+                         and type region := R.tregion513,12756
+                         and type regions := Rt.tregions514,12804
+                         and type valtypes := Vt.t) = structvaltypes515,12854
+  module E = EnvE516,12915
+  module StringSet = Set.Make_binable_using_comparator(String)StringSet517,12932
+  module ST = structST519,12996
+  let denote_binop (op : binop) : N.t -> N.t -> N.t =denote_binop525,13130
+  let denote_cast (c : cast) : int -> N.t -> N.t =denote_cast547,13701
+  let denote_unop (op : unop) : N.t -> N.t =denote_unop554,13880
+  let rec denote_exp (e : Bil.exp) : N.t ST.t =denote_exp559,13991
+  let denote_def (d : def term) : unit ST.t =denote_def682,18934
+  let denote_phi (p : phi term) : unit ST.t =denote_phi696,19378
+  let denote_jmp (j : jmp term) : unit ST.t =denote_jmp703,19607
+  let denote_elt (e : Blk.elt) (st : E.t) : E.t =denote_elt710,19775
+         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid j) in()718,20049
+         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid p) in()721,20167
+module DomainProduct(X : NumericDomain)(Y : NumericDomain)DomainProduct729,20397
+  type t = X.t * Y.tt731,20488
+  let key : t DomainKey.k =key733,20510
+  let get k =get739,20690
+  let set key (x, y) newval =set746,20892
+  let first (prod : t) : X.t =first749,20970
+  let second (prod : t) : Y.t =second753,21038
+  let bot = X.bot, Y.botbot757,21109
+  let top = X.top, Y.toptop758,21134
+  let make_top width signed = X.make_top width signed, Y.make_top width signedmake_top759,21159
+  let b1 = X.b1, Y.b1b1761,21239
+  let b0 = X.b0, Y.b0b0762,21261
+  let order (x, y) (x', y') =order764,21286
+  let compare x y : int =compare772,21455
+  let equal f s =equal780,21590
+  let join (x, y) (x', y') = X.join x x', Y.join y y'join785,21677
+  let meet (x, y) (x', y') = X.meet x x', Y.meet y y'meet786,21731
+  let contains (x, y) (x', y') = X.contains x x' || Y.contains y y'contains789,21858
+  let binop xf yf =binop791,21927
+  let add = binop X.add Y.addadd794,22022
+  let sub = binop X.sub Y.subsub795,22052
+  let mul = binop X.mul Y.mulmul796,22082
+  let div = binop X.div Y.divdiv797,22112
+  let sdiv = binop X.sdiv Y.sdivsdiv798,22142
+  let umod = binop X.umod Y.umodumod799,22175
+  let smod = binop X.smod Y.smodsmod800,22208
+  let lshift = binop X.lshift Y.lshiftlshift801,22241
+  let rshift = binop X.rshift Y.rshiftrshift802,22280
+  let arshift = binop X.arshift Y.arshiftarshift803,22319
+  let logand = binop X.logand Y.logandlogand804,22361
+  let logor = binop X.logor Y.logorlogor805,22400
+  let logxor = binop X.logxor Y.logxorlogxor806,22436
+  let neg (x, y) = X.neg x, Y.neg yneg808,22476
+  let lnot (x, y) = X.lnot x, Y.lnot ylnot809,22512
+  let bincomp xf yf =bincomp812,22624
+  let booleq = bincomp X.booleq Y.booleqbooleq815,22693
+  let boolneq = bincomp X.boolneq Y.boolneqboolneq816,22734
+  let boollt = bincomp X.boollt Y.boolltboollt817,22778
+  let boolle = bincomp X.boolle Y.boolleboolle818,22819
+  let boolslt = bincomp X.boolslt Y.boolsltboolslt819,22860
+  let boolsle = bincomp X.boolsle Y.boolsleboolsle820,22904
+  let could_be_true (x, y) = X.could_be_true x || Y.could_be_true ycould_be_true824,23073
+  let could_be_false (x, y) = X.could_be_false x || Y.could_be_false ycould_be_false826,23142
+  let cast_or_extract xf yf = fun n (x, y) -> xf n x, yf n ycast_or_extract828,23214
+  let unsigned = cast_or_extract X.unsigned Y.unsignedunsigned829,23275
+  let signed = cast_or_extract X.signed Y.signedsigned830,23330
+  let low = cast_or_extract X.low Y.low low831,23379
+  let high = cast_or_extract X.high Y.highhigh832,23420
+  let extract (x, y) hi lo = X.extract x hi lo, Y.extract y hi loextract834,23464
+  let concat (x, y) (x', y') = X.concat x x', Y.concat y y'concat835,23530
+  let to_string (x, y) = Format.sprintf "(%s, %s)" (X.to_string x) (Y.to_string y)to_string837,23591
+  let of_int ?(width = 64) i = X.of_int ~width i, Y.of_int ~width iof_int838,23674
+  let of_word w = X.of_word w, Y.of_word wof_word839,23742
+  let of_z ?(width = 64) z = X.of_z ~width z, Y.of_z ~width zof_z840,23785
+  let sexp_of_t (x, y) = Sexp.List [ X.sexp_of_t x; Y.sexp_of_t y ]sexp_of_t841,23847
+  let bitwidth (x, y) =bitwidth842,23915
 
-comp_simp.ml,1440
+comp_simp.ml,2103
 open CoreComp_simp1,0
 module T = Bap_core_theory.TheoryT7,70
 module KB = Bap_core_theory.KBKB8,104
 module Checker(N : NumericDomain) = structChecker10,136
+  module E = structE11,179
+    type region = Abstract_memory.Region.tregion12,199
+    type regions = Abstract_memory.Region.Set.tregions13,242
+    type valtypes = Common.cell_tvaltypes14,290
   module AI = AbstractInterpreter(N)(Abstract_memory.Region)(Abstract_memory.Region.Set)(struct AI17,366
   module AI = AbstractInterpreter(N)(Abstract_memory.Region)(Abstract_memory.Region.Set)(struct t17,366
   module I = Wrapping_intervalI18,493
@@ -458,6 +531,12 @@ module Checker(N : NumericDomain) = structChecker10,136
       let special = special_for_bw to_check inspecial61,1587
   let check_binop_operandscheck_binop_operands64,1669
     let left_specials = fst specials inleft_specials70,1839
+  let specials_of_binop (op : binop) : (I.t -> I.t) list * (I.t -> I.t) list =specials_of_binop119,3677
+    let one i = I.of_int ~width:(I.bitwidth i) 1 inone120,3756
+  let check_binop (op : binop) : N.t -> N.t -> unit ST.t =check_binop150,4694
+  let rec check_exp (e : Bil.exp) : N.t ST.t =check_exp154,4843
+  let check_def (d : def term)check_def218,7028
+  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : E.t) : warns =check_elt233,7459
 
 data_section.ml,27
 open CoreData_section1,0
@@ -496,7 +575,7 @@ module DomainKey : KeyT = structDomainKey19,329
     let module B = (val y : K with type t = b) iny44,931
     let module B = (val y : K with type t = b) int44,931
 
-driver.ml,1611
+driver.ml,1612
 open CoreDriver1,0
 module T = Bap_core_theory.TheoryT7,75
 module KB = Bap_knowledge.KnowledgeKB8,109
@@ -522,8 +601,8 @@ let should_skip_analysis (edges : Edge_builder.edges)should_skip_analysis101,3
 let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =run_analyses138,4482
      let edges = List.map edges ~f:(Calling_context.of_edge) inedges159,5164
      let cfg = Graphlib.create (module G) ~edges () inG161,5288
-     let () = printf "Setting up initial solution \n%!" in()175,5900
-     let first_node = match Seq.hd (Graphlib.reverse_postorder_traverse (module G) cfg) withG263,9241
+     let () = printf "Setting up initial solution \n%!" in()186,6632
+     let first_node = match Seq.hd (Graphlib.reverse_postorder_traverse (module G) cfg) withG276,10039
 
 edge_builder.ml,1445
 open CoreEdge_builder1,0
@@ -723,7 +802,7 @@ let t_of_sub_nodes nodes insns_of_node =t_of_sub_nodes26,559
 let t_of_sub sub =t_of_sub33,721
   let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg inGraphs35,770
 
-type_domain.ml,2542
+type_domain.ml,2541
 open CoreType_domain1,0
 module T = Bap_core_theory.TheoryT5,36
 module KB = Bap_core_theory.KBKB6,70
@@ -749,42 +828,42 @@ let meet x y =meet53,987
 let contains x y =contains61,1218
 let add x y =add65,1281
 let sub x y =sub76,1582
-let general_binop x y = sgeneral_binop89,1885
-let mul = general_binopmul91,1912
-let div = general_binopdiv93,1937
-let sdiv = general_binopsdiv95,1962
-let umod = general_binopumod97,1988
-let smod = general_binopsmod99,2014
-let lshift = general_binoplshift101,2040
-let rshift = general_binoprshift103,2068
-let arshift = general_binoparshift105,2096
-let logand = general_binoplogand107,2125
-let logor = general_binoplogor109,2153
-let logxor = general_binoplogxor111,2180
-let general_unop x = sgeneral_unop113,2208
-let neg = general_unopneg115,2232
-let lnot = general_unoplnot117,2256
-let extract x hi lo = sextract119,2281
-let concat = general_binopconcat121,2306
-let booleq = general_binopbooleq123,2334
-let boolneq = general_binopboolneq125,2362
-let boollt = general_binopboollt127,2391
-let boolle = general_binopboolle129,2419
-let boolslt = general_binopboolslt131,2447
-let boolsle = general_binopboolsle133,2476
-let could_be_true _ = truecould_be_true135,2505
-let could_be_false _ = truecould_be_false137,2533
-let general_cast n x = sgeneral_cast139,2562
-let unsigned = general_castunsigned141,2588
-let signed = general_castsigned143,2617
-let low = general_castlow145,2644
-let high = general_casthigh147,2668
-let to_string = functionto_string149,2693
-let of_int ?width v = sof_int155,2849
-let of_word w = sof_word157,2874
-let of_z ?width z = sof_z159,2893
-let bitwidth typ = failwith "can't bitwidth on type"bitwidth161,2916
-let sexp_of_t = CellType.sexp_of_tsexp_of_t163,2970
+let general_binop x y = sgeneral_binop87,1883
+let mul = general_binopmul89,1910
+let div = general_binopdiv91,1935
+let sdiv = general_binopsdiv93,1960
+let umod = general_binopumod95,1986
+let smod = general_binopsmod97,2012
+let lshift = general_binoplshift99,2038
+let rshift = general_binoprshift101,2066
+let arshift = general_binoparshift103,2094
+let logand = general_binoplogand105,2123
+let logor = general_binoplogor107,2151
+let logxor = general_binoplogxor109,2178
+let general_unop x = sgeneral_unop111,2206
+let neg = general_unopneg113,2230
+let lnot = general_unoplnot115,2254
+let extract x hi lo = sextract117,2279
+let concat = general_binopconcat119,2304
+let booleq = general_binopbooleq121,2332
+let boolneq = general_binopboolneq123,2360
+let boollt = general_binopboollt125,2389
+let boolle = general_binopboolle127,2417
+let boolslt = general_binopboolslt129,2445
+let boolsle = general_binopboolsle131,2474
+let could_be_true _ = truecould_be_true133,2503
+let could_be_false _ = truecould_be_false135,2531
+let general_cast n x = sgeneral_cast137,2560
+let unsigned = general_castunsigned139,2586
+let signed = general_castsigned141,2615
+let low = general_castlow143,2642
+let high = general_casthigh145,2666
+let to_string = functionto_string147,2691
+let of_int ?width v = sof_int153,2847
+let of_word w = sof_word155,2872
+let of_z ?width z = sof_z157,2891
+let bitwidth typ = failwith "can't bitwidth on type"bitwidth159,2914
+let sexp_of_t = CellType.sexp_of_tsexp_of_t161,2968
 
 uarch_checker.ml,562
 open CoreUarch_checker1,0
@@ -803,7 +882,7 @@ module SS = Set.Make_binable_using_comparator(String)SS4,24
 type t = SS.tt6,79
 let rec run (e : Bil.exp) : SS.t =run8,94
 
-wrapping_interval.ml,1183
+wrapping_interval.ml,1135
 open CoreWrapping_interval1,0
 module T = Bap_core_theory.TheoryT4,24
 module KB = Bap_core_theory.KBKB5,58
@@ -811,18 +890,20 @@ let package = "uarch-checker"package7,90
 let name = "interval"name8,120
 let desc = "Interval type/domain for abstract interpretation"desc9,142
 let width = 128 (* bits *)width10,204
-type range = {lo: Z.t; hi: Z.t; width: int; signed: bool} (* [@@deriving sexp, bin_io] *)range12,232
-type range = {lo: Z.t; hi: Z.t; width: int; signed: bool} (* [@@deriving sexp, bin_io] *)lo12,232
-type range = {lo: Z.t; hi: Z.t; width: int; signed: bool} (* [@@deriving sexp, bin_io] *)hi12,232
-type range = {lo: Z.t; hi: Z.t; width: int; signed: bool} (* [@@deriving sexp, bin_io] *)width12,232
-type range = {lo: Z.t; hi: Z.t; width: int; signed: bool} (* [@@deriving sexp, bin_io] *)signed12,232
-type t = Bot | Interval of range (* [@@deriving sexp, bin_io] *)t13,322
-type t = Bot | Interval of range (* [@@deriving sexp, bin_io] *)Bot13,322
-type t = Bot | Interval of range (* [@@deriving sexp, bin_io] *)Interval13,322
-let empty = Botempty16,430
-let bot = Botbot17,446
-let make_b1 width signed = Interval {lo=Z.one; hi=Z.one; width; signed}make_b119,461
+type range = {lo: Z.t; hi: Z.t; width: int; signed: bool} (* [@@deriving bin_io] *)range12,232
+type range = {lo: Z.t; hi: Z.t; width: int; signed: bool} (* [@@deriving bin_io] *)lo12,232
+type range = {lo: Z.t; hi: Z.t; width: int; signed: bool} (* [@@deriving bin_io] *)hi12,232
+type range = {lo: Z.t; hi: Z.t; width: int; signed: bool} (* [@@deriving bin_io] *)width12,232
+type range = {lo: Z.t; hi: Z.t; width: int; signed: bool} (* [@@deriving bin_io] *)signed12,232
+type t = Bot | Interval of range (* [@@deriving bin_io] *)t13,316
+type t = Bot | Interval of range (* [@@deriving bin_io] *)Bot13,316
+type t = Bot | Interval of range (* [@@deriving bin_io] *)Interval13,316
+let empty = Botempty16,418
+let bot = Botbot17,434
+let make_b1 width signed = Interval {lo=Z.one; hi=Z.one; width; signed}make_b119,449
 
 /Users/mkf727/repos/bap,include
 
 /Users/mkf727/.opam/bap-alpha/lib/zarith,include
+
+/Users/mkf727/.opam/bap-alpha/lib/core,include

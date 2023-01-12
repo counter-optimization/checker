@@ -160,6 +160,17 @@ let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
      let module G = Graphlib.Make(Calling_context)(Bool) in
      let cfg = Graphlib.create (module G) ~edges () in
 
+     (* let () = if String.equal (Sub.name sub) "crypto_hash_sha512_final" *)
+     (*          then Graphlib.to_dot (module G) *)
+     (*                               ~string_of_node:Calling_context.to_string *)
+     (*                               (\* ~string_of_edge:(fun (ccfrom, ccto, _is_interproc) -> *\) *)
+     (*                               (\*   sprintf "(%s, %s)" *\) *)
+     (*                               (\*           (Calling_context.to_string ccfrom) *\) *)
+     (*                               (\*           (Calling_context.to_string ccto)) *\) *)
+     (*                               ~filename:"crypto_hash_sha512_final.dot" *)
+     (*                               cfg *)
+     (*          else () in *)
+
      (* AbsInt *)
      let module ProdIntvlxTaint = DomainProduct(Wrapping_interval)(Checker_taint.Analysis) in
      let module WithTypes = DomainProduct(ProdIntvlxTaint)(Type_domain) in
@@ -275,7 +286,8 @@ let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
      
      let analysis_results = Graphlib.fixpoint
                               (module G)
-                              cfg 
+                              cfg
+                              ~steps:E.widen_threshold
                               ~step:E.widen_with_step
                               ~init:init_sol
                               ~equal:E.equal

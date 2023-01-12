@@ -109,7 +109,7 @@ module Cell(N : NumericDomain) = struct
       sprintf "%s-%s" (name m) valtype_str
 
     let pp (m : t) : unit =
-      Format.printf "%s%!" @@ to_string m
+      Format.printf "%s\n%!" @@ to_string m
 
     (* let overlaps_with_ptr cel ptr : bool = *)
     (*   if not (Region.equal (Pointer.region ptr) cel.region) *)
@@ -790,41 +790,56 @@ module Make(N : NumericDomain)
        (* let () = printf "in load_of_bil_exp, computing width\n%!" in *)
        let width = bap_size_to_absdom size in
 
-       (* let () = printf "in load_of_bil_exp, computing is_global\n%!" in *)
-       let is_global = offs_is_scalar && Set.is_empty regions in
+       let offs_size = match Wrapping_interval.size offs with
+         | Some offs_size -> offs_size
+         | None ->
+            failwith @@
+              sprintf "in load_of_bil_exp, couldn't convert offs %s to Z.t"
+                      (Wrapping_interval.to_string offs) in
+            
+       let max_ptd_to_elts = Z.of_int 64 in
 
-       (* let () = printf "in load_of_bil_exp, computing region\n%!" in *)
-       let regions = (if is_global
-                     then Set.add regions Region.Global
-                     else regions) |> Set.to_list
-       in
+       (if Z.gt offs_size max_ptd_to_elts
+        then
+          let () = printf "in load_of_bil_exp, pointer %s points to too many elements. maybe an unconstrained pointer?\n%!" (Exp.to_string idx) in
+          let () = printf "in load_of_bil_exp, returning top instead\n%!" in
+          Ok (N.top, m)
+        else
+          (* let () = printf "in load_of_bil_exp, computing is_global\n%!" in *)
+          let is_global = offs_is_scalar && Set.is_empty regions in
 
-       let open Or_error.Monad_infix in
-       
-       Wrapping_interval.to_list offs >>= fun all_offsets ->
+          (* let () = printf "in load_of_bil_exp, computing region\n%!" in *)
+          let regions = (if is_global
+                         then Set.add regions Region.Global
+                         else regions) |> Set.to_list
+          in
 
-       (* let () = printf "in load_of_bil_exp, all offsets are:\n%!" in *)
-       (* let () = List.iter all_offsets ~f:(fun o -> *)
-       (*                      printf "offset: %s\n%!" (Wrapping_interval.to_string o)) in *)
+          let open Or_error.Monad_infix in
+          
+          Wrapping_interval.to_list offs >>= fun all_offsets ->
 
-       (* let () = printf "in load_of_bil_exp, all regions are:\n%!" in *)
-       (* let () = List.iter regions ~f:(fun r -> *)
-       (*                      printf "region: %s\n%!" (Region.to_string r)) in *)
-       
-       let regions_and_offsets = List.cartesian_product regions all_offsets in
+          (* let () = printf "in load_of_bil_exp, all offsets are:\n%!" in *)
+          (* let () = List.iter all_offsets ~f:(fun o -> *)
+          (*                      printf "offset: %s\n%!" (Wrapping_interval.to_string o)) in *)
 
-       (* let () = printf "in load_of_bil_exp, region,offset pairs are:\n%!" in *)
-       (* let () = List.iter regions_and_offsets ~f:(fun (r, o) -> *)
-       (*                      printf "reg,off: (%s, %s)\n%!" *)
-       (*                             (Region.to_string r) *)
-       (*                             (Wrapping_interval.to_string o)) in *)
-       
-       List.fold regions_and_offsets
-                 ~init:(Ok (N.bot, m))
-                 ~f:(fun state (region, offs) ->
-                   state >>= fun (data_acc, mem) ->
-                   load ~offs ~region ~width ~size ~mem >>= fun (loaded_val, mem') ->
-                   Ok (N.join data_acc loaded_val, mem'))
+          (* let () = printf "in load_of_bil_exp, all regions are:\n%!" in *)
+          (* let () = List.iter regions ~f:(fun r -> *)
+          (*                      printf "region: %s\n%!" (Region.to_string r)) in *)
+          
+          let regions_and_offsets = List.cartesian_product regions all_offsets in
+
+          (* let () = printf "in load_of_bil_exp, region,offset pairs are:\n%!" in *)
+          (* let () = List.iter regions_and_offsets ~f:(fun (r, o) -> *)
+          (*                      printf "reg,off: (%s, %s)\n%!" *)
+          (*                             (Region.to_string r) *)
+          (*                             (Wrapping_interval.to_string o)) in *)
+          
+          List.fold regions_and_offsets
+                    ~init:(Ok (N.bot, m))
+                    ~f:(fun state (region, offs) ->
+                      state >>= fun (data_acc, mem) ->
+                      load ~offs ~region ~width ~size ~mem >>= fun (loaded_val, mem') ->
+                      Ok (N.join data_acc loaded_val, mem')))
     | _ -> Or_error.error_string "load_of_bil_exp: Not a load in load_of_bil_exp"
 
   (* don't let pointers point to too many locations. right now,
@@ -945,8 +960,7 @@ module Make(N : NumericDomain)
           let () = printf "in store_of_bil_exp, denote of exp %s, offs: %s : %s\n%!"
                           (Exp.to_string e)
                           (Wrapping_interval.to_string offs)
-                          (Error.to_string_hum err)
-          in
+                          (Error.to_string_hum err) in
           Ok m
        | Ok _ ->
           let all_offs = get_all_offs ~offs ~width in

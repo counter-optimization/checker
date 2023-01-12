@@ -14,7 +14,15 @@ module T = struct
 
   let version = "0.0.0"
 
-  let pp ppf cc =
+  let to_string (cc : t) : string =
+    let rec loop cc =
+      match cc with
+      | [] -> ""
+      | x :: xs -> sprintf "%a" Tid.pps x
+    in
+    sprintf "tid%s" @@ loop cc
+
+  let pp ppf (cc : t) =
     let rec loop ppf cc =
       match cc with
       | [] -> ()

@@ -430,7 +430,7 @@ module NumericEnv(ValueDom : NumericDomain)
   let lookup name env =
     match M.find env name with
     | Some v -> v
-    | None -> ValueDom.bot
+    | None -> ValueDom.top
 
   let set name v env : t = M.set env ~key:name ~data:v
 
@@ -478,15 +478,24 @@ module NumericEnv(ValueDom : NumericDomain)
     let get_differing_keys prev_state new_state =
       M.fold prev_state ~init:Seq.empty ~f:(fun ~key ~data acc ->
           let next = M.find_exn new_state key in
+          (* let () = printf "in widen_with_step:get_differing_keys, prev is %s, next is %s\n" *)
+          (*                 (ValueDom.to_string data) (ValueDom.to_string next) in *)
           if ValueDom.equal data next
-          then acc
-          else Seq.cons key acc)
+          then
+            (* let () = printf "the values were equal\n%!" in *)
+            acc
+          else
+            (* let () = printf "the values were not equal\n%!" in *)
+            Seq.cons key acc)
     in
     let widen_state prev_state new_state =
       let changed_keys = get_differing_keys prev_state new_state in
+      (* let () = printf "in widen_with_step:widen_state, changed keys are:\n%!"; *)
+               (* Seq.iter changed_keys ~f:(fun var -> printf "changed key: %s\n%!" var) in *)
       Seq.fold changed_keys ~init:prev_state ~f:(fun prev changed ->
           set changed ValueDom.top prev)
     in
+    (* let () = printf "in widen_with_step: steps %d\n%!" steps in *)
     let f = if steps < widen_threshold then merge else widen_state in
     f prev_state new_state
 
