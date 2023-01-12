@@ -472,7 +472,7 @@ module NumericEnv(ValueDom : NumericDomain)
       else M.set prev ~key ~data in
     M.fold env2 ~init:env1 ~f:merge_helper
 
-  let widen_threshold = 256
+  let widen_threshold = 10
   
   let widen_with_step steps n prev_state new_state : t =
     let get_differing_keys prev_state new_state =

@@ -841,7 +841,7 @@ module Make(N : NumericDomain)
          sprintf "in ensure_offs_range_is_ok, can't get size of offs (WI.t): %s"
                  (Wrapping_interval.to_string offs) in
     Or_error.bind size ~f:(fun size ->
-    let max_pointers = Z.of_int 256 in
+    let max_pointers = Z.of_int 64 in
     if Z.gt size max_pointers
     then
       Or_error.error_string
