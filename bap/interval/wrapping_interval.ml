@@ -493,8 +493,8 @@ let of_z ?(width = 64) (z : Z.t) : t =
 
 let to_list (intvl : t) : t list Or_error.t =
   let rec loop ~(hi : Z.t) ~(lo : Z.t) ~(res : t list) : t list =
-    if Z.equal (Z.sub hi lo) Z.zero
-    then res
+    if Z.equal hi lo
+    then List.cons (of_z hi) res
     else
       let res' = List.cons (of_z hi) res in
       loop ~hi:(Z.sub hi Z.one) ~lo ~res:res'

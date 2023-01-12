@@ -569,6 +569,7 @@ module AbstractInterpreter(N: NumericDomain)
              match res with
              | Ok (res, st') ->
                 (* let () = Format.printf "Done denoting load\n%!" in *)
+                (* let () = Format.printf "loaded data was: %s\n%!" (N.to_string res) in *)
                 ST.put st' >>= fun () ->
                 ST.return res
              | Error msg -> failwith @@ Error.to_string_hum msg

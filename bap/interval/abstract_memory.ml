@@ -304,14 +304,14 @@ module Make(N : NumericDomain)
       let high_bit_idx = low_bit_idx + 7 in
       N.extract data high_bit_idx low_bit_idx
 
-    let merge_bytes = N.join
+    let merge_bytes = N.meet
 
     let shift_byte (data : N.t) (count_as_bits : int) : N.t =
       let count_as_abstract_value = N.of_int count_as_bits in
       N.lshift data count_as_abstract_value
 
     let data_from_little_endian_bytes (le_bytes : N.t list) : N.t =
-      let rec loop (bytes : N.t list) (acc : N.t) ?(idx : int = 0) : N.t =
+      let rec loop (bytes : N.t list) ?(idx : int = 0) (acc : N.t) : N.t =
         match bytes with
         | [] -> acc
         | byte :: bytes' ->
@@ -325,10 +325,9 @@ module Make(N : NumericDomain)
     let get_merge_lists ~(this : t) ~(other : t) : (N.t * N.t) list =
       let lt x y = WI.could_be_true (WI.boollt x y) in
       let gt x y = WI.could_be_true (WI.boollt y x) in
-      
-      let rec loop (toffs : WI.t list) (ooffs : WI.t list)
-                   ?(tidx : int = 0) ?(oidx : int = 0)
-                   ?(rev_acc : (N.t * N.t) list = []) : (N.t * N.t) list =
+      let rec loop ?(tidx : int = 0) ?(oidx : int = 0)
+                   ?(rev_acc : (N.t * N.t) list = [])
+                   (toffs : WI.t list) (ooffs : WI.t list) : (N.t * N.t) list =
         match toffs, ooffs with
         | [], [] -> List.rev rev_acc
         | [], _ -> List.rev rev_acc
@@ -367,7 +366,7 @@ module Make(N : NumericDomain)
 
   include T
 
-  let pp {cells; env; bases}  =
+  let pp {cells; env; bases; globals_read}  =
     (* let print_ptr_to_cells ~key ~data = *)
     (*   let cell_set_str =  Set.to_list data |> List.to_string ~f:C.to_string in *)
     (*   Format.printf "\t%s --> %s\n%!" (Ptr.to_string key) cell_set_str *)
@@ -380,7 +379,9 @@ module Make(N : NumericDomain)
     Set.iter cells ~f:C.pp;
     Env.pp env;
     printf "* Var->Bases map is:\n%!";
-    Map.iteri bases ~f:print_bases_map
+    Map.iteri bases ~f:print_bases_map;
+    printf "* Loaded globals are:\n%!";
+    Set.iter globals_read ~f:C.pp
 
   let empty : t = { cells = C.Set.empty;
                     env = Env.empty;
@@ -589,11 +590,11 @@ module Make(N : NumericDomain)
                 end
              | Ok data ->
                 let res = N.of_word data in
-                let res_s = N.to_string res in
-                let () = printf "in load_global, loaded data was %s\n%!" res_s in
+                (* let res_s = N.to_string res in *)
+                (* let () = printf "in load_global, loaded data was %s\n%!" res_s in *)
                 Ok res
 
-  let set_cell_to_top (c : C.t) (mem : t) ?(secret : bool = false) : t =
+  let set_cell_to_top (c : C.t) ?(secret : bool = false) (mem : t) : t =
     let top = if secret then set_taint N.top else set_untaint N.top in
     { mem with env = Env.set (C.name c) top mem.env }
 
@@ -715,28 +716,38 @@ module Make(N : NumericDomain)
     let open Or_error.Monad_infix in
     
     let cell = C.make ~offs ~width ~region ~valtype:CellType.Unknown in
+    let () = printf "in load, cell is %s\n%!" (C.to_string cell) in
 
     let is_global = match region with | Global -> true | _ -> false in
     let global_already_loaded_from_img = global_already_read ~cell ~mem in
   
     if is_global && not global_already_loaded_from_img
     then
-       load_global offs size mem >>= fun data ->
-       let valtype = CellType.Unknown in
-       (* and set it in the current env, so next read doesn't go to the image *)
-       store ~offs ~region ~width ~data ~valtype mem >>= fun mem' ->
-       Ok (data, { mem' with globals_read = Set.add mem'.globals_read cell })
+      let () = printf "in load, loading global from img\n%!" in
+      
+      load_global offs size mem >>= fun data ->
+      let valtype = CellType.Unknown in
+      (* and set it in the current env, so next read doesn't go to the image *)
+      store ~offs ~region ~width ~data ~valtype mem >>= fun mem' ->
+      Ok (data, { mem' with globals_read = Set.add mem'.globals_read cell })
     else
       let has_existing_value = cell_exists ~cell ~mem in
       if has_existing_value
       then
+        let () = printf "in load, loading existing value\n%!" in
         let data = lookup (C.name cell) mem in
         Ok (data, mem)
       else
+        let () = printf "in load, loading new value\n%!" in
         let overlap = get_overlapping_cells cell mem in
-        let cell_as_overlap = Overlap.of_cell cell N.bot mem in
+        let () = printf "in load, overlapping cells are: \n%!" in
+        let () = Set.iter overlap ~f:(fun c -> printf "overlap cell: %s\n%!" (C.name c)) in 
+        
+        let cell_as_overlap = Overlap.of_cell cell N.top mem in
+        
         if Set.length overlap >= 1
         then
+          let () = printf "in load, doing overlapping load\n%!" in
           let final = Set.fold overlap ~init:cell_as_overlap ~f:(fun current_data other_cell ->
                                  let other_overlapper = Overlap.of_existing_cell other_cell mem in
                                  Overlap.merge ~this:current_data ~other:other_overlapper) in
@@ -791,8 +802,22 @@ module Make(N : NumericDomain)
        let open Or_error.Monad_infix in
        
        Wrapping_interval.to_list offs >>= fun all_offsets ->
+
+       (* let () = printf "in load_of_bil_exp, all offsets are:\n%!" in *)
+       (* let () = List.iter all_offsets ~f:(fun o -> *)
+       (*                      printf "offset: %s\n%!" (Wrapping_interval.to_string o)) in *)
+
+       (* let () = printf "in load_of_bil_exp, all regions are:\n%!" in *)
+       (* let () = List.iter regions ~f:(fun r -> *)
+       (*                      printf "region: %s\n%!" (Region.to_string r)) in *)
        
        let regions_and_offsets = List.cartesian_product regions all_offsets in
+
+       (* let () = printf "in load_of_bil_exp, region,offset pairs are:\n%!" in *)
+       (* let () = List.iter regions_and_offsets ~f:(fun (r, o) -> *)
+       (*                      printf "reg,off: (%s, %s)\n%!" *)
+       (*                             (Region.to_string r) *)
+       (*                             (Wrapping_interval.to_string o)) in *)
        
        List.fold regions_and_offsets
                  ~init:(Ok (N.bot, m))
@@ -864,7 +889,7 @@ module Make(N : NumericDomain)
     let fs_base = 0x0000_4000 in
 
     let fs_ptr = set_typd (N.of_int fs_base) CellType.Ptr in
-    let fs_ptr = set_based (fs_ptr) Bases_domain.global in
+    let fs_ptr = set_based (fs_ptr) Bases_domain.heap in
     
     let stack_canary_width = Wrapping_interval.of_int 8 in
     
@@ -872,14 +897,14 @@ module Make(N : NumericDomain)
 
     let with_fs_base_set = setptr
                              ~name:"FS_BASE"
-                             ~regions:(Region.Set.singleton Common.Region.Global)
+                             ~regions:Bases_domain.heap
                              ~offs:fs_ptr
                              ~width:stack_canary_width
                              empty in
 
     let env_with_canary_set = store
                                 ~offs:(Wrapping_interval.of_int (fs_base + 0x28))
-                                ~region:Common.Region.Global
+                                ~region:Region.Heap
                                 ~width:stack_canary_width
                                 ~data:stack_canary_value
                                 ~valtype:CellType.Scalar
@@ -981,23 +1006,19 @@ module Make(N : NumericDomain)
       ~data:init_ret_ptr
       ~valtype:CellType.Ptr
 
-  let havoc_on_call : t -> t = fun x -> x
-  (* let havoc_on_call (mem : t) : t = *)
-  (*   let havoc_one_cell (mem : t) (cname : string) : t = *)
-  (*     { mem with env = Env.set cname N.top mem.env } *)
-  (*   in *)
-  (*   let cell_name_of_ptr (p : Ptr.t) : string = *)
-  (*     C.t_of_ptr p |> C.name *)
-  (*   in *)
-  (*   let havoc_rax (mem : t) : t = *)
-  (*     let rax = "RAX" in *)
-  (*     { mem with env = Env.set rax N.top mem.env } *)
-  (*   in *)
-  (*   let cell_map = mem.cells in *)
-  (*   let cells = Map.keys cell_map in *)
-  (*   let cell_names = List.map cells ~f:cell_name_of_ptr in *)
-  (*   List.fold cell_names ~init:mem ~f:havoc_one_cell *)
-  (*   |> havoc_rax *)
+  let havoc_on_call (mem : t) : t =
+    let havoc_one_cell (mem : t) (cname : string) : t =
+      { mem with env = Env.set cname N.top mem.env }
+    in
+    let havoc_rax (mem : t) : t =
+      let rax = "RAX" in
+      { mem with env = Env.set rax N.top mem.env }
+    in
+    (* let cell_map = mem.cells in *)
+    let cells = mem.cells in
+    let cell_names = Set.to_list cells |> List.map ~f:C.name in
+    List.fold cell_names ~init:mem ~f:havoc_one_cell
+    |> havoc_rax
 
   let set_rsp (offs : int) (mem : t) : t err =
     let offs = N.of_int ~width:64 offs in
