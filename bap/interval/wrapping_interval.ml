@@ -9,8 +9,8 @@ let name = "interval"
 let desc = "Interval type/domain for abstract interpretation"
 let width = 128 (* bits *)
 
-type range = {lo: Z.t; hi: Z.t; width: int; signed: bool} (* [@@deriving sexp, bin_io] *)
-type t = Bot | Interval of range (* [@@deriving sexp, bin_io] *)
+type range = {lo: Z.t; hi: Z.t; width: int; signed: bool} (* [@@deriving bin_io] *)
+type t = Bot | Interval of range (* [@@deriving bin_io] *)
 
 (** constants and lattice-based values *)
 let empty = Bot
@@ -490,6 +490,18 @@ let of_z ?(width = 64) (z : Z.t) : t =
              hi = z;
              width;
              signed = Z.sign z = -1 }
+
+let to_list (intvl : t) : t list Or_error.t =
+  let rec loop ~(hi : Z.t) ~(lo : Z.t) ~(res : t list) : t list =
+    if Z.equal (Z.sub hi lo) Z.zero
+    then res
+    else
+      let res' = List.cons (of_z hi) res in
+      loop ~hi:(Z.sub hi Z.one) ~lo ~res:res'
+  in
+  match intvl with
+  | Bot -> Or_error.error_string "In WI.to_list, tried to to_list bottom elt"
+  | Interval {lo; hi; width; signed} -> Ok (loop ~hi ~lo ~res:[])
 
 let of_word (w : word) : t =
   let width = Word.bitwidth w in

@@ -27,74 +27,13 @@ module BaseSetMap = struct
         set merged ~key ~data:finaldata)
 end
 
-(** Pointers *)
-module Pointer(N : NumericDomain) = struct
-  module T = struct
-    type t = { region: Region.t;
-               offs: Wrapping_interval.t;
-               width: Wrapping_interval.t }
-               [@@deriving sexp_of]
-
-    let equal x y =
-      let reg_eq = Region.equal x.region y.region in
-      let offs_eq = Wrapping_interval.equal x.offs y.offs in
-      let width_eq = Wrapping_interval.equal x.width y.width in
-      reg_eq && offs_eq && width_eq
-
-    let compare x y = if equal x y then 0 else -1
-
-    let get_intvl : N.t -> Wrapping_interval.t =
-      match N.get Wrapping_interval.key with
-      | Some f -> f
-      | None -> failwith "Couldn't extract interval information out of product domain, in module Pointer"
-
-    let make ~region ~offs ~width : t = { region; offs; width }
-
-    let region p = p.region
-    let offs p = p.offs
-    
-    let width_in_bits p = p.width
-    let bits_in_byte = Wrapping_interval.of_int 8
-    let width_in_bytes p =
-      let bitwidth = width_in_bits p in
-      Wrapping_interval.div bitwidth bits_in_byte
-
-    let all_widths_of_ptr {region; offs; width} =
-      let possible_offs = [8; 16; 32; 64; 128; 256; 512] in
-      List.map possible_offs ~f:(fun width ->
-          let width = N.of_int ~width:64 width |> get_intvl in
-          {region; offs; width})
-
-    let of_regions ~regions ~offs ~width =
-      List.map (Set.to_list regions) ~f:(fun region ->
-          make ~region ~offs ~width)
-
-    let to_string {region; offs; width} =
-      let r = Region.to_string region in
-      let o = Wrapping_interval.to_string offs in
-      let w = Wrapping_interval.to_string width in
-      sprintf "(%s, %s, %s)" r o w
-
-    let pp ptr : unit =
-      Format.printf "%s%!" @@ to_string ptr
-  end
-
-  include T
-  include Comparator.Make(T)
-end
-
 (** Cells *)
 module Cell(N : NumericDomain) = struct
-  
   module T = struct
-    
-    module Pointer = Pointer(N)
-    
     type t = { region: Region.t;
                offs: Wrapping_interval.t;
                valtype: CellType.t;
-               width: Wrapping_interval.t }
-               [@@deriving sexp_of]
+               width: Wrapping_interval.t } [@@deriving sexp_of]
 
     let compare x y =
       let reg_eq = Region.equal x.region y.region in
@@ -103,11 +42,22 @@ module Cell(N : NumericDomain) = struct
       let valtype_eq = match x.valtype, y.valtype with
         | Scalar, Scalar -> true
         | Ptr, Ptr -> true
+        | Undef, Undef -> true
+        | Unknown, _ -> true
+        | _ , Unknown -> true
         | _, _ -> false
       in
       if reg_eq && offs_eq && width_eq && valtype_eq
       then 0
       else -1
+
+    let same_address c1 c2 : bool =
+      Region.equal c1.region c2.region &&
+        Wrapping_interval.equal c1.offs c2.offs
+
+    let same_cell c1 c2 : bool =
+      same_address c1 c2 &&
+        Wrapping_interval.equal c1.width c2.width
 
     let bits_per_byte = Wrapping_interval.of_int 8
     
@@ -131,22 +81,22 @@ module Cell(N : NumericDomain) = struct
     let make ~region ~offs ~width ~valtype : t =
       { region; offs; width; valtype }
 
-    let ptr_of_t { region; offs; width; valtype } : Pointer.t =
-      Pointer.make ~region ~offs ~width
+    (* let ptr_of_t { region; offs; width; valtype } : Pointer.t = *)
+    (*   Pointer.make ~region ~offs ~width *)
 
-    let t_of_ptr ?(valtype = CellType.Scalar) p : t =
-      let region = Pointer.region p in
-      let width = Pointer.width_in_bits p in
-      let offs = Pointer.offs p in
-      make ~region ~offs ~width ~valtype
+    (* let t_of_ptr ?(valtype = CellType.Scalar) p : t = *)
+    (*   let region = Pointer.region p in *)
+    (*   let width = Pointer.width_in_bits p in *)
+    (*   let offs = Pointer.offs p in *)
+    (*   make ~region ~offs ~width ~valtype *)
 
-    let equals_ptr cel ptr : bool =
-      let reg = Pointer.region ptr in
-      let offs = Pointer.offs ptr in
-      let width = Pointer.width_in_bits ptr in
-      Region.equal cel.region reg &&
-        Wrapping_interval.could_be_true (Wrapping_interval.booleq cel.offs offs) &&
-          Wrapping_interval.could_be_true (Wrapping_interval.booleq cel.width width)
+    (* let equals_ptr cel ptr : bool = *)
+    (*   let reg = Pointer.region ptr in *)
+    (*   let offs = Pointer.offs ptr in *)
+    (*   let width = Pointer.width_in_bits ptr in *)
+    (*   Region.equal cel.region reg && *)
+    (*     Wrapping_interval.could_be_true (Wrapping_interval.booleq cel.offs offs) && *)
+    (*       Wrapping_interval.could_be_true (Wrapping_interval.booleq cel.width width) *)
 
     let name (m : t) : string =
       let reg_str = Region.to_string m.region in
@@ -161,27 +111,42 @@ module Cell(N : NumericDomain) = struct
     let pp (m : t) : unit =
       Format.printf "%s%!" @@ to_string m
 
-    let overlaps_with_ptr cel ptr : bool =
-      if not (Region.equal (Pointer.region ptr) cel.region)
+    (* let overlaps_with_ptr cel ptr : bool = *)
+    (*   if not (Region.equal (Pointer.region ptr) cel.region) *)
+    (*   then false *)
+    (*   else *)
+    (*     let open Wrapping_interval in *)
+    (*     let one = of_int 1 in *)
+    (*     let ptr_base = Pointer.offs ptr in *)
+    (*     let ptr_end = add (Pointer.offs ptr) (Pointer.width_in_bytes ptr) in *)
+    (*     let ptr_end = sub ptr_end one in *)
+    (*     let cel_base = cel.offs in *)
+    (*     let cel_end = add cel.offs (width_in_bytes cel) in *)
+    (*     let cel_end = sub cel_end one in *)
+    (*     (could_be_true (boolle ptr_base cel_base) && *)
+    (*        could_be_true (boolle cel_base ptr_end)) || *)
+    (*       (could_be_true (boolle ptr_base cel_end) && *)
+    (*          could_be_true (boolle cel_end ptr_end)) *)
+
+    let overlaps cel other : bool =
+      if not (Region.equal other.region cel.region)
       then false
       else
         let open Wrapping_interval in
         let one = of_int 1 in
-        let ptr_base = Pointer.offs ptr in
-        let ptr_end = add (Pointer.offs ptr) (Pointer.width_in_bytes ptr) in
-        let ptr_end = sub ptr_end one in
+        
+        let other_base = other.offs in
+        let other_end = add other_base (width_in_bytes other) in
+        let other_end = sub other_end one in
+        
         let cel_base = cel.offs in
         let cel_end = add cel.offs (width_in_bytes cel) in
         let cel_end = sub cel_end one in
-        (could_be_true (boolle ptr_base cel_base) &&
-           could_be_true (boolle cel_base ptr_end)) ||
-          (could_be_true (boolle ptr_base cel_end) &&
-             could_be_true (boolle cel_end ptr_end))
-
-    (** values are actually in big endian because we're in
-        ocaml land, but we want to simulate little endian
-        especially if there are overlapping reads/writes *)
-    
+        
+        (could_be_true (boolle other_base cel_base) &&
+           could_be_true (boolle cel_base other_end)) ||
+          (could_be_true (boolle other_base cel_end) &&
+             could_be_true (boolle cel_end other_end))
   end
 
   module Cmp = struct
@@ -192,85 +157,69 @@ module Cell(N : NumericDomain) = struct
   include Cmp
   
   module Set = struct
+    (* include Set.Make_binable_using_comparator(Cmp) *)
     type t = (Cmp.t, comparator_witness) Set.t
 
     let empty : t = Set.empty (module Cmp)
     
-    (* TODO: what if two cells have different type? *)
-    let merge s1 s2 : t = Set.union s1 s2
-
     let of_list = Set.of_list (module Cmp)
-    
-    let add = Set.add
-
-    let length = Set.length
-    
-    let union = Set.union
-
-    let find = Set.find
-    
-    let filter = Set.filter
-    
-    let fold = Set.fold
-    
-    let to_list = Set.to_list
     
     let singleton = Set.singleton (module Cmp)
   end
 
-  module Map = struct
-    type t = (Pointer.t, Set.t, Pointer.comparator_witness) Map.t
+  (* module Map = struct *)
+  (*   type t = (Pointer.t, Set.t, Pointer.comparator_witness) Map.t *)
     
-    let empty = Map.empty (module Pointer)
+  (*   let empty = Map.empty (module Pointer) *)
     
-    let set (m : t) = Map.set m
+  (*   let set (m : t) = Map.set m *)
     
-    let merge (m1 : t) (m2 : t) : t =
-      let combine ~key v1 v2 = Set.merge v1 v2 in
-      Map.merge_skewed m1 m2 ~combine
+  (*   let merge (m1 : t) (m2 : t) : t = *)
+  (*     let combine ~key v1 v2 = Set.merge v1 v2 in *)
+  (*     Map.merge_skewed m1 m2 ~combine *)
     
-    let find : t -> Pointer.t -> Set.t option = Map.find
+  (*   let find : t -> Pointer.t -> Set.t option = Map.find *)
     
-    let find_exn : t -> Pointer.t -> Set.t = Map.find_exn
+  (*   let find_exn : t -> Pointer.t -> Set.t = Map.find_exn *)
 
-    let fold : t -> init:'a -> f:(key:Pointer.t -> data:Set.t -> 'a -> 'a) -> 'a = Map.fold
+  (*   let fold : t -> init:'a -> f:(key:Pointer.t -> data:Set.t -> 'a -> 'a) -> 'a = Map.fold *)
 
-    let add_cell ptr cell m =
-      let new_cell_set = if Map.mem m ptr
-                         then Set.add (find_exn m ptr) cell
-                         else Set.singleton cell
-      in
-      Map.set m ~key:ptr ~data:new_cell_set
+  (*   let add_cell ptr cell m = *)
+  (*     let new_cell_set = if Map.mem m ptr *)
+  (*                        then Set.add (find_exn m ptr) cell *)
+  (*                        else Set.singleton cell *)
+  (*     in *)
+  (*     Map.set m ~key:ptr ~data:new_cell_set *)
 
-    let merge m1 m2 : t =
-      let merge_helper ~key ~data prev =
-        match find prev key with
-        | Some cells -> set prev ~key ~data:(Set.union data cells)
-        | None -> set prev ~key ~data
-      in
-      fold m2 ~init:m1 ~f:merge_helper
+  (*   let merge m1 m2 : t = *)
+  (*     let merge_helper ~key ~data prev = *)
+  (*       match find prev key with *)
+  (*       | Some cells -> set prev ~key ~data:(Set.union data cells) *)
+  (*       | None -> set prev ~key ~data *)
+  (*     in *)
+  (*     fold m2 ~init:m1 ~f:merge_helper *)
 
-    let get_overlapping ptr (m : t) =
-      Map.fold m ~init:Set.empty
-        ~f:(fun ~key ~data acc ->
-          let cellset = data in
-          let overlap = Set.filter cellset
-                          ~f:(fun c -> overlaps_with_ptr c ptr)
-          in
-          Set.union overlap acc)
+  (*   let get_overlapping ptr (m : t) = *)
+  (*     Map.fold m ~init:Set.empty *)
+  (*       ~f:(fun ~key ~data acc -> *)
+  (*         let cellset = data in *)
+  (*         let overlap = Set.filter cellset *)
+  (*                         ~f:(fun c -> overlaps_with_ptr c ptr) *)
+  (*         in *)
+  (*         Set.union overlap acc) *)
 
-    (** For a newly added_cell, and all of the cells it overlaps,
-        overlap_cells, for each c in overlap_cells, add added_cell
-        to c's set of overlapping ptrs (pointer overlap is a symmetric
-        relation) *)
-    let fix_overlap (added_cell : T.t) (overlap_cells : Set.t) (m : t) : t =
-      Set.fold overlap_cells ~init:m
-        ~f:(fun m cel ->
-          let ptr = ptr_of_t cel in
-          let old_cellset = find_exn m ptr in
-          let new_cellset = Set.add old_cellset added_cell in
-          set ~key:ptr ~data:new_cellset m)
-  end
+  (*   (\** For a newly added_cell, and all of the cells it overlaps, *)
+  (*       overlap_cells, for each c in overlap_cells, add added_cell *)
+  (*       to c's set of overlapping ptrs (pointer overlap is a symmetric *)
+  (*       relation) *\) *)
+  (*   let fix_overlap (added_cell : T.t) (overlap_cells : Set.t) (m : t) : t = *)
+  (*     Set.fold overlap_cells ~init:m *)
+  (*       ~f:(fun m cel -> *)
+  (*         let ptr = ptr_of_t cel in *)
+  (*         let old_cellset = find_exn m ptr in *)
+  (*         let new_cellset = Set.add old_cellset added_cell in *)
+  (*         set ~key:ptr ~data:new_cellset m) *)
+  (* end *)
 end
 
 module BaseSet = Region.Set
@@ -284,8 +233,6 @@ module Make(N : NumericDomain)
   
   module C = Cell(N)
   
-  module Ptr = Pointer(N)
-  
   module CellSet = C.Set
   
   module SS = Set.Make_binable_using_comparator(String)
@@ -297,11 +244,13 @@ module Make(N : NumericDomain)
   
     type cellset = CellSet.t
     
-    type cellmap = C.Map.t
-    
     type env = Env.t
     
-    type t = { cells: cellset; env: env; bases: basemap; img: Image.t option }
+    type t = { cells: cellset;
+               env: env;
+               bases: basemap;
+               img: Image.t option;
+               globals_read : cellset }
     
     type regions = Region.Set.t
     
@@ -315,7 +264,7 @@ module Make(N : NumericDomain)
       
     type t = { cell : C.t ; offsets : offs ; data : N.t }
 
-    let of_cell (cell : C.t) (mem : T.t) : t =
+    let of_existing_cell (cell : C.t) (mem : T.t) : t =
       let int_width = match C.width_in_bytes_int cell with
         | Ok i -> i
         | Error e ->
@@ -333,6 +282,21 @@ module Make(N : NumericDomain)
       let cellname = C.name cell in
       let data = Env.lookup cellname mem.env in
 
+      { cell ; offsets = absolute_offsets ; data }
+
+    let of_cell (cell : C.t) (data : N.t) (mem : T.t) : t =
+      let int_width = match C.width_in_bytes_int cell with
+        | Ok i -> i
+        | Error e ->
+           failwith @@
+             sprintf "in Overlap.of_cell, Couldn't turn cell width WI into Int: %s" @@
+               Error.to_string_hum e in
+      (* e.g., if a pointer points to offs, X, and points to a value of width u32, then
+         generate a list containing [X; X+1; X+2; X+3] *)
+      let relative_offsets = List.init int_width ~f:(fun x -> x) in
+      let absolute_offsets = List.map relative_offsets ~f:(fun reloffs ->
+                                        let wi_offs = Wrapping_interval.of_int reloffs in
+                                        WI.add cell.offs wi_offs) in
       { cell ; offsets = absolute_offsets ; data }
 
     let extract_byte (data : N.t) (byte_offs : int) : N.t =
@@ -404,26 +368,25 @@ module Make(N : NumericDomain)
   include T
 
   let pp {cells; env; bases}  =
-    let print_ptr_to_cells ~key ~data =
-      let cell_set_str =  Set.to_list data |> List.to_string ~f:C.to_string in
-      Format.printf "\t%s --> %s\n%!" (Ptr.to_string key) cell_set_str
-    in
+    (* let print_ptr_to_cells ~key ~data = *)
+    (*   let cell_set_str =  Set.to_list data |> List.to_string ~f:C.to_string in *)
+    (*   Format.printf "\t%s --> %s\n%!" (Ptr.to_string key) cell_set_str *)
+    (* in *)
     let print_bases_map ~key ~data =
       let region_set_str = Set.to_list data |> List.to_string ~f:Region.to_string in
       Format.printf "\t%s --> %s\n%!" key region_set_str
     in
     printf "* Ptr->Cells map is:\n%!";
-    Map.iteri cells ~f:print_ptr_to_cells;
+    Set.iter cells ~f:C.pp;
     Env.pp env;
     printf "* Var->Bases map is:\n%!";
     Map.iteri bases ~f:print_bases_map
 
-  let empty : t = { cells = C.Map.empty;
+  let empty : t = { cells = C.Set.empty;
                     env = Env.empty;
                     bases = BaseSetMap.empty;
+                    globals_read = C.Set.empty;
                     img = None }
-
-  let make_pointer = Ptr.make
 
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with
@@ -454,6 +417,9 @@ module Make(N : NumericDomain)
   let set_typd (prod : N.t) (typ : Type_domain.t) : N.t =
     N.set Type_domain.key prod typ
 
+  let set_based (prod : N.t) (typ : Bases_domain.t) : N.t =
+    N.set Bases_domain.key prod typ
+
   let set_img (mem : t) (img : Image.t) : t =
     { mem with img = Some img }
 
@@ -471,7 +437,7 @@ module Make(N : NumericDomain)
   let equal {cells=cells1; env=env1; bases=bases1; _}
         {cells=cells2; env=env2; bases=bases2; _} =
     Env.equal env1 env2 &&
-      Map.equal (Set.equal) cells1 cells2 &&
+      Set.equal cells1 cells2 &&
         Map.equal (Set.equal) bases1 bases2
 
   let setptr ~(name:string) ~regions ~offs ~width m =
@@ -513,79 +479,82 @@ module Make(N : NumericDomain)
   let set_cell_to_top cell_name (mem : t) : t =
     { mem with env = Env.set cell_name N.top mem.env }
 
-  let rec compute_type (e : Bil.exp) (mem : t) : CellType.t =
-    match e with
-    | Load (_mem, idx, _endian, size) -> CellType.Unknown
-    | Store (_mem, idx, v, _endian, _sz) -> CellType.Unknown
-    | Var v ->
-       let name = Var.name v in
-       if holds_ptr name mem
-       then CellType.Ptr
-       else CellType.Scalar
-    | Int w -> Scalar (* maybe, later this may be a global *)
-    | BinOp (op, x, y) ->
-       let xt = compute_type x mem in
-       let yt = compute_type y mem in
-       begin
-         match op with
-         | Bil.PLUS -> (match xt, yt with
-                        | CellType.Ptr, _ -> CellType.Ptr
-                        | _, CellType.Ptr -> CellType.Ptr
-                        | _ -> CellType.Scalar)
-         | Bil.MINUS -> (match xt, yt with
-                         | CellType.Ptr, CellType.Ptr -> CellType.Scalar
-                         | CellType.Ptr, CellType.Scalar -> CellType.Ptr
-                         | _ -> failwith "Can't subtract these types in compute_type mem")
-         | _ -> CellType.Scalar
-       end
-    | UnOp (op, x) -> compute_type x mem
-    | Cast (cast_op, size, e) -> compute_type e mem
-    | Extract (hi, lo, e) -> compute_type e mem
-    | Concat (left, right) ->
-       let left_t = compute_type left mem in
-       let right_t = compute_type right mem in
-       (match left_t, right_t with
-       | CellType.Ptr, _ -> CellType.Ptr
-       | _, CellType.Ptr -> CellType.Ptr
-       | _ -> CellType.Scalar)
-    | Let _ -> CellType.Scalar (* todo *)
-    | Ite _ -> CellType.Scalar (* todo *)
-    | Unknown _ -> CellType.Scalar
+  (* let rec compute_type (e : Bil.exp) (mem : t) : CellType.t = *)
+  (*   match e with *)
+  (*   | Load (_mem, idx, _endian, size) -> CellType.Unknown *)
+  (*   | Store (_mem, idx, v, _endian, _sz) -> CellType.Unknown *)
+  (*   | Var v -> *)
+  (*      let name = Var.name v in *)
+  (*      if holds_ptr name mem *)
+  (*      then CellType.Ptr *)
+  (*      else CellType.Scalar *)
+  (*   | Int w -> Scalar (\* maybe, later this may be a global *\) *)
+  (*   | BinOp (op, x, y) -> *)
+  (*      let xt = compute_type x mem in *)
+  (*      let yt = compute_type y mem in *)
+  (*      begin *)
+  (*        match op with *)
+  (*        | Bil.PLUS -> (match xt, yt with *)
+  (*                       | CellType.Ptr, _ -> CellType.Ptr *)
+  (*                       | _, CellType.Ptr -> CellType.Ptr *)
+  (*                       | _ -> CellType.Scalar) *)
+  (*        | Bil.MINUS -> (match xt, yt with *)
+  (*                        | CellType.Ptr, CellType.Ptr -> CellType.Scalar *)
+  (*                        | CellType.Ptr, CellType.Scalar -> CellType.Ptr *)
+  (*                        | _ -> failwith "Can't subtract these types in compute_type mem") *)
+  (*        | _ -> CellType.Scalar *)
+  (*      end *)
+  (*   | UnOp (op, x) -> compute_type x mem *)
+  (*   | Cast (cast_op, size, e) -> compute_type e mem *)
+  (*   | Extract (hi, lo, e) -> compute_type e mem *)
+  (*   | Concat (left, right) -> *)
+  (*      let left_t = compute_type left mem in *)
+  (*      let right_t = compute_type right mem in *)
+  (*      (match left_t, right_t with *)
+  (*      | CellType.Ptr, _ -> CellType.Ptr *)
+  (*      | _, CellType.Ptr -> CellType.Ptr *)
+  (*      | _ -> CellType.Scalar) *)
+  (*   | Let _ -> CellType.Scalar (\* todo *\) *)
+  (*   | Ite _ -> CellType.Scalar (\* todo *\) *)
+  (*   | Unknown _ -> CellType.Scalar *)
 
-  let cells_of_offs_and_regions ~(offs : Wrapping_interval.t) ~regions ~(width : Wrapping_interval.t) (mem : t) : C.Set.t =
-    let ptrs = Ptr.of_regions ~regions ~offs ~width in
-    List.fold ptrs ~init:C.Set.empty
-      ~f:(fun acc ptr ->
-        C.Set.union acc @@
-          Map.fold mem.cells ~init:C.Set.empty
-            ~f:(fun ~key ~data acc ->
-              if Ptr.equal ptr key
-              then C.Set.union acc data
-              else acc))
+  let get_overlapping_cells (cell : C.t) (mem : t) : C.Set.t =
+    Set.filter mem.cells ~f:(C.overlaps cell)
 
-  let load_from_offs_and_regions ~(offs : Wrapping_interval.t) ~regions
-        ~(width : Wrapping_interval.t) (mem : t) : N.t err =
-    let ptrs = Ptr.of_regions ~regions ~offs ~width in
-    let cells = cells_of_offs_and_regions ~offs ~regions ~width mem in
-    match C.Set.length cells with
-    | 0 ->
-       let ptr_strings = List.fold ptrs ~init:"" ~f:(fun acc x ->
-                             acc ^ " " ^ Ptr.to_string x)
-       in
-       let () = printf "Didn't find cells for ptrs: %s\n%!" ptr_strings in
-       let () = printf "Setting to untainted top...\n%!" in
-       (* Ok N.top *)
-       Ok (set_untaint N.top)
-    | 1 ->
-       Ok (C.Set.fold cells ~init:N.bot ~f:(fun valset c ->
-               let celname = C.name c in
-               N.join valset @@ lookup celname mem))
-    | _ ->
-       let ptr_strings = List.fold ptrs ~init:"" ~f:(fun acc x ->
-                             acc ^ " " ^ Ptr.to_string x)
-       in
-       Or_error.error_string @@
-         sprintf "in load_from_offs_and_regions: No support for reading overlapping ptrs: %s" ptr_strings
+  (* let cells_of_offs_and_regions ~(offs : Wrapping_interval.t) ~regions ~(width : Wrapping_interval.t) (mem : t) : C.Set.t = *)
+  (*   let ptrs = Ptr.of_regions ~regions ~offs ~width in *)
+  (*   List.fold ptrs ~init:C.Set.empty *)
+  (*     ~f:(fun acc ptr -> *)
+  (*       C.Set.union acc @@ *)
+  (*         Map.fold mem.cells ~init:C.Set.empty *)
+  (*           ~f:(fun ~key ~data acc -> *)
+  (*             if Ptr.equal ptr key *)
+  (*             then C.Set.union acc data *)
+  (*             else acc)) *)
+
+  (* let load_from_offs_and_regions ~(offs : Wrapping_interval.t) ~regions *)
+  (*       ~(width : Wrapping_interval.t) (mem : t) : N.t err = *)
+  (*   let ptrs = Ptr.of_regions ~regions ~offs ~width in *)
+  (*   let cells = cells_of_offs_and_regions ~offs ~regions ~width mem in *)
+  (*   match C.Set.length cells with *)
+  (*   | 0 -> *)
+  (*      let ptr_strings = List.fold ptrs ~init:"" ~f:(fun acc x -> *)
+  (*                            acc ^ " " ^ Ptr.to_string x) *)
+  (*      in *)
+  (*      let () = printf "Didn't find cells for ptrs: %s\n%!" ptr_strings in *)
+  (*      let () = printf "Setting to untainted top...\n%!" in *)
+  (*      (\* Ok N.top *\) *)
+  (*      Ok (set_untaint N.top) *)
+  (*   | 1 -> *)
+  (*      Ok (C.Set.fold cells ~init:N.bot ~f:(fun valset c -> *)
+  (*              let celname = C.name c in *)
+  (*              N.join valset @@ lookup celname mem)) *)
+  (*   | _ -> *)
+  (*      let ptr_strings = List.fold ptrs ~init:"" ~f:(fun acc x -> *)
+  (*                            acc ^ " " ^ Ptr.to_string x) *)
+  (*      in *)
+  (*      Or_error.error_string @@ *)
+  (*        sprintf "in load_from_offs_and_regions: No support for reading overlapping ptrs: %s" ptr_strings *)
 
   let load_global (offs : Wrapping_interval.t) (sz : size) (m : t) : N.t err =
     match m.img with
@@ -628,45 +597,43 @@ module Make(N : NumericDomain)
     let top = if secret then set_taint N.top else set_untaint N.top in
     { mem with env = Env.set (C.name c) top mem.env }
 
-  let propagate_unstore_to_overlap (overlapping : C.Set.t) ~(secret : bool) (mem : t) : t =
-    let rec loop (overlapping : C.Set.t) (done_ : C.Set.t) (mem : t) : t =
-      if Set.is_empty overlapping
-      then mem
-      else
-        let current_cell = Set.nth overlapping 0 |> Option.value_exn in
-        let should_process_current = not (Set.mem done_ current_cell) in
-        let overlapping' = Set.remove overlapping current_cell in
-        if should_process_current
-        then 
-          let current_ptr = C.ptr_of_t current_cell in
-          let current_overlap = C.Map.get_overlapping current_ptr mem.cells in
-          let done_' = Set.add done_ current_cell in
-          let overlapping' = Set.union overlapping' current_overlap in
-          let mem' = set_cell_to_top current_cell mem ~secret in
-          loop overlapping' done_' mem'
-        else
-          loop overlapping' done_ mem
-    in
-    loop overlapping C.Set.empty mem
+  (* let propagate_unstore_to_overlap (overlapping : C.Set.t) ~(secret : bool) (mem : t) : t = *)
+  (*   let rec loop (overlapping : C.Set.t) (done_ : C.Set.t) (mem : t) : t = *)
+  (*     if Set.is_empty overlapping *)
+  (*     then mem *)
+  (*     else *)
+  (*       let current_cell = Set.nth overlapping 0 |> Option.value_exn in *)
+  (*       let should_process_current = not (Set.mem done_ current_cell) in *)
+  (*       let overlapping' = Set.remove overlapping current_cell in *)
+  (*       if should_process_current *)
+  (*       then  *)
+  (*         let current_ptr = C.ptr_of_t current_cell in *)
+  (*         let current_overlap = C.Map.get_overlapping current_ptr mem.cells in *)
+  (*         let done_' = Set.add done_ current_cell in *)
+  (*         let overlapping' = Set.union overlapping' current_overlap in *)
+  (*         let mem' = set_cell_to_top current_cell mem ~secret in *)
+  (*         loop overlapping' done_' mem' *)
+  (*       else *)
+  (*         loop overlapping' done_ mem *)
+  (*   in *)
+  (*   loop overlapping C.Set.empty mem *)
 
   let remove_cell (c : C.t) (mem : t) : t =
     let () = printf "in remove_cell, removing cell %s\n%!" (C.name c) in
-    let is_not_c (other : C.t) : bool = C.compare c other <> 0 in
-    let cells' = Map.map mem.cells ~f:(fun cells -> Set.filter cells ~f:is_not_c) in
+    let cells' = Set.remove mem.cells c in
     let env' = Env.unset (C.name c) mem.env in
     { mem with cells = cells'; env = env' }
 
   let store ~(offs : Wrapping_interval.t) ~region
-        ~(width : Wrapping_interval.t) ~data ~valtype mem : t err =
+            ~(width : Wrapping_interval.t) ~data ~valtype mem : t err =
     let open Or_error.Monad_infix in
     
-    let ptr = Ptr.make ~region ~offs ~width in
-    let cel = C.t_of_ptr ~valtype ptr in
+    let cel = C.make ~region ~offs ~width ~valtype in
     let celname = C.name cel in
     
-    let () = printf "storing to ptr %s\n%!" (Ptr.to_string ptr) in
+    let () = printf "storing to cell %s\n%!" (C.to_string cel) in
 
-    let overlap = C.Map.get_overlapping ptr mem.cells in
+    let overlap = get_overlapping_cells cel mem in
 
     let () = printf "in store, overlapping cells are:\n%!" in
     let () = Set.iter overlap ~f:(fun c ->
@@ -700,23 +667,18 @@ module Make(N : NumericDomain)
     (*         { mem with env = Env.set ovc_name untainted_top old_env }) *)
     (* in *)
 
-    if not (C.equals_ptr cel ptr)
+    let old_env = mem'.env in
+    let old_cells = mem'.cells in
+    let res = Ok { mem' with env = Env.set celname data old_env;
+                             cells = Set.add old_cells cel } in
+    if Set.length overlap > 1
     then
-      Or_error.error_string @@
-      sprintf "Can't store ptr %s to cell %s" (Ptr.to_string ptr) celname
+      let () = printf "in store: did propagate unstore, here is the out state:\n%!" in
+      let () = pp mem' in
+      res
     else
-      let old_env = mem'.env in
-      let old_cells = mem'.cells in
-      let res = Ok { mem' with env = Env.set celname data old_env;
-                               cells = C.Map.add_cell ptr cel old_cells } in
-      if Set.length overlap > 1
-      then
-        let () = printf "in store: did propagate unstore, here is the out state:\n%!" in
-        let () = pp mem' in
-        res
-      else
-        res
-    
+      res
+  
     (* if C.Set.length overlap > 1 *)
     (* then *)
     (*   let overlap = C.Set.fold overlap ~init:"" *)
@@ -736,14 +698,52 @@ module Make(N : NumericDomain)
     (*       sprintf "Can't store ptr %s to cell %s" (Ptr.to_string ptr) celname *)
     (*   else *)
     (*     Ok { mem with env = Env.set celname data mem.env; *)
-    (*                   cells = C.Map.add_cell ptr cel mem.cells } *)
+  (*                   cells = C.Map.add_cell ptr cel mem.cells } *)
 
-  let global_exists ~(offs : Wrapping_interval.t)
-        ~(width : Wrapping_interval.t) (mem : t) : bool =
-    let regions = Region.Set.from_region Region.Global in 
-    let cells = cells_of_offs_and_regions ~offs ~regions ~width mem in
-    0 < C.Set.length cells
+  let global_already_read ~(cell : C.t) ~(mem : t) : bool =
+    match Set.find mem.cells ~f:(C.same_cell cell) with
+    | Some _ -> true
+    | None -> false
 
+  let cell_exists ~(cell : C.t) ~(mem : t) : bool =
+    match Set.find mem.cells ~f:(C.same_cell cell) with
+    | Some _ -> true
+    | None -> false
+  
+  let load ~(offs : Wrapping_interval.t) ~(width : Wrapping_interval.t)
+           ~(size : size) ~(region : Region.t) ~(mem : t) : (N.t * t) err =
+    let open Or_error.Monad_infix in
+    
+    let cell = C.make ~offs ~width ~region ~valtype:CellType.Unknown in
+
+    let is_global = match region with | Global -> true | _ -> false in
+    let global_already_loaded_from_img = global_already_read ~cell ~mem in
+  
+    if is_global && not global_already_loaded_from_img
+    then
+       load_global offs size mem >>= fun data ->
+       let valtype = CellType.Unknown in
+       (* and set it in the current env, so next read doesn't go to the image *)
+       store ~offs ~region ~width ~data ~valtype mem >>= fun mem' ->
+       Ok (data, { mem' with globals_read = Set.add mem'.globals_read cell })
+    else
+      let has_existing_value = cell_exists ~cell ~mem in
+      if has_existing_value
+      then
+        let data = lookup (C.name cell) mem in
+        Ok (data, mem)
+      else
+        let overlap = get_overlapping_cells cell mem in
+        let cell_as_overlap = Overlap.of_cell cell N.bot mem in
+        if Set.length overlap >= 1
+        then
+          let final = Set.fold overlap ~init:cell_as_overlap ~f:(fun current_data other_cell ->
+                                 let other_overlapper = Overlap.of_existing_cell other_cell mem in
+                                 Overlap.merge ~this:current_data ~other:other_overlapper) in
+          Ok (final.data, mem)
+        else
+          Ok (N.top, mem)
+  
 (* on first load of global, load from the image into the abstract
      memory environment, then do the load a usual. this is unsound force
      general programs in the case of a previous overlapping store,
@@ -751,11 +751,11 @@ module Make(N : NumericDomain)
      overlap/nonalignment for now
    *)
   let load_of_bil_exp (e : Bil.exp) (idx_res : N.t)
-        (size : Size.t) (m : t) : N.t err =
+        (size : Size.t) (m : t) : (N.t * t) err =
     match e with
     | Bil.Load (_mem, idx, _endian, size) ->
        (* let () = printf "in load_of_bil_exp, getting load from vars\n%!" in *)
-       let load_from_vars = Var_name_collector.run idx in
+       (* let load_from_vars = Var_name_collector.run idx in *)
        
        (* let () = printf "in load_of_bil_exp, load from vars: \n%!" in *)
        (* let () = SS.iter load_from_vars ~f:(fun v -> printf "%s\n%!" v) in *)
@@ -783,30 +783,23 @@ module Make(N : NumericDomain)
        let is_global = offs_is_scalar && Set.is_empty regions in
 
        (* let () = printf "in load_of_bil_exp, computing region\n%!" in *)
-       let regions = if is_global
+       let regions = (if is_global
                      then Set.add regions Region.Global
-                     else regions
+                     else regions) |> Set.to_list
        in
 
-       (* let () = printf "in load_of_bil_exp, computing glob_xists\n%!" in *)
-       let glob_xists = (global_exists ~offs ~width m) in
-       
        let open Or_error.Monad_infix in
        
-       (if is_global && not glob_xists
-        then
-          (* let () = printf "in load_of_bil_exp, doing load_global\n%!" in *)
-          load_global offs size m >>= fun data ->
-          let region = Region.Global in
-          let valtype = CellType.Unknown in
-          (* let () = printf "in load_of_bil_exp, doing store\n%!" in *)
-          store ~offs ~region ~width ~data ~valtype m >>= fun m' ->
-          Ok (m', Region.Set.from_region region)
-        else
-          Ok (m, regions))
-       >>= fun (m', regions') ->
-       (* let () = printf "in load_of_bil_exp, load_from_vars2\n%!" in *)
-       load_from_offs_and_regions m' ~offs ~regions:regions' ~width
+       Wrapping_interval.to_list offs >>= fun all_offsets ->
+       
+       let regions_and_offsets = List.cartesian_product regions all_offsets in
+       
+       List.fold regions_and_offsets
+                 ~init:(Ok (N.bot, m))
+                 ~f:(fun state (region, offs) ->
+                   state >>= fun (data_acc, mem) ->
+                   load ~offs ~region ~width ~size ~mem >>= fun (loaded_val, mem') ->
+                   Ok (N.join data_acc loaded_val, mem'))
     | _ -> Or_error.error_string "load_of_bil_exp: Not a load in load_of_bil_exp"
 
   (* don't let pointers point to too many locations. right now,
@@ -871,6 +864,7 @@ module Make(N : NumericDomain)
     let fs_base = 0x0000_4000 in
 
     let fs_ptr = set_typd (N.of_int fs_base) CellType.Ptr in
+    let fs_ptr = set_based (fs_ptr) Bases_domain.global in
     
     let stack_canary_width = Wrapping_interval.of_int 8 in
     
@@ -897,7 +891,7 @@ module Make(N : NumericDomain)
        failwith "in set_stack_canary, couldn't set value of canary"
     
   (* on first store to a global, just treat it as every other store. *)
-  let store_of_bil_exp (e : Bil.exp) ~(offs : N.t) ~data ~valtype ~size m
+  let store_of_bil_exp (e : Bil.exp) ~(offs : N.t) ~data ~size m
       : t err =
     match e with
     | Bil.Store (_mem, idx, v, _endian, size) ->
@@ -914,8 +908,9 @@ module Make(N : NumericDomain)
        let bases_to_load_from = (if Set.is_empty bases_to_load_from
                                 then Region.Set.from_region Region.Global
                                  else bases_to_load_from)
-                              |> Region.Set.to_list
-       in
+                                |> Region.Set.to_list in
+
+       let valtype = get_typd data in
        
        (* let () = printf "in store_of_bil_exp, getting intvl offs\n%!" in *)
        let offs = get_intvl offs in
@@ -986,30 +981,28 @@ module Make(N : NumericDomain)
       ~data:init_ret_ptr
       ~valtype:CellType.Ptr
 
-  (* have to handle:
-     1) don't havoc stack slots that hold frame ptr, return ptr
-   *)
-  let havoc_on_call (mem : t) : t =
-    let havoc_one_cell (mem : t) (cname : string) : t =
-      { mem with env = Env.set cname N.top mem.env }
-    in
-    let cell_name_of_ptr (p : Ptr.t) : string =
-      C.t_of_ptr p |> C.name
-    in
-    let havoc_rax (mem : t) : t =
-      let rax = "RAX" in
-      { mem with env = Env.set rax N.top mem.env }
-    in
-    let cell_map = mem.cells in
-    let cells = Map.keys cell_map in
-    let cell_names = List.map cells ~f:cell_name_of_ptr in
-    List.fold cell_names ~init:mem ~f:havoc_one_cell
-    |> havoc_rax
+  let havoc_on_call : t -> t = fun x -> x
+  (* let havoc_on_call (mem : t) : t = *)
+  (*   let havoc_one_cell (mem : t) (cname : string) : t = *)
+  (*     { mem with env = Env.set cname N.top mem.env } *)
+  (*   in *)
+  (*   let cell_name_of_ptr (p : Ptr.t) : string = *)
+  (*     C.t_of_ptr p |> C.name *)
+  (*   in *)
+  (*   let havoc_rax (mem : t) : t = *)
+  (*     let rax = "RAX" in *)
+  (*     { mem with env = Env.set rax N.top mem.env } *)
+  (*   in *)
+  (*   let cell_map = mem.cells in *)
+  (*   let cells = Map.keys cell_map in *)
+  (*   let cell_names = List.map cells ~f:cell_name_of_ptr in *)
+  (*   List.fold cell_names ~init:mem ~f:havoc_one_cell *)
+  (*   |> havoc_rax *)
 
   let set_rsp (offs : int) (mem : t) : t err =
     let offs = N.of_int ~width:64 offs in
-    let offs_as_ptr = N.set Type_domain.key offs CellType.Ptr in
-    let offs_with_base = N.set Bases_domain.key offs_as_ptr Bases_domain.stack in
+    let offs_as_ptr = set_typd offs CellType.Ptr in
+    let offs_with_base = set_based offs_as_ptr Bases_domain.stack in
     setptr mem
       ~name:"RSP"
       ~regions:(BaseSet.singleton Region.Stack)
@@ -1019,8 +1012,8 @@ module Make(N : NumericDomain)
 
   let set_rbp (offs : int) (mem : t) : t err =
     let offs = N.of_int ~width:64 offs in
-    let offs_as_ptr = N.set Type_domain.key offs CellType.Ptr in
-    let offs_with_base = N.set Bases_domain.key offs_as_ptr Bases_domain.stack in
+    let offs_as_ptr = set_typd offs CellType.Ptr in
+    let offs_with_base = set_based offs_as_ptr Bases_domain.stack in
     Ok (setptr mem
           ~name:"RBP"
           ~regions:(BaseSet.singleton Region.Stack)
@@ -1037,22 +1030,24 @@ module Make(N : NumericDomain)
 
   (* TODO: type consistency in cell merging *)
   let merge mem1 mem2 : t =
-    let {cells=cells1; env=env1; bases=bases1; img=img1} = mem1 in
-    let {cells=cells2; env=env2; bases=bases2; img=img2} = mem2 in
+    let {cells=cells1; env=env1; bases=bases1; img=img1; globals_read=gr1} = mem1 in
+    let {cells=cells2; env=env2; bases=bases2; img=img2; globals_read=gr2} = mem2 in
+    let merged_globals_read = Set.union gr1 gr2 in
     let merged_img = merge_images img1 img2 in
-    let merged_cells = C.Map.merge cells1 cells2 in
+    let merged_cells = Set.union cells1 cells2 in
     let merged_env = Env.merge env1 env2 in
     let merged_bases = BaseSetMap.merge bases1 bases2 in
     { cells=merged_cells;
       env=merged_env;
       bases=merged_bases;
-      img=merged_img }
+      img=merged_img;
+      globals_read=merged_globals_read }
 
   let widen_threshold = 256
 
   let widen_with_step steps n prev next : t =
-    let widen_cell_map {cells=prev; _} {cells=next; _} : C.Map.t =
-      C.Map.merge prev next
+    let widen_cell_map {cells=prev; _} {cells=next; _} : C.Set.t =
+      Set.union prev next
     in
     let widen_bases_map {bases=prev; _} {bases=next; _} : basemap =
       BaseSetMap.merge prev next
@@ -1060,11 +1055,15 @@ module Make(N : NumericDomain)
     let widen_env steps n {env=prev; _} {env=next; _} : Env.t =
       Env.widen_with_step steps n prev next
     in
+    let widen_globals_read {globals_read=prev; _} {globals_read=next; _} : C.Set.t =
+      Set.union prev next
+    in
     let widen steps n mem1 mem2 =
       {cells = widen_cell_map prev next;
        env = widen_env steps n prev next;
        bases = widen_bases_map prev next;
-       img = merge_images prev.img next.img }
+       img = merge_images prev.img next.img;
+       globals_read = widen_globals_read prev next }
     in
     widen steps n prev next
 end

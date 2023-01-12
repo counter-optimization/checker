@@ -368,8 +368,6 @@ module type MemoryT =
     
     val equal : t -> t -> bool
     
-    val compute_type : Bil.exp -> t -> cell_t
-    
     val set_rsp : int -> t -> t err
     
     val set_rbp : int -> t -> t err
@@ -386,9 +384,9 @@ module type MemoryT =
     
     (* val update_on_assn : lhs:Var.t -> rhs:v -> t -> t *)
     
-    val load_of_bil_exp : Bil.exp -> v -> Size.t -> t -> v err
+    val load_of_bil_exp : Bil.exp -> v -> Size.t -> t -> (v * t) err
     
-    val store_of_bil_exp : Bil.exp -> offs:v -> data:v -> valtype:cell_t -> size:Size.t -> t -> t err
+    val store_of_bil_exp : Bil.exp -> offs:v -> data:v -> size:Size.t -> t -> t err
 
     val havoc_on_call : t -> t
 
@@ -434,8 +432,6 @@ module NumericEnv(ValueDom : NumericDomain)
     | Some v -> v
     | None -> ValueDom.bot
 
-  let compute_type e env = CellType.Scalar
-  
   let set name v env : t = M.set env ~key:name ~data:v
 
   let unset name env : t = M.remove env name 
@@ -454,9 +450,9 @@ module NumericEnv(ValueDom : NumericDomain)
   
   let update_on_assn ~lhs ~rhs env = env
 
-  let load_of_bil_exp (e : Bil.exp) _offs _sz env = Ok ValueDom.top
+  let load_of_bil_exp (e : Bil.exp) _offs _sz env = Ok (ValueDom.top, env)
   
-  let store_of_bil_exp (e : Bil.exp) ~offs ~data ~valtype ~size env = Ok env
+  let store_of_bil_exp (e : Bil.exp) ~offs ~data ~size env = Ok env
 
   let havoc_on_call env = env
   
@@ -571,8 +567,9 @@ module AbstractInterpreter(N: NumericDomain)
            let res = E.load_of_bil_exp e offs size st in
            begin
              match res with
-             | Ok res ->
+             | Ok (res, st') ->
                 (* let () = Format.printf "Done denoting load\n%!" in *)
+                ST.put st' >>= fun () ->
                 ST.return res
              | Error msg -> failwith @@ Error.to_string_hum msg
            end
@@ -589,11 +586,10 @@ module AbstractInterpreter(N: NumericDomain)
            (* let () = printf "in denote_exp of store, denoting data\n%!" in *)
            denote_exp v >>= fun data ->
            (* let () = printf "in denote_exp of store, computing type\n%!" in *)
-           ST.gets (Env.compute_type v) >>= fun valtype ->
            begin
              (* let () = printf "in denote_exp of store, doing store\n%!" in  *)
              ST.get () >>= fun st ->
-             match Env.store_of_bil_exp e ~offs ~data ~valtype ~size st with
+             match Env.store_of_bil_exp e ~offs ~data ~size st with
              | Ok newenv -> ST.put newenv >>= fun () -> ST.return N.bot
              | Error msg -> failwith @@ Error.to_string_hum msg
            end
@@ -712,17 +708,17 @@ module AbstractInterpreter(N: NumericDomain)
     
     let res = match e with
       | `Def d ->
-         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid d) in
+         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid d) in *)
          denote_def d
       | `Jmp j ->
-         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid j) in
+         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid j) in *)
          denote_jmp j 
       | `Phi p ->
-         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid p) in
+         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid p) in *)
          denote_phi p
     in
     let (elt_res, state') = ST.run res st in
-    let () = Format.printf "out-state is:\n%!"; E.pp state' in
+    (* let () = Format.printf "out-state is:\n%!"; E.pp state' in *)
     state'
 end
 
