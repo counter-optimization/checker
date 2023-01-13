@@ -505,11 +505,8 @@ let to_list (intvl : t) : t list Or_error.t =
 
 let of_word (w : word) : t =
   let width = Word.bitwidth w in
-  
   let z_val = Word.to_bitvec w |> Bitvec.to_bigint in
-
   of_z ~width z_val
-
 
   (* if width = 64 *)
   (* then match Word.to_int64 w with *)

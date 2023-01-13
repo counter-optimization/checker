@@ -122,10 +122,9 @@ module Checker(N : NumericDomain) = struct
     let one i = I.of_int ~width:(I.bitwidth i) 1 in
     let zero i = I.of_int ~width:(I.bitwidth i) 0 in
     let all_ones i =
-      let bw = I.bitwidth i in 
-      let uint_max_for_i = (Int.pow 2 bw) - 1 in
-      I.of_int ~width:bw uint_max_for_i
-    in
+      let bw = I.bitwidth i in
+      let ones = Word.ones bw in
+      Wrapping_interval.of_word ones in
     let onel = [one] in
     let zerol = [zero] in
     let zeroallonesl = [zero; all_ones] in
@@ -175,8 +174,12 @@ module Checker(N : NumericDomain) = struct
        ST.get () >>= fun st ->
        eval_in_ai e st
     | Bil.BinOp (op, x, y) ->
+       (* let () = printf "in comp simp binop, denoting binop: %s\n%!" *)
+       (*                 (Common.binop_to_string op) in *)
        check_exp x >>= fun x' ->
+       (* let () = printf "in comp simp binop, done denoting left\n%!" in *)
        check_exp y >>= fun y' ->
+       (* let () = printf "in comp simp binop, done denoting right\n%!" in *)
        check_binop op x' y' >>= fun () ->
        let binop = AI.denote_binop op in
        let expr_res = binop x' y' in
