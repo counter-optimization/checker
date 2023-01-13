@@ -257,27 +257,20 @@ let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
      in
 
      let env_with_df_set = E.set "DF" FinalDomain.b0 with_canary_set in
-
      let env_with_rsp_set = match E.set_rsp stack_addr env_with_df_set with
          | Ok env' -> env'
-         | Error e -> failwith @@ Error.to_string_hum e
-     in
-     
+         | Error e -> failwith @@ Error.to_string_hum e in
      let env_with_img_set = E.set_img env_with_rsp_set img in
-
      let initial_mem = List.fold true_args ~init:env_with_img_set
-                         ~f:(fun mem argname ->
-                           E.set argname FinalDomain.top mem)
-     in
+                                 ~f:(fun mem argname -> E.init_arg ~name:argname mem) in
+     
      let () = Format.printf "Initial memory+env is: %!" in
      let () = E.pp initial_mem in
      let () = Format.printf "\n%!" in
-
+     
      let first_node = match Seq.hd (Graphlib.reverse_postorder_traverse (module G) cfg) with
        | Some n -> n
-       | None -> failwith "in driver, cfg building init sol, couldn't get first node"
-     in
-     (* let () = printf "first node is %s\n%!" (Tid.to_string first_node) in *)
+       | None -> failwith "in driver, cfg building init sol, couldn't get first node" in
 
      let with_args = G.Node.Map.set G.Node.Map.empty ~key:first_node ~data:initial_mem in
      let init_sol = Solution.create with_args empty in

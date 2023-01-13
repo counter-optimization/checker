@@ -166,60 +166,6 @@ module Cell(N : NumericDomain) = struct
     
     let singleton = Set.singleton (module Cmp)
   end
-
-  (* module Map = struct *)
-  (*   type t = (Pointer.t, Set.t, Pointer.comparator_witness) Map.t *)
-    
-  (*   let empty = Map.empty (module Pointer) *)
-    
-  (*   let set (m : t) = Map.set m *)
-    
-  (*   let merge (m1 : t) (m2 : t) : t = *)
-  (*     let combine ~key v1 v2 = Set.merge v1 v2 in *)
-  (*     Map.merge_skewed m1 m2 ~combine *)
-    
-  (*   let find : t -> Pointer.t -> Set.t option = Map.find *)
-    
-  (*   let find_exn : t -> Pointer.t -> Set.t = Map.find_exn *)
-
-  (*   let fold : t -> init:'a -> f:(key:Pointer.t -> data:Set.t -> 'a -> 'a) -> 'a = Map.fold *)
-
-  (*   let add_cell ptr cell m = *)
-  (*     let new_cell_set = if Map.mem m ptr *)
-  (*                        then Set.add (find_exn m ptr) cell *)
-  (*                        else Set.singleton cell *)
-  (*     in *)
-  (*     Map.set m ~key:ptr ~data:new_cell_set *)
-
-  (*   let merge m1 m2 : t = *)
-  (*     let merge_helper ~key ~data prev = *)
-  (*       match find prev key with *)
-  (*       | Some cells -> set prev ~key ~data:(Set.union data cells) *)
-  (*       | None -> set prev ~key ~data *)
-  (*     in *)
-  (*     fold m2 ~init:m1 ~f:merge_helper *)
-
-  (*   let get_overlapping ptr (m : t) = *)
-  (*     Map.fold m ~init:Set.empty *)
-  (*       ~f:(fun ~key ~data acc -> *)
-  (*         let cellset = data in *)
-  (*         let overlap = Set.filter cellset *)
-  (*                         ~f:(fun c -> overlaps_with_ptr c ptr) *)
-  (*         in *)
-  (*         Set.union overlap acc) *)
-
-  (*   (\** For a newly added_cell, and all of the cells it overlaps, *)
-  (*       overlap_cells, for each c in overlap_cells, add added_cell *)
-  (*       to c's set of overlapping ptrs (pointer overlap is a symmetric *)
-  (*       relation) *\) *)
-  (*   let fix_overlap (added_cell : T.t) (overlap_cells : Set.t) (m : t) : t = *)
-  (*     Set.fold overlap_cells ~init:m *)
-  (*       ~f:(fun m cel -> *)
-  (*         let ptr = ptr_of_t cel in *)
-  (*         let old_cellset = find_exn m ptr in *)
-  (*         let new_cellset = Set.add old_cellset added_cell in *)
-  (*         set ~key:ptr ~data:new_cellset m) *)
-  (* end *)
 end
 
 module BaseSet = Region.Set
@@ -480,82 +426,13 @@ module Make(N : NumericDomain)
   let set_cell_to_top cell_name (mem : t) : t =
     { mem with env = Env.set cell_name N.top mem.env }
 
-  (* let rec compute_type (e : Bil.exp) (mem : t) : CellType.t = *)
-  (*   match e with *)
-  (*   | Load (_mem, idx, _endian, size) -> CellType.Unknown *)
-  (*   | Store (_mem, idx, v, _endian, _sz) -> CellType.Unknown *)
-  (*   | Var v -> *)
-  (*      let name = Var.name v in *)
-  (*      if holds_ptr name mem *)
-  (*      then CellType.Ptr *)
-  (*      else CellType.Scalar *)
-  (*   | Int w -> Scalar (\* maybe, later this may be a global *\) *)
-  (*   | BinOp (op, x, y) -> *)
-  (*      let xt = compute_type x mem in *)
-  (*      let yt = compute_type y mem in *)
-  (*      begin *)
-  (*        match op with *)
-  (*        | Bil.PLUS -> (match xt, yt with *)
-  (*                       | CellType.Ptr, _ -> CellType.Ptr *)
-  (*                       | _, CellType.Ptr -> CellType.Ptr *)
-  (*                       | _ -> CellType.Scalar) *)
-  (*        | Bil.MINUS -> (match xt, yt with *)
-  (*                        | CellType.Ptr, CellType.Ptr -> CellType.Scalar *)
-  (*                        | CellType.Ptr, CellType.Scalar -> CellType.Ptr *)
-  (*                        | _ -> failwith "Can't subtract these types in compute_type mem") *)
-  (*        | _ -> CellType.Scalar *)
-  (*      end *)
-  (*   | UnOp (op, x) -> compute_type x mem *)
-  (*   | Cast (cast_op, size, e) -> compute_type e mem *)
-  (*   | Extract (hi, lo, e) -> compute_type e mem *)
-  (*   | Concat (left, right) -> *)
-  (*      let left_t = compute_type left mem in *)
-  (*      let right_t = compute_type right mem in *)
-  (*      (match left_t, right_t with *)
-  (*      | CellType.Ptr, _ -> CellType.Ptr *)
-  (*      | _, CellType.Ptr -> CellType.Ptr *)
-  (*      | _ -> CellType.Scalar) *)
-  (*   | Let _ -> CellType.Scalar (\* todo *\) *)
-  (*   | Ite _ -> CellType.Scalar (\* todo *\) *)
-  (*   | Unknown _ -> CellType.Scalar *)
+  let init_arg ~(name : string) (mem : t) : t =
+    let heap_or_stack = Bases_domain.join Bases_domain.heap Bases_domain.stack in
+    let init_arg_val = set_based N.top heap_or_stack in
+    set name init_arg_val mem
 
   let get_overlapping_cells (cell : C.t) (mem : t) : C.Set.t =
     Set.filter mem.cells ~f:(C.overlaps cell)
-
-  (* let cells_of_offs_and_regions ~(offs : Wrapping_interval.t) ~regions ~(width : Wrapping_interval.t) (mem : t) : C.Set.t = *)
-  (*   let ptrs = Ptr.of_regions ~regions ~offs ~width in *)
-  (*   List.fold ptrs ~init:C.Set.empty *)
-  (*     ~f:(fun acc ptr -> *)
-  (*       C.Set.union acc @@ *)
-  (*         Map.fold mem.cells ~init:C.Set.empty *)
-  (*           ~f:(fun ~key ~data acc -> *)
-  (*             if Ptr.equal ptr key *)
-  (*             then C.Set.union acc data *)
-  (*             else acc)) *)
-
-  (* let load_from_offs_and_regions ~(offs : Wrapping_interval.t) ~regions *)
-  (*       ~(width : Wrapping_interval.t) (mem : t) : N.t err = *)
-  (*   let ptrs = Ptr.of_regions ~regions ~offs ~width in *)
-  (*   let cells = cells_of_offs_and_regions ~offs ~regions ~width mem in *)
-  (*   match C.Set.length cells with *)
-  (*   | 0 -> *)
-  (*      let ptr_strings = List.fold ptrs ~init:"" ~f:(fun acc x -> *)
-  (*                            acc ^ " " ^ Ptr.to_string x) *)
-  (*      in *)
-  (*      let () = printf "Didn't find cells for ptrs: %s\n%!" ptr_strings in *)
-  (*      let () = printf "Setting to untainted top...\n%!" in *)
-  (*      (\* Ok N.top *\) *)
-  (*      Ok (set_untaint N.top) *)
-  (*   | 1 -> *)
-  (*      Ok (C.Set.fold cells ~init:N.bot ~f:(fun valset c -> *)
-  (*              let celname = C.name c in *)
-  (*              N.join valset @@ lookup celname mem)) *)
-  (*   | _ -> *)
-  (*      let ptr_strings = List.fold ptrs ~init:"" ~f:(fun acc x -> *)
-  (*                            acc ^ " " ^ Ptr.to_string x) *)
-  (*      in *)
-  (*      Or_error.error_string @@ *)
-  (*        sprintf "in load_from_offs_and_regions: No support for reading overlapping ptrs: %s" ptr_strings *)
 
   let load_global (offs : Wrapping_interval.t) (sz : size) (m : t) : N.t err =
     match m.img with
@@ -598,27 +475,6 @@ module Make(N : NumericDomain)
     let top = if secret then set_taint N.top else set_untaint N.top in
     { mem with env = Env.set (C.name c) top mem.env }
 
-  (* let propagate_unstore_to_overlap (overlapping : C.Set.t) ~(secret : bool) (mem : t) : t = *)
-  (*   let rec loop (overlapping : C.Set.t) (done_ : C.Set.t) (mem : t) : t = *)
-  (*     if Set.is_empty overlapping *)
-  (*     then mem *)
-  (*     else *)
-  (*       let current_cell = Set.nth overlapping 0 |> Option.value_exn in *)
-  (*       let should_process_current = not (Set.mem done_ current_cell) in *)
-  (*       let overlapping' = Set.remove overlapping current_cell in *)
-  (*       if should_process_current *)
-  (*       then  *)
-  (*         let current_ptr = C.ptr_of_t current_cell in *)
-  (*         let current_overlap = C.Map.get_overlapping current_ptr mem.cells in *)
-  (*         let done_' = Set.add done_ current_cell in *)
-  (*         let overlapping' = Set.union overlapping' current_overlap in *)
-  (*         let mem' = set_cell_to_top current_cell mem ~secret in *)
-  (*         loop overlapping' done_' mem' *)
-  (*       else *)
-  (*         loop overlapping' done_ mem *)
-  (*   in *)
-  (*   loop overlapping C.Set.empty mem *)
-
   let remove_cell (c : C.t) (mem : t) : t =
     let () = printf "in remove_cell, removing cell %s\n%!" (C.name c) in
     let cells' = Set.remove mem.cells c in
@@ -640,33 +496,8 @@ module Make(N : NumericDomain)
     let () = Set.iter overlap ~f:(fun c ->
                         printf "overlapping cell: %s\n%!" (C.to_string c)) in
     let () = printf "in store, deleting overlapping cells\n%!" in
-
-    (* let mem' = if Set.length overlap > 1 *)
-    (*            then *)
-    (*              let () = printf "in store: more than one overlap, propagating unstores\n%!" in *)
-    (*              propagate_unstore_to_overlap overlap ~secret:true mem *)
-    (*            else mem in *)
     
     let mem' = Set.fold overlap ~init:mem ~f:(fun mem' c -> remove_cell c mem') in
-
-    (* todo: finer grained secret tainting for cell forgetting *)
-    (* let secret = match get_taint data with *)
-    (*   | Checker_taint.Analysis.Taint -> true *)
-    (*   | Checker_taint.Analysis.Notaint -> false *)
-    (* in *)
-
-    (* let untainted_top = tainter N.top in *)
-
-    (* let mem_overlaps_havocd = C.Set.fold overlap ~init:mem *)
-    (*     ~f:(fun m ovc -> *)
-    (*         let ovc_name = C.name ovc in *)
-    (*         let () = printf *)
-    (*           "in store, setting previous overlap cell, %s, to top with overriding cell %s's taint value" *)
-    (*             ovc_name celname *)
-    (*         in *)
-    (*         let old_env = mem.env in *)
-    (*         { mem with env = Env.set ovc_name untainted_top old_env }) *)
-    (* in *)
 
     let old_env = mem'.env in
     let old_cells = mem'.cells in
@@ -679,27 +510,6 @@ module Make(N : NumericDomain)
       res
     else
       res
-  
-    (* if C.Set.length overlap > 1 *)
-    (* then *)
-    (*   let overlap = C.Set.fold overlap ~init:"" *)
-    (*                   ~f:(fun acc c -> acc ^ " " ^ (C.name c)) *)
-    (*   in *)
-    (*   Or_error.error_string @@ *)
-    (*     sprintf "No support for storing with overlapping ptrs %s" overlap *)
-    (* else *)
-    (*   let cel = if C.Set.length overlap = 1 *)
-    (*             then List.hd_exn @@ C.Set.to_list overlap *)
-    (*             else C.t_of_ptr ~valtype ptr *)
-    (*   in *)
-    (*   let celname = C.name cel in *)
-    (*   if not (C.equals_ptr cel ptr) *)
-    (*   then *)
-    (*     Or_error.error_string @@ *)
-    (*       sprintf "Can't store ptr %s to cell %s" (Ptr.to_string ptr) celname *)
-    (*   else *)
-    (*     Ok { mem with env = Env.set celname data mem.env; *)
-  (*                   cells = C.Map.add_cell ptr cel mem.cells } *)
 
   let global_already_read ~(cell : C.t) ~(mem : t) : bool =
     match Set.find mem.cells ~f:(C.same_cell cell) with

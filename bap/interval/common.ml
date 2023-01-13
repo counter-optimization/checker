@@ -59,6 +59,90 @@ module CalleeRel = struct
   end
 end
 
+module ReturnInsnsGetter = struct
+  type all_rets = (tid, Tid.comparator_witness) Set.t
+  
+  type t = all_rets
+  
+  type kbt
+
+  open KB.Monad_infix
+
+  let domain = KB.Domain.powerset (module Tid) ~inspect:Tid.sexp_of_t "tid-powerset-domain"
+
+  (* type all_rets = (Int.t, Int.comparator_witness) Set.t *)
+  
+  (* type t = all_rets *)
+  
+  (* type kbt *)
+
+  (* open KB.Monad_infix *)
+
+  (* let domain = KB.Domain.powerset (module Int) *)
+  (*                                 ~inspect:Int.sexp_of_t *)
+  (*                                 "tid-powerset-domain" *)
+  
+
+  let cls : (kbt, unit) KB.cls = KB.Class.declare
+                                   ~public:true
+                                   ~package
+                                   "all-return-insn-tids" ()
+
+  let all_rets : (kbt, t) KB.slot = KB.Class.property
+                                      ~public:true
+                                      ~package
+                                      cls
+                                      "all-rets-set"
+                                      domain
+
+  let is_return_label label : bool KB.t=
+    KB.collect T.Semantics.slot label >>= fun (insn : Insn.t) ->
+    let is_ret = Insn.is Insn.return insn in
+    KB.return is_ret
+  
+  let empty : t = Set.empty (module Tid)
+
+  let singleton : tid -> t = Set.singleton (module Tid)
+
+  let label_to_tids label =
+    KB.collect T.Label.addr label >>= fun maybe_addr ->
+    KB.collect T.Label.name label >>= fun maybe_name ->
+    KB.collect T.Semantics.slot label >>= fun (insn : Insn.t) ->
+    let bir_terms = KB.Value.get Term.slot insn in
+    (* bir_terms is a list of blk terms *)
+    let tids_lists = List.map bir_terms ~f:(fun b ->
+                                Term.enum jmp_t b
+                                |> Sequence.map ~f:Term.tid
+                                |> Sequence.to_list) in
+    let tids = List.join tids_lists in
+    KB.return @@ Set.of_list (module Tid) tids
+    
+  let build () : t =
+    let computation = KB.objects T.Program.cls >>= fun labels ->
+                      let init_rets = KB.return empty in
+                      Seq.fold labels ~init:init_rets ~f:(fun all_rets label ->
+                                 is_return_label label >>= fun is_ret ->
+                                 if not is_ret
+                                 then
+                                   all_rets
+                                 else
+                                   label_to_tids label >>= fun ret_tids ->
+                                   all_rets >>= fun all_rets ->
+                                   KB.return @@ Set.union all_rets ret_tids)
+                      >>= fun all_ret_tids ->
+                      KB.Object.create cls >>= fun to_store ->
+                      KB.provide all_rets to_store all_ret_tids >>= fun () ->
+                      KB.return to_store in
+    let cur_st = Toplevel.current () in 
+    match KB.run cls computation cur_st with
+    | Ok (ret_tids, _st') -> KB.Value.get all_rets ret_tids
+    | Error e ->
+       failwith @@
+         sprintf "in ReturnInsnsGetter.build, error : %s" (KB.Conflict.to_string e)
+
+  let is_return (tid : tid) (all_rets : all_rets) : bool = Set.mem all_rets tid
+end
+
 let sub_of_tid_for_prog (p : Program.t) (t : Tid.t) : sub term Or_error.t =
   match Term.find sub_t p t with
   | Some callee_sub -> Ok callee_sub
@@ -67,14 +151,15 @@ let sub_of_tid_for_prog (p : Program.t) (t : Tid.t) : sub term Or_error.t =
        Format.sprintf "Couldn't find callee sub for tid %a" Tid.pps t
 
 module AnalysisBlackList = struct
-  let blacklisted_func_names : string list = ["interrupt"]
+  let blacklisted_func_names : string list = ["interrupt"; "plt"]
 
   let contains_blacklisted_func_name (subname : string) : bool =
     List.fold blacklisted_func_names ~init:false ~f:(fun any_bld blname ->
-        any_bld || (String.is_substring subname ~substring:blname))
+                any_bld || (String.is_substring subname ~substring:blname))
 
   let sub_is_blacklisted (sub : sub term) : bool =
-    Sub.name sub |> contains_blacklisted_func_name
+    let name = Sub.name sub in
+    contains_blacklisted_func_name name
 
   let sub_is_not_linked (sub : sub term) : bool =
     let blks = Term.enum blk_t sub in
@@ -361,6 +446,8 @@ module type MemoryT =
     val empty : t
     
     val lookup : string -> t -> v
+
+    val init_arg : name:string -> t -> t
     
     val set : string -> v -> t -> t
 
@@ -433,6 +520,8 @@ module NumericEnv(ValueDom : NumericDomain)
     | None -> ValueDom.top
 
   let set name v env : t = M.set env ~key:name ~data:v
+
+  let init_arg ~(name : string) env : t = M.set env ~key:name ~data:ValueDom.top
 
   let unset name env : t = M.remove env name 
 
@@ -718,13 +807,13 @@ module AbstractInterpreter(N: NumericDomain)
     
     let res = match e with
       | `Def d ->
-         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid d) in *)
+         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid d) in
          denote_def d
       | `Jmp j ->
-         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid j) in *)
+         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid j) in
          denote_jmp j 
       | `Phi p ->
-         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid p) in *)
+         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid p) in
          denote_phi p
     in
     let (elt_res, state') = ST.run res st in
