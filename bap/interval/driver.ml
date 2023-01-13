@@ -154,22 +154,12 @@ let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
      (* run the liveness analysis *)
      (* let () = printf "Running liveness analysis\n%!" in *)
      (* let liveness = Live_variables.Analysis.run sub in *)
+     let liveness = Live_variables.IsUsedPass.UseRel.empty in
      
      (* CFG *)
      let edges = List.map edges ~f:(Calling_context.of_edge) in
      let module G = Graphlib.Make(Calling_context)(Bool) in
      let cfg = Graphlib.create (module G) ~edges () in
-
-     (* let () = if String.equal (Sub.name sub) "crypto_hash_sha512_final" *)
-     (*          then Graphlib.to_dot (module G) *)
-     (*                               ~string_of_node:Calling_context.to_string *)
-     (*                               (\* ~string_of_edge:(fun (ccfrom, ccto, _is_interproc) -> *\) *)
-     (*                               (\*   sprintf "(%s, %s)" *\) *)
-     (*                               (\*           (Calling_context.to_string ccfrom) *\) *)
-     (*                               (\*           (Calling_context.to_string ccto)) *\) *)
-     (*                               ~filename:"crypto_hash_sha512_final.dot" *)
-     (*                               cfg *)
-     (*          else () in *)
 
      (* AbsInt *)
      let module ProdIntvlxTaint = DomainProduct(Wrapping_interval)(Checker_taint.Analysis) in
@@ -304,63 +294,60 @@ let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
       * https://stackoverflow.com/questions/67823455/having-a-module-and-an-instance-of-it-as-parameters-to-an-ocaml-function
       *)
      
-     (* let analyze_edge (module Chkr : Checker.S with type env = E.t) *)
-     (*       (e : 'a Calling_context.Edge.t) : Chkr.warns = *)
-     (*   let from_cc = Calling_context.Edge.from_ e in *)
-     (*   let to_cc = Calling_context.Edge.to_ e in *)
-     (*   let to_tid = Calling_context.to_insn_tid to_cc in *)
-     (*   (\* the env to run the checker in is stored in the insn to be checked *)
-     (*      here, the solution envs are stored/keyed by calling context, *)
-     (*      the instructions are still just by tid though. *)
-     (*    *\) *)
-     (*   let in_state = Solution.get analysis_results to_cc in *)
-     (*   let insn = *)
-     (*     match Tid_map.find tidmap to_tid with *)
-     (*     | Some elt -> elt *)
-     (*     | None -> *)
-     (*        let tid_str = Tid.to_string to_tid in *)
-     (*        failwith @@ *)
-     (*          sprintf "In running checker %s, couldn't find tid %s" Chkr.name tid_str *)
-     (*   in *)
-     (*   let () = Format.printf *)
-     (*              "checking edge (%a, %a)\n%!" *)
-     (*              Calling_context.pp from_cc *)
-     (*              Calling_context.pp to_cc in *)
-     (*   Chkr.check_elt insn liveness in_state *)
-     (* in *)
+     let analyze_edge (module Chkr : Checker.S with type env = E.t)
+           (e : 'a Calling_context.Edge.t) : Chkr.warns =
+       let from_cc = Calling_context.Edge.from_ e in
+       let to_cc = Calling_context.Edge.to_ e in
+       let to_tid = Calling_context.to_insn_tid to_cc in
+       (* the env to run the checker in is stored in the insn to be checked
+          here, the solution envs are stored/keyed by calling context,
+          the instructions are still just by tid though.
+        *)
+       let in_state = Solution.get analysis_results to_cc in
+       let insn =
+         match Tid_map.find tidmap to_tid with
+         | Some elt -> elt
+         | None ->
+            let tid_str = Tid.to_string to_tid in
+            failwith @@
+              sprintf "In running checker %s, couldn't find tid %s" Chkr.name tid_str
+       in
+       let () = Format.printf
+                  "checking edge (%a, %a)\n%!"
+                  Calling_context.pp from_cc
+                  Calling_context.pp to_cc in
+       Chkr.check_elt insn liveness in_state in
 
-     (* let run_checker (module Chkr : Checker.S with type env = E.t) (es : 'a Calling_context.edges) : Chkr.warns = *)
-     (*   List.fold edges *)
-     (*     ~init:Alert.Set.empty *)
-     (*     ~f:(fun alerts edge -> *)
-     (*       let alerts' = analyze_edge (module Chkr) edge in *)
-     (*       Alert.Set.union alerts alerts') *)
-     (* in *)
+     let run_checker (module Chkr : Checker.S with type env = E.t) (es : 'a Calling_context.edges) : Chkr.warns =
+       List.fold edges
+         ~init:Alert.Set.empty
+         ~f:(fun alerts edge ->
+           let alerts' = analyze_edge (module Chkr) edge in
+           Alert.Set.union alerts alerts') in
      
-     (* comp simp checking *)
-     (* let module CSChecker : Checker.S with type env = E.t = struct *)
-     (*     include Comp_simp.Checker(FinalDomain) *)
-     (*     type env = E.t *)
-     (*   end *)
-     (* in *)
-     (* let module SSChecker : Checker.S with type env = E.t = struct *)
-     (*     include Silent_stores.Checker(FinalDomain) *)
-     (*     type env = E.t *)
-     (*   end *)
-     (* in *)
-     (* let () = printf "Starting comp simp checker...\n%!" in *)
-     (* let comp_simp_alerts = run_checker (module CSChecker) edges in *)
-     (* let () = printf "Done running comp simp checker.\n%!" in *)
-     (* let () = printf "Starting silent stores checker...\n%!" in *)
-     (* let silent_store_alerts = run_checker (module SSChecker) edges in *)
-     (* let () = printf "Done running silent stores checker.\n%!" in *)
-     (* let all_alerts = Alert.Set.union comp_simp_alerts silent_store_alerts in *)
-     let all_alerts = Alert.Set.empty in
+     let module CSChecker : Checker.S with type env = E.t = struct
+         include Comp_simp.Checker(FinalDomain)
+         type env = E.t
+       end in
+     let module SSChecker : Checker.S with type env = E.t = struct
+         include Silent_stores.Checker(FinalDomain)
+         type env = E.t
+       end in
+     let () = printf "Starting comp simp checker...\n%!" in
+     let comp_simp_alerts = run_checker (module CSChecker) edges in
+     let () = printf "Done running comp simp checker.\n%!" in
+     let () = printf "Starting silent stores checker...\n%!" in
+     let silent_store_alerts = run_checker (module SSChecker) edges in
+     let () = printf "Done running silent stores checker.\n%!" in
+     let all_alerts = Alert.Set.union comp_simp_alerts silent_store_alerts in
+     (* let all_alerts = Alert.Set.empty in *)
      
      (* fill out this subroutine name in all of the generated alerts for
         this sub *)
-     let all_alerts = Alert.Set.map all_alerts ~f:(fun alert ->
-                          { alert with sub_name = Some (Sub.name sub) }) in
+     let alerts_with_subs = Alert.Set.map all_alerts ~f:(fun alert ->
+                                            { alert with sub_name = Some (Sub.name sub) }) in
+     let alerts_with_ops_addrs = Alert.OpcodeAndAddrFiller.set_opcode_and_addr_for_alert_set alerts_with_subs proj in
+     let all_alerts = alerts_with_ops_addrs in
      
      (* get callees--both direct and indirect calls--of this call *)
      let () = Format.printf "Getting callees for sub %s\n%!" (Sub.name sub) in

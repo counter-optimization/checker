@@ -7,13 +7,13 @@ open Monads.Std
 module Checker(N : NumericDomain) = struct
   
   module Env = struct
-    type region = Abstract_memory.Region.t
-    type regions = Abstract_memory.Region.Set.t
+    type region = Common.Region.t
+    type regions = Common.Region.Set.t
     type valtypes = Common.cell_t
     include Abstract_memory.Make(N)
   end
 
-  module AI = AbstractInterpreter(N)(Abstract_memory.Region)(Abstract_memory.Region.Set)(struct type t = Common.cell_t end)(Env)
+  module AI = AbstractInterpreter(N)(Common.Region)(Common.Region.Set)(struct type t = Common.cell_t end)(Env)
   
   module I = Wrapping_interval
 
@@ -80,16 +80,16 @@ module Checker(N : NumericDomain) = struct
     | Bil.Load (_mem, idx, _endian, size) ->
        check_exp idx >>= fun offs ->
        ST.gets @@ fun st ->
-                  (match Env.load_of_bil_exp e offs st.env with
-                   | Ok v -> v
+                  (match Env.load_of_bil_exp e offs size st.env with
+                   | Ok (v, _) -> v
                    | Error e -> failwith @@ Error.to_string_hum e)
     | Bil.Store (mem, idx, v, endian, size) ->
        ST.get () >>= fun st ->
        check_exp idx >>= fun idx_val ->
        let load_of_old_val = Bil.Load (mem, idx, endian, size) in
-       let eval_loaded_val = Env.load_of_bil_exp load_of_old_val idx_val st.env in
+       let eval_loaded_val = Env.load_of_bil_exp load_of_old_val idx_val size st.env in
        let old_val = match eval_loaded_val with
-         | Ok old_val -> old_val
+         | Ok (old_val, _) -> old_val
          | Error e ->
             let () = printf "silentstores.check_exp: %s\n" @@
                        Error.to_string_hum e
@@ -105,6 +105,8 @@ module Checker(N : NumericDomain) = struct
          begin
            let alert_desc = "\"Store of val, prev val, or mem idx is tainted\"" in
            let alert : Alert.t = { tid = st.tid;
+                                   opcode = None;
+                                   addr = None;
                                    sub_name = None;
                                    flags_live = None; (* todo *)
                                    reason = Alert.SilentStores;

@@ -70,19 +70,6 @@ module ReturnInsnsGetter = struct
 
   let domain = KB.Domain.powerset (module Tid) ~inspect:Tid.sexp_of_t "tid-powerset-domain"
 
-  (* type all_rets = (Int.t, Int.comparator_witness) Set.t *)
-  
-  (* type t = all_rets *)
-  
-  (* type kbt *)
-
-  (* open KB.Monad_infix *)
-
-  (* let domain = KB.Domain.powerset (module Int) *)
-  (*                                 ~inspect:Int.sexp_of_t *)
-  (*                                 "tid-powerset-domain" *)
-  
-
   let cls : (kbt, unit) KB.cls = KB.Class.declare
                                    ~public:true
                                    ~package

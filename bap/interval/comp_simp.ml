@@ -9,12 +9,12 @@ module KB = Bap_core_theory.KB
 
 module Checker(N : NumericDomain) = struct
   module E = struct
-    type region = Abstract_memory.Region.t
-    type regions = Abstract_memory.Region.Set.t
+    type region = Common.Region.t
+    type regions = Common.Region.Set.t
     type valtypes = Common.cell_t
     include Abstract_memory.Make(N)
   end
-  module AI = AbstractInterpreter(N)(Abstract_memory.Region)(Abstract_memory.Region.Set)(struct type t = Common.cell_t end)(E)
+  module AI = AbstractInterpreter(N)(Common.Region)(Common.Region.Set)(struct type t = Common.cell_t end)(E)
   module I = Wrapping_interval
   module SS = Common.SS
 
@@ -89,6 +89,8 @@ module Checker(N : NumericDomain) = struct
                           else None
           in
           let alert : Alert.t = { tid = st.tid;
+                                  opcode = None;
+                                  addr = None;
                                   sub_name = None;
                                   flags_live = None;
                                   reason = Alert.CompSimp;
@@ -161,8 +163,8 @@ module Checker(N : NumericDomain) = struct
     | Bil.Load (_mem, idx, _endian, size) ->
        check_exp idx >>= fun offs ->
        ST.gets @@ fun st ->
-                  (match E.load_of_bil_exp e offs st.env with
-                  | Ok v -> v
+                  (match E.load_of_bil_exp e offs size st.env with
+                  | Ok (v, _) -> v
                   | Error e -> failwith @@ Error.to_string_hum e)
     | Bil.Store (_mem, idx, v, _endian, size) ->
        check_exp idx >>= fun offs ->
