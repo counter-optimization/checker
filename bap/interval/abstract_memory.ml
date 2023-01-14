@@ -180,15 +180,15 @@ module Make(N : NumericDomain)
   module C = Cell(N)
   
   module CellSet = C.Set
-  
+
   module SS = Set.Make_binable_using_comparator(String)
 
   module WI = Wrapping_interval
 
   module T = struct
-    type basemap = BaseSet.t BaseSetMap.t
+    type basemap = BaseSet.t BaseSetMap.t 
   
-    type cellset = CellSet.t
+    type cellset = CellSet.t 
     
     type env = Env.t
     
@@ -197,7 +197,7 @@ module Make(N : NumericDomain)
                bases: basemap;
                img: Image.t option;
                globals_read : cellset }
-    
+
     type regions = Region.Set.t
     
     type valtypes = Common.cell_t
@@ -312,6 +312,8 @@ module Make(N : NumericDomain)
 
   include T
 
+  let is_empty_env m : bool = Env.equal m.env Env.empty
+
   let pp {cells; env; bases; globals_read}  =
     (* let print_ptr_to_cells ~key ~data = *)
     (*   let cell_set_str =  Set.to_list data |> List.to_string ~f:C.to_string in *)
@@ -381,11 +383,12 @@ module Make(N : NumericDomain)
     in
     Wrapping_interval.of_int bitwidth
   
-  let equal {cells=cells1; env=env1; bases=bases1; _}
-        {cells=cells2; env=env2; bases=bases2; _} =
+  let equal {cells=cells1; env=env1; bases=bases1; globals_read=globals_read1; _}
+        {cells=cells2; env=env2; bases=bases2; globals_read=globals_read2; _} =
     Env.equal env1 env2 &&
       Set.equal cells1 cells2 &&
-        Map.equal (Set.equal) bases1 bases2
+        Map.equal (Set.equal) bases1 bases2 &&
+          Set.equal globals_read1 globals_read2
 
   let setptr ~(name:string) ~regions ~offs ~width m =
     let env = Env.set name offs m.env in
@@ -414,17 +417,13 @@ module Make(N : NumericDomain)
     then Some (Env.lookup name mem.env)
     else None
 
-  let lookup name m : N.t =
-    Env.lookup name m.env
+  let lookup name m : N.t = Env.lookup name m.env
 
-  let set name data (mem : t) : t =
-    { mem with env = Env.set name data mem.env }
+  let set name data (mem : t) : t = { mem with env = Env.set name data mem.env }
 
-  let unset name (mem : t) : t =
-    { mem with env = Env.unset name mem.env }
+  let unset name (mem : t) : t = { mem with env = Env.unset name mem.env }
 
-  let set_cell_to_top cell_name (mem : t) : t =
-    { mem with env = Env.set cell_name N.top mem.env }
+  let set_cell_to_top cell_name (mem : t) : t = { mem with env = Env.set cell_name N.top mem.env }
 
   let init_arg ~(name : string) (mem : t) : t =
     let heap_or_stack = Bases_domain.join Bases_domain.heap Bases_domain.stack in
@@ -877,9 +876,9 @@ module Make(N : NumericDomain)
   let merge mem1 mem2 : t =
     let {cells=cells1; env=env1; bases=bases1; img=img1; globals_read=gr1} = mem1 in
     let {cells=cells2; env=env2; bases=bases2; img=img2; globals_read=gr2} = mem2 in
-    let merged_globals_read = Set.union gr1 gr2 in
+    let merged_globals_read = Set.inter gr1 gr2 in
     let merged_img = merge_images img1 img2 in
-    let merged_cells = Set.union cells1 cells2 in
+    let merged_cells = Set.inter cells1 cells2 in
     let merged_env = Env.merge env1 env2 in
     let merged_bases = BaseSetMap.merge bases1 bases2 in
     { cells=merged_cells;
@@ -888,27 +887,39 @@ module Make(N : NumericDomain)
       img=merged_img;
       globals_read=merged_globals_read }
 
-  let widen_threshold = 256
+  let widen_threshold = Common.ai_widen_threshold
 
+  (* cells is the powerset domain of all possible cells. this is not representable
+     since it is the product of the interval domain, width domain, type domain, and region
+     idomain. to handle widening, if a cell is not present in the cellset, it is read
+     during a load as the top element of the valuedomain. this means for termination,
+     we can swap join and meet for cells domain and have the empty set as the top element
+     as it never returns an unsound result during a memory load or store. join of two
+     different states/envs then, is the set intersect of the cell sets as this is more
+     of an overapproximation of existing cells and therefore cell contents.
+
+     also do this for globals_read. i think this is sound, but haven't thought through
+     it that much with how globals are guessed at/handled. *)
   let widen_with_step steps n prev next : t =
     let widen_cell_map {cells=prev; _} {cells=next; _} : C.Set.t =
-      Set.union prev next
-    in
+      Set.inter prev next in
     let widen_bases_map {bases=prev; _} {bases=next; _} : basemap =
-      BaseSetMap.merge prev next
-    in
+      BaseSetMap.merge prev next in
     let widen_env steps n {env=prev; _} {env=next; _} : Env.t =
-      Env.widen_with_step steps n prev next
-    in
+      Env.widen_with_step steps n prev next in
     let widen_globals_read {globals_read=prev; _} {globals_read=next; _} : C.Set.t =
-      Set.union prev next
-    in
+      Set.inter prev next in
     let widen steps n mem1 mem2 =
       {cells = widen_cell_map prev next;
        env = widen_env steps n prev next;
        bases = widen_bases_map prev next;
        img = merge_images prev.img next.img;
-       globals_read = widen_globals_read prev next }
-    in
-    widen steps n prev next
+       globals_read = widen_globals_read prev next }in
+    (* let () = printf "in Abstract_memory.widen_with_step, changes are (%d):\n%!" steps in *)
+    (* let () = printf "cell sets stayed the same??: %B\n%!" (Set.equal prev.cells next.cells) in *)
+    (* let () = printf "bases map stayed the same??: %B\n%!" (Map.equal Set.equal prev.bases next.bases) in *)
+    (* let () = printf "envs stayed the same??: %B\n%!" (Env.equal prev.env next.env) in *)
+    (* let () = printf "globals_read stayed the same??: %B\n%!" (Set.equal prev.globals_read next.globals_read) in *)
+    let merger = if steps < widen_threshold then merge else (widen steps n) in
+    merger prev next
 end

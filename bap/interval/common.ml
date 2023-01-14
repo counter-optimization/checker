@@ -334,6 +334,8 @@ let jmp_is_return (j : jmp term) : bool =
   | Call c -> Option.is_none @@ Call.return c
   | _ -> false
 
+let ai_widen_threshold = 10
+
 module type NumericDomain = sig
   type t
 
@@ -548,7 +550,7 @@ module NumericEnv(ValueDom : NumericDomain)
       else M.set prev ~key ~data in
     M.fold env2 ~init:env1 ~f:merge_helper
 
-  let widen_threshold = 10
+  let widen_threshold = ai_widen_threshold
   
   let widen_with_step steps n prev_state new_state : t =
     let get_differing_keys prev_state new_state =
@@ -684,7 +686,9 @@ module AbstractInterpreter(N: NumericDomain)
            (* let bop_str = binop_to_string op in *)
            (* let () = Format.printf "Denoting binop %s\n%!" bop_str in *)
            denote_exp x >>= fun x' ->
+           (* let () = printf "Done denoting left\n%!" in *)
            denote_exp y >>= fun y' ->
+           (* let () = printf "Done denoting right\n%!" in *)
            (* let () = Format.printf "Denoting partially evald expression: %s %s %s\n%!" *)
            (* (N.to_string x') bop_str (N.to_string y') *)
            (* in *)

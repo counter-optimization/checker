@@ -149,7 +149,15 @@ module Checker(N : NumericDomain) = struct
     | Bil.SLE -> [], []
 
   let check_binop (op : binop) : N.t -> N.t -> unit ST.t =
-    check_binop_operands (specials_of_binop op) op
+    (* let () = printf "in comp_simp.check_binop, getting specials of binop %s\n%!" *)
+               (* (Common.binop_to_string op) in *)
+    let specials = specials_of_binop op in
+    (* let () = printf "in comp_simp.check_binop, done getting specials of binop %s\n%!" *)
+               (* (Common.binop_to_string op) in *)
+    (* let () = printf "in comp_simp.check_binop, getting checker for binop operands\n%!" in *)
+    let checker = check_binop_operands specials op in
+    (* let () = printf "in comp_simp.check_binop, done getting checker for binop operands\n%!" in *)
+    checker
 
   (* TODO: don't flag on constants *)
   let rec check_exp (e : Bil.exp) : N.t ST.t =
@@ -175,14 +183,22 @@ module Checker(N : NumericDomain) = struct
        eval_in_ai e st
     | Bil.BinOp (op, x, y) ->
        (* let () = printf "in comp simp binop, denoting binop: %s\n%!" *)
-       (*                 (Common.binop_to_string op) in *)
+                       (* (Common.binop_to_string op) in *)
+       (* ST.get () >>= fun st -> *)
+       (* let () = printf "instate is:\n%!"; E.pp st.env in *)
        check_exp x >>= fun x' ->
        (* let () = printf "in comp simp binop, done denoting left\n%!" in *)
        check_exp y >>= fun y' ->
        (* let () = printf "in comp simp binop, done denoting right\n%!" in *)
+       (* let () = printf "in comp simp binop, checking binop\n%!" in *)
        check_binop op x' y' >>= fun () ->
+       (* let () = printf "in comp simp binop, done checking binop\n%!" in *)
+       (* let () = printf "in comp simp binop, running AI binop on binop now\n%!" in *)
        let binop = AI.denote_binop op in
+       (* let () = printf "in comp simp binop, done running AI binop on binop\n%!" in *)
+       (* let () = printf "in comp simp binop, eval the binop now\n%!" in *)
        let expr_res = binop x' y' in
+       (* let () = printf "in comp simp binop, done eval the binop\n%!" in *)
        ST.return expr_res
     | Bil.UnOp (op, x) ->
        check_exp x >>= fun x' ->

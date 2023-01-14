@@ -270,7 +270,7 @@ let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
      let analysis_results = Graphlib.fixpoint
                               (module G)
                               cfg
-                              ~steps:E.widen_threshold
+                              (* ~steps:E.widen_threshold *)
                               ~step:E.widen_with_step
                               ~init:init_sol
                               ~equal:E.equal
@@ -280,43 +280,48 @@ let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
                                 let elt = match Tid_map.find tidmap tid with
                                   | Some elt -> elt
                                   | None ->
-                                     let tid_s = Tid.to_string tid in
-                                     let err_s = sprintf "in calculating analysis_results, couldn't find tid %s in tidmap" tid_s in
-                                     failwith err_s
+                                     failwith @@
+                                       sprintf
+                                         "in calculating analysis_results, couldn't find tid %a in tidmap"
+                                         Tid.pps tid
+
                                 in
                                 AbsInt.denote_elt elt) in
 
      let () = printf "Done running abstract interpreter\n%!" in
-
+     
      (* Build up checker infra and run the checkers
       * This next part is an abomination of Ocaml code
       * todo: refactor this using this SO answer:
       * https://stackoverflow.com/questions/67823455/having-a-module-and-an-instance-of-it-as-parameters-to-an-ocaml-function
       *)
-     
-     let analyze_edge (module Chkr : Checker.S with type env = E.t)
-           (e : 'a Calling_context.Edge.t) : Chkr.warns =
+     (* the env to run the checker in is stored in the insn to be checked
+          here, the solution envs are stored/keyed by calling context,
+          the instructions are still just by tid though. *)
+     let analyze_edge (module Chkr : Checker.S with type env = E.t) (e : 'a Calling_context.Edge.t) : Chkr.warns =
        let from_cc = Calling_context.Edge.from_ e in
        let to_cc = Calling_context.Edge.to_ e in
        let to_tid = Calling_context.to_insn_tid to_cc in
-       (* the env to run the checker in is stored in the insn to be checked
-          here, the solution envs are stored/keyed by calling context,
-          the instructions are still just by tid though.
-        *)
        let in_state = Solution.get analysis_results to_cc in
-       let insn =
-         match Tid_map.find tidmap to_tid with
-         | Some elt -> elt
-         | None ->
-            let tid_str = Tid.to_string to_tid in
-            failwith @@
-              sprintf "In running checker %s, couldn't find tid %s" Chkr.name tid_str
-       in
-       let () = Format.printf
-                  "checking edge (%a, %a)\n%!"
-                  Calling_context.pp from_cc
-                  Calling_context.pp to_cc in
-       Chkr.check_elt insn liveness in_state in
+       if E.equal in_state E.empty
+       then
+         failwith @@
+           sprintf "in analyzing edge (%s, %s), with checker %s, elt tid to examine %a, in state env is empty."
+                   (Calling_context.to_string from_cc)
+                   (Calling_context.to_string to_cc)
+                   Chkr.name
+                   Tid.pps to_tid
+       else
+         let insn = match Tid_map.find tidmap to_tid with
+           | Some elt -> elt
+           | None ->
+              failwith @@
+                sprintf
+                  "In running checker %s, couldn't find tid %a" Chkr.name Tid.pps to_tid in
+         let () = Format.printf "checking edge (%a, %a)\n%!"
+                                Calling_context.pp from_cc
+                                Calling_context.pp to_cc in
+         Chkr.check_elt insn liveness in_state in
 
      let run_checker (module Chkr : Checker.S with type env = E.t) (es : 'a Calling_context.edges) : Chkr.warns =
        List.fold edges
@@ -408,10 +413,8 @@ let check_fn top_level_sub img ctxt proj : unit =
       let worklist_wo_procd_wo_sub = Set.remove worklist_wo_procd sub in
       let next_processed = Set.add processed sub in
       
-      let () = Format.printf "Processing sub %s (%a)\n%!"
-                 (Sub.name sub)
-                 Tid.pp (Term.tid sub)
-      in
+      let () = Format.printf "Processing sub %s (%a)\n%!" (Sub.name sub)
+                             Tid.pp (Term.tid sub) in
       if AnalysisBlackList.sub_is_blacklisted sub ||
            AnalysisBlackList.sub_is_not_linked sub
       then
