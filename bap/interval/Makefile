@@ -18,14 +18,47 @@ PKGS = bap,core_kernel,stdio,graphlib,zarith,ounit2,monads
 bap-plugin : *.ml
 	bapbuild $(PLUGIN_NAME)
 
+libna_argon2id : bap-plugin
+	@echo -n "Starting analysis of argon2id"
+
+	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
+
+	-bap --plugin-path=. --pass=uarch-checker --uarch-checker-target-function=crypto_pwhash_argon2id --no-optimization --bil-optimization=0 ../../test/libna/bap_ld_scalar_mult.o > libna.crypto_pwhash_argon2id.debug.log 2>&1
+
+	@echo -n "Done with analysis of argon2id"
+
+	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
+
+libna_aesni : bap-plugin
+	@echo -n "Starting analysis of aesni "
+
+	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
+
+	-bap --plugin-path=. --pass=uarch-checker --uarch-checker-target-function=crypto_aead_aes256gcm_encrypt --no-optimization --bil-optimization=0 ../../test/libna/bap_ld_scalar_mult.o > libna.crypto_aead_aes256gcm_encrypt.debug.log 2>&1
+
+	@echo -n "Done with analysis of aesni "
+
+	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
+
 libna_crypto_sign : bap-plugin
 	@echo -n "Starting analysis of crypto_sign "
 
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 
-	-bap --plugin-path=. --pass=uarch-checker --uarch-checker-target-function=crypto_sign --no-optimization --bil-optimization=0 ../../test/libna/bap_ld_scalar_mult.o > libna.debug.log 2>&1
+	-bap --plugin-path=. --pass=uarch-checker --uarch-checker-target-function=crypto_sign --no-optimization --bil-optimization=0 ../../test/libna/bap_ld_scalar_mult.o > libna.crypto_sign.debug.log 2>&1
 
 	@echo -n "Done with analysis of crypto_sign "
+
+	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
+
+libna_aead : bap-plugin
+	@echo -n "Starting analysis of chacha20poly1305 "
+
+	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
+
+	-bap --plugin-path=. --pass=uarch-checker --uarch-checker-target-function=crypto_aead_chacha20poly1305_encrypt --no-optimization --bil-optimization=0 ../../test/libna/bap_ld_scalar_mult.o > libna.crypto_aead_chacha20poly1305_encrypt.debug.log 2>&1
+
+	@echo -n "Done with analysis of chacha20poly1305 "
 
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 
