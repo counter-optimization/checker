@@ -487,14 +487,14 @@ module Make(N : NumericDomain)
     let cel = C.make ~region ~offs ~width ~valtype in
     let celname = C.name cel in
     
-    let () = printf "storing to cell %s\n%!" (C.to_string cel) in
+    (* let () = printf "storing to cell %s\n%!" (C.to_string cel) in *)
 
     let overlap = get_overlapping_cells cel mem in
 
-    let () = printf "in store, overlapping cells are:\n%!" in
-    let () = Set.iter overlap ~f:(fun c ->
-                        printf "overlapping cell: %s\n%!" (C.to_string c)) in
-    let () = printf "in store, deleting overlapping cells\n%!" in
+    (* let () = printf "in store, overlapping cells are:\n%!" in *)
+    (* let () = Set.iter overlap ~f:(fun c -> *)
+    (*                     printf "overlapping cell: %s\n%!" (C.to_string c)) in *)
+    (* let () = printf "in store, deleting overlapping cells\n%!" in *)
     
     let mem' = Set.fold overlap ~init:mem ~f:(fun mem' c -> remove_cell c mem') in
 
@@ -504,8 +504,8 @@ module Make(N : NumericDomain)
                              cells = Set.add old_cells cel } in
     if Set.length overlap > 1
     then
-      let () = printf "in store: did propagate unstore, here is the out state:\n%!" in
-      let () = pp mem' in
+      (* let () = printf "in store: did propagate unstore, here is the out state:\n%!" in *)
+      (* let () = pp mem' in *)
       res
     else
       res
@@ -525,14 +525,14 @@ module Make(N : NumericDomain)
     let open Or_error.Monad_infix in
     
     let cell = C.make ~offs ~width ~region ~valtype:CellType.Unknown in
-    let () = printf "in load, cell is %s\n%!" (C.to_string cell) in
+    (* let () = printf "in load, cell is %s\n%!" (C.to_string cell) in *)
 
     let is_global = match region with | Global -> true | _ -> false in
     let global_already_loaded_from_img = global_already_read ~cell ~mem in
   
     if is_global && not global_already_loaded_from_img
     then
-      let () = printf "in load, loading global from img\n%!" in
+      (* let () = printf "in load, loading global from img\n%!" in *)
       
       load_global offs size mem >>= fun data ->
       let valtype = CellType.Unknown in
@@ -543,20 +543,20 @@ module Make(N : NumericDomain)
       let has_existing_value = cell_exists ~cell ~mem in
       if has_existing_value
       then
-        let () = printf "in load, loading existing value\n%!" in
+        (* let () = printf "in load, loading existing value\n%!" in *)
         let data = lookup (C.name cell) mem in
         Ok (data, mem)
       else
-        let () = printf "in load, loading new value\n%!" in
+        (* let () = printf "in load, loading new value\n%!" in *)
         let overlap = get_overlapping_cells cell mem in
-        let () = printf "in load, overlapping cells are: \n%!" in
-        let () = Set.iter overlap ~f:(fun c -> printf "overlap cell: %s\n%!" (C.name c)) in 
+        (* let () = printf "in load, overlapping cells are: \n%!" in *)
+        (* let () = Set.iter overlap ~f:(fun c -> printf "overlap cell: %s\n%!" (C.name c)) in  *)
         
         let cell_as_overlap = Overlap.of_cell cell N.top mem in
         
         if Set.length overlap >= 1
         then
-          let () = printf "in load, doing overlapping load\n%!" in
+          (* let () = printf "in load, doing overlapping load\n%!" in *)
           let final = Set.fold overlap ~init:cell_as_overlap ~f:(fun current_data other_cell ->
                                  let other_overlapper = Overlap.of_existing_cell other_cell mem in
                                  Overlap.merge ~this:current_data ~other:other_overlapper) in
@@ -583,8 +583,8 @@ module Make(N : NumericDomain)
        (* let () = printf "in load_of_bil_exp, getting regions\n%!" in *)
        (* let regions = BaseSetMap.bases_of_vars load_from_vars m.bases in *)
        let regions : Region.Set.t = get_bases idx_res in
-       let () = printf "in load_of_bil_exp, regions to load from:\n%!" in
-       let () = Set.iter regions ~f:Region.pp in
+       (* let () = printf "in load_of_bil_exp, regions to load from:\n%!" in *)
+       (* let () = Set.iter regions ~f:Region.pp in *)
 
        (* let () = printf "in load_of_bil_exp, getting offs intvl\n%!" in *)
        let offs = get_intvl idx_res in

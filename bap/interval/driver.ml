@@ -254,9 +254,9 @@ let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
      let initial_mem = List.fold true_args ~init:env_with_img_set
                                  ~f:(fun mem argname -> E.init_arg ~name:argname mem) in
      
-     let () = Format.printf "Initial memory+env is: %!" in
-     let () = E.pp initial_mem in
-     let () = Format.printf "\n%!" in
+     (* let () = Format.printf "Initial memory+env is: %!" in *)
+     (* let () = E.pp initial_mem in *)
+     (* let () = Format.printf "\n%!" in *)
      
      let first_node = match Seq.hd (Graphlib.reverse_postorder_traverse (module G) cfg) with
        | Some n -> n
@@ -408,7 +408,7 @@ let check_fn top_level_sub img ctxt proj : unit =
     then res
     else
       let sub = Set.min_elt_exn worklist_wo_procd in
-      let () = iter_insns sub in
+      (* let () = iter_insns sub in *)
       
       let worklist_wo_procd_wo_sub = Set.remove worklist_wo_procd sub in
       let next_processed = Set.add processed sub in

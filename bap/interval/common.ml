@@ -798,13 +798,13 @@ module AbstractInterpreter(N: NumericDomain)
     
     let res = match e with
       | `Def d ->
-         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid d) in
+         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid d) in *)
          denote_def d
       | `Jmp j ->
-         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid j) in
+         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid j) in *)
          denote_jmp j 
       | `Phi p ->
-         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid p) in
+         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid p) in *)
          denote_phi p
     in
     let (elt_res, state') = ST.run res st in

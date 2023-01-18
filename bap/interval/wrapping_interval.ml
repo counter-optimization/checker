@@ -573,21 +573,18 @@ let bitwidth x =
   | None ->
      let err_msg = Format.sprintf
                      "Couldn't get bitwidth for bottom value %s"
-                     (to_string x)
-     in
+                     (to_string x) in
      failwith err_msg
 
 let size intvl : Z.t option =
   match intvl with
   | Bot -> None
-  | Interval {lo; hi; width; signed} ->
-     Some (Z.sub hi lo)
+  | Interval {lo; hi; width; signed} -> Some (Z.sub hi lo)
 
 let is_const intvl : bool =
   match size intvl with
   | None -> false
-  | Some sz ->
-     Z.equal Z.one sz
+  | Some sz -> Z.equal Z.zero sz
 
 (** Setting up domain keys for usage in InteractableNumDom *)
 module Key = Common.DomainKey
