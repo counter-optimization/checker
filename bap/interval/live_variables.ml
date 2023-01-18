@@ -1,5 +1,6 @@
 open Core
 open Bap.Std
+open Graphlib.Std
 
 (* what does it mean for a var in BAP IR SSA to be live?
    we are doing a may-be-live analysis:
@@ -118,25 +119,25 @@ open Bap.Std
 
 module T = Bap_core_theory.Theory
 
-module NameAndTid = struct
-  module T = struct
-    type t = string * Tid.t [@@deriving compare, sexp, equal, bin_io]
-  end
+(* module NameAndTid = struct *)
+(*   module T = struct *)
+(*     type t = string * Tid.t [@@deriving compare, sexp, equal, bin_io] *)
+(*   end *)
 
-  module Cmp = struct
-    include T
-    include Comparator.Make(T)
-  end
+(*   module Cmp = struct *)
+(*     include T *)
+(*     include Comparator.Make(T) *)
+(*   end *)
 
-  include T
-  include Cmp
+(*   include T *)
+(*   include Cmp *)
 
-  let make ~name ~tid : t = (name, tid)
+(*   let make ~name ~tid : t = (name, tid) *)
 
-  module Set = struct
-    include Set.Make_binable_using_comparator(Cmp)
-  end
-end
+(*   module Set = struct *)
+(*     include Set.Make_binable_using_comparator(Cmp) *)
+(*   end *)
+(* end *)
 
 module SS = Set.Make_binable_using_comparator(String)
 
@@ -150,25 +151,37 @@ let fold_over_elts (sub : Sub.t) ~(init : 'a) ~(f:'a -> Blk.elt -> 'a) ~(cong : 
         let defs' = Seq.fold elts ~init:defs ~f in
         cong defs defs')
 
+let get_all_defs (sub : sub term) : def term list =
+  let blks = Term.enum blk_t sub |> Seq.to_list in
+  List.map blks ~f:(fun b -> Term.enum def_t b |> Seq.to_list)
+  |> List.join
+
+let get_all_phis (sub : sub term) : phi term list =
+  let blks = Term.enum blk_t sub |> Seq.to_list in
+  List.map blks ~f:(fun b -> Term.enum phi_t b |> Seq.to_list)
+  |> List.join
+
 (* internal passes used for intermediate data gathering *)
-module GetPhiAssnsPass = struct
-  let elt_to_phi_var : Blk.elt -> NameAndTid.Set.t = function
-    | `Phi p ->
-       let name = (Phi.var p |> T.Var.name) in
-       let tid = Term.tid p in 
-       NameAndTid.make ~name ~tid |> NameAndTid.Set.singleton
-    | _ -> NameAndTid.Set.empty
+(* module GetPhiAssnsPass = struct *)
+(*   let elt_to_phi_var : Blk.elt -> NameAndTid.Set.t = function *)
+(*     | `Phi p -> *)
+(*        let name = (Phi.var p |> T.Var.name) in *)
+(*        let tid = Term.tid p in  *)
+(*        NameAndTid.make ~name ~tid |> NameAndTid.Set.singleton *)
+(*     | _ -> NameAndTid.Set.empty *)
 
-  (* returns set of tuples of phi defs
-   * and the tid of the phi: this is defd here *)
-  let run (sub : Sub.t) : NameAndTid.Set.t =
-    fold_over_elts sub
-      ~init:NameAndTid.Set.empty
-      ~cong:NameAndTid.Set.union
-      ~f:(fun defs elt ->
-        elt_to_phi_var elt |> NameAndTid.Set.union defs)
-end
+(*   (\* returns set of tuples of phi defs *)
+(*    * and the tid of the phi: this is defd here *\) *)
+(*   let run (sub : Sub.t) : NameAndTid.Set.t = *)
+(*     fold_over_elts sub *)
+(*       ~init:NameAndTid.Set.empty *)
+(*       ~cong:NameAndTid.Set.union *)
+(*       ~f:(fun defs elt -> *)
+(*         elt_to_phi_var elt |> NameAndTid.Set.union defs) *)
+(* end *)
 
+(* create a map from var name to the tid where it is defined. this
+   is the GetDefsPass.t type *)
 module GetDefsPass : sig
   type t
 
@@ -184,8 +197,7 @@ end = struct
     | `Both (left, right) ->
        if Tid.equal left right
        then Some left
-       else 
-         failwith "tids shouldn't be duplicated in GetDefsPass"
+       else failwith "tids shouldn't be duplicated in GetDefsPass"
     | `Left l -> Some l
     | `Right r -> Some r
 
@@ -219,7 +231,6 @@ end = struct
       ~f:add_def_to_mapping
 end
 
-
 (*
   (a, x, y, b)
    where
@@ -243,58 +254,29 @@ module IsUsedPass = struct
   module UseRel = Set.Make(T)
   include T
              
-  let phi_option_to_uses (_tid, opt_expr) : SS.t =
-    Var_name_collector.run opt_expr
+  let phi_option_to_uses (_tid, opt_expr) : SS.t = Var_name_collector.run opt_expr
 
-  let elt_to_uses (e : Blk.elt) (defmap : GetDefsPass.t) : t list =
-    match e with
-    | `Def d ->
-       let rhs = Def.rhs d in
-       let user = Def.lhs d |> Var.name in
-       let used_names = Var_name_collector.run rhs in
-       let user_tid = Term.tid d in
-       SS.fold used_names
-         ~init:[]
-         ~f:(fun rels used ->
-           let used_tid = GetDefsPass.def_tid_of_var_name defmap used in
-           let newrel = { used;
-                          user_tid;
-                          used_tid;
-                          user }
-           in
-           List.cons newrel rels)
-    | `Phi p ->
-       let options = Phi.values p in
-       let used_names = Seq.fold options ~init:SS.empty
-                          ~f:(fun uses opt ->
-                            phi_option_to_uses opt |> SS.union uses)
-       in
-       let user_tid = Term.tid p in
-       let user = Phi.lhs p |> Var.name in
-       SS.fold used_names
-         ~init:[]
-         ~f:(fun rels used ->
-           let used_tid = GetDefsPass.def_tid_of_var_name defmap used in
-           let newrel = { used;
-                          user_tid;
-                          used_tid;
-                          user }
-           in
-           List.cons newrel rels)
-    | _ -> []
+  let def_to_uses (d : def term) (defmap : GetDefsPass.t) : t list =
+    let rhs = Def.rhs d in
+    let user = Def.lhs d |> Var.name in
+    let used_names = Var_name_collector.run rhs in
+    let user_tid = Term.tid d in
+    Set.to_list used_names
+    |> List.map ~f:(fun used ->
+                  let used_tid = GetDefsPass.def_tid_of_var_name defmap used in
+                  { used; user_tid; used_tid; user })
 
-  (* returns a set of tuples of vars used and the
-     tid of where it is used *)
-  (* defs mapping is map from varname -> tid of where it is defd *)
-  let run (sub : Sub.t) (defs_mapping : GetDefsPass.t) : UseRel.t =
-    let rel_list = fold_over_elts sub
-                     ~init:[]
-                     ~f:(fun rels elt ->
-                       let rels_to_add = elt_to_uses elt defs_mapping in
-                       List.append rels_to_add rels)
-                     ~cong:List.append
-    in
-    UseRel.of_list rel_list
+  let phi_to_uses (p : phi term) (defmap : GetDefsPass.t) : t list =
+    let options = Phi.values p in
+    let used_names = Seq.fold options ~init:SS.empty
+                              ~f:(fun uses opt ->
+                                phi_option_to_uses opt |> SS.union uses) in
+    let user_tid = Term.tid p in
+    let user = Phi.lhs p |> Var.name in
+    Set.to_list used_names
+    |> List.map ~f:(fun used ->
+                  let used_tid = GetDefsPass.def_tid_of_var_name defmap used in
+                  { used; user_tid; used_tid; user })
 
   let to_string (rel : t) : string =
     let user_tid_s = Tid.to_string rel.user_tid in
@@ -309,12 +291,24 @@ module IsUsedPass = struct
       user_tid_s
       rel.user
 
-  let print_rel (rel : t) : unit =
-    printf "%s\n%!" @@ to_string rel
+  let print_rel (rel : t) : unit = printf "%s\n%!" @@ to_string rel
   
   let print_rels (rels : UseRel.t) : unit =
     printf "Used-By relations are:\n%!";
     UseRel.iter rels ~f:print_rel
+
+  (* returns a set of tuples of vars used and the
+     tid of where it is used *)
+  (* defs mapping is map from varname -> tid of where it is defd *)
+  let run (sub : Sub.t) (defs_mapping : GetDefsPass.t) : UseRel.t =
+    let all_defs = get_all_defs sub in
+    let all_phis = get_all_phis sub in
+    let all_def_usages = List.map all_defs ~f:(fun d -> def_to_uses d defs_mapping)
+                         |> List.join in
+    let all_phi_usages = List.map all_phis ~f:(fun p -> phi_to_uses p defs_mapping)
+                         |> List.join in
+    let rel_list = List.append all_phi_usages all_def_usages in
+    UseRel.of_list rel_list
 end
 
 type t = IsUsedPass.UseRel.t
@@ -323,10 +317,7 @@ type t = IsUsedPass.UseRel.t
 module Analysis = struct
   let run (sub : Sub.t) : t =
     let sub_ssa = sub_to_ssa_sub sub in
-    (* printf "ssa sub insns are: \n"; *)
-    (* Edge_builder.iter_insns sub_ssa; *)
     let defs_map = GetDefsPass.run sub_ssa in
     let used_by_rels = IsUsedPass.run sub_ssa defs_map in
-    (* let () = IsUsedPass.print_rels used_by_rels in *)
     used_by_rels
 end

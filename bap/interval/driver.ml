@@ -152,9 +152,10 @@ let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
      res
   | None ->
      (* run the liveness analysis *)
-     (* let () = printf "Running liveness analysis\n%!" in *)
-     (* let liveness = Live_variables.Analysis.run sub in *)
-     let liveness = Live_variables.IsUsedPass.UseRel.empty in
+     let () = printf "Running liveness analysis\n%!" in
+     let liveness = Live_variables.Analysis.run sub in
+     let () = Live_variables.IsUsedPass.print_rels liveness in
+     (* let liveness = Live_variables.IsUsedPass.UseRel.empty in *)
      
      (* CFG *)
      let edges = List.map edges ~f:(Calling_context.of_edge) in
