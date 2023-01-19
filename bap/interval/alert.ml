@@ -1,5 +1,6 @@
 open Core
 open Bap.Std
+open Common
 
 module Theory = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
@@ -18,7 +19,8 @@ module T = struct
              opcode : string option;
              addr : string option;
              tid : Tid.t;
-             flags_live : bool option;
+             flags_live : SS.t;
+             is_live : bool option;
              problematic_operands : int list option;
              left_val : string option;
              right_val : string option;
@@ -37,6 +39,18 @@ module Set = struct
 end
 
 include T
+
+let str_of_flags_live (flags_live : SS.t) : string =
+  let flags_live = SS.to_list flags_live in
+  let rec loop flag_names acc =
+    match flag_names with
+    | [] -> "" (* e.g., in case flags_live is empty, otherwise never reached *)
+    | final_flag_name :: [] -> acc ^ final_flag_name
+    | cur_flag_name :: next_flag_name :: rest_flags ->
+       let cur_name_with_comma = cur_flag_name ^ "," in
+       loop (next_flag_name :: rest_flags) (acc ^ cur_name_with_comma) in
+  loop flags_live ""
+  
 
 module OpcodeAndAddrFiller = struct
   (* let set_opcode_for_alert (alert : T.t) : T.t = *)
@@ -170,24 +184,48 @@ module OpcodeAndAddrFiller = struct
     |> Set.map ~f:(fun alert -> set_opcode_for_alert alert opcode_lut)
 end
 
+module LivenessFiller = struct
+  type liveness = Live_variables.t
+
+  let set_for_alert (alert : t) (liveness : liveness) : t =
+    let warn_tid = alert.tid in
+
+    (* let users : (string * tid) list = *)
+    (*   Live_variables.get_users_names_and_tids liveness ~of_tid:warn_tid in *)
+    
+    (* let flag_users : (string * tid) list = *)
+    (*   List.filter users ~f:(fun (name, tid) -> Common.var_name_is_x86_64_flag name) in *)
+
+    let live_flags =
+      Live_variables.get_live_flags_of_prev_def_tid liveness ~prev_def_tid:warn_tid in
+
+    let is_live_flagless = Live_variables.is_live_flagless liveness ~tid:warn_tid in
+
+    let is_live = is_live_flagless || not @@ SS.is_empty live_flags in
+    
+    (* let flag_users_names : SS.t = List.map flag_users ~f:fst |> SS.of_list in *)
+    
+    (* let is_live = not @@ List.is_empty users in *)
+    
+    { alert with flags_live = live_flags; is_live = Some is_live }
+    
+  let set_for_alert_set (alerts : Set.t) (liveness : liveness) : Set.t =
+    Set.map alerts ~f:(fun single_alert -> set_for_alert single_alert liveness)
+end
+
 let t_of_reason_and_tid (reason : reason) (tid : Tid.t) : t =
   { sub_name = None;
     opcode = None;
     addr = None;
     tid;
     reason;
-    flags_live = None;
+    flags_live = SS.empty;
+    is_live = None;
     left_val = None;
     right_val = None;
     problematic_operands = None;
     desc = ""
   }
-
-let set_flags_live (x : t) : t =
-  { x with flags_live = Some true }
-
-let set_flags_live (x : t) : t =
-  { x with flags_live = Some true }
 
 let add_problematic_operands (x : t) (prob_op : int list) : t =
   match x.problematic_operands with
@@ -196,6 +234,7 @@ let add_problematic_operands (x : t) (prob_op : int list) : t =
   | None ->
      { x with problematic_operands = Some prob_op }
 
+(* note that this prints a csv row where every field is paranoidly double quoted. rfc4180 compliant. *)
 let to_string (x : t) : string =
   let { sub_name;
         opcode;
@@ -205,6 +244,7 @@ let to_string (x : t) : string =
         left_val;
         right_val;
         flags_live;
+        is_live;
         reason;
         desc } = x
   in
@@ -224,12 +264,14 @@ let to_string (x : t) : string =
     | None -> "" in
   let left_str = Option.value left_val ~default:"" in
   let right_str = Option.value right_val ~default:"" in
-  let flags_live_str = match flags_live with
-    | Some fl -> Bool.to_string fl
-    | None -> "" in
+  let flags_live_str = str_of_flags_live flags_live in
+  let is_live_str = match is_live with
+    | None -> ""
+    | Some is_live -> Bool.to_string is_live in
   let reason_str = string_of_reason reason in
+  (* if you change this next part, then change csv_header below also *)
   sprintf
-    "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s"
+    "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\""
     sub_name_str
     opcode_str
     addr_str
@@ -238,13 +280,20 @@ let to_string (x : t) : string =
     left_str
     right_str
     flags_live_str
+    is_live_str
     reason_str
     desc
 
-let csv_header : string = "\n"
+let csv_header : string = "subroutine_name,mir_opcode,addr,tid,problematic_operands,left_operand,right_operand,live_flags,is_live,alert_reason,description"
 
-let to_csv_row (alert : t) : string = Format.sprintf "%s\n" @@ to_string alert
+let to_csv_row (alert : t) : string = (to_string alert)
 
 let print_alert (alert : t) : unit = printf "Alert: %s\n%!" @@ to_string alert
 
 let print_alerts : Set.t -> unit = Set.iter ~f:print_alert
+
+let save_alerts_to_csv_file ~(filename : string) (alerts : Set.t) : unit =
+  let alerts_as_csv_rows = Set.to_list alerts
+                           |> List.map ~f:to_csv_row in
+  let final_rows = List.cons csv_header alerts_as_csv_rows in
+  Out_channel.write_lines filename final_rows

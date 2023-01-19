@@ -45,7 +45,12 @@ module Checker(N : NumericDomain) = struct
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with
     | Some f -> f
-    | None -> failwith "Couldn't extract interval information out of product domain"
+    | None -> failwith "Couldn't extract interval information out of product domain in comp simp checker"
+
+  let get_taint : N.t -> Checker_taint.Analysis.t =
+    match N.get Checker_taint.Analysis.key with
+    | Some f -> f
+    | None -> failwith "Couldn't extract taint information out of product domain in comp simp checker"
 
   let dont_care_vars = ["ZF"; "OF"; "CF"; "AF"; "PF"; "SF"]
                        |> SS.of_list
@@ -92,7 +97,8 @@ module Checker(N : NumericDomain) = struct
                                   opcode = None;
                                   addr = None;
                                   sub_name = None;
-                                  flags_live = None;
+                                  flags_live = SS.empty;
+                                  is_live = None;
                                   reason = Alert.CompSimp;
                                   desc = binop_str;
                                   left_val = left_str;
@@ -159,6 +165,11 @@ module Checker(N : NumericDomain) = struct
     (* let () = printf "in comp_simp.check_binop, done getting checker for binop operands\n%!" in *)
     checker
 
+  let is_tainted (exp : N.t) : bool =
+    match get_taint exp with
+    | Taint -> true
+    | Notaint -> false
+
   (* TODO: don't flag on constants *)
   let rec check_exp (e : Bil.exp) : N.t ST.t =
     let eval_in_ai (e : Bil.exp) (st : State.t) : N.t ST.t =
@@ -191,7 +202,11 @@ module Checker(N : NumericDomain) = struct
        check_exp y >>= fun y' ->
        (* let () = printf "in comp simp binop, done denoting right\n%!" in *)
        (* let () = printf "in comp simp binop, checking binop\n%!" in *)
-       check_binop op x' y' >>= fun () ->
+       let left_is_tainted = is_tainted x' in
+       let right_is_tainted = is_tainted y' in
+       (if left_is_tainted || right_is_tainted
+       then check_binop op x' y'
+       else ST.return ()) >>= fun () ->
        (* let () = printf "in comp simp binop, done checking binop\n%!" in *)
        (* let () = printf "in comp simp binop, running AI binop on binop now\n%!" in *)
        let binop = AI.denote_binop op in
@@ -236,20 +251,25 @@ module Checker(N : NumericDomain) = struct
        check_exp y >>= fun y' ->
        ST.return @@ N.concat x' y'
 
-  let check_def (d : def term)
-        (live : Live_variables.t)
-        (env : E.t)
-      : warns =
+  (* early bail outs:
+       don't comp simp check the lifted flag calculations, and
+       don't comp simp check if the def is not tainted--all members of the rhs
+         expression tree are untainted then *)
+  let check_def (d : def term) (live : Live_variables.t) (env : E.t) : warns =
     let tid = Term.tid d in
     let lhs = Def.lhs d in
     let lhs_var_name = Var.name lhs in
-    if SS.mem dont_care_vars lhs_var_name
+    if Common.var_name_is_x86_64_flag lhs_var_name
     then empty
     else
-      let init_state = State.init env tid live in
-      let rhs = Def.rhs d in
-      let _, final_state = ST.run (check_exp rhs) init_state in
-      final_state.warns
+      let is_tainted = is_tainted @@ E.lookup lhs_var_name env in
+      if not is_tainted
+      then empty
+      else
+        let init_state = State.init env tid live in
+        let rhs = Def.rhs d in
+        let _, final_state = ST.run (check_exp rhs) init_state in
+        final_state.warns
   
   let check_elt (e : Blk.elt) (live : Live_variables.t) (env : E.t) : warns =
     match e with

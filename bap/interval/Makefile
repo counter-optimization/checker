@@ -23,7 +23,7 @@ libna_argon2id : bap-plugin
 
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 
-	-bap --plugin-path=. --pass=uarch-checker --uarch-checker-target-function=crypto_pwhash_argon2id --no-optimization --bil-optimization=0 ../../test/libna/bap_ld_scalar_mult.o > libna.crypto_pwhash_argon2id.debug.log 2>&1
+	-bap --plugin-path=. --pass=uarch-checker --uarch-checker-output-csv-file=./libna.crypto_pwhash_argon2id.csv --uarch-checker-target-function=crypto_pwhash_argon2id --no-optimization --bil-optimization=0 ../../test/libna/bap_ld_scalar_mult.o > libna.crypto_pwhash_argon2id.debug.log 2>&1
 
 	@echo -n "Done with analysis of argon2id"
 
@@ -34,7 +34,7 @@ libna_aesni : bap-plugin
 
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 
-	-bap --plugin-path=. --pass=uarch-checker --uarch-checker-target-function=crypto_aead_aes256gcm_encrypt --no-optimization --bil-optimization=0 ../../test/libna/bap_ld_scalar_mult.o > libna.crypto_aead_aes256gcm_encrypt.debug.log 2>&1
+	-bap --plugin-path=. --pass=uarch-checker --uarch-checker-output-csv-file=./libna.crypto_aesni.csv --uarch-checker-target-function=crypto_aead_aes256gcm_encrypt --no-optimization --bil-optimization=0 ../../test/libna/bap_ld_scalar_mult.o > libna.crypto_aead_aes256gcm_encrypt.debug.log 2>&1
 
 	@echo -n "Done with analysis of aesni "
 
@@ -45,7 +45,7 @@ libna_crypto_sign : bap-plugin
 
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 
-	-bap --plugin-path=. --pass=uarch-checker --uarch-checker-target-function=crypto_sign --no-optimization --bil-optimization=0 ../../test/libna/bap_ld_scalar_mult.o > libna.crypto_sign.debug.log 2>&1
+	-bap --plugin-path=. --pass=uarch-checker --uarch-checker-output-csv-file=./libna.crypto_sign_ed25519.csv --uarch-checker-target-function=crypto_sign --no-optimization --bil-optimization=0 ../../test/libna/bap_ld_scalar_mult.o > libna.crypto_sign.debug.log 2>&1
 
 	@echo -n "Done with analysis of crypto_sign "
 
@@ -56,7 +56,7 @@ libna_aead : bap-plugin
 
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 
-	-bap --plugin-path=. --pass=uarch-checker --uarch-checker-target-function=crypto_aead_chacha20poly1305_encrypt --no-optimization --bil-optimization=0 ../../test/libna/bap_ld_scalar_mult.o > libna.crypto_aead_chacha20poly1305_encrypt.debug.log 2>&1
+	-bap --plugin-path=. --pass=uarch-checker --uarch-checker-output-csv-file=./libna.aead_chacha20poly1305.csv --uarch-checker-target-function=crypto_aead_chacha20poly1305_encrypt --no-optimization --bil-optimization=0 ../../test/libna/bap_ld_scalar_mult.o > libna.crypto_aead_chacha20poly1305_encrypt.debug.log 2>&1
 
 	@echo -n "Done with analysis of chacha20poly1305 "
 

@@ -1,4 +1,5 @@
 open Core
+open Bap_main
 open Bap.Std
 open Graphlib.Std
 open Common
@@ -13,6 +14,7 @@ module CR = Common.CalleeRel
 module CRS = CR.Set
 
 type check_sub_result = { callees : CRS.t;
+                          liveness_info : Live_variables.t;
                           alerts : Alert.Set.t }
 
 type checker_alerts = Alert.Set.t
@@ -118,31 +120,27 @@ let should_skip_analysis (edges : Edge_builder.edges)
               | Direct totid -> Some totid
               | _ -> None
             end
-         | _ -> None
-       in
+         | _ -> None in
        begin
          match totid with
          | None -> failwith "todo"
          | Some totid ->
             let callee_rels = CRS.singleton { callee = totid ;
                                               caller = Term.tid sub ;
-                                              callsite = Term.tid j }
-            in
+                                              callsite = Term.tid j } in
             let empty_alerts = Alert.Set.empty in
-            Some { alerts = empty_alerts ; callees = callee_rels }
+            Some { alerts = empty_alerts;
+                   callees = callee_rels;
+                   liveness_info = Live_variables.IsUsedPass.UseRel.empty }
        end
        | _ -> failwith "in should_skip_analysis, subroutine is single instruction but non jump instruction. this case is not yet handled." 
   else
     None
 
 let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
-  
   let () = printf "Running analysis on sub %s\n%!" (Sub.name sub) in
-    
   let prog = Project.program proj in
-  
   let edges, tidmap = Edge_builder.run_one sub proj in
-  
   match should_skip_analysis edges tidmap sub prog with
   | Some res ->
      let sub_name = Sub.name sub in
@@ -347,13 +345,17 @@ let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
      let () = printf "Done running silent stores checker.\n%!" in
      let all_alerts = Alert.Set.union comp_simp_alerts silent_store_alerts in
      (* let all_alerts = Alert.Set.empty in *)
-     
+
+     (* fill out all alert fields that can't (or shouldn't be known in the checkes *)
      (* fill out this subroutine name in all of the generated alerts for
         this sub *)
      let alerts_with_subs = Alert.Set.map all_alerts ~f:(fun alert ->
                                             { alert with sub_name = Some (Sub.name sub) }) in
      let alerts_with_ops_addrs = Alert.OpcodeAndAddrFiller.set_opcode_and_addr_for_alert_set alerts_with_subs proj in
-     let all_alerts = alerts_with_ops_addrs in
+     
+     let alerts_with_liveness = Alert.LivenessFiller.set_for_alert_set alerts_with_ops_addrs liveness in
+       
+     let all_alerts = alerts_with_liveness in
      
      (* get callees--both direct and indirect calls--of this call *)
      let () = Format.printf "Getting callees for sub %s\n%!" (Sub.name sub) in
@@ -367,7 +369,7 @@ let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
      let () = Format.printf "Callees are: \n%!" in
      let () = CRS.print callees in
      
-     { alerts = all_alerts; callees = callees }
+     { alerts = all_alerts; callees = callees; liveness_info = liveness }
 
 let iter_insns sub : unit =
   let irg = Sub.to_cfg sub in
@@ -382,10 +384,8 @@ let iter_insns sub : unit =
     let print_insn = function
       | `Def d -> Format.printf "iter_insns--Def: %s\n%!" @@ Def.to_string d
       | `Phi p -> Format.printf "iter_insns--Phi: %s\n%!" @@ Phi.to_string p
-      | `Jmp j -> Format.printf "iter_insns--Jmp: %s\n%!" @@ Jmp.to_string j
-    in
-    Seq.iter insns ~f:print_insn
-  in
+      | `Jmp j -> Format.printf "iter_insns--Jmp: %s\n%!" @@ Jmp.to_string j in
+    Seq.iter insns ~f:print_insn in
   
   let () = Format.printf "nodes are:\n%!" in 
   Seq.iter nodes ~f:print_sub_defs
@@ -398,10 +398,11 @@ let check_fn top_level_sub img ctxt proj : unit =
   let worklist = SubSet.singleton (top_level_sub) in
   let processed = SubSet.empty in
   let init_res = Alert.Set.empty in
-
+  
   let rec loop ~(worklist : SubSet.t)
             ~(processed : SubSet.t)
             ~(res : checker_alerts)
+            ~(liveness : Live_variables.t)
             ~(is_toplevel : bool)
           : checker_alerts =
     let worklist_wo_procd = Set.diff worklist processed in
@@ -410,48 +411,43 @@ let check_fn top_level_sub img ctxt proj : unit =
     else
       let sub = Set.min_elt_exn worklist_wo_procd in
       (* let () = iter_insns sub in *)
-      
       let worklist_wo_procd_wo_sub = Set.remove worklist_wo_procd sub in
       let next_processed = Set.add processed sub in
-      
       let () = Format.printf "Processing sub %s (%a)\n%!" (Sub.name sub)
                              Tid.pp (Term.tid sub) in
       if AnalysisBlackList.sub_is_blacklisted sub ||
            AnalysisBlackList.sub_is_not_linked sub
       then
         let () = Format.printf "Sub %s is blacklisted or not linked into the object file, skipping...\n%!"
-                   (Sub.name sub)
-        in
+                   (Sub.name sub) in
         loop ~worklist:worklist_wo_procd_wo_sub
           ~processed:next_processed
           ~res
+          ~liveness
           ~is_toplevel:false
       else
         let current_res = run_analyses sub img proj ~is_toplevel in
-
         let callee_subs = CRS.to_list current_res.callees
                           |> List.map ~f:(fun (r : CR.t) -> sub_of_tid_exn r.callee proj)
-                          |> SubSet.of_list
-        in
-
+                          |> SubSet.of_list in
         let () = SubSet.iter callee_subs ~f:(fun callee ->
-            printf "CallOf: (%s, %s)\n%!" (Sub.name sub) (Sub.name callee))
-        in
-        
+            printf "CallOf: (%s, %s)\n%!" (Sub.name sub) (Sub.name callee)) in
         let next_worklist = SubSet.union worklist_wo_procd_wo_sub callee_subs in
         let all_alerts = Alert.Set.union res current_res.alerts in
         loop ~worklist:next_worklist
           ~processed:next_processed
           ~res:all_alerts
-          ~is_toplevel:false
-  in
+          ~liveness:current_res.liveness_info
+          ~is_toplevel:false in
   
   (* Run the analyses and checkers *)
-  let checker_alerts = loop ~worklist ~processed
-                         ~res:init_res ~is_toplevel:true
-  in
-
+  let checker_alerts = loop ~worklist
+                            ~processed
+                            ~liveness:Live_variables.IsUsedPass.UseRel.empty
+                            ~res:init_res
+                            ~is_toplevel:true in
   let () = Format.printf "Done processing all functions\n%!" in
-
+  
   (* just print to stdout for now *)
-  Alert.print_alerts checker_alerts
+  let csv_out_file_name = Extension.Configuration.get ctxt Common.output_csv_file_param in
+  Alert.save_alerts_to_csv_file ~filename:csv_out_file_name checker_alerts

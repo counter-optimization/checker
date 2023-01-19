@@ -1,4 +1,5 @@
 open Core
+open Bap_main
 open Bap.Std
 open Graphlib.Std
 open Monads.Std
@@ -15,6 +16,21 @@ module SS = struct
 end
 
 let package = "uarch-checker"
+
+let target_func_param = Extension.Configuration.parameter
+                            ~doc:"Which top-level function to check"
+                            Extension.Type.string
+                            "target-function"
+
+let output_csv_file_param = Extension.Configuration.parameter
+                              ~doc:"CSV file where checker results will be stored"
+                              Extension.Type.string
+                              "output-csv-file"
+
+let x86_64_flag_names : SS.t = SS.of_list ["CF"; "PF"; "AF"; "ZF"; "SF";
+                                           "TF"; "IF"; "DF"; "OF"]
+
+let var_name_is_x86_64_flag : string -> bool = SS.mem x86_64_flag_names
 
 let string_powset_dom = KB.Domain.powerset
                           (module String)

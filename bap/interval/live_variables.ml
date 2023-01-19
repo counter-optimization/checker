@@ -1,6 +1,7 @@
 open Core
 open Bap.Std
 open Graphlib.Std
+open Common
 
 (* what does it mean for a var in BAP IR SSA to be live?
    we are doing a may-be-live analysis:
@@ -139,8 +140,6 @@ module T = Bap_core_theory.Theory
 (*   end *)
 (* end *)
 
-module SS = Set.Make_binable_using_comparator(String)
-
 let sub_to_ssa_sub : Sub.t -> Sub.t = Sub.ssa
 
 let fold_over_elts (sub : Sub.t) ~(init : 'a) ~(f:'a -> Blk.elt -> 'a) ~(cong : 'a -> 'a -> 'a) : 'a =
@@ -241,18 +240,25 @@ end
   *)
 module IsUsedPass = struct
   module T = struct
-    (* used_tid is an option type since
-       subs in SSA still have some free vars
-       like RBP, RSP, RIP, args like RDI, RSI, ..
-     *)
+    (* used_tid is an option type since subs in SSA still have some free
+       vars (the sub's arguments) *)
     type t = { used : string;
-               used_tid : Tid.t option;
-               user_tid : Tid.t;
+               used_defining_tid : tid option;
+               user_tid : tid;
                user : string }
                [@@deriving sexp, compare, bin_io]
   end
-  module UseRel = Set.Make(T)
-  include T
+
+  module Cmp = struct
+    include T
+    include Comparator.Make(T)
+  end
+  
+  module UseRel = struct
+    include Set.Make_using_comparator(Cmp)
+  end
+  
+  include Cmp
              
   let phi_option_to_uses (_tid, opt_expr) : SS.t = Var_name_collector.run opt_expr
 
@@ -263,8 +269,8 @@ module IsUsedPass = struct
     let user_tid = Term.tid d in
     Set.to_list used_names
     |> List.map ~f:(fun used ->
-                  let used_tid = GetDefsPass.def_tid_of_var_name defmap used in
-                  { used; user_tid; used_tid; user })
+                  let used_defining_tid = GetDefsPass.def_tid_of_var_name defmap used in
+                  { used; user_tid; used_defining_tid; user })
 
   let phi_to_uses (p : phi term) (defmap : GetDefsPass.t) : t list =
     let options = Phi.values p in
@@ -275,21 +281,16 @@ module IsUsedPass = struct
     let user = Phi.lhs p |> Var.name in
     Set.to_list used_names
     |> List.map ~f:(fun used ->
-                  let used_tid = GetDefsPass.def_tid_of_var_name defmap used in
-                  { used; user_tid; used_tid; user })
+                  let used_defining_tid = GetDefsPass.def_tid_of_var_name defmap used in
+                  { used; user_tid; used_defining_tid; user })
 
   let to_string (rel : t) : string =
     let user_tid_s = Tid.to_string rel.user_tid in
-    let used_tid_s = match rel.used_tid with
+    let used_tid_s = match rel.used_defining_tid with
       | None -> "none,freevar"
-      | Some tid -> Tid.to_string tid
-    in
-    sprintf
-      "(used: %s, used_tid: %s, user_tid: %s, user: %s)"
-      rel.used
-      used_tid_s
-      user_tid_s
-      rel.user
+      | Some tid -> Tid.to_string tid in
+    sprintf "(used: %s, used_defining_tid: %s, user_tid: %s, user: %s)"
+      rel.used used_tid_s user_tid_s rel.user
 
   let print_rel (rel : t) : unit = printf "%s\n%!" @@ to_string rel
   
@@ -315,9 +316,64 @@ type t = IsUsedPass.UseRel.t
 
 (* the live variables analysis (Live_variables.Analysis.run) *)
 module Analysis = struct
-  let run (sub : Sub.t) : t =
+  let run (sub : Sub.t) : IsUsedPass.UseRel.t =
     let sub_ssa = sub_to_ssa_sub sub in
     let defs_map = GetDefsPass.run sub_ssa in
     let used_by_rels = IsUsedPass.run sub_ssa defs_map in
     used_by_rels
 end
+
+type name_and_tid = string * tid
+
+let unssa_var_name (name : string) : string =
+  let ssa_suffix_start_char = '.' in
+  match String.rindex name ssa_suffix_start_char with
+  | Some idx_of_ssa_start -> String.slice name 0 idx_of_ssa_start
+  | None -> name
+
+let filter_results (analysis_results : IsUsedPass.UseRel.t) ~(f : IsUsedPass.t -> bool) : t =
+  Set.filter analysis_results ~f
+
+let get_users_names_and_tids (analysis_results : IsUsedPass.UseRel.t) ~(of_tid : tid) : name_and_tid list =
+  (* let def_tid = Term.tid of_def in *)
+  let is_use_rel_for_def_tid (use_rel : IsUsedPass.t) : bool =
+    match use_rel.used_defining_tid with
+    | None -> false
+    | Some other_def_tid -> Tid.equal other_def_tid of_tid in
+  filter_results analysis_results ~f:is_use_rel_for_def_tid
+  |> Set.to_list
+  |> List.map ~f:(fun (use_rel : IsUsedPass.t) ->
+                (unssa_var_name use_rel.user, use_rel.user_tid))
+
+(* is this def used in some other non-flag-defining def? *)
+let is_live_flagless (analysis_results : IsUsedPass.UseRel.t) ~(tid : tid) : bool =
+  let users : (string * tid) list =
+    get_users_names_and_tids analysis_results ~of_tid:tid in
+  let is_not_flag (var_name : string) : bool =
+    let normalized_name = unssa_var_name var_name in
+    not @@ Common.var_name_is_x86_64_flag normalized_name in
+  let non_flag_users : (string * tid) list =
+    List.filter users ~f:(fun (name, tid) -> is_not_flag name) in
+  not @@ List.is_empty non_flag_users
+  (* if not @@ List.is_empty non_flag_users *)
+  (* then true *)
+  (* else failwith "todo" *)
+
+(* bool option: if the variable has no flags *)
+(* assumption: flags for one instruction are not used
+   to calculate the flags for another instruction *)
+let get_live_flags_of_prev_def_tid (analysis_results : IsUsedPass.UseRel.t) ~(prev_def_tid : tid) : SS.t =
+  let all_users : (string * tid) list =
+    get_users_names_and_tids analysis_results ~of_tid:prev_def_tid in
+  let is_flag (var_name : string) : bool = 
+    let normalized_name = unssa_var_name var_name in
+    Common.var_name_is_x86_64_flag normalized_name in
+  let flag_users : (string * tid) list =
+    List.filter all_users ~f:(fun (name, tid) -> is_flag name) in
+  let live_flag_users : (string * tid) list =
+    List.filter flag_users ~f:(fun (name, tid) ->
+                  is_live_flagless analysis_results ~tid) in
+  let live_flag_users_normalized_names : string list =
+    List.map live_flag_users ~f:(fun (name, _) -> unssa_var_name name) in
+  SS.of_list live_flag_users_normalized_names
+  
