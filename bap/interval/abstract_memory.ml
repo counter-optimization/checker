@@ -372,6 +372,14 @@ module Make(N : NumericDomain)
   let set_img (mem : t) (img : Image.t) : t =
     { mem with img = Some img }
 
+  let bap_size_to_int = function
+    | `r8 -> 8
+    | `r16 -> 16
+    | `r32 -> 32
+    | `r64 -> 64
+    | `r128 -> 128
+    | `r256 -> 256
+    
   let bap_size_to_absdom (sz : Size.t) : Wrapping_interval.t =
     let bitwidth = match sz with
       | `r8 -> 8
@@ -379,8 +387,7 @@ module Make(N : NumericDomain)
       | `r32 -> 32
       | `r64 -> 64
       | `r128 -> 128
-      | `r256 -> 256
-    in
+      | `r256 -> 256 in
     Wrapping_interval.of_int bitwidth
   
   let equal {cells=cells1; env=env1; bases=bases1; globals_read=globals_read1; _}
@@ -443,27 +450,33 @@ module Make(N : NumericDomain)
           let offs_s = Wrapping_interval.to_string offs in
           Or_error.error_string @@
             sprintf
-              "load_global: couldn't convert offs %s to address for image: %s" offs_s (Error.to_string_hum e)
-
+              "load_global: couldn't convert offs %s to address for image: %s"
+              offs_s (Error.to_string_hum e)
        | Ok addr ->
           let addr_w = Word.of_int ~width:64 addr in
           let target_seg = Table.find_addr segs addr_w in
           match target_seg with
           | None ->
-             begin
-               
-               let addr_s = Word.to_string addr_w in
-               Or_error.error_string @@ sprintf "load_global: couldn't find addr %s in image" addr_s
-             end
+             (* probably a read or write to bss. i see in the knowledge base
+                that there are entries for bounds of .bss and .tbss
+                TODO: use those boundries to tell abstract_memory state about
+                bss. in the mean time, if there is a load or store of a constant
+                pointer that is not already allocated/present in the binary ELF
+                image, then return untainted 0 as if it were an initial load from
+                zero'd out bss. *)
+             let () = Format.printf "load_global: couldn't find addr %a in image\n%!"
+                                    Word.pp addr_w in
+             Ok (N.of_int ~width:(bap_size_to_int sz) 0
+                 |> set_untaint)
           | Some (mem, seg) ->
              match Memory.get ~addr:addr_w ~scale:sz mem with
              | Error e ->
-                begin
-                  let segname = Image.Segment.name seg in
-                  let addr_s = Word.to_string addr_w in
-                  let err_s = Error.to_string_hum e in
-                  Or_error.error_string @@ sprintf "load_global: Error reading address %s from seg %s: %s" addr_s segname err_s
-                end
+                let segname = Image.Segment.name seg in
+                let addr_s = Word.to_string addr_w in
+                let err_s = Error.to_string_hum e in
+                Or_error.error_string @@
+                  sprintf "load_global: Error reading address %s from seg %s: %s"
+                          addr_s segname err_s
              | Ok data ->
                 let res = N.of_word data in
                 (* let res_s = N.to_string res in *)

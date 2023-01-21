@@ -27,6 +27,11 @@ let output_csv_file_param = Extension.Configuration.parameter
                               Extension.Type.string
                               "output-csv-file"
 
+let secrets_csv_file_param = Extension.Configuration.parameter
+                               ~doc:"CSV file where secret function argument indices are stored"
+                               Extension.Type.string
+                              "secrets-csv-file"
+
 let x86_64_flag_names : SS.t = SS.of_list ["CF"; "PF"; "AF"; "ZF"; "SF";
                                            "TF"; "IF"; "DF"; "OF"]
 
@@ -621,7 +626,7 @@ module AbstractInterpreter(N: NumericDomain)
     include Monad.State.Make(E)(Monad.Ident) 
   end
   open ST.Syntax
-
+  
   let denote_binop (op : binop) : N.t -> N.t -> N.t =
     match op with
     | Bil.PLUS -> N.add
@@ -814,13 +819,13 @@ module AbstractInterpreter(N: NumericDomain)
     
     let res = match e with
       | `Def d ->
-         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid d) in *)
+         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid d) in
          denote_def d
       | `Jmp j ->
-         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid j) in *)
+         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid j) in
          denote_jmp j 
       | `Phi p ->
-         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid p) in *)
+         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid p) in
          denote_phi p
     in
     let (elt_res, state') = ST.run res st in

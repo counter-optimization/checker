@@ -100,11 +100,15 @@ module Getter(N : NumericDomain) = struct
              Ok { callee = sub_tid ;
                   caller = caller_tid ;
                   callsite = fromtid }
-          | None -> Or_error.error_string
-                      "get_callee_of_indirect_exn: Couldn't find callee sub tid for that addr")
+          | None -> Or_error.error_string @@
+                      sprintf
+                        "get_callee_of_indirect_exn: Couldn't find callee sub tid for that addr : callee_tid is %a, jmp_from tid is %a, callee_addr is %a"
+                        Tid.pps callee_tid Tid.pps (Term.tid jmp_from) Bitvector.pps callee_addr)
       | Error e ->
          let wi_err_msg = Error.to_string_hum e in
-         let err_msg = sprintf "get_callee_of_indirect_exn: Couldn't get callee as a single integer in Callees.Getter.get_callee_of_indirect_exn: %s" wi_err_msg in
+         let err_msg =
+           sprintf "get_callee_of_indirect_exn: Couldn't get callee as a single integer: %s"
+                   wi_err_msg in
          Or_error.error_string err_msg
 
   let of_jmp_term (j : jmp term) (sub : sub term) (prog : Program.t) (all_ret_tids : ReturnInsnsGetter.t) sol : rel option Or_error.t =

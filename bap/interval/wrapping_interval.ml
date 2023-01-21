@@ -266,6 +266,32 @@ let binop op left right : t =
      wrap_intvl res wrapping_range
   | _, _ -> Bot
 
+(* we assume that the cryptographic code is correct and safe of
+   common programming errors like div by zero. because of this, if
+   the divisor is an interval like [0, UINT32_MAX], then the divisor
+   can be changed to [1, UINT32_MAX] since we know 0 can't have happened.
+   Ditto for [INT32_MIN, 0].
+   If 0 is not the endpoints of the interval, then a div by zero won't happen
+   in *this* code, but we don't change the intervals since we can't put a hole
+   in the interval anyways. *)
+let make_rhs_zero_safe binop_fn left right : t =
+  match right with
+  | Interval {lo; hi; width; signed} ->
+     let zero = Z.zero in
+     let lo_is_zero = Z.equal lo zero in
+     let hi_is_zero = Z.equal hi zero in
+     (match lo_is_zero, hi_is_zero with
+     | true, true ->
+        failwith "in Wrapping_interval.safe_div, div by constant zero"
+     | true, false ->
+        let new_right = Interval { lo = Z.add lo Z.one; hi; width; signed } in
+        binop binop_fn left new_right
+     | false, true ->
+        let new_right = Interval { lo; hi = Z.sub hi Z.one; width; signed } in
+        binop binop_fn left new_right
+     | false, false -> binop binop_fn left right)
+  | Bot -> failwith "in Wrapping_interval.safe_div, right is bot"
+
 let unop op intvl =
   match intvl with
   | Interval r ->
@@ -279,10 +305,10 @@ let shift_wrapper op x y = op x (Z.to_int y)
 let add = binop Z.add
 let sub = binop Z.sub
 let mul = binop Z.mul
-let div = binop Z.div
-let sdiv = binop Z.div
-let umod = binop Z.rem
-let smod = binop Z.rem
+let div = make_rhs_zero_safe Z.div
+let sdiv = make_rhs_zero_safe Z.div
+let umod = make_rhs_zero_safe Z.rem
+let smod = make_rhs_zero_safe Z.rem
 let lshift = binop @@ shift_wrapper Z.shift_left
 let rshift = binop @@ shift_wrapper Z.shift_right
 let arshift = binop @@ shift_wrapper Z.shift_right_trunc

@@ -399,12 +399,8 @@ let check_fn top_level_sub img ctxt proj : unit =
   let processed = SubSet.empty in
   let init_res = Alert.Set.empty in
   
-  let rec loop ~(worklist : SubSet.t)
-            ~(processed : SubSet.t)
-            ~(res : checker_alerts)
-            ~(liveness : Live_variables.t)
-            ~(is_toplevel : bool)
-          : checker_alerts =
+  let rec loop ~(worklist : SubSet.t) ~(processed : SubSet.t) ~(res : checker_alerts)
+            ~(liveness : Live_variables.t) ~(is_toplevel : bool) : checker_alerts =
     let worklist_wo_procd = Set.diff worklist processed in
     if SubSet.is_empty worklist_wo_procd
     then res
