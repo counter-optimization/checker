@@ -485,6 +485,8 @@ module type MemoryT =
     
     val store_of_bil_exp : Bil.exp -> offs:v -> data:v -> size:Size.t -> t -> t err
 
+    val store_global : addr:addr -> data:word -> valtype:CellType.t -> t -> t err
+
     val havoc_on_call : t -> t
 
     val merge : t -> t -> t
@@ -552,6 +554,8 @@ module NumericEnv(ValueDom : NumericDomain)
   let load_of_bil_exp (e : Bil.exp) _offs _sz env = Ok (ValueDom.top, env)
   
   let store_of_bil_exp (e : Bil.exp) ~offs ~data ~size env = Ok env
+
+  let store_global ~addr ~data ~valtype env = Ok env
 
   let havoc_on_call env = env
   
@@ -750,8 +754,28 @@ module AbstractInterpreter(N: NumericDomain)
         | Bil.Unknown (str, _) ->
            (* This seems to be used for at least:
               setting undefined flags (like everything
-              but OF,CF after x86_64 mul) *)
-           ST.return N.bot
+              but OF,CF after x86_64 mul)
+
+              also, results of cpuid/feature identification in libsodium:
+              0003b294: RAX := pad:64[unknown[bits]:u32]
+              0003b297: RBX := pad:64[unknown[bits]:u32]
+              0003b29a: RCX := pad:64[unknown[bits]:u32]
+              0003b29d: RDX := pad:64[unknown[bits]:u32]
+              0003b2a9: #12582456 := RBX
+              0003b2ad: RBX := RSI
+              0003b2b1: RSI := #12582456
+              0003b2c3: #12582455 := low:32[RAX]
+              0003b2c6: OF := 0
+              0003b2c9: CF := 0
+              0003b2cc: AF := unknown[bits]:u1
+              0003b2d1: PF :=
+                        ~low:1[let $221 = #12582455 >> 4 ^ #12582455 in
+                               let $222 = $221 >> 2 ^ $221 in $222 >> 1 ^ $222]
+              0003b2d5: SF := high:1[#12582455]
+              0003b2d9: ZF := 0 = #12582455
+
+              for now, return top *)
+           ST.return N.top
         
         | Bil.Let (var, exp, body) ->
            ST.get () >>= fun prestate -> 

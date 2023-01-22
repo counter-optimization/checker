@@ -137,7 +137,9 @@ let should_skip_analysis (edges : Edge_builder.edges)
   else
     None
 
-let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
+let run_analyses sub img proj ~(is_toplevel : bool)
+                 ~(bss_init_stores : Global_function_pointers.global_const_store list)
+    : check_sub_result =
   let () = printf "Running analysis on sub %s\n%!" (Sub.name sub) in
   let prog = Project.program proj in
   let edges, tidmap = Edge_builder.run_one sub proj in
@@ -242,15 +244,31 @@ let run_analyses sub img proj ~(is_toplevel : bool) : check_sub_result =
      (* todo: handle vector registers *)
      let true_args = List.filter freenames
                        ~f:(fun name -> List.mem x64_args name ~equal:String.equal)
-                     |> List.append argnames
-     in
+                     |> List.append argnames in
 
      let env_with_df_set = E.set "DF" FinalDomain.b0 with_canary_set in
      let env_with_rsp_set = match E.set_rsp stack_addr env_with_df_set with
          | Ok env' -> env'
          | Error e -> failwith @@ Error.to_string_hum e in
      let env_with_img_set = E.set_img env_with_rsp_set img in
-     let initial_mem = List.fold true_args ~init:env_with_img_set
+     let env_with_bss_initd =
+       List.fold bss_init_stores
+                 ~init:(Ok env_with_img_set)
+                 ~f:(fun env' store ->
+                   Or_error.bind env' ~f:(fun env' ->
+                                   E.store_global env' ~addr:store.addr
+                                                  ~data:store.data
+                                                  ~valtype:CellType.Ptr)) in
+     
+     let env_with_bss_initd = match env_with_bss_initd with
+       | Ok env -> env 
+       | Error e ->
+          let inner_err_msg = Error.to_string_hum e in
+          failwith @@ sprintf "in run_analysis setting bss inits : %s" inner_err_msg in
+
+     let final_env = env_with_bss_initd in
+                   
+     let initial_mem = List.fold true_args ~init:final_env
                                  ~f:(fun mem argname -> E.init_arg ~name:argname mem) in
      
      (* let () = Format.printf "Initial memory+env is: %!" in *)
@@ -398,6 +416,18 @@ let check_fn top_level_sub img ctxt proj : unit =
   let worklist = SubSet.singleton (top_level_sub) in
   let processed = SubSet.empty in
   let init_res = Alert.Set.empty in
+
+  (* let global_storing_subs = Global_function_pointers.Libsodium.Analysis.get_global_storing_subs ctxt proj in *)
+  (* let () = Format.printf "Subs storing to globals are:\n%!"; *)
+  (*          List.iter global_storing_subs ~f:(fun sub -> *)
+  (*                      Format.printf "gss: %s\n%!" (Sub.name sub)) in *)
+
+  let global_store_data = Global_function_pointers.Libsodium.Analysis.get_all_init_fn_ptr_data ctxt proj in
+  let () = Format.printf "Global stores are:\n%!";
+           List.iter global_store_data ~f:(fun { data; addr } ->
+                       Format.printf "mem[%a] <- %a\n%!"
+                                     Word.pp addr
+                                     Word.pp data) in
   
   let rec loop ~(worklist : SubSet.t) ~(processed : SubSet.t) ~(res : checker_alerts)
             ~(liveness : Live_variables.t) ~(is_toplevel : bool) : checker_alerts =
@@ -422,7 +452,9 @@ let check_fn top_level_sub img ctxt proj : unit =
           ~liveness
           ~is_toplevel:false
       else
-        let current_res = run_analyses sub img proj ~is_toplevel in
+        let current_res = run_analyses sub img proj
+                                       ~is_toplevel
+                                       ~bss_init_stores:global_store_data in
         let callee_subs = CRS.to_list current_res.callees
                           |> List.map ~f:(fun (r : CR.t) -> sub_of_tid_exn r.callee proj)
                           |> SubSet.of_list in

@@ -315,14 +315,9 @@ module Make(N : NumericDomain)
   let is_empty_env m : bool = Env.equal m.env Env.empty
 
   let pp {cells; env; bases; globals_read}  =
-    (* let print_ptr_to_cells ~key ~data = *)
-    (*   let cell_set_str =  Set.to_list data |> List.to_string ~f:C.to_string in *)
-    (*   Format.printf "\t%s --> %s\n%!" (Ptr.to_string key) cell_set_str *)
-    (* in *)
     let print_bases_map ~key ~data =
       let region_set_str = Set.to_list data |> List.to_string ~f:Region.to_string in
-      Format.printf "\t%s --> %s\n%!" key region_set_str
-    in
+      Format.printf "\t%s --> %s\n%!" key region_set_str in
     printf "* Ptr->Cells map is:\n%!";
     Set.iter cells ~f:C.pp;
     Env.pp env;
@@ -496,32 +491,22 @@ module Make(N : NumericDomain)
   let store ~(offs : Wrapping_interval.t) ~region
             ~(width : Wrapping_interval.t) ~data ~valtype mem : t err =
     let open Or_error.Monad_infix in
-    
     let cel = C.make ~region ~offs ~width ~valtype in
     let celname = C.name cel in
-    
-    (* let () = printf "storing to cell %s\n%!" (C.to_string cel) in *)
-
     let overlap = get_overlapping_cells cel mem in
-
-    (* let () = printf "in store, overlapping cells are:\n%!" in *)
-    (* let () = Set.iter overlap ~f:(fun c -> *)
-    (*                     printf "overlapping cell: %s\n%!" (C.to_string c)) in *)
-    (* let () = printf "in store, deleting overlapping cells\n%!" in *)
-    
     let mem' = Set.fold overlap ~init:mem ~f:(fun mem' c -> remove_cell c mem') in
-
     let old_env = mem'.env in
     let old_cells = mem'.cells in
-    let res = Ok { mem' with env = Env.set celname data old_env;
-                             cells = Set.add old_cells cel } in
-    if Set.length overlap > 1
-    then
-      (* let () = printf "in store: did propagate unstore, here is the out state:\n%!" in *)
-      (* let () = pp mem' in *)
-      res
-    else
-      res
+    Ok { mem' with env = Env.set celname data old_env;
+                   cells = Set.add old_cells cel }
+
+  let store_global ~(addr : addr) ~(data : word) ~valtype mem : t err =
+    let open Or_error.Monad_infix in
+    let addr_wi = Wrapping_interval.of_word addr in
+    let data_wi = N.of_word data in
+    let width = Wrapping_interval.of_int 64 in
+    let region = Region.Global in
+    store ~offs:addr_wi ~region ~width ~data:data_wi ~valtype mem
 
   let global_already_read ~(cell : C.t) ~(mem : t) : bool =
     match Set.find mem.cells ~f:(C.same_cell cell) with

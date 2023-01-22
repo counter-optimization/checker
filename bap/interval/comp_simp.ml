@@ -66,12 +66,9 @@ module Checker(N : NumericDomain) = struct
       let special = special_for_bw to_check in
       I.contains special to_check
 
-  let check_binop_operands
-        (specials : (I.t -> I.t) list * (I.t -> I.t) list)
-        (op : binop)
-        (left : N.t)
-        (right : N.t)
-      : unit ST.t =
+  let check_binop_operands (specials : (I.t -> I.t) list * (I.t -> I.t) list)
+                           (op : binop) ~(check_left : bool) ~(check_right : bool)
+                           (left : N.t) (right : N.t) : unit ST.t =
     let left_specials = fst specials in
     let right_specials = snd specials in
     let left = get_intvl left in
@@ -87,12 +84,10 @@ module Checker(N : NumericDomain) = struct
           let binop_str = Common.binop_to_string op in
           let left_str = if is_left
                          then Some (I.to_string operand)
-                         else None
-          in
+                         else None in
           let right_str = if not is_left
                           then Some (I.to_string operand)
-                          else None
-          in
+                          else None in
           let alert : Alert.t = { tid = st.tid;
                                   opcode = None;
                                   addr = None;
@@ -103,26 +98,22 @@ module Checker(N : NumericDomain) = struct
                                   desc = binop_str;
                                   left_val = left_str;
                                   right_val = right_str;
-                                  problematic_operands = Some [problematic_operand_indice] }
-          in
-          ST.update @@
-            fun old_st ->
+                                  problematic_operands = Some [problematic_operand_indice] } in
+          ST.update @@ fun old_st ->
             { old_st with warns = Alert.Set.add old_st.warns alert }
         else
-          result_acc
-      in
-      check_operand
-    in
-    let left_res = List.fold left_specials
-                     ~init:(ST.return ())
-                     ~f:(fold_checker ~is_left:true)
-    in
-    let right_res = List.fold right_specials
-                      ~init:(ST.return ())
-                      ~f:(fold_checker ~is_left:false)
-    in
-    left_res >>= fun () ->
-    right_res
+          result_acc in
+      check_operand in
+    (if check_left
+    then List.fold left_specials
+                   ~init:(ST.return ())
+                   ~f:(fold_checker ~is_left:true)
+     else ST.return ()) >>= fun () ->
+    if check_right
+    then List.fold right_specials
+                   ~init:(ST.return ())
+                   ~f:(fold_checker ~is_left:false)
+    else ST.return ()
 
   let specials_of_binop (op : binop) : (I.t -> I.t) list * (I.t -> I.t) list =
     let one i = I.of_int ~width:(I.bitwidth i) 1 in
@@ -154,15 +145,10 @@ module Checker(N : NumericDomain) = struct
     | Bil.SLT -> [], []
     | Bil.SLE -> [], []
 
-  let check_binop (op : binop) : N.t -> N.t -> unit ST.t =
-    (* let () = printf "in comp_simp.check_binop, getting specials of binop %s\n%!" *)
-               (* (Common.binop_to_string op) in *)
+  let check_binop (op : binop) ~(check_left : bool) ~(check_right : bool)
+      : N.t -> N.t -> unit ST.t =
     let specials = specials_of_binop op in
-    (* let () = printf "in comp_simp.check_binop, done getting specials of binop %s\n%!" *)
-               (* (Common.binop_to_string op) in *)
-    (* let () = printf "in comp_simp.check_binop, getting checker for binop operands\n%!" in *)
-    let checker = check_binop_operands specials op in
-    (* let () = printf "in comp_simp.check_binop, done getting checker for binop operands\n%!" in *)
+    let checker = check_binop_operands specials op ~check_left ~check_right in
     checker
 
   let is_tainted (exp : N.t) : bool =
@@ -170,13 +156,26 @@ module Checker(N : NumericDomain) = struct
     | Taint -> true
     | Notaint -> false
 
-  (* TODO: don't flag on constants *)
+  let rec is_const (exp : Bil.exp) : bool =
+    match exp with
+     | Bil.Load (_, _, _, _) -> false
+     | Bil.Store (_, _, _, _, _) -> false
+     | Bil.BinOp (_, left, right) -> is_const left && is_const right
+     | Bil.UnOp (_, subexp) -> is_const subexp
+     | Bil.Var _ -> false
+     | Bil.Int _ -> true
+     | Bil.Cast (_, _, subexp) -> is_const subexp
+     | Bil.Let (_, _, body) -> is_const body
+     | Bil.Unknown (_, _) -> false
+     | Bil.Ite (_, then', else') -> is_const then' && is_const else'
+     | Bil.Extract (_, _, subexp) -> is_const subexp
+     | Bil.Concat (left, right) -> is_const left && is_const right
+
   let rec check_exp (e : Bil.exp) : N.t ST.t =
     let eval_in_ai (e : Bil.exp) (st : State.t) : N.t ST.t =
       let exp_evaler = AI.denote_exp e in
       let (res, _) = AI.ST.run exp_evaler st.env in
-      ST.return res
-    in
+      ST.return res in
     match e with
     | Bil.Load (_mem, idx, _endian, size) ->
        check_exp idx >>= fun offs ->
@@ -193,27 +192,14 @@ module Checker(N : NumericDomain) = struct
        ST.get () >>= fun st ->
        eval_in_ai e st
     | Bil.BinOp (op, x, y) ->
-       (* let () = printf "in comp simp binop, denoting binop: %s\n%!" *)
-                       (* (Common.binop_to_string op) in *)
-       (* ST.get () >>= fun st -> *)
-       (* let () = printf "instate is:\n%!"; E.pp st.env in *)
        check_exp x >>= fun x' ->
-       (* let () = printf "in comp simp binop, done denoting left\n%!" in *)
        check_exp y >>= fun y' ->
-       (* let () = printf "in comp simp binop, done denoting right\n%!" in *)
-       (* let () = printf "in comp simp binop, checking binop\n%!" in *)
-       let left_is_tainted = is_tainted x' in
-       let right_is_tainted = is_tainted y' in
-       (if left_is_tainted || right_is_tainted
-       then check_binop op x' y'
-       else ST.return ()) >>= fun () ->
-       (* let () = printf "in comp simp binop, done checking binop\n%!" in *)
-       (* let () = printf "in comp simp binop, running AI binop on binop now\n%!" in *)
+       let should_check_left = is_tainted x' && not (is_const x) in
+       let should_check_right = is_tainted y' && not (is_const y) in
+       let checker = check_binop op ~check_left:should_check_left ~check_right:should_check_right in
+       checker x' y' >>= fun () ->
        let binop = AI.denote_binop op in
-       (* let () = printf "in comp simp binop, done running AI binop on binop\n%!" in *)
-       (* let () = printf "in comp simp binop, eval the binop now\n%!" in *)
        let expr_res = binop x' y' in
-       (* let () = printf "in comp simp binop, done eval the binop\n%!" in *)
        ST.return expr_res
     | Bil.UnOp (op, x) ->
        check_exp x >>= fun x' ->

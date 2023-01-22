@@ -113,8 +113,6 @@ module Getter(N : NumericDomain) = struct
 
   let of_jmp_term (j : jmp term) (sub : sub term) (prog : Program.t) (all_ret_tids : ReturnInsnsGetter.t) sol : rel option Or_error.t =
     let open Or_error.Monad_infix in
-    (* let () = printf "in of_jmp_term, jmp term: %a\n%!" Jmp.ppo j in *)
-    (* let () = printf "in of_jmp_term, is_ret_branch?: %B\n%!" @@ is_ret_branch j all_ret_tids in *)
     let caller_tid = Term.tid sub in
     let callsite_tid = Term.tid j in
     match Jmp.kind j with
@@ -144,12 +142,11 @@ module Getter(N : NumericDomain) = struct
     let prog = Project.program proj in
     let blks = Term.enum blk_t sub in
     let ret_jmp_tids = Common.ReturnInsnsGetter.build () in
-    (* let () = Set.iter ret_jmp_tids ~f:(fun ret_tid -> *)
-    (*                     printf "ret_tid: %a\n%!" Tid.ppo ret_tid) in *)
     let jmp_terms = Seq.map blks ~f:(fun b -> Term.enum jmp_t b |> Seq.to_list)
                     |> Seq.to_list
                     |> List.join in
-    let callees = List.map jmp_terms ~f:(fun jt -> of_jmp_term jt sub prog ret_jmp_tids sol) in
+    let callees = List.map jmp_terms ~f:(fun jt ->
+                             of_jmp_term jt sub prog ret_jmp_tids sol) in
     let open Or_error.Monad_infix in
     List.fold callees
               ~init:(Ok [])
