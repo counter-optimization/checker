@@ -12,6 +12,7 @@ module Cfg = Bap.Std.Graphs.Cfg
 module IrCfg = Bap.Std.Graphs.Ir
 module CR = Common.CalleeRel
 module CRS = CR.Set
+module ABI = Common.AMD64SystemVABI
 
 type check_sub_result = { callees : CRS.t;
                           liveness_info : Live_variables.t;
@@ -179,72 +180,18 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let stack_addr = 0x7fff_fff0 in
      
      let free_vars = Sub.free_vars sub in
+     let () = printf "Free vars of sub (%s) are:\n%!" @@ Sub.name sub;
+              Set.iter free_vars ~f:(fun v -> printf "%s\n%!" @@ Var.name v) in
      let freenames = Set.to_list free_vars |> List.map ~f:Var.name in
      
      let args = Term.enum arg_t sub in
      let argnames = Seq.map args ~f:(fun a -> Arg.var a |> T.Var.name) |> Seq.to_list in
-     let x64_args = ["RDI"; "RSI"; "RDX"; "RCX"; "R8"; "R9"] in
+     let () = printf "Arg names of sub (%s) are:\n%!" @@ Sub.name sub;
+              List.iter argnames ~f:(fun a -> printf "%s\n%!" a) in
 
-     (* crypto_sign argument setup:
-        arg 1: ptr to signedmessage
-        arg 2: ptr to signedmessage length (set by libsodium)
-        arg 3: ptr to message
-        arg 4: message len
-        arg 5: ptr to secret key
-      *)
-     (* let with_all_args = match is_toplevel with *)
-     (*   | true -> *)
-     (*      let heap = Region.Set.singleton Common.Region.Heap in *)
-     (*      let heap_start = 0x1000_1000 in *)
-     (*      let byte_width = FinalDomain.of_int 1 in *)
-     (*      let long_long_width = FinalDomain.of_int 8 in *)
-     (*      let arg1 = E.setptr *)
-     (*                   ~name:(List.nth_exn x64_args 0) *)
-     (*                   ~regions:heap *)
-     (*                   ~offs:(FinalDomain.of_int heap_start) *)
-     (*                   ~width:byte_width *)
-     (*                   empty *)
-     (*      in *)
-          
-     (*      let arg2 = E.setptr *)
-     (*                   ~name:(List.nth_exn x64_args 1) *)
-     (*                   ~regions:heap *)
-     (*                   ~offs:(FinalDomain.of_int (heap_start + 128)) *)
-     (*                   ~width:long_long_width *)
-     (*                   arg1 *)
-     (*      in *)
+     
 
-
-     (*      let arg3 = E.setptr *)
-     (*                   ~name:(List.nth_exn x64_args 2) *)
-     (*                   ~regions:heap *)
-     (*                   ~offs:(FinalDomain.of_int (heap_start + 400)) *)
-     (*                   ~width:byte_width *)
-     (*                   arg2 *)
-     (*      in *)
-
-     (*      let arg4 = E.set (List.nth_exn x64_args 3) (FinalDomain.of_int 32) arg3 in *)
-
-     (*      let arg5 = E.setptr *)
-     (*                   ~name:(List.nth_exn x64_args 4) *)
-     (*                   ~regions:heap *)
-     (*                   ~offs:(FinalDomain.of_int (heap_start + 500)) *)
-     (*                   ~width:byte_width *)
-     (*                   arg4 *)
-     (*      in *)
-     (*      arg5 *)
-     (*   | false -> empty *)
-     (* in *)
-
-     let with_all_args = empty in
-
-     let with_canary_set = E.set_stack_canary with_all_args in
-
-     (* e.g., filter out bap's 'mem' var *)
-     (* todo: handle vector registers *)
-     let true_args = List.filter freenames
-                       ~f:(fun name -> List.mem x64_args name ~equal:String.equal)
-                     |> List.append argnames in
+     let with_canary_set = E.set_stack_canary empty in
 
      let env_with_df_set = E.set "DF" FinalDomain.b0 with_canary_set in
      let env_with_rsp_set = match E.set_rsp stack_addr env_with_df_set with
@@ -266,20 +213,26 @@ let run_analyses sub img proj ~(is_toplevel : bool)
           let inner_err_msg = Error.to_string_hum e in
           failwith @@ sprintf "in run_analysis setting bss inits : %s" inner_err_msg in
 
-     let final_env = env_with_bss_initd in
-                   
-     let initial_mem = List.fold true_args ~init:final_env
-                                 ~f:(fun mem argname -> E.init_arg ~name:argname mem) in
+     (* let final_env = env_with_bss_initd in *)
+
+     (* e.g., filter out bap's 'mem' var, the result var
+        commonly used in prog analysis *)
+     let true_args = List.append argnames freenames
+                     |> List.filter ~f:ABI.var_name_is_arg in
      
-     (* let () = Format.printf "Initial memory+env is: %!" in *)
-     (* let () = E.pp initial_mem in *)
-     (* let () = Format.printf "\n%!" in *)
+     let final_env = List.fold true_args
+                               ~init:env_with_bss_initd
+                               ~f:(fun mem argname -> E.init_arg ~name:argname mem) in
+     
+     let () = Format.printf "Initial memory+env is: %!" in
+     let () = E.pp final_env in
+     let () = Format.printf "\n%!" in
      
      let first_node = match Seq.hd (Graphlib.reverse_postorder_traverse (module G) cfg) with
        | Some n -> n
        | None -> failwith "in driver, cfg building init sol, couldn't get first node" in
 
-     let with_args = G.Node.Map.set G.Node.Map.empty ~key:first_node ~data:initial_mem in
+     let with_args = G.Node.Map.set G.Node.Map.empty ~key:first_node ~data:final_env in
      let init_sol = Solution.create with_args empty in
 
      let () = printf "Running abstract interpreter\n%!" in
@@ -379,10 +332,21 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let () = Format.printf "Getting callees for sub %s\n%!" (Sub.name sub) in
      
      let module GetCallees = Callees.Getter(FinalDomain) in
-     
-     let callees = match GetCallees.get sub proj analysis_results with
-       | Ok callees -> callees
-       | Error e -> failwith @@ Error.to_string_hum e in
+
+     let callee_analysis_results = GetCallees.get sub proj analysis_results in
+     let callees = List.filter callee_analysis_results ~f:Or_error.is_ok
+                   |> List.map ~f:Or_error.ok_exn
+                   |> CalleeRel.Set.of_list in
+
+     (* print all callee errs *)
+     let () = List.filter callee_analysis_results ~f:Or_error.is_error
+              |> List.iter
+                   ~f:(function
+                       | Error err ->
+                          Format.printf "In getting callees for sub %s : %s\n%!"
+                                        (Sub.name sub)
+                                        (Error.to_string_hum err)
+                       | Ok _ -> ()) in
      
      let () = Format.printf "Callees are: \n%!" in
      let () = CRS.print callees in

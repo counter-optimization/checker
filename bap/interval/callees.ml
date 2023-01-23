@@ -138,7 +138,7 @@ module Getter(N : NumericDomain) = struct
        Or_error.error_string
          "of_jmp_term_exn: returns not handled in Callee.Getter.of_jmp_term_exn"
 
-  let get_callees sub proj sol : rel list Or_error.t =
+  let get_callees sub proj sol : rel Or_error.t list =
     let prog = Project.program proj in
     let blks = Term.enum blk_t sub in
     let ret_jmp_tids = Common.ReturnInsnsGetter.build () in
@@ -147,18 +147,16 @@ module Getter(N : NumericDomain) = struct
                     |> List.join in
     let callees = List.map jmp_terms ~f:(fun jt ->
                              of_jmp_term jt sub prog ret_jmp_tids sol) in
-    let open Or_error.Monad_infix in
-    List.fold callees
-              ~init:(Ok [])
-              ~f:(fun acc cr ->
-                acc >>= fun acc ->
-                cr >>=  fun cr ->
-                match cr with
-                | Some cr -> Ok (List.cons cr acc)
-                | None -> Ok acc)
+    List.filter callees ~f:(function
+                            | Ok maybe_cr -> Option.is_some maybe_cr
+                            | Error _ -> true)
+    |> List.map ~f:(function
+                    | Ok maybe_cr -> Ok (Option.value_exn maybe_cr)
+                    | Error e -> Error e)
     
   (* returns list of sub term of callees *)
-  let get (sub : sub term) (proj : Project.t) sol : CalleeRel.Set.t Or_error.t =
-    get_callees sub proj sol >>= fun callees ->
-    Ok (CalleeRel.Set.of_list callees)
+  let get (sub : sub term) (proj : Project.t) sol : rel Or_error.t list =
+    get_callees sub proj sol
+    (* get_callees sub proj sol >>= fun callees -> *)
+    (* Ok (CalleeRel.Set.of_list callees) *)
 end

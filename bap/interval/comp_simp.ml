@@ -7,6 +7,8 @@ open Monads.Std
 module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 
+module ABI = Common.ABI
+
 module Checker(N : NumericDomain) = struct
   module E = struct
     type region = Common.Region.t
@@ -52,9 +54,7 @@ module Checker(N : NumericDomain) = struct
     | Some f -> f
     | None -> failwith "Couldn't extract taint information out of product domain in comp simp checker"
 
-  let dont_care_vars = ["ZF"; "OF"; "CF"; "AF"; "PF"; "SF"]
-                       |> SS.of_list
-
+  let dont_care_vars = ABI.flag_names (* don't comp simp check flag calculations *)
   
   let empty : warns = Alert.Set.empty
   let join : warns -> warns -> warns = Alert.Set.union
@@ -196,7 +196,9 @@ module Checker(N : NumericDomain) = struct
        check_exp y >>= fun y' ->
        let should_check_left = is_tainted x' && not (is_const x) in
        let should_check_right = is_tainted y' && not (is_const y) in
-       let checker = check_binop op ~check_left:should_check_left ~check_right:should_check_right in
+       let checker = check_binop op
+                                 ~check_left:should_check_left
+                                 ~check_right:should_check_right in
        checker x' y' >>= fun () ->
        let binop = AI.denote_binop op in
        let expr_res = binop x' y' in
@@ -245,7 +247,7 @@ module Checker(N : NumericDomain) = struct
     let tid = Term.tid d in
     let lhs = Def.lhs d in
     let lhs_var_name = Var.name lhs in
-    if Common.var_name_is_x86_64_flag lhs_var_name
+    if ABI.var_name_is_flag lhs_var_name
     then empty
     else
       let is_tainted = is_tainted @@ E.lookup lhs_var_name env in

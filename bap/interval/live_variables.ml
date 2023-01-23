@@ -3,6 +3,8 @@ open Bap.Std
 open Graphlib.Std
 open Common
 
+module ABI = Common.ABI
+
 (* what does it mean for a var in BAP IR SSA to be live?
    we are doing a may-be-live analysis:
    - a non-flag variable is live if it or its flags are used
@@ -351,7 +353,7 @@ let is_live_flagless (analysis_results : IsUsedPass.UseRel.t) ~(tid : tid) : boo
     get_users_names_and_tids analysis_results ~of_tid:tid in
   let is_not_flag (var_name : string) : bool =
     let normalized_name = unssa_var_name var_name in
-    not @@ Common.var_name_is_x86_64_flag normalized_name in
+    not @@ ABI.var_name_is_flag normalized_name in
   let non_flag_users : (string * tid) list =
     List.filter users ~f:(fun (name, tid) -> is_not_flag name) in
   not @@ List.is_empty non_flag_users
@@ -367,7 +369,7 @@ let get_live_flags_of_prev_def_tid (analysis_results : IsUsedPass.UseRel.t) ~(pr
     get_users_names_and_tids analysis_results ~of_tid:prev_def_tid in
   let is_flag (var_name : string) : bool = 
     let normalized_name = unssa_var_name var_name in
-    Common.var_name_is_x86_64_flag normalized_name in
+    ABI.var_name_is_flag normalized_name in
   let flag_users : (string * tid) list =
     List.filter all_users ~f:(fun (name, tid) -> is_flag name) in
   let live_flag_users : (string * tid) list =
@@ -376,4 +378,6 @@ let get_live_flags_of_prev_def_tid (analysis_results : IsUsedPass.UseRel.t) ~(pr
   let live_flag_users_normalized_names : string list =
     List.map live_flag_users ~f:(fun (name, _) -> unssa_var_name name) in
   SS.of_list live_flag_users_normalized_names
+
+(* let get_dependent_defs_up_to_bound  *)
   

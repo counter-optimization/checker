@@ -2,6 +2,8 @@ open Core
 open Bap.Std
 open Common
 
+module ABI = Common.ABI
+
 (* This is an implementation based on the paper 'Field-Sensitive Value *)
 (* Analysis of Embedded C Programs with Union Types and Pointer *)
 (* Arithmetics'. *)
@@ -428,13 +430,30 @@ module Make(N : NumericDomain)
   let set_cell_to_top cell_name (mem : t) : t = { mem with env = Env.set cell_name N.top mem.env }
 
   let init_arg ~(name : string) (mem : t) : t =
-    let heap_or_stack = Bases_domain.join Bases_domain.heap Bases_domain.stack in
-    let init_arg_val = set_based N.top heap_or_stack in
-    set name init_arg_val mem
+    if not @@ ABI.var_name_is_arg name
+    then
+      failwith @@ sprintf "in E.init_arg, arg %s is not an arg for this ABI" name
+    else
+      let is_vector_arg = ABI.var_name_is_vector_arg name in
+      let init_val_width = if is_vector_arg
+                           then ABI.vector_arg_width
+                           else ABI.gpr_arg_width in
+      let init_bases = if is_vector_arg
+                       then Bases_domain.bot
+                       else Bases_domain.join Bases_domain.heap Bases_domain.stack in
+      let () = if is_vector_arg
+               then printf "in init_arg, initializing vector arg %s\n%!" name
+               else printf "in init_arg, initializing gpr arg %s\n%!" name in
+      let signed = false in
+      let init_val = N.make_top init_val_width signed in
+      let init_w_bases_set = set_based init_val init_bases in
+      set name init_w_bases_set mem
 
   let get_overlapping_cells (cell : C.t) (mem : t) : C.Set.t =
     Set.filter mem.cells ~f:(C.overlaps cell)
 
+  (* todo, whatever is breaking the Wrapping_interval.to_int at tid %0008b943
+     in analyzing argon2id *)
   let load_global (offs : Wrapping_interval.t) (sz : size) (m : t) : N.t err =
     match m.img with
     | None -> Or_error.error_string "load_global: memory's image should be set before load"
@@ -443,10 +462,10 @@ module Make(N : NumericDomain)
        match Wrapping_interval.to_int offs with
        | Error e ->
           let offs_s = Wrapping_interval.to_string offs in
-          Or_error.error_string @@
-            sprintf
-              "load_global: couldn't convert offs %s to address for image: %s"
-              offs_s (Error.to_string_hum e)
+          let () = printf
+                     "load_global: couldn't convert offs %s to address for image: %s"
+                     offs_s (Error.to_string_hum e) in
+          Ok N.top
        | Ok addr ->
           let addr_w = Word.of_int ~width:64 addr in
           let target_seg = Table.find_addr segs addr_w in

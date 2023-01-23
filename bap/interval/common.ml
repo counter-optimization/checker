@@ -32,10 +32,38 @@ let secrets_csv_file_param = Extension.Configuration.parameter
                                Extension.Type.string
                               "secrets-csv-file"
 
-let x86_64_flag_names : SS.t = SS.of_list ["CF"; "PF"; "AF"; "ZF"; "SF";
-                                           "TF"; "IF"; "DF"; "OF"]
+module AMD64SystemVABI = struct
+  let flag_names : SS.t = SS.of_list ["CF"; "PF"; "AF"; "ZF"; "SF";
+                                      "TF"; "IF"; "DF"; "OF"]
 
-let var_name_is_x86_64_flag : string -> bool = SS.mem x86_64_flag_names
+  let gpr_arg_names = ["RDI"; "RSI"; "RDX"; "RCX"; "R8"; "R9"]
+
+  let vectorreg_arg_names_aliased = ["XMM0"; "XMM1"; "XMM2"; "XMM3"; "XMM4";
+                                     "XMM5"; "XMM6"; "XMM7"]
+
+  (* i think bap uses YMMN instead of XMMN similar to how it uses RAX
+     (like low:32[RAX]) instead of EAX *)
+  let vectorreg_arg_names_unaliased = ["YMM0"; "YMM1"; "YMM2"; "YMM3"; "YMM4";
+                                       "YMM5"; "YMM6"; "YMM7"]
+
+  let vector_arg_names = List.append vectorreg_arg_names_unaliased vectorreg_arg_names_aliased
+
+  let vector_arg_width = 256
+
+  let arg_names = List.append gpr_arg_names vector_arg_names
+
+  let gpr_arg_width = 64
+  
+  let var_name_is_flag : string -> bool = SS.mem flag_names
+
+  let var_name_is_arg : string -> bool = List.mem arg_names ~equal:String.equal
+
+  let var_name_is_vector_arg : string -> bool = List.mem vector_arg_names ~equal:String.equal
+
+  let var_name_is_gpr : string -> bool = List.mem gpr_arg_names ~equal:String.equal
+end
+
+module ABI = AMD64SystemVABI
 
 let string_powset_dom = KB.Domain.powerset
                           (module String)
@@ -840,7 +868,6 @@ module AbstractInterpreter(N: NumericDomain)
 
   let denote_elt (e : Blk.elt) (st : E.t) : E.t =
     (* let () = printf "in-state is:\n%!"; E.pp st in *)
-    
     let res = match e with
       | `Def d ->
          let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid d) in
@@ -850,8 +877,7 @@ module AbstractInterpreter(N: NumericDomain)
          denote_jmp j 
       | `Phi p ->
          let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid p) in
-         denote_phi p
-    in
+         denote_phi p in
     let (elt_res, state') = ST.run res st in
     (* let () = Format.printf "out-state is:\n%!"; E.pp state' in *)
     state'

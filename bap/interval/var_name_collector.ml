@@ -1,9 +1,6 @@
 open Core
 open Bap.Std
-
-module SS = Set.Make_binable_using_comparator(String)
-
-type t = SS.t
+open Common
 
 let rec run (e : Bil.exp) : SS.t =
   match e with

@@ -23,19 +23,13 @@ let b0_u64 = make_b0 64 false
 let b1 = make_b1 1 false
 let b0 = make_b0 1 false
 
-(* defaults to uint 64 range *)
 let make_top width signed : t =
-  (* -2**(N-1) or 0 *)
   let two = Z.of_int 2 in
   let range_lo = if signed then Z.neg (Z.pow two (width - 1)) else Z.zero in
   let range_hi = Z.sub (Z.pow two (if signed then width - 1 else width)) Z.one in
- Interval {lo = range_lo;
-            hi = range_hi;
-            width = width;
-            signed = signed}
+  Interval {lo = range_lo; hi = range_hi; width = width; signed = signed}
 
-let top : t =
-  make_top 64 false
+let top : t = make_top 64 false
 
 let to_string (intvl : t) : string =
   match intvl with
@@ -448,6 +442,7 @@ let high len x =
   | Bot -> Bot
   | Interval {lo; hi; width; signed} ->
      let offs = width - len in
+     let () = printf "in wrapping_interval.high, len is %d, width is %d\n%!" len width in
      let x1 = Z.extract lo offs len in
      let x2 = Z.extract hi offs len in
      Interval { lo = Z.min x1 x2;
