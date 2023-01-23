@@ -95,6 +95,10 @@
 (define regs-add
   (list rax rcx))
 
+; Check CF for add64 only
+(define flags-add64
+  (list 'CF))
+
 (define attempt-add8
   (list
    (mov-r/m64-imm32 r10 (bv (expt 2 31) 32))
@@ -160,10 +164,10 @@
    (add-r/m32-r32 r10d r11d)
    (adc-r/m64-r64 rcx rax)
    ; rotate back
-   (ror-r/m64-imm8 r10 (bv 16 8))
    (ror-r/m64-imm8 r11 (bv 16 8))
-   (rol-r/m64-imm8 rcx (bv 16 8))
    (rol-r/m64-imm8 rax (bv 16 8))
+   (ror-r/m64-imm8 r10 (bv 16 8))
+   (rcl-r/m64-imm8 rcx (bv 16 8))
    ; recombine and restore rax
    (mov-r/m16-r16 cx r10w)
    (mov-r/m16-r16 ax r11w)

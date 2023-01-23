@@ -9,7 +9,8 @@
   rol-r/m16-cl rol-r/m32-cl rol-r/m64-cl
   ror-r/m16-cl ror-r/m32-cl ror-r/m64-cl
   rol-r/m16-imm8 rol-r/m32-imm8 rol-r/m64-imm8
-  ror-r/m16-imm8 ror-r/m32-imm8 ror-r/m64-imm8)
+  ror-r/m16-imm8 ror-r/m32-imm8 ror-r/m64-imm8
+  rcl-r/m64-imm8)
 
 
 (define (interpret-rol cpu dst count)
@@ -40,6 +41,22 @@
     (cpu-flag-set! cpu 'CF (msb result))
     (if (equal? v2 (bv 1 n))
         (cpu-flag-set! cpu 'OF (bvxor (msb result) (bit (- n 2) result)))
+        (cpu-flag-havoc! cpu 'OF))))
+
+(define (interpret-rcl cpu dst count)
+  (define n (core:bv-size count))
+  (define mask (if (equal? n 64) (bv #x3f n) (bv #x1f n)))
+  (define v1 (trunc n (cpu-gpr-ref cpu dst)))
+  (define v2 (concat (bv 0 1) (bvand count mask)))
+  (define carry (bitvector->bool (cpu-flag-ref cpu 'CF)))
+  (define result (bvrol (concat (bool->bitvector carry 1) v1) v2))
+  (cpu-gpr-set! cpu dst (trunc n result))
+  ; flags are unchanged for zero count
+  (unless (bvzero? v2)
+    ; SF, ZF, AF, and PF are always unaffected
+    (cpu-flag-set! cpu 'CF (msb result))
+    (if (equal? v2 (bv 1 n))
+        (cpu-flag-set! cpu 'OF (bvxor (msb result) (cpu-flag-ref cpu 'CF)))
         (cpu-flag-havoc! cpu 'OF))))
 
 (define-syntax (define-rotate-1 stx)
@@ -161,3 +178,7 @@
 ; C1 /1 ib
 ; REX.W C1 /1 ib
 (define-rotate-imm8 ror #xC1 /1)
+
+; C1 /2 ib
+; REX.W C1 /2 ib
+(define-rotate-imm8 rcl #xC1 /2)

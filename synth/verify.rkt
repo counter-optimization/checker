@@ -11,7 +11,7 @@
 
 (provide (all-defined-out))
 
-(define (comp-simp-verify attempt spec regs)
+(define (comp-simp-verify attempt spec regs [flags '()])
   (define spec-cpu (comp-simp:make-x86-64-cpu))
   (define attempt-cpu (comp-simp:make-x86-64-cpu))
 
@@ -37,6 +37,11 @@
     (define spec-reg (cpu-gpr-ref spec-cpu reg))
     (define impl-reg (cpu-gpr-ref attempt-cpu reg))
     (assert (bveq spec-reg impl-reg)))
+
+  (for ([flag flags])
+    (define spec-flag (cpu-flag-ref spec-cpu flag))
+    (define impl-flag (cpu-flag-ref attempt-cpu flag))
+    (assert (bveq spec-flag impl-flag)))
   )
 
 (module+ main
@@ -44,5 +49,5 @@
   (define test (verify (bveq tester (bvsub (bvsub tester (bv (expt 2 31) 32)) (bv (expt 2 31) 32)))))
   (displayln test)
   (displayln (bv (sub1 (expt 2 32)) 32))
-  (define cex (verify (comp-simp-verify attempt-arshift8 spec-arshift8 regs-arshift)))
+  (define cex (verify (comp-simp-verify attempt-add64 spec-add64 regs-add flags-add64)))
   cex)
