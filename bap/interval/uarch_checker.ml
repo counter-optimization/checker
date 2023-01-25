@@ -32,9 +32,7 @@ module UarchCheckerExtension = struct
     Out_channel.close out_ch
   
   let pass ctxt proj =
-    let target_func_name = Extension.Configuration.get ctxt Common.target_func_param in
     let target_obj_name = get_target_file_name proj in
-    let target_fn = get_target_func_from_name ~name:target_func_name proj in
 
     let out_csv_file_name = Extension.Configuration.get ctxt Common.output_csv_file_param in
     let () = test_output_csv_file ~filename:out_csv_file_name in
@@ -46,8 +44,12 @@ module UarchCheckerExtension = struct
            sprintf "In Uarch_checker.pass, couldn't build image for %s" target_obj_name
       | Ok i -> i in
     let img = fst img_and_errs in
+
+    let config_path = Extension.Configuration.get ctxt Common.config_file_path_param in
+    let config = Config.Parser.parse_config_file ~path:config_path in
+    let () = printf "Config is:\n%!"; Config.pp config in
     
-    Driver.check_fn target_fn img ctxt proj
+    Driver.check_config config img ctxt proj
     
   let register_pass ctxt =
     Project.register_pass' (pass ctxt);

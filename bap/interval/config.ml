@@ -2,8 +2,6 @@ open Core
 open Bap_main
 open Bap.Std
 
-open Common
-
 (* 
 config_file ::= ( init_fn )* ( analyze_fn ) ( analyze_fn )*
 
@@ -34,6 +32,35 @@ module T = struct
 
   let empty_secret_map = Map.empty (module String)
 
+  let get_taint_arg_indices subname config : int list option =
+    let secret_args = config.secret_args in
+    match Map.find secret_args subname with
+    | Some arg_indices -> Some (Set.to_list arg_indices)
+    | None -> None
+
+  let get_target_fns_exn config proj : sub term Sequence.t =
+    let prog = Project.program proj in
+    let subs = Term.enum sub_t prog in
+    let target_fn_names = config.target_fns in
+    let target_subs = Seq.filter subs ~f:(fun sub ->
+                                   let name = Sub.name sub in
+                                   Set.mem target_fn_names name) in
+    if Seq.length target_subs <> Set.length target_fn_names
+    then
+      (* collect the func names we couldn't find for analysis
+         and throw an exception*)
+      let found_names = Seq.map target_subs ~f:Sub.name |> Seq.to_list in
+      let target_fn_name_not_resolved name : bool =
+        not @@ List.mem found_names name ~equal:String.equal in
+      let problematic_fn_names = Set.filter target_fn_names
+                                            ~f:target_fn_name_not_resolved
+                                 |> Set.to_list in
+      let problematic_names_str = List.to_string problematic_fn_names ~f:(fun x -> x) in
+      failwith @@ sprintf
+                    "In Config.get_target_fns_exn, couldn't find function symbol in the target object file for targetted functions: %s" problematic_names_str
+    else
+      target_subs
+
   let pp c =
     printf "init_fns: %s\n%!" @@ List.to_string ~f:(fun x -> x) (Set.to_list c.init_fns);
     printf "target_fns: %s\n%!" @@ List.to_string ~f:(fun x -> x) (Set.to_list c.target_fns);
@@ -60,9 +87,6 @@ module Parser = struct
 
   let init_fn_prefix = "init "
 
-  let get_path ctxt : path =
-    Extension.Configuration.get ctxt Common.config_file_path_param
-
   let parsed_of_line line : parsed =
     let is_init_fn_line = String.is_prefix line ~prefix:init_fn_prefix in
     if is_init_fn_line
@@ -70,12 +94,6 @@ module Parser = struct
       let init_fn = String.chop_prefix_if_exists line ~prefix:init_fn_prefix in
       InitFn init_fn
     else
-      (* let comma_idx = match String.index line ',' with *)
-      (*   | Some idx -> idx *)
-      (*   | None -> failwith @@ *)
-      (*               sprintf *)
-      (*                 "In Config.Parser.parsed_of_line, target_fn line %s is malformed" *)
-      (*                 line in *)
       let line_as_list = String.split line ~on:',' in
       let () = if List.length line_as_list <> 2
                then failwith @@ sprintf

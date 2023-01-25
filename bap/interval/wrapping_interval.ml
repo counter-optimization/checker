@@ -442,7 +442,7 @@ let high len x =
   | Bot -> Bot
   | Interval {lo; hi; width; signed} ->
      let offs = width - len in
-     let () = printf "in wrapping_interval.high, len is %d, width is %d\n%!" len width in
+     (* let () = printf "in wrapping_interval.high, len is %d, width is %d\n%!" len width in *)
      let x1 = Z.extract lo offs len in
      let x2 = Z.extract hi offs len in
      Interval { lo = Z.min x1 x2;

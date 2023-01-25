@@ -185,6 +185,35 @@ module OpcodeAndAddrFiller = struct
     |> Set.map ~f:(fun alert -> set_opcode_for_alert alert opcode_lut)
 end
 
+(* RPO = reverse post-order traversal *)
+module RpoIdxAlertFiller = struct
+  let set_rpo_idx_for_alert (alert : T.t) (rpo_addrs : string list) : T.t =
+    let this_addr : string = match alert.addr with
+      | Some addr_str -> addr_str
+      | None -> failwith "In RpoIdxAlertFiller.set_rpo_idx_for_alert, alerts should have addr strings filled out before filling out rpo indices" in
+    let rpo_idx = match List.findi rpo_addrs ~f:(fun _idx elt ->
+                                           String.equal elt this_addr) with
+      | Some (rpo_idx, _elt) -> rpo_idx
+      | None -> failwith @@ sprintf "In RpoIdxAlertFiller.set_rpo_idx_for_alert, didn't find addr %s, probably mismatch in alert vs sub" this_addr in
+    { alert with rpo_idx = Some rpo_idx }
+
+  let set_rpo_indices_for_alert_set (alerts : Set.t)
+                                    (sub : sub term)
+                                    (proj : Project.t)
+                                    (rpo_traversal : Calling_context.t Sequence.t) : Set.t =
+    let rpo_tids = Seq.map rpo_traversal ~f:Calling_context.to_insn_tid in
+    let lut = OpcodeAndAddrFiller.build_lut proj in
+    let (addr_lut, opcode_lut) = lut in
+    let addr_of_tid_exn tid : string = match Map.find addr_lut tid with
+      | Some tid -> tid
+      | None -> failwith @@ sprintf "In RpoIdxAlertFiller.set_rpo_indices_for_alert_set, couldn't find addr in addr_lut for tid %a" Tid.pps tid in
+    let rpo_addrs = Seq.map rpo_tids ~f:addr_of_tid_exn in
+    let grouped_rpo_addrs = Seq.to_list rpo_addrs
+                            |> List.group ~break:String.(<>) in
+    let rpo_addrs = List.map grouped_rpo_addrs ~f:List.hd_exn in
+    Set.map alerts ~f:(fun a -> set_rpo_idx_for_alert a rpo_addrs)
+end
+
 module LivenessFiller = struct
   type liveness = Live_variables.t
 

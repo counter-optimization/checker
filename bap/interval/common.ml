@@ -17,10 +17,10 @@ end
 
 let package = "uarch-checker"
 
-let target_func_param = Extension.Configuration.parameter
-                            ~doc:"Which top-level function to check"
-                            Extension.Type.string
-                            "target-function"
+(* let target_func_param = Extension.Configuration.parameter *)
+(*                             ~doc:"Which top-level function to check" *)
+(*                             Extension.Type.string *)
+(*                             "target-function" *)
 
 let output_csv_file_param = Extension.Configuration.parameter
                               ~doc:"CSV file where checker results will be stored"
@@ -490,7 +490,7 @@ module type MemoryT =
     
     val lookup : string -> t -> v
 
-    val init_arg : name:string -> t -> t
+    val init_arg : name:string -> Config.t -> sub term -> t -> t
     
     val set : string -> v -> t -> t
 
@@ -501,7 +501,7 @@ module type MemoryT =
     val set_rsp : int -> t -> t err
     
     val set_rbp : int -> t -> t err
-    
+
     val set_img : t -> Image.t -> t
 
     val set_stack_canary : t -> t
@@ -566,7 +566,7 @@ module NumericEnv(ValueDom : NumericDomain)
 
   let set name v env : t = M.set env ~key:name ~data:v
 
-  let init_arg ~(name : string) env : t = M.set env ~key:name ~data:ValueDom.top
+  let init_arg ~(name : string) _config _sub env : t = M.set env ~key:name ~data:ValueDom.top
 
   let unset name env : t = M.remove env name 
 
@@ -875,13 +875,13 @@ module AbstractInterpreter(N: NumericDomain)
     (* let () = printf "in-state is:\n%!"; E.pp st in *)
     let res = match e with
       | `Def d ->
-         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid d) in
+         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid d) in *)
          denote_def d
       | `Jmp j ->
-         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid j) in
+         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid j) in *)
          denote_jmp j 
       | `Phi p ->
-         let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid p) in
+         (* let () = Format.printf "Denoting tid %a\n%!" Tid.pp (Term.tid p) in *)
          denote_phi p in
     let (elt_res, state') = ST.run res st in
     (* let () = Format.printf "out-state is:\n%!"; E.pp state' in *)

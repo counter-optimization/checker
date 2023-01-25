@@ -25,7 +25,7 @@ libna_argon2id : bap-plugin
 
 	-bap --plugin-path=. --pass=uarch-checker \
 	--uarch-checker-output-csv-file=./libna.crypto_pwhash_argon2id.csv \
-	--uarch-checker-target-function=crypto_pwhash_argon2id \
+	--uarch-checker-config-file=crypto_pwhash.uarch_checker.config \
 	--no-optimization --bil-optimization=0 \
 	../../test/libna/bap_ld_scalar_mult.o > libna.crypto_pwhash_argon2id.debug.log 2>&1
 
@@ -55,7 +55,6 @@ libna_crypto_sign : bap-plugin
 
 	-bap --plugin-path=. --pass=uarch-checker \
 	--uarch-checker-output-csv-file=./libna.crypto_sign_ed25519.csv \
-	--uarch-checker-target-function=crypto_sign \
 	--uarch-checker-config-file=crypto_sign.uarch_checker.config \
 	--no-optimization --bil-optimization=0 \
 	../../test/libna/bap_ld_scalar_mult.o > libna.crypto_sign.debug.log 2>&1

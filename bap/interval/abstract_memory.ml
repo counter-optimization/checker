@@ -378,15 +378,25 @@ module Make(N : NumericDomain)
     | `r256 -> 256
     
   let bap_size_to_absdom (sz : Size.t) : Wrapping_interval.t =
-    let bitwidth = match sz with
-      | `r8 -> 8
-      | `r16 -> 16
-      | `r32 -> 32
-      | `r64 -> 64
-      | `r128 -> 128
-      | `r256 -> 256 in
-    Wrapping_interval.of_int bitwidth
-  
+    Wrapping_interval.of_int @@ match sz with
+                                | `r8 -> 8
+                                | `r16 -> 16
+                                | `r32 -> 32
+                                | `r64 -> 64
+                                | `r128 -> 128
+                                | `r256 -> 256
+
+  let taint_gpr_arg ~(arg_idx : int) mem : t =
+    let arg_name = match List.nth ABI.gpr_arg_names arg_idx with
+      | Some name -> name
+      | None ->
+         failwith @@
+           sprintf
+             "in taint_gpr_arg of idx %d, arg_idx is either on the stack (not yet handled) or invalid"
+             arg_idx in
+    let tainted_top = N.top in
+    { mem with env = Env.set arg_name tainted_top mem.env }
+
   let equal {cells=cells1; env=env1; bases=bases1; globals_read=globals_read1; _}
         {cells=cells2; env=env2; bases=bases2; globals_read=globals_read2; _} =
     Env.equal env1 env2 &&
@@ -429,7 +439,7 @@ module Make(N : NumericDomain)
 
   let set_cell_to_top cell_name (mem : t) : t = { mem with env = Env.set cell_name N.top mem.env }
 
-  let init_arg ~(name : string) (mem : t) : t =
+  let init_arg ~(name : string) config sub (mem : t) : t =
     if not @@ ABI.var_name_is_arg name
     then
       failwith @@ sprintf "in E.init_arg, arg %s is not an arg for this ABI" name
@@ -441,13 +451,26 @@ module Make(N : NumericDomain)
       let init_bases = if is_vector_arg
                        then Bases_domain.bot
                        else Bases_domain.join Bases_domain.heap Bases_domain.stack in
-      let () = if is_vector_arg
-               then printf "in init_arg, initializing vector arg %s\n%!" name
-               else printf "in init_arg, initializing gpr arg %s\n%!" name in
       let signed = false in
       let init_val = N.make_top init_val_width signed in
       let init_w_bases_set = set_based init_val init_bases in
-      set name init_w_bases_set mem
+      let should_be_tainted =
+        begin
+          let subname = Sub.name sub in
+          let maybe_arg_indices = Config.get_taint_arg_indices subname config in
+          match maybe_arg_indices with
+          | None -> false
+          | Some indices ->
+             let taint_arg_names = List.map indices ~f:(fun i ->
+                                              List.nth ABI.gpr_arg_names i) in
+             List.fold taint_arg_names ~init:false ~f:(fun should_taint maybe_name ->
+                         match maybe_name with
+                         | Some n -> should_taint || (String.equal n name)
+                         | None -> should_taint)
+        end in
+      let tainter = if should_be_tainted then set_taint else set_untaint in
+      let init_w_taint_set = tainter init_w_bases_set in
+      set name init_w_taint_set mem
 
   let get_overlapping_cells (cell : C.t) (mem : t) : C.Set.t =
     Set.filter mem.cells ~f:(C.overlaps cell)

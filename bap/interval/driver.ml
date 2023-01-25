@@ -140,7 +140,7 @@ let should_skip_analysis (edges : Edge_builder.edges)
 
 let run_analyses sub img proj ~(is_toplevel : bool)
                  ~(bss_init_stores : Global_function_pointers.global_const_store list)
-    : check_sub_result =
+                 ~(config : Config.t) : check_sub_result =
   let () = printf "Running analysis on sub %s\n%!" (Sub.name sub) in
   let prog = Project.program proj in
   let edges, tidmap = Edge_builder.run_one sub proj in
@@ -155,8 +155,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      (* run the liveness analysis *)
      let () = printf "Running liveness analysis\n%!" in
      let liveness = Live_variables.Analysis.run sub in
-     let () = Live_variables.IsUsedPass.print_rels liveness in
-     (* let liveness = Live_variables.IsUsedPass.UseRel.empty in *)
+     (* let () = Live_variables.IsUsedPass.print_rels liveness in *)
      
      (* CFG *)
      let edges = List.map edges ~f:(Calling_context.of_edge) in
@@ -222,13 +221,15 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      
      let final_env = List.fold true_args
                                ~init:env_with_bss_initd
-                               ~f:(fun mem argname -> E.init_arg ~name:argname mem) in
+                               ~f:(fun mem argname ->
+                                 E.init_arg ~name:argname config sub mem) in
      
      let () = Format.printf "Initial memory+env is: %!" in
      let () = E.pp final_env in
      let () = Format.printf "\n%!" in
-     
-     let first_node = match Seq.hd (Graphlib.reverse_postorder_traverse (module G) cfg) with
+
+     let rpo_traversal = Graphlib.reverse_postorder_traverse (module G) cfg in
+     let first_node = match Seq.hd rpo_traversal with
        | Some n -> n
        | None -> failwith "in driver, cfg building init sol, couldn't get first node" in
 
@@ -288,9 +289,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
               failwith @@
                 sprintf
                   "In running checker %s, couldn't find tid %a" Chkr.name Tid.pps to_tid in
-         let () = Format.printf "checking edge (%a, %a)\n%!"
-                                Calling_context.pp from_cc
-                                Calling_context.pp to_cc in
+         (* let () = Format.printf "checking edge (%a, %a)\n%!" *)
+         (*                        Calling_context.pp from_cc *)
+         (*                        Calling_context.pp to_cc in *)
          Chkr.check_elt insn liveness in_state in
 
      let run_checker (module Chkr : Checker.S with type env = E.t) (es : 'a Calling_context.edges) : Chkr.warns =
@@ -325,8 +326,10 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let alerts_with_ops_addrs = Alert.OpcodeAndAddrFiller.set_opcode_and_addr_for_alert_set alerts_with_subs proj in
      
      let alerts_with_liveness = Alert.LivenessFiller.set_for_alert_set alerts_with_ops_addrs liveness in
+
+     let alerts_with_rpo_indices = Alert.RpoIdxAlertFiller.set_rpo_indices_for_alert_set alerts_with_liveness sub proj rpo_traversal in
        
-     let all_alerts = alerts_with_liveness in
+     let all_alerts = alerts_with_rpo_indices in
      
      (* get callees--both direct and indirect calls--of this call *)
      let () = Format.printf "Getting callees for sub %s\n%!" (Sub.name sub) in
@@ -348,8 +351,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                         (Error.to_string_hum err)
                        | Ok _ -> ()) in
      
-     let () = Format.printf "Callees are: \n%!" in
-     let () = CRS.print callees in
+     (* let () = Format.printf "Callees are: \n%!" in *)
+     (* let () = CRS.print callees in *)
      
      { alerts = all_alerts; callees = callees; liveness_info = liveness }
 
@@ -376,19 +379,11 @@ let iter_insns sub : unit =
    should have type (Project.t -> unit). here, this function
    gets curried until it has this type.
  *)
-let check_fn top_level_sub img ctxt proj : unit =
-  let worklist = SubSet.singleton (top_level_sub) in
+let check_config config img ctxt proj : unit =
+  let target_fns = Config.get_target_fns_exn config proj in
+  let worklist = SubSet.of_sequence target_fns in
   let processed = SubSet.empty in
   let init_res = Alert.Set.empty in
-
-  let config_path = Extension.Configuration.get ctxt Common.config_file_path_param in
-  let config = Config.Parser.parse_config_file ~path:config_path in
-  let () = printf "Config is:\n%!"; Config.pp config in
-
-  (* let global_storing_subs = Global_function_pointers.Libsodium.Analysis.get_global_storing_subs ctxt proj in *)
-  (* let () = Format.printf "Subs storing to globals are:\n%!"; *)
-  (*          List.iter global_storing_subs ~f:(fun sub -> *)
-  (*                      Format.printf "gss: %s\n%!" (Sub.name sub)) in *)
 
   let global_store_data = Global_function_pointers.Libsodium.Analysis.get_all_init_fn_ptr_data ctxt proj in
   let () = Format.printf "Global stores are:\n%!";
@@ -397,14 +392,17 @@ let check_fn top_level_sub img ctxt proj : unit =
                                      Word.pp addr
                                      Word.pp data) in
   
-  let rec loop ~(worklist : SubSet.t) ~(processed : SubSet.t) ~(res : checker_alerts)
-            ~(liveness : Live_variables.t) ~(is_toplevel : bool) : checker_alerts =
+  let rec loop ~(worklist : SubSet.t)
+               ~(processed : SubSet.t)
+               ~(res : checker_alerts)
+               ~(liveness : Live_variables.t)
+               ~(is_toplevel : bool)
+               ~(config : Config.t) : checker_alerts =
     let worklist_wo_procd = Set.diff worklist processed in
     if SubSet.is_empty worklist_wo_procd
     then res
     else
       let sub = Set.min_elt_exn worklist_wo_procd in
-      (* let () = iter_insns sub in *)
       let worklist_wo_procd_wo_sub = Set.remove worklist_wo_procd sub in
       let next_processed = Set.add processed sub in
       let () = Format.printf "Processing sub %s (%a)\n%!" (Sub.name sub)
@@ -419,10 +417,12 @@ let check_fn top_level_sub img ctxt proj : unit =
           ~res
           ~liveness
           ~is_toplevel:false
+          ~config
       else
         let current_res = run_analyses sub img proj
                                        ~is_toplevel
-                                       ~bss_init_stores:global_store_data in
+                                       ~bss_init_stores:global_store_data
+                                       ~config in
         let callee_subs = CRS.to_list current_res.callees
                           |> List.map ~f:(fun (r : CR.t) -> sub_of_tid_exn r.callee proj)
                           |> SubSet.of_list in
@@ -434,6 +434,7 @@ let check_fn top_level_sub img ctxt proj : unit =
           ~processed:next_processed
           ~res:all_alerts
           ~liveness:current_res.liveness_info
+          ~config
           ~is_toplevel:false in
   
   (* Run the analyses and checkers *)
@@ -441,7 +442,8 @@ let check_fn top_level_sub img ctxt proj : unit =
                             ~processed
                             ~liveness:Live_variables.IsUsedPass.UseRel.empty
                             ~res:init_res
-                            ~is_toplevel:true in
+                            ~is_toplevel:true
+                            ~config in
   let () = Format.printf "Done processing all functions\n%!" in
   
   (* just print to stdout for now *)
