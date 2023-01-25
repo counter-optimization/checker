@@ -25,32 +25,50 @@ def get_live_flags(csv_row_dict):
     return set(live_flags)
 
 if __name__ == '__main__':
-    csv_file_name = sys.argv[1]
+    cs_opcodes = set()
+    ss_opcodes = set()
+    
+    for arg in sys.argv[1:]:
+        csv_file_name = arg
 
-    # calculate mir_opcodes -> live flags for all alerts
-    with open(csv_file_name, mode="r") as csv_file:
-        reader = csv.DictReader(csv_file)
+        # calculate mir_opcodes -> live flags for all alerts
+        with open(csv_file_name, mode="r") as csv_file:
+            reader = csv.DictReader(csv_file)
 
-        opcodes_to_live_flags = dict()
-        opcodes_to_addrs = dict()
-        
-        logger.info(f"Processing csv file: {csv_file_name}")
-        for row in reader:
-            logger.debug(f"Opcode ({row['mir_opcode']}) has live flags csv row: {row['live_flags']}")
-            if is_comp_simp_warn(row) and has_live_flags(row):
+            opcodes_to_live_flags = dict()
+            opcodes_to_addrs = dict()
+
+            logger.info(f"Processing csv file: {csv_file_name}")
+            for row in reader:
+                logger.debug(f"Opcode ({row['mir_opcode']}) has live flags csv row: {row['live_flags']}")
                 opcode = row['mir_opcode']
 
-                live_flags = get_live_flags(row)
-                cur_flags = opcodes_to_live_flags.get(opcode, set())
-                cur_flags |= live_flags
-                opcodes_to_live_flags[opcode] = cur_flags
+                if is_comp_simp_warn(row):
+                    cs_opcodes.add(opcode)
 
-                addrs = row['addr']
-                cur_addrs = opcodes_to_addrs.get(opcode, set())
-                cur_addrs.add(addrs)
-                opcodes_to_addrs[opcode] = cur_addrs
+                if is_silent_store_warn(row):
+                    ss_opcodes.add(opcode)
 
-        logger.info("Printing live flag info")
-        for opcode, live_flags in opcodes_to_live_flags.items():
-            addrs = opcodes_to_addrs[opcode]
-            print(f"{opcode} ({len(addrs)}) ({addrs}): {live_flags}")
+                if is_comp_simp_warn(row) and has_live_flags(row):
+                    live_flags = get_live_flags(row)
+                    cur_flags = opcodes_to_live_flags.get(opcode, set())
+                    cur_flags |= live_flags
+                    opcodes_to_live_flags[opcode] = cur_flags
+
+                    addrs = row['addr']
+                    cur_addrs = opcodes_to_addrs.get(opcode, set())
+                    cur_addrs.add(addrs)
+                    opcodes_to_addrs[opcode] = cur_addrs
+
+            logger.info("Printing live flag info")
+            for opcode, live_flags in opcodes_to_live_flags.items():
+                addrs = opcodes_to_addrs[opcode]
+                print(f"{opcode} ({len(addrs)}) ({addrs}): {live_flags}")
+
+    logger.info("Printing all CS opcodes")
+    for opcode in sorted(cs_opcodes):
+        print(opcode)
+
+    logger.info("Printing all SS opcodes")
+    for opcode in sorted(ss_opcodes):
+        print(opcode)
