@@ -91,6 +91,7 @@ module Checker(N : NumericDomain) = struct
           let alert : Alert.t = { tid = st.tid;
                                   opcode = None;
                                   addr = None;
+                                  rpo_idx = None;
                                   sub_name = None;
                                   flags_live = SS.empty;
                                   is_live = None;

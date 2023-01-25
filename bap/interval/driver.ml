@@ -2,11 +2,11 @@ open Core
 open Bap_main
 open Bap.Std
 open Graphlib.Std
-open Common
-open Abstract_memory
-
 module T = Bap_core_theory.Theory
 module KB = Bap_knowledge.Knowledge
+
+open Common
+open Abstract_memory
 
 module Cfg = Bap.Std.Graphs.Cfg
 module IrCfg = Bap.Std.Graphs.Ir
@@ -380,6 +380,10 @@ let check_fn top_level_sub img ctxt proj : unit =
   let worklist = SubSet.singleton (top_level_sub) in
   let processed = SubSet.empty in
   let init_res = Alert.Set.empty in
+
+  let config_path = Extension.Configuration.get ctxt Common.config_file_path_param in
+  let config = Config.Parser.parse_config_file ~path:config_path in
+  let () = printf "Config is:\n%!"; Config.pp config in
 
   (* let global_storing_subs = Global_function_pointers.Libsodium.Analysis.get_global_storing_subs ctxt proj in *)
   (* let () = Format.printf "Subs storing to globals are:\n%!"; *)

@@ -18,6 +18,7 @@ module T = struct
   type t = { sub_name : string option;
              opcode : string option;
              addr : string option;
+             rpo_idx : int option;
              tid : Tid.t;
              flags_live : SS.t;
              is_live : bool option;
@@ -217,6 +218,7 @@ let t_of_reason_and_tid (reason : reason) (tid : Tid.t) : t =
   { sub_name = None;
     opcode = None;
     addr = None;
+    rpo_idx = None;
     tid;
     reason;
     flags_live = SS.empty;
@@ -239,6 +241,7 @@ let to_string (x : t) : string =
   let { sub_name;
         opcode;
         addr;
+        rpo_idx;
         tid;
         problematic_operands;
         left_val;
@@ -246,8 +249,7 @@ let to_string (x : t) : string =
         flags_live;
         is_live;
         reason;
-        desc } = x
-  in
+        desc } = x in
   let sub_name_str = match sub_name with
     | Some sub_name -> sub_name
     | None ->
@@ -257,6 +259,9 @@ let to_string (x : t) : string =
        failwith err_msg in
   let opcode_str = Option.value opcode ~default:"" in
   let addr_str = Option.value addr ~default:"" in
+  let rpo_idx_str = match rpo_idx with
+    | Some i -> Int.to_string i
+    | None -> "" in
   let tid_str = Tid.to_string tid in
   let po_str = match problematic_operands with
     | Some ops -> String.concat ~sep:":" @@
@@ -271,10 +276,11 @@ let to_string (x : t) : string =
   let reason_str = string_of_reason reason in
   (* if you change this next part, then change csv_header below also *)
   sprintf
-    "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\""
+    "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\""
     sub_name_str
     opcode_str
     addr_str
+    rpo_idx_str
     tid_str
     po_str
     left_str
@@ -284,7 +290,7 @@ let to_string (x : t) : string =
     reason_str
     desc
 
-let csv_header : string = "subroutine_name,mir_opcode,addr,tid,problematic_operands,left_operand,right_operand,live_flags,is_live,alert_reason,description"
+let csv_header : string = "subroutine_name,mir_opcode,addr,rpo_idx,tid,problematic_operands,left_operand,right_operand,live_flags,is_live,alert_reason,description"
 
 let to_csv_row (alert : t) : string = (to_string alert)
 

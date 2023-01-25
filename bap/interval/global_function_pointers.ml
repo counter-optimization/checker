@@ -77,7 +77,10 @@ module Libsodium = struct
         if SubSet.is_empty worklist
         then processed
         else
-          let picked = SubSet.nth worklist 0 |> Option.value_exn in
+          let picked = match SubSet.nth worklist 0 with
+            | Some callee -> callee
+            | None ->
+               failwith "in Global_function_pointers.get_all_direct_callees, shouldn't happen" in
           let worklist' = SubSet.remove worklist picked in
           if SubSet.mem processed picked
           then worklist_loop ~processed ~worklist:worklist'

@@ -24,13 +24,18 @@ let target_func_param = Extension.Configuration.parameter
 
 let output_csv_file_param = Extension.Configuration.parameter
                               ~doc:"CSV file where checker results will be stored"
-                              Extension.Type.string
+                              Extension.Type.path
                               "output-csv-file"
 
 let secrets_csv_file_param = Extension.Configuration.parameter
                                ~doc:"CSV file where secret function argument indices are stored"
+                               Extension.Type.path
+                               "secrets-csv-file"
+
+let config_file_path_param = Extension.Configuration.parameter
+                               ~doc:"Path to cio config file"
                                Extension.Type.string
-                              "secrets-csv-file"
+                               "config-file"
 
 module AMD64SystemVABI = struct
   let flag_names : SS.t = SS.of_list ["CF"; "PF"; "AF"; "ZF"; "SF";
