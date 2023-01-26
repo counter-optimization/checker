@@ -162,6 +162,13 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let module G = Graphlib.Make(Calling_context)(Bool) in
      let cfg = Graphlib.create (module G) ~edges () in
 
+     (* print edges for debugging *)
+     let () = printf "edges are: \n%!";
+              List.iter edges ~f:(fun (from', to', _) ->
+                          let from_tid = Calling_context.to_insn_tid from' in
+                          let to_tid = Calling_context.to_insn_tid to' in
+                          printf "\t%a -> %a\n%!" Tid.ppo from_tid Tid.ppo to_tid) in
+
      (* AbsInt *)
      let module ProdIntvlxTaint = DomainProduct(Wrapping_interval)(Checker_taint.Analysis) in
      let module WithTypes = DomainProduct(ProdIntvlxTaint)(Type_domain) in

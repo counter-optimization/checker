@@ -201,12 +201,21 @@ module RpoIdxAlertFiller = struct
                                     (sub : sub term)
                                     (proj : Project.t)
                                     (rpo_traversal : Calling_context.t Sequence.t) : Set.t =
+    let () = printf "Setting rpo indices for sub %s\n%!" @@ Sub.name sub in
     let rpo_tids = Seq.map rpo_traversal ~f:Calling_context.to_insn_tid in
+    let () = printf "Rpo tids are:\n%!";
+             Seq.iter rpo_tids ~f:(fun tid -> printf "%a\n%!" Tid.ppo tid) in
     let lut = OpcodeAndAddrFiller.build_lut proj in
-    let (addr_lut, opcode_lut) = lut in
+    let (addr_lut, _) = lut in
+    (* let () = printf "addr_lut is:\n%!"; *)
+    (*          Map.iteri addr_lut ~f:(fun ~key ~data -> *)
+    (*                      printf "\t%a : %s\n%!" Tid.ppo key data) in *)
     let addr_of_tid_exn tid : string = match Map.find addr_lut tid with
       | Some tid -> tid
-      | None -> failwith @@ sprintf "In RpoIdxAlertFiller.set_rpo_indices_for_alert_set, couldn't find addr in addr_lut for tid %a" Tid.pps tid in
+      | None ->
+         failwith @@
+           sprintf "In RpoIdxAlertFiller.set_rpo_indices_for_alert_set, couldn't find addr in addr_lut for tid %a"
+                   Tid.pps tid in
     let rpo_addrs = Seq.map rpo_tids ~f:addr_of_tid_exn in
     let grouped_rpo_addrs = Seq.to_list rpo_addrs
                             |> List.group ~break:String.(<>) in
