@@ -140,7 +140,9 @@ let should_skip_analysis (edges : Edge_builder.edges)
 
 let run_analyses sub img proj ~(is_toplevel : bool)
                  ~(bss_init_stores : Global_function_pointers.global_const_store list)
-                 ~(config : Config.t) : check_sub_result =
+                 ~(config : Config.t)
+                 ~(do_ss_checks : bool)
+                 ~(do_cs_checks : bool) : check_sub_result =
   let () = printf "Running analysis on sub %s\n%!" (Sub.name sub) in
   let prog = Project.program proj in
   let edges, tidmap = Edge_builder.run_one sub proj in
@@ -162,13 +164,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let module G = Graphlib.Make(Calling_context)(Bool) in
      let cfg = Graphlib.create (module G) ~edges () in
 
-     (* print edges for debugging *)
-     let () = printf "edges are: \n%!";
-              List.iter edges ~f:(fun (from', to', _) ->
-                          let from_tid = Calling_context.to_insn_tid from' in
-                          let to_tid = Calling_context.to_insn_tid to' in
-                          printf "\t%a -> %a\n%!" Tid.ppo from_tid Tid.ppo to_tid) in
-
      (* AbsInt *)
      let module ProdIntvlxTaint = DomainProduct(Wrapping_interval)(Checker_taint.Analysis) in
      let module WithTypes = DomainProduct(ProdIntvlxTaint)(Type_domain) in
@@ -186,8 +181,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let stack_addr = 0x7fff_fff0 in
      
      let free_vars = Sub.free_vars sub in
-     let () = printf "Free vars of sub (%s) are:\n%!" @@ Sub.name sub;
-              Set.iter free_vars ~f:(fun v -> printf "%s\n%!" @@ Var.name v) in
      let freenames = Set.to_list free_vars |> List.map ~f:Var.name in
      
      let args = Term.enum arg_t sub in
@@ -307,27 +300,41 @@ let run_analyses sub img proj ~(is_toplevel : bool)
          ~f:(fun alerts edge ->
            let alerts' = analyze_edge (module Chkr) edge in
            Alert.Set.union alerts alerts') in
-     
-     let module CSChecker : Checker.S with type env = E.t = struct
-         include Comp_simp.Checker(FinalDomain)
-         type env = E.t
-       end in
-     let module SSChecker : Checker.S with type env = E.t = struct
-         include Silent_stores.Checker(FinalDomain)
-         type env = E.t
-       end in
-     let () = printf "Starting comp simp checker...\n%!" in
-     let comp_simp_alerts = run_checker (module CSChecker) edges in
-     let () = printf "Done running comp simp checker.\n%!" in
-     let () = printf "Starting silent stores checker...\n%!" in
-     let silent_store_alerts = run_checker (module SSChecker) edges in
-     let () = printf "Done running silent stores checker.\n%!" in
-     let all_alerts = Alert.Set.union comp_simp_alerts silent_store_alerts in
-     (* let all_alerts = Alert.Set.empty in *)
 
-     (* fill out all alert fields that can't (or shouldn't be known in the checkes *)
-     (* fill out this subroutine name in all of the generated alerts for
-        this sub *)
+     let comp_simp_alerts =
+       if do_cs_checks
+       then
+         begin
+           let module CSChecker : Checker.S
+                      with type env = E.t = struct
+               include Comp_simp.Checker(FinalDomain)
+               type env = E.t
+             end in
+           let () = printf "Starting comp simp checker...\n%!" in
+           let alerts = run_checker (module CSChecker) edges in
+           let () = printf "Done running comp simp checker.\n%!" in
+           alerts
+         end
+       else Alert.Set.empty in
+
+     let silent_store_alerts =
+       if do_ss_checks
+       then
+         begin
+           let module SSChecker : Checker.S with type env = E.t = struct
+               include Silent_stores.Checker(FinalDomain)
+               type env = E.t
+             end in
+           
+           let () = printf "Starting silent stores checker...\n%!" in
+           let alerts = run_checker (module SSChecker) edges in
+           let () = printf "Done running silent stores checker.\n%!" in
+           alerts
+         end
+       else Alert.Set.empty in
+     
+     let all_alerts = Alert.Set.union comp_simp_alerts silent_store_alerts in
+
      let alerts_with_subs = Alert.Set.map all_alerts ~f:(fun alert ->
                                             { alert with sub_name = Some (Sub.name sub) }) in
      let alerts_with_ops_addrs = Alert.OpcodeAndAddrFiller.set_opcode_and_addr_for_alert_set alerts_with_subs proj in
@@ -398,6 +405,9 @@ let check_config config img ctxt proj : unit =
                        Format.printf "mem[%a] <- %a\n%!"
                                      Word.pp addr
                                      Word.pp data) in
+
+  let do_ss_checks = Extension.Configuration.get ctxt Common.do_ss_checks_param in
+  let do_cs_checks = Extension.Configuration.get ctxt Common.do_cs_checks_param in
   
   let rec loop ~(worklist : SubSet.t)
                ~(processed : SubSet.t)
@@ -429,6 +439,8 @@ let check_config config img ctxt proj : unit =
         let current_res = run_analyses sub img proj
                                        ~is_toplevel
                                        ~bss_init_stores:global_store_data
+                                       ~do_cs_checks
+                                       ~do_ss_checks
                                        ~config in
         let callee_subs = CRS.to_list current_res.callees
                           |> List.map ~f:(fun (r : CR.t) -> sub_of_tid_exn r.callee proj)

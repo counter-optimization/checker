@@ -1,8 +1,12 @@
-TEST_SRCS = common.ml checker_taint.ml wrapping_interval.ml test_wrapping_interval.ml abstract_memory.ml test_abstract_memory.ml test_main.ml
-TEST_OBJS = $(TEST_SRCS:.ml=.cmo)
-TEST_INTFS = $(TEST_SRCS:.ml=.cmi)
-TEST_MAIN = test_main
+BUILD_DIR = _build
+TEST_SRCS ::= $(shell ls *.ml)
+TEST_OBJS = $(addprefix $(BUILD_DIR)/, $(TEST_SRCS:.ml=.cmo))
+TEST_INTFS = $(addprefix $(BUILD_DIR)/, $(TEST_SRCS:.ml=.cmi))
+TEST_NATIVES = $(addprefix $(BUILD_DIR)/, $(TEST_SRCS:.ml=.cmx))
+OCAML_PKGS = -package regular -package ppx_bap -package core_kernel -package bap-knowledge -package bap-core-theory -package bap-main -package bap
 PLUGIN_NAME = uarch_checker.plugin
+
+BAPBUILD_JOB_SLOTS=4
 
 # for building ocaml tags
 BAP_MASTER_REPO=/Users/mkf727/repos/bap
@@ -11,88 +15,106 @@ JANESTREET_CORE_BASE=/Users/mkf727/.opam/bap-alpha/lib/core
 
 COMP_SIMP_TEST_DIR = comp-simp-test-cases
 
-PKGS = bap,core_kernel,stdio,graphlib,zarith,ounit2,monads
+.PHONY: clean bap-plugin libna_aesni libna_argon2id libna_aead libna_crypto_sign release debug
 
-.PHONY : clean test comp-simp-test-cases bap-plugin
+debug: bap-plugin
 
-bap-plugin : *.ml
-	bapbuild $(PLUGIN_NAME)
+release: $(PLUGIN_NAME)
 
-libna_argon2id : bap-plugin
+bap-plugin: *.ml
+	bapbuild -j $(BAPBUILD_JOB_SLOTS) $(PLUGIN_NAME)
+
+libna_argon2id: $(PLUGIN_NAME)
 	@echo -n "Starting analysis of argon2id"
-
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
-
 	-bap --plugin-path=. --pass=uarch-checker \
 	--uarch-checker-output-csv-file=./libna.crypto_pwhash_argon2id.csv \
 	--uarch-checker-config-file=crypto_pwhash.uarch_checker.config \
+	--uarch-checker-ss \
+	--uarch-checker-cs \
 	--no-optimization --bil-optimization=0 \
 	../../test/libna/bap_ld_scalar_mult.o > libna.crypto_pwhash_argon2id.debug.log 2>&1
-
 	@echo -n "Done with analysis of argon2id"
-
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 
-libna_aesni : bap-plugin
+libna_aesni: $(PLUGIN_NAME)
 	@echo -n "Starting analysis of aesni "
-
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
-
 	-bap --plugin-path=. --pass=uarch-checker \
 	--uarch-checker-output-csv-file=./libna.crypto_aesni.csv \
 	--uarch-checker-target-function=crypto_aead_aes256gcm_encrypt \
+	--uarch-checker-ss \
+	--uarch-checker-cs \
 	--no-optimization --bil-optimization=0 \
 	../../test/libna/bap_ld_scalar_mult.o > libna.crypto_aead_aes256gcm_encrypt.debug.log 2>&1
-
 	@echo -n "Done with analysis of aesni "
-
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 
-libna_crypto_sign : bap-plugin
+libna_crypto_sign: $(PLUGIN_NAME)
 	@echo -n "Starting analysis of crypto_sign "
-
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
-
 	-bap --plugin-path=. --pass=uarch-checker \
 	--uarch-checker-output-csv-file=./libna.crypto_sign_ed25519.csv \
 	--uarch-checker-config-file=crypto_sign.uarch_checker.config \
+	--uarch-checker-ss \
+	--uarch-checker-cs \
 	--no-optimization --bil-optimization=0 \
 	../../test/libna/bap_ld_scalar_mult.o > libna.crypto_sign.debug.log 2>&1
-
 	@echo -n "Done with analysis of crypto_sign "
-
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 
-libna_aead : bap-plugin
+libna_aead: $(PLUGIN_NAME)
 	@echo -n "Starting analysis of chacha20poly1305 "
-
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
-
-	-bap --plugin-path=. --pass=uarch-checker --uarch-checker-output-csv-file=./libna.aead_chacha20poly1305.csv --uarch-checker-target-function=crypto_aead_chacha20poly1305_encrypt --no-optimization --bil-optimization=0 ../../test/libna/bap_ld_scalar_mult.o > libna.crypto_aead_chacha20poly1305_encrypt.debug.log 2>&1
-
+	-bap --plugin-path=. --pass=uarch-checker \
+	--uarch-checker-output-csv-file=./libna.aead_chacha20poly1305.csv \
+	--uarch-checker-target-function=crypto_aead_chacha20poly1305_encrypt \
+	--uarch-checker-ss \
+	--uarch-checker-cs \
+	--no-optimization --bil-optimization=0 \
+	../../test/libna/bap_ld_scalar_mult.o > libna.crypto_aead_chacha20poly1305_encrypt.debug.log 2>&1
 	@echo -n "Done with analysis of chacha20poly1305 "
-
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 
-test : $(TEST_MAIN) comp-simp-test-cases
-	./$(TEST_MAIN)
+tags: $(TEST_SRCS)
+	-ctags -e --etags-include=$(BAP_MASTER_REPO) --etags-include=$(Z_PLUGIN_LIB_BASE) --etags-include=$(JANESTREET_CORE_BASE) -R $^
 
-tags : *.ml
-	-ctags -e --etags-include=$(BAP_MASTER_REPO) --etags-include=$(Z_PLUGIN_LIB_BASE) --etags-include=$(JANESTREET_CORE_BASE) -R *.ml
+$(PLUGIN_NAME): $(BUILD_DIR)/$(PLUGIN_NAME)
+	ln -sf $^ $@
 
-comp-simp-test-cases :
-	$(MAKE) -C $(COMP_SIMP_TEST_DIR)
+$(BUILD_DIR)/$(PLUGIN_NAME): $(BUILD_DIR)/uarch_checker.cmxs $(BUILD_DIR)/uarch_checker.cma
+	bapbundle pack -name uarch_checker -main $(BUILD_DIR)/uarch_checker.cmxs -main $(BUILD_DIR)/uarch_checker.cma -provides uarch_checker $@
 
-$(TEST_MAIN) : $(TEST_OBJS)
-	ocamlfind ocamlc -o test_main -package $(PKGS) -linkpkg $(TEST_OBJS)
+$(BUILD_DIR)/uarch_checker.cmxs: $(BUILD_DIR)/uarch_checker.cmxa
+	ocamlfind ocamlopt -shared -linkall -ccopt -L -ccopt $(BUILD_DIR) $< -o $@
 
-$(TEST_OBJS) &: $(TEST_SRCS)
-	ocamlfind ocamlc -package $(PKGS) -c $(TEST_SRCS)
+$(BUILD_DIR)/uarch_checker.cmxa: $(TEST_NATIVES)
+	ocamlfind ocamlopt -a -thread $(OCAML_PKGS) $(TEST_NATIVES) -o $@
 
-clean :
-	-rm $(TEST_MAIN)
-	-rm $(TEST_OBJS)
-	-rm $(TEST_INTFS)
+$(BUILD_DIR)/uarch_checker.cma: $(TEST_OBJS)
+	ocamlfind ocamlc -a -custom -thread $(OCAML_PKGS) $(TEST_OBJS) -o $@
+
+$(BUILD_DIR)/%.cmo: %.ml | $(BUILD_DIR)
+	ocamlfind ocamlc -c -thread -I $(BUILD_DIR) $(OCAML_PKGS) -o $@ $<
+
+$(BUILD_DIR)/%.cmx: %.ml | $(BUILD_DIR)
+	ocamlfind ocamlopt -c -O3 -thread -I $(BUILD_DIR) $(OCAML_PKGS) -o $@ $<
+
+$(BUILD_DIR):
+	mkdir $(BUILD_DIR)
+
+depends: $(BUILD_DIR)/.depends
+
+$(BUILD_DIR)/.depends: $(TEST_SRCS) | $(BUILD_DIR)
+	cp $(TEST_SRCS) $(BUILD_DIR)
+	ocamlfind ocamldep -nocwd -I $(BUILD_DIR) $(addprefix $(BUILD_DIR)/, $(TEST_SRCS)) > $@
+
+include $(BUILD_DIR)/.depends
+
+clean:
 	-rm *.plugin
 	-rm -r _build/
+	-rm *.cm[olax]
+	-rm *.cmx[as]
+	-rm .depends
 	-$(MAKE) -C $(COMP_SIMP_TEST_DIR) clean

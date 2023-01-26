@@ -37,6 +37,16 @@ let config_file_path_param = Extension.Configuration.parameter
                                Extension.Type.string
                                "config-file"
 
+let do_ss_checks_param = Extension.Configuration.parameter
+                           ~doc:"Do silent store checks?"
+                           Extension.Type.bool
+                           "ss"
+
+let do_cs_checks_param = Extension.Configuration.parameter
+                           ~doc:"Do comp simp checks?"
+                           Extension.Type.bool
+                           "cs"
+
 module AMD64SystemVABI = struct
   let flag_names : SS.t = SS.of_list ["CF"; "PF"; "AF"; "ZF"; "SF";
                                       "TF"; "IF"; "DF"; "OF"]
