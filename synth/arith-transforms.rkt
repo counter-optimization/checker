@@ -97,7 +97,7 @@
 
 ; Check CF for add64 only
 (define flags-add64
-  (list 'CF))
+  (list 'CF 'ZF))
 
 (define attempt-add8
   (list
@@ -168,9 +168,14 @@
    (rol-r/m64-imm8 rax (bv 16 8))
    (ror-r/m64-imm8 r10 (bv 16 8))
    (rcl-r/m64-imm8 rcx (bv 16 8))
+   ; save CF
+   (setc r12b)
    ; recombine and restore rax
    (mov-r/m16-r16 cx r10w)
    (mov-r/m16-r16 ax r11w)
+   ; set flags
+   (cmp-r/m64-imm8 rcx (bv 0 8))
+   (bt-r/m64-imm8 r12b (bv 0 8))
   ))
 
 (define spec-add64
