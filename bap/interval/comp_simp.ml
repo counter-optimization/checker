@@ -10,6 +10,26 @@ module KB = Bap_core_theory.KB
 
 module ABI = Common.ABI
 
+type cs_state = {
+    mock_sub_tid : tid option;
+    target_tid : tid option;
+    which_args : int list;
+    mock_frees : Set.M(Var).t
+  }
+
+module Machine = Primus.Analysis
+module Linker = Primus.Linker.Make(Machine)
+module Eval = Primus.Interpreter.Make(Machine)
+
+let cs_state = Primus.Machine.State.declare
+                 ~uuid:"9ff44277-c861-4e74-9eec-6df3b53c6a19"
+                 ~name:"cs_state" @@ fun _ -> {
+                      mock_sub_tid = None;
+                      target_tid = None;
+                      which_args = [];
+                      mock_frees = Set.empty (module Var)
+                 }
+
 module Mxtor = struct
     (* need to write primus components to:
        1) set the machine entry point to the mock sub
@@ -28,27 +48,72 @@ module Mxtor = struct
   (* let symex_system = Primus.System.Repository.get *)
   (*                      ~package:bap_package *)
   (*                      symex_system_name *)
-
-  module Machine = Primus.Analysis
-  module Linker = Primus.Linker.Make(Machine)
-
+  
   module CompSimpSymExChecker(Machine : Primus.Machine.S) = struct
     open Machine.Syntax
 
     module Linker = Primus.Linker.Make(Machine)
+    module Eval = Primus.Interpreter.Make(Machine)
+    module Env = Primus.Env.Make(Machine)
+    module Lisp = Primus.Lisp.Make(Machine)
+    module Val = Primus.Value.Make(Machine)
 
     let on_enter_sub sub =
-      Machine.return @@ printf "CompSimpSymExChecker visited sub %s\n%!"
-                          (Sub.name sub)
+      Machine.return @@
+        printf "CompSimpSymExChecker visited sub %s\n%!"
+          (Sub.name sub)
+
+    let init_free_vars st =
+      let free_vars = Set.to_list st.mock_frees in
+      let free_vars = List.filter free_vars ~f:(fun other ->
+                          let other = Var.name other in
+                          not @@ String.equal other "mem") in
+      Val.of_word (Word.zero 64) >>= fun default_val ->
+      Machine.List.iter free_vars ~f:(fun fv ->
+          Env.set fv default_val)
 
     let on_start start_str =
-      Machine.return @@
-        printf "CompSimpSymExChecker on_start: %s\n%!" start_str
+      Machine.Local.get cs_state >>= fun s ->
+      match s.mock_sub_tid with
+      | Some target_tid ->
+         Machine.program >>= fun prog ->
+         let sub = Term.find sub_t prog target_tid in
+         let () = if Option.is_none sub
+                  then failwith "in on_start, couldn't find mock sub in prog"
+                  else ()
+         in
+         (* let _ = Lisp.eval_fun "symbolic-value"  *)
+         let sub = Option.value_exn sub in
+         let first_blk = Term.first blk_t sub in
+         let first_blk = match first_blk with
+           | Some blk -> blk
+           | None -> failwith "in on_start, sub doesn't have first blk"
+         in
+         let first_blk_tid = Term.tid first_blk in
+         init_free_vars s >>= fun () ->
+         (* let () = printf "in on_start, execing linker on tid %a (parent sub tid %a)\n%!" *)
+         (*            Tid.ppo first_blk_tid *)
+         (*            Tid.ppo target_tid in *)
+         Linker.exec (`tid first_blk_tid) >>= fun () ->
+         Eval.halt >>=
+           never_returns
+      | None ->
+         (* let () = printf "in on_start, cs_state's target_tid is not set\n%!" in *)
+         Eval.halt >>=
+           never_returns
+         >>= fun _ -> 
+         Machine.return @@
+           printf "CompSimpSymExChecker on_start: %s\n%!" start_str
 
+    let on_enter_blk blk =
+      Machine.return @@
+        printf "CompSimpSymExChecker visited blk %a\n%!"
+          Tid.ppo (Term.tid blk)
     
     let init () =
       Machine.sequence [
           Primus.Interpreter.enter_sub >>> on_enter_sub;
+          Primus.Interpreter.enter_blk >>> on_enter_blk;
           Primus.System.start >>> on_start
         ]
   end
@@ -186,8 +251,6 @@ module Checker(N : NumericDomain) = struct
   let get_dependent_defs : def term list option ST.t =
     ST.gets @@ fun s ->
     let dependents = Live_variables.dependents_up_to_bound s.tid s.symex_state.dep_bound s.liveness in
-    (* let () = printf "Dependents for tid %a are:\n%!" Tid.ppo s.tid in *)
-    (* let () = List.iter dependents ~f:(printf "\t%a\n%!" Tid.ppo) in *)
     let dep_defs = tids_to_def_terms dependents s in
     Option.(>>|) dep_defs @@ fun dep_defs ->
     (* check that the potentially leaky def is in the dependent defs list and last *)
@@ -203,7 +266,6 @@ module Checker(N : NumericDomain) = struct
          failwith @@ sprintf "in computing dependent defs, target tid %a not in dep defs: %s"
                        Tid.pps s.tid (List.to_string ~f:(Def.to_string) dep_defs)
     in
-    (* let () = List.iter dep_defs ~f:(fun d -> printf "%a :: %a\n%!" Tid.ppo (Term.tid d) Def.ppo d) in *)
     dep_defs
 
   let build_mock_sub_for_mx (defs : def term list) : sub term ST.t =
@@ -213,7 +275,10 @@ module Checker(N : NumericDomain) = struct
       { st with symex_state = { st.symex_state with mock_free_vars = free_vars } })
     >>= fun () ->
     ST.gets @@ fun st ->
-    Sub.create ~blks:[blk] ~name:st.symex_state.mock_sub_name ()
+               Sub.create ~blks:[blk] ~name:st.symex_state.mock_sub_name ()
+
+  let get_frees_of_mock_sub msub : Set.M(Var).t ST.t =
+    ST.return @@ Sub.free_vars msub
     
   let check_binop_operands (specials : (I.t -> I.t) list * (I.t -> I.t) list)
                            (op : binop) ~(check_left : bool) ~(check_right : bool)
@@ -231,18 +296,44 @@ module Checker(N : NumericDomain) = struct
           result_acc >>= fun () ->
           ST.get () >>= fun st ->
           get_dependent_defs >>= fun deps ->
-          if Option.is_some deps
+          let can_do_last_symex_check = Option.is_some deps in
+          if can_do_last_symex_check
           then
             let deps = Option.value_exn deps in
             build_mock_sub_for_mx deps >>= fun mocksub ->
-            let mocksub_name = `tid (Term.tid mocksub) in
+            let mocksub_name = `symbol (Sub.name mocksub) in
+            get_frees_of_mock_sub mocksub >>= fun mock_frees ->
             let kb_state = Toplevel.current () in
-            let () = printf "starting microexecution...%!" in
-            let start = Mxtor.Linker.exec mocksub_name in
-            let res = Primus.System.run Mxtor.cs_system st.proj kb_state ~start in
-            let () = printf "done\n%!" in
+            (* let () = printf "mock_sub is\n%a\n%!" Sub.ppo mocksub in *)
+            (* let () = printf "starting microexecution...%!" in *)
+            let prog = Project.program st.proj in
+            let prog' = Term.append sub_t prog mocksub in
+            let proj_with_prog = Project.with_program st.proj prog' in
+            let res = Primus.System.run Mxtor.cs_system proj_with_prog kb_state ~init:(
+                          let open Machine.Syntax in
+                          let module MockCode = functor (Machine : Primus.Machine.S) -> struct
+                                                  module Eval = Primus.Interpreter.Make(Machine)
+                                                  let exec = Eval.sub mocksub
+                                                end
+                          in
+                          let unlink = (Linker.lookup mocksub_name) >>| fun code ->
+                              match code with
+                              | Some _ -> Linker.unlink mocksub_name
+                              | None -> Machine.return ()
+                          in
+                          Machine.join unlink >>= fun () ->
+                          (Linker.link
+                            ~name:(Sub.name mocksub)
+                            ~tid:(Term.tid mocksub)
+                            (module MockCode)) >>= fun () ->
+                          Machine.Local.update cs_state ~f:(fun s ->
+                              { s with mock_sub_tid = Some (Term.tid mocksub); mock_frees})) in
             let () = match res with
-              | Ok (exit_status, proj', kb_state') -> ()
+              | Ok (Normal, proj', kb_state') -> printf "primus exited normal (Normal)\n%!"
+              | Ok (Exn Primus.Interpreter.Halt, proj', kb_state') ->
+                 printf "primus exited normal (Halt)\n%!"
+              | Ok (Exn e, proj', kb_state') ->
+                 printf "primus exited with exception %s\n%!" @@ Primus.Exn.to_string e
               | Error e -> failwith @@ Bap_knowledge.Knowledge.Conflict.to_string e in
             let binop_str = Common.binop_to_string op in
             let left_str = if is_left

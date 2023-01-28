@@ -112,6 +112,7 @@ $(BUILD_DIR)/.depends: $(TEST_SRCS) | $(BUILD_DIR)
 include $(BUILD_DIR)/.depends
 
 clean:
+	-ocamlbuild -clean
 	-rm *.plugin
 	-rm -r _build/
 	-rm *.cm[olax]
