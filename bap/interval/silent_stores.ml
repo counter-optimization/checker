@@ -31,12 +31,14 @@ module Checker(N : NumericDomain) = struct
     type t = { warns: warns;
                env: Env.t;
                tid : Tid.t;
+               proj : project;
                liveness : Live_variables.t } 
 
-    let init in_state tid liveness =
+    let init in_state tid liveness proj =
       { warns = Alert.Set.empty;
         env = in_state;
         tid = tid;
+        proj;
         liveness = liveness }
   end
     
@@ -171,6 +173,7 @@ module Checker(N : NumericDomain) = struct
   let check_def (d : def term)
         (live : Live_variables.t)
         (env : Env.t)
+        proj
       : warns =
     let tid = Term.tid d in
     let lhs = Def.lhs d in
@@ -178,13 +181,13 @@ module Checker(N : NumericDomain) = struct
     if SS.mem dont_care_vars lhs_var_name
     then empty
     else
-      let init_state = State.init env tid live in
+      let init_state = State.init env tid live proj in
       let rhs = Def.rhs d in
       let _, final_state = ST.run (check_exp rhs) init_state in
       final_state.warns
   
-  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : Env.t) : warns =
+  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : Env.t) (sub : sub term) proj : warns =
     match e with
-    | `Def d -> check_def d live env
+    | `Def d -> check_def d live env proj
     | _ -> empty
 end

@@ -56,4 +56,6 @@ module UarchCheckerExtension = struct
     Ok ()
 end
 
-let () = Extension.declare UarchCheckerExtension.register_pass
+let () = Extension.declare
+           ~features:["primus"; "symbolic-executor"; "symbolic-lisp-primitives"]
+           UarchCheckerExtension.register_pass

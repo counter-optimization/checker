@@ -224,9 +224,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                ~f:(fun mem argname ->
                                  E.init_arg ~name:argname config sub mem) in
      
-     let () = Format.printf "Initial memory+env is: %!" in
-     let () = E.pp final_env in
-     let () = Format.printf "\n%!" in
+     (* let () = Format.printf "Initial memory+env is: %!" in *)
+     (* let () = E.pp final_env in *)
+     (* let () = Format.printf "\n%!" in *)
 
      let rpo_traversal = Graphlib.reverse_postorder_traverse (module G) cfg in
      let first_node = match Seq.hd rpo_traversal with
@@ -292,7 +292,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
          (* let () = Format.printf "checking edge (%a, %a)\n%!" *)
          (*                        Calling_context.pp from_cc *)
          (*                        Calling_context.pp to_cc in *)
-         Chkr.check_elt insn liveness in_state in
+         Chkr.check_elt insn liveness in_state sub proj in
 
      let run_checker (module Chkr : Checker.S with type env = E.t) (es : 'a Calling_context.edges) : Chkr.warns =
        List.fold edges

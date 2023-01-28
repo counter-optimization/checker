@@ -1,6 +1,7 @@
 open Core
 open Bap_main
 open Bap.Std
+open Bap_primus.Std
 open Graphlib.Std
 open Monads.Std
 
@@ -37,14 +38,14 @@ let config_file_path_param = Extension.Configuration.parameter
                                Extension.Type.string
                                "config-file"
 
-let do_ss_checks_param = Extension.Configuration.parameter
+let do_ss_checks_param = Extension.Configuration.flag
                            ~doc:"Do silent store checks?"
-                           Extension.Type.bool
+                           ~aliases:["silent-stores"; "x86-ss"]
                            "ss"
 
-let do_cs_checks_param = Extension.Configuration.parameter
+let do_cs_checks_param = Extension.Configuration.flag
                            ~doc:"Do comp simp checks?"
-                           Extension.Type.bool
+                           ~aliases:["comp-simp"; "x86-cs"]
                            "cs"
 
 module AMD64SystemVABI = struct
@@ -84,6 +85,28 @@ let string_powset_dom = KB.Domain.powerset
                           (module String)
                           ~inspect:String.sexp_of_t
                           "string-powerset-domain"
+
+module SymExChecker = struct
+  type t = {
+      dep_bound : int;
+      mock_sub_name : string;
+      mock_free_vars : Set.M(Var).t;
+      mock_target_vars : Var.t list
+    }
+
+  type state = t
+
+  let default_mock_sub_name = "mock-sub-for-mx"
+
+  let default_dep_bound = 10
+
+  let default_state = {
+      dep_bound = default_dep_bound;
+      mock_sub_name = default_mock_sub_name;
+      mock_free_vars = Set.empty (module Var);
+      mock_target_vars = []
+    }
+end
 
 module CalleeRel = struct
   module T = struct

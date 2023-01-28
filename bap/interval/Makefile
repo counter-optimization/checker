@@ -3,7 +3,7 @@ TEST_SRCS ::= $(shell ls *.ml)
 TEST_OBJS = $(addprefix $(BUILD_DIR)/, $(TEST_SRCS:.ml=.cmo))
 TEST_INTFS = $(addprefix $(BUILD_DIR)/, $(TEST_SRCS:.ml=.cmi))
 TEST_NATIVES = $(addprefix $(BUILD_DIR)/, $(TEST_SRCS:.ml=.cmx))
-OCAML_PKGS = -package regular -package ppx_bap -package core_kernel -package bap-knowledge -package bap-core-theory -package bap-main -package bap
+OCAML_PKGS = -package regular -package ppx_bap -package core_kernel -package bap-knowledge -package bap-core-theory -package bap-main -package bap -package bap-primus
 PLUGIN_NAME = uarch_checker.plugin
 
 BAPBUILD_JOB_SLOTS=4
@@ -22,9 +22,9 @@ debug: bap-plugin
 release: $(PLUGIN_NAME)
 
 bap-plugin: *.ml
-	bapbuild -j $(BAPBUILD_JOB_SLOTS) $(PLUGIN_NAME)
+	bapbuild -pkg bap-primus -j $(BAPBUILD_JOB_SLOTS) $(PLUGIN_NAME)
 
-libna_argon2id: $(PLUGIN_NAME)
+libna_argon2id: debug
 	@echo -n "Starting analysis of argon2id"
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 	-bap --plugin-path=. --pass=uarch-checker \
@@ -37,7 +37,7 @@ libna_argon2id: $(PLUGIN_NAME)
 	@echo -n "Done with analysis of argon2id"
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 
-libna_aesni: $(PLUGIN_NAME)
+libna_aesni: debug
 	@echo -n "Starting analysis of aesni "
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 	-bap --plugin-path=. --pass=uarch-checker \
@@ -50,7 +50,7 @@ libna_aesni: $(PLUGIN_NAME)
 	@echo -n "Done with analysis of aesni "
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 
-libna_crypto_sign: $(PLUGIN_NAME)
+libna_crypto_sign: debug
 	@echo -n "Starting analysis of crypto_sign "
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 	-bap --plugin-path=. --pass=uarch-checker \
@@ -63,7 +63,7 @@ libna_crypto_sign: $(PLUGIN_NAME)
 	@echo -n "Done with analysis of crypto_sign "
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 
-libna_aead: $(PLUGIN_NAME)
+libna_aead: debug
 	@echo -n "Starting analysis of chacha20poly1305 "
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 	-bap --plugin-path=. --pass=uarch-checker \

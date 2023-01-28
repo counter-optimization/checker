@@ -32,4 +32,4 @@ S test_abstract_memory.ml
 
 B _build
 
-PKG bap core_kernel stdio graphlib zarith ounit2 monads
+PKG bap core_kernel stdio graphlib zarith ounit2 monads bap-primus
