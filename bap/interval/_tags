@@ -1,0 +1,2 @@
+<**/*.cmx> or <*.cmx>: ocaml, native, optimize(3)
+<**/*.cmo> or <*.cmo>: ocaml, byte, optimize(3)
