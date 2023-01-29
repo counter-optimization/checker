@@ -13,7 +13,7 @@ module Solver = Z3.Solver
 
 let ctxt = Z3.mk_context [
                  "model", "true";
-                 "timeout", "200"
+                 (* "timeout", "200" *)
                ]
 
 let solver = Solver.mk_solver_s ctxt "QF_BV"
@@ -221,6 +221,11 @@ module Executor = struct
     ST.gets @@ fun st ->
     List.Assoc.find_exn st.env ~equal symname
 
+  let get_value_in_env symname : Expr.expr option ST.t =
+    let equal = String.equal in
+    ST.gets @@ fun st ->
+    List.Assoc.find st.env ~equal symname
+
   let has_symbolic_name varname : bool ST.t =
     let equal = String.equal in
     ST.gets @@ fun st ->
@@ -250,11 +255,28 @@ module Executor = struct
   let get_last_loaded_symname : string option ST.t =
     ST.gets @@ fun st -> st.last_loaded_symname
 
-  let add_neq_constraint left right : unit ST.t =
+  let push_constraint ctr : unit ST.t =
     ST.update @@ fun st ->
-    let neq = Bool.mk_not ctxt @@ Bool.mk_eq ctxt left right in
     let cs' = st.constraints in
-    { st with constraints = neq :: cs' }
+    { st with constraints = ctr :: cs' }
+
+  let push_def_constraint lhs_varname lhs_symname rhs_symvalue : unit ST.t =
+    get_value_in_env lhs_symname >>= fun lhs_symvalue ->
+    (match lhs_symvalue with
+      | Some lhs_symvalue -> ST.return lhs_symvalue
+      | None ->
+         let bw = match ABI.size_of_var_name lhs_varname with
+           | Some bw -> bw
+           | None -> 64
+         in
+         fresh_bv_for_symbolic lhs_symname bw
+    ) >>= fun lhs_symvalue ->
+    let eq_ctr = Bool.mk_eq ctxt lhs_symvalue rhs_symvalue in
+    push_constraint eq_ctr
+
+  let add_neq_constraint left right : unit ST.t =
+    let neq = Bool.mk_not ctxt @@ Bool.mk_eq ctxt left right in
+    push_constraint neq
 
   module SilentStoreChecks = struct
     let on_fail = fun st -> { st with failed_ss = true }
@@ -296,9 +318,12 @@ module Executor = struct
       let rw = Bitv.get_size (Expr.get_sort right) in
       let no_checks = (left, []), (right, []) in
       let left_nots, right_nots = match op with
-        | Bil.PLUS -> (left, adds lw), (right, adds rw)
-        | Bil.MINUS -> (left, none), (right, adds rw)
-        | Bil.TIMES -> (left, muls lw), (right, muls rw)
+        | Bil.PLUS ->
+           (left, adds lw), (right, adds rw)
+        | Bil.MINUS ->
+           (left, none), (right, adds rw)
+        | Bil.TIMES ->
+           (left, muls lw), (right, muls rw)
         | Bil.DIVIDE | Bil.SDIVIDE ->
            (left, [mul_zero lw]), (right, [mul_iden rw])
         | Bil.MOD  | Bil.SMOD ->
@@ -341,7 +366,9 @@ module Executor = struct
     | Solver.UNSATISFIABLE -> ST.return true
     | Solver.UNKNOWN ->
        failwith @@
-         Format.sprintf "in Symbolic.Executor.check_now, error checking constraints for solver: %s" @@ Solver.to_string solver
+         Format.sprintf "in Symbolic.Executor.check_now, error checking constraints for solver: %s : %s"
+           (Solver.to_string solver)
+           (Solver.get_reason_unknown solver)
     | Solver.SATISFIABLE ->
        ST.update onfail >>= fun () ->
        ST.return false
@@ -374,7 +401,7 @@ module Executor = struct
               ST.get () >>= fun st_wo_constraints ->
               add_neq_constraint curval symval >>= fun () ->
               check_now SilentStoreChecks.on_fail >>= fun _store_safe ->
-              ST.put st_wo_constraints >>= fun () ->
+              (* ST.put st_wo_constraints >>= fun () -> *)
               ST.return None
          end
        else
@@ -393,10 +420,14 @@ module Executor = struct
                 ST.get () >>= fun ini_st ->
                 do_left_checks >>= fun () ->
                 check_now CompSimpChecks.on_left_fail >>= fun _left_safe ->
+                ST.gets (fun st -> st.failed_cs_left) >>= fun failed_cs_left ->
                 ST.put ini_st >>= fun () ->
                 do_right_checks >>= fun () ->
                 check_now CompSimpChecks.on_right_fail >>= fun _right_safe ->
-                ST.put ini_st
+                ST.gets (fun st -> st.failed_cs_right) >>= fun failed_cs_right ->
+                ST.put ini_st >>= fun () ->
+                ST.update @@ fun st ->
+                { st with failed_cs_left; failed_cs_right }
               else
                 ST.return ()
             end >>= fun () ->
@@ -475,12 +506,17 @@ module Executor = struct
     ST.update (fun st ->
       { st with do_check = Tid.equal tid st.target_tid }) >>= fun () ->
     let rhs = Def.rhs dt in
+    ST.gets (fun st ->
+    printf "tid is %a, doing check? %B\n%!"
+      Tid.ppo tid
+      st.do_check) >>= fun () ->
     eval_exp rhs >>= fun mr ->
     match mr with
     | Some result ->
        let lhs = Def.lhs dt in
        let varname = Var.name lhs in
        new_symbolic varname >>= fun symname ->
+       push_def_constraint varname symname result >>= fun () ->
        set_last_loaded_symname symname >>= fun () ->
        ST.update (fun st -> { st with do_check = false }) >>= fun () ->
        set_symbolic_val symname result
@@ -488,6 +524,7 @@ module Executor = struct
        ST.update @@ fun st -> { st with do_check = false }
 
   let eval_def_list defs : unit ST.t =
+    let () = Solver.reset solver in (* clear old def constraints *)
     let init = ST.return () in
     List.fold defs ~init ~f:(fun st dt ->
         ST.get () >>= fun st ->

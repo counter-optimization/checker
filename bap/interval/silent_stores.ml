@@ -31,14 +31,19 @@ module Checker(N : NumericDomain) = struct
     type t = { warns: warns;
                env: Env.t;
                tid : Tid.t;
+               sub : sub term;
                proj : project;
+               symex_state : SymExChecker.state;
                liveness : Live_variables.t } 
 
-    let init in_state tid liveness proj =
+    let init in_state tid liveness sub dep_bound proj =
       { warns = Alert.Set.empty;
         env = in_state;
         tid = tid;
         proj;
+        sub;
+        symex_state = { SymExChecker.default_state
+                        with dep_bound };
         liveness = liveness }
   end
     
@@ -47,6 +52,10 @@ module Checker(N : NumericDomain) = struct
     include Monad.State.Make(State)(Monad.Ident) 
   end
   open ST.Syntax
+
+  type state = State.t
+
+  let dep_bound = 8
 
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with
@@ -66,6 +75,46 @@ module Checker(N : NumericDomain) = struct
 
   let empty : warns = Alert.Set.empty
   let join : warns -> warns -> warns = Alert.Set.union
+
+  let tids_to_def_terms tids (s : state) : def term list option =
+    let blks = Term.enum blk_t s.sub in
+    let defs = Seq.map blks ~f:(Term.enum def_t)
+               |> Seq.join in
+    let select_set = Set.of_list (module Tid) tids in
+    let selected_defs = Seq.filter defs
+                          ~f:(fun dt -> Set.mem select_set @@ Term.tid dt) in
+    let selected_defs = Seq.to_list selected_defs in
+    if List.length selected_defs = List.length tids
+    then Some selected_defs
+    else None
+
+  let print_dep_defs tid dts =
+    List.iter dts
+      ~f:(fun dt ->
+        printf "dep def of tid %a :: %a -- %a\n%!"
+          Tid.ppo tid
+          Tid.ppo (Term.tid dt)
+          Def.ppo dt)
+
+  let get_dependent_defs : def term list option ST.t =
+    ST.gets @@ fun s ->
+    let dependents = Live_variables.dependents_up_to_bound s.tid s.symex_state.dep_bound s.liveness in
+    let dep_defs = tids_to_def_terms dependents s in
+    Option.(>>|) dep_defs @@ fun dep_defs ->
+    (* check that the potentially leaky def is in the dependent defs list and last *)
+    let () = match List.findi dep_defs ~f:(fun _ dt -> Tid.equal (Term.tid dt) s.tid) with
+      | Some (pos, dt) -> if pos <> (List.length dep_defs - 1)
+                          then
+                            let () = print_dep_defs s.tid dep_defs in
+                            failwith @@ sprintf "in computing dependent defs, target tid %a not last in dep defs: %s"
+                                          Tid.pps s.tid (List.to_string ~f:(Def.to_string) dep_defs)
+                          else ()
+      | None ->
+         let () = print_dep_defs s.tid dep_defs in
+         failwith @@ sprintf "in computing dependent defs, target tid %a not in dep defs: %s"
+                       Tid.pps s.tid (List.to_string ~f:(Def.to_string) dep_defs)
+    in
+    dep_defs
 
   (* TODO: don't flag on constants *)
   (* cases:
@@ -105,22 +154,57 @@ module Checker(N : NumericDomain) = struct
        if old_tainted || new_tainted (* || idx_tainted *)
        then
          begin
-           let alert_desc = "\"Store of val, prev val, or mem idx is tainted\"" in
-           let alert : Alert.t = { tid = st.tid;
-                                   opcode = None;
-                                   addr = None;
-                                   rpo_idx = None;
-                                   sub_name = None;
-                                   flags_live = SS.empty;
-                                   is_live = None;
-                                   reason = Alert.SilentStores;
-                                   desc = alert_desc;
-                                   left_val = None;
-                                   right_val = None;
-                                   problematic_operands = None }
-           in
-           ST.put { st with warns = Alert.Set.add st.warns alert } >>= fun () ->
-           ST.return N.bot
+           get_dependent_defs >>= fun deps ->
+           let can_do_last_symex_check = Option.is_some deps in
+           if can_do_last_symex_check
+           then
+             let deps = Option.value_exn deps in
+             let start' = Time_ns.now () in
+             let do_check = Symbolic.Executor.eval_def_list deps in
+             let init_st = Symbolic.Executor.init ~do_ss:true deps st.tid in
+             let (), fini_st = Symbolic.Executor.run do_check init_st in
+             let failed_ss = fini_st.failed_ss in
+             let end' = Time_ns.now () in
+             let () = printf "Finished last ditch symex ss. start: %s, end: %s\n%!"
+                        (Time_ns.to_string start')
+                        (Time_ns.to_string end') in
+             let () = Format.printf "Last ditch symex failed ss? %B\n%!" failed_ss in
+             if failed_ss
+             then
+               let alert_desc = "Silent stores failed last ditch sym ex check" in
+               let alert : Alert.t = { tid = st.tid;
+                                       opcode = None;
+                                       addr = None;
+                                       rpo_idx = None;
+                                       sub_name = None;
+                                       flags_live = SS.empty;
+                                       is_live = None;
+                                       reason = Alert.SilentStores;
+                                       desc = alert_desc;
+                                       left_val = None;
+                                       right_val = None;
+                                       problematic_operands = None }
+               in
+               ST.put { st with warns = Alert.Set.add st.warns alert } >>= fun () ->
+               ST.return N.bot
+             else
+               ST.return N.bot
+           else
+             let alert_desc = "Store of val, prev val, or mem idx is tainted" in
+             let alert : Alert.t = { tid = st.tid;
+                                     opcode = None;
+                                     addr = None;
+                                     rpo_idx = None;
+                                     sub_name = None;
+                                     flags_live = SS.empty;
+                                     is_live = None;
+                                     reason = Alert.SilentStores;
+                                     desc = alert_desc;
+                                     left_val = None;
+                                     right_val = None;
+                                     problematic_operands = None } in
+             ST.put { st with warns = Alert.Set.add st.warns alert } >>= fun () ->
+             ST.return N.bot
          end
        else
          ST.return N.bot
@@ -173,6 +257,7 @@ module Checker(N : NumericDomain) = struct
   let check_def (d : def term)
         (live : Live_variables.t)
         (env : Env.t)
+        (sub : sub term)
         proj
       : warns =
     let tid = Term.tid d in
@@ -181,13 +266,13 @@ module Checker(N : NumericDomain) = struct
     if SS.mem dont_care_vars lhs_var_name
     then empty
     else
-      let init_state = State.init env tid live proj in
+      let init_state = State.init env tid live sub dep_bound proj in
       let rhs = Def.rhs d in
       let _, final_state = ST.run (check_exp rhs) init_state in
       final_state.warns
   
   let check_elt (e : Blk.elt) (live : Live_variables.t) (env : Env.t) (sub : sub term) proj : warns =
     match e with
-    | `Def d -> check_def d live env proj
+    | `Def d -> check_def d live env sub proj
     | _ -> empty
 end

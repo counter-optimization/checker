@@ -185,7 +185,8 @@ module Checker(N : NumericDomain) = struct
         env = in_state;
         tid = tid;
         liveness = liveness;
-        symex_state = SymExChecker.default_state;
+        symex_state = { SymExChecker.default_state
+                        with dep_bound };
         proj;
         sub }
   end
@@ -197,8 +198,6 @@ module Checker(N : NumericDomain) = struct
   open ST.Syntax
 
   type state = State.t
-
-  
 
   (* todo, make an optional CL arg *)
   let dep_bound = 10
@@ -283,7 +282,8 @@ module Checker(N : NumericDomain) = struct
 
   let get_frees_of_mock_sub msub : Set.M(Var).t ST.t =
     ST.return @@ Sub.free_vars msub
-    
+
+  (* todo, don't do the symbolic execution twice *)
   let check_binop_operands (specials : (I.t -> I.t) list * (I.t -> I.t) list)
                            (op : binop) ~(check_left : bool) ~(check_right : bool)
                            (left : N.t) (right : N.t) : unit ST.t =
@@ -314,80 +314,36 @@ module Checker(N : NumericDomain) = struct
             let () = printf "Finished last ditch symex. start: %s, end: %s\n%!"
                        (Time_ns.to_string start')
                        (Time_ns.to_string end') in
-            let () =
-              Format.printf
-                "Last ditch symex failed left? %B failed right? %B\n%!"
-                failed_cs_left failed_cs_right in
-            (* build_mock_sub_for_mx deps >>= fun mocksub -> *)
-            (* let last_check_start = Time_ns.now () in *)
-            (* let () = Format.printf "(%a) symex check start at: %s\n%!" *)
-            (*            Tid.pp (Term.tid mocksub) *)
-            (*            @@ Time_ns.to_string last_check_start in *)
-            (* let mocksub_name = `symbol (Sub.name mocksub) in *)
-            (* get_frees_of_mock_sub mocksub >>= fun mock_frees -> *)
-            (* let kb_state = Toplevel.current () in *)
-            (* let () = printf "mock_sub is\n%a\n%!" Sub.ppo mocksub in *)
-            (* let () = printf "starting microexecution...%!" in *)
-            (* let prog = Project.program st.proj in *)
-            (* let prog' = Term.append sub_t prog mocksub in *)
-            (* let proj_with_prog = Project.with_program st.proj prog' in *)
-            (* let res = Primus.System.run Mxtor.cs_system proj_with_prog kb_state *)
-            (*             ~fini:begin *)
-            (*               let open Machine.Syntax in *)
-            (*               Machine.Local.get cs_state >>= fun _ -> *)
-            (*               let now = Time_ns.now () in *)
-            (*               let () = Format.printf "(%a) end sym ex time %s\n%!" *)
-            (*                          Tid.pp (Term.tid mocksub) *)
-            (*                        @@ Time_ns.to_string now in *)
-            (*               Machine.return () *)
-            (*             end *)
-            (*             ~init:( *)
-            (*               let open Machine.Syntax in *)
-            (*               let module MockCode = functor (Machine : Primus.Machine.S) -> struct *)
-            (*                                       module Eval = Primus.Interpreter.Make(Machine) *)
-            (*                                       let exec = Eval.sub mocksub *)
-            (*                                     end *)
-            (*               in *)
-            (*               let unlink = (Linker.lookup mocksub_name) >>| fun code -> *)
-            (*                   match code with *)
-            (*                   | Some _ -> Linker.unlink mocksub_name *)
-            (*                   | None -> Machine.return () *)
-            (*               in *)
-            (*               Machine.join unlink >>= fun () -> *)
-            (*               (Linker.link *)
-            (*                 ~name:(Sub.name mocksub) *)
-            (*                 ~tid:(Term.tid mocksub) *)
-            (*                 (module MockCode)) >>= fun () -> *)
-            (*               Machine.Local.update cs_state ~f:(fun s -> *)
-            (*                   { s with mock_sub_tid = Some (Term.tid mocksub); mock_frees})) in *)
-            (* let () = match res with *)
-            (*   | Ok (Normal, proj', kb_state') -> printf "primus exited normal (Normal)\n%!" *)
-            (*   | Ok (Exn Primus.Interpreter.Halt, proj', kb_state') -> *)
-            (*      printf "primus exited normal (Halt)\n%!" *)
-            (*   | Ok (Exn e, proj', kb_state') -> *)
-            (*      printf "primus exited with exception %s\n%!" @@ Primus.Exn.to_string e *)
-            (*   | Error e -> failwith @@ Bap_knowledge.Knowledge.Conflict.to_string e in *)
-            let binop_str = Common.binop_to_string op in
-            let left_str = if is_left
-                           then Some (I.to_string operand)
-                           else None in
-            let right_str = if not is_left
-                            then Some (I.to_string operand)
-                            else None in
-            let alert : Alert.t = { tid = st.tid;
-                                    opcode = None;
-                                    addr = None;
-                                    rpo_idx = None;
-                                    sub_name = None;
-                                    flags_live = SS.empty;
-                                    is_live = None;
-                                    reason = Alert.CompSimp;
-                                    desc = binop_str;
-                                    left_val = left_str;
-                                    right_val = right_str;
-                                    problematic_operands = Some [problematic_operand_indice] } in
-            ST.update @@ fun old_st ->
-                         { old_st with warns = Alert.Set.add old_st.warns alert }
+            let () = Format.printf
+                       "Last ditch symex failed left? %B failed right? %B\n%!"
+                       failed_cs_left failed_cs_right in
+            let should_fail = (is_left && failed_cs_right) ||
+                                (not is_left && failed_cs_right) in
+            if should_fail
+            then 
+              let binop_str = Common.binop_to_string op in
+              let left_str = if is_left
+                             then Some (I.to_string operand)
+                             else None in
+              let right_str = if not is_left
+                              then Some (I.to_string operand)
+                              else None in
+              let alert : Alert.t = { tid = st.tid;
+                                      opcode = None;
+                                      addr = None;
+                                      rpo_idx = None;
+                                      sub_name = None;
+                                      flags_live = SS.empty;
+                                      is_live = None;
+                                      reason = Alert.CompSimp;
+                                      desc = binop_str;
+                                      left_val = left_str;
+                                      right_val = right_str;
+                                      problematic_operands = Some [problematic_operand_indice] } in
+              ST.update @@ fun old_st ->
+                           { old_st with warns = Alert.Set.add old_st.warns alert }
+            else
+              ST.return ()
           else
             let binop_str = Common.binop_to_string op in
             let left_str = if is_left
