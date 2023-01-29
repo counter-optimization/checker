@@ -101,8 +101,8 @@ module Checker(N : NumericDomain) = struct
        check_exp v >>= fun new_val ->
        let old_tainted = is_tainted old_val in
        let new_tainted = is_tainted new_val in
-       let idx_tainted = is_tainted idx_val in
-       if old_tainted || new_tainted || idx_tainted
+       (* let idx_tainted = is_tainted idx_val in *)
+       if old_tainted || new_tainted (* || idx_tainted *)
        then
          begin
            let alert_desc = "\"Store of val, prev val, or mem idx is tainted\"" in

@@ -48,11 +48,23 @@ let do_cs_checks_param = Extension.Configuration.flag
                            ~aliases:["comp-simp"; "x86-cs"]
                            "cs"
 
+let int_of_sz = function
+  | `r8 -> 8
+  | `r16 -> 16
+  | `r32 -> 32
+  | `r64 -> 64
+  | `r128 -> 128
+  | `r256 -> 256
+
 module AMD64SystemVABI = struct
   let flag_names : SS.t = SS.of_list ["CF"; "PF"; "AF"; "ZF"; "SF";
                                       "TF"; "IF"; "DF"; "OF"]
 
   let gpr_arg_names = ["RDI"; "RSI"; "RDX"; "RCX"; "R8"; "R9"]
+
+  let gpr_names = ["RAX"; "RBX"; "RCX"; "RDX"; "RDI"; "RSI";
+                   "R8"; "R9"; "R10"; "R11"; "R12"; "R13";
+                   "R14"; "R15"; "RSP"; "RBP"]
 
   let vectorreg_arg_names_aliased = ["XMM0"; "XMM1"; "XMM2"; "XMM3"; "XMM4";
                                      "XMM5"; "XMM6"; "XMM7"]
@@ -77,6 +89,16 @@ module AMD64SystemVABI = struct
   let var_name_is_vector_arg : string -> bool = List.mem vector_arg_names ~equal:String.equal
 
   let var_name_is_gpr : string -> bool = List.mem gpr_arg_names ~equal:String.equal
+  
+  let size_of_var_name name : int option =
+    let equal = String.equal in
+    if String.is_substring name ~substring:"YMM"
+    then Some 256
+    else if String.is_substring name ~substring:"XMM"
+    then Some 128
+    else if List.mem gpr_names name ~equal
+    then Some 64
+    else None
 end
 
 module ABI = AMD64SystemVABI

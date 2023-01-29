@@ -91,6 +91,10 @@ module Mxtor = struct
          in
          let first_blk_tid = Term.tid first_blk in
          init_free_vars s >>= fun () ->
+         let now = Time_ns.now () in
+         let () = Format.printf "(%a) sym ex actual start at %s\n%!"
+                    Tid.pp target_tid
+                  @@ Time_ns.to_string now in
          (* let () = printf "in on_start, execing linker on tid %a (parent sub tid %a)\n%!" *)
          (*            Tid.ppo first_blk_tid *)
          (*            Tid.ppo target_tid in *)
@@ -300,41 +304,69 @@ module Checker(N : NumericDomain) = struct
           if can_do_last_symex_check
           then
             let deps = Option.value_exn deps in
-            build_mock_sub_for_mx deps >>= fun mocksub ->
-            let mocksub_name = `symbol (Sub.name mocksub) in
-            get_frees_of_mock_sub mocksub >>= fun mock_frees ->
-            let kb_state = Toplevel.current () in
+            let start' = Time_ns.now () in
+            let do_check = Symbolic.Executor.eval_def_list deps in
+            let init_st = Symbolic.Executor.init ~do_cs:true deps st.tid in
+            let (), fini_st = Symbolic.Executor.run do_check init_st in
+            let failed_cs_left = fini_st.failed_cs_left in
+            let failed_cs_right = fini_st.failed_cs_right in
+            let end' = Time_ns.now () in
+            let () = printf "Finished last ditch symex. start: %s, end: %s\n%!"
+                       (Time_ns.to_string start')
+                       (Time_ns.to_string end') in
+            let () =
+              Format.printf
+                "Last ditch symex failed left? %B failed right? %B\n%!"
+                failed_cs_left failed_cs_right in
+            (* build_mock_sub_for_mx deps >>= fun mocksub -> *)
+            (* let last_check_start = Time_ns.now () in *)
+            (* let () = Format.printf "(%a) symex check start at: %s\n%!" *)
+            (*            Tid.pp (Term.tid mocksub) *)
+            (*            @@ Time_ns.to_string last_check_start in *)
+            (* let mocksub_name = `symbol (Sub.name mocksub) in *)
+            (* get_frees_of_mock_sub mocksub >>= fun mock_frees -> *)
+            (* let kb_state = Toplevel.current () in *)
             (* let () = printf "mock_sub is\n%a\n%!" Sub.ppo mocksub in *)
             (* let () = printf "starting microexecution...%!" in *)
-            let prog = Project.program st.proj in
-            let prog' = Term.append sub_t prog mocksub in
-            let proj_with_prog = Project.with_program st.proj prog' in
-            let res = Primus.System.run Mxtor.cs_system proj_with_prog kb_state ~init:(
-                          let open Machine.Syntax in
-                          let module MockCode = functor (Machine : Primus.Machine.S) -> struct
-                                                  module Eval = Primus.Interpreter.Make(Machine)
-                                                  let exec = Eval.sub mocksub
-                                                end
-                          in
-                          let unlink = (Linker.lookup mocksub_name) >>| fun code ->
-                              match code with
-                              | Some _ -> Linker.unlink mocksub_name
-                              | None -> Machine.return ()
-                          in
-                          Machine.join unlink >>= fun () ->
-                          (Linker.link
-                            ~name:(Sub.name mocksub)
-                            ~tid:(Term.tid mocksub)
-                            (module MockCode)) >>= fun () ->
-                          Machine.Local.update cs_state ~f:(fun s ->
-                              { s with mock_sub_tid = Some (Term.tid mocksub); mock_frees})) in
-            let () = match res with
-              | Ok (Normal, proj', kb_state') -> printf "primus exited normal (Normal)\n%!"
-              | Ok (Exn Primus.Interpreter.Halt, proj', kb_state') ->
-                 printf "primus exited normal (Halt)\n%!"
-              | Ok (Exn e, proj', kb_state') ->
-                 printf "primus exited with exception %s\n%!" @@ Primus.Exn.to_string e
-              | Error e -> failwith @@ Bap_knowledge.Knowledge.Conflict.to_string e in
+            (* let prog = Project.program st.proj in *)
+            (* let prog' = Term.append sub_t prog mocksub in *)
+            (* let proj_with_prog = Project.with_program st.proj prog' in *)
+            (* let res = Primus.System.run Mxtor.cs_system proj_with_prog kb_state *)
+            (*             ~fini:begin *)
+            (*               let open Machine.Syntax in *)
+            (*               Machine.Local.get cs_state >>= fun _ -> *)
+            (*               let now = Time_ns.now () in *)
+            (*               let () = Format.printf "(%a) end sym ex time %s\n%!" *)
+            (*                          Tid.pp (Term.tid mocksub) *)
+            (*                        @@ Time_ns.to_string now in *)
+            (*               Machine.return () *)
+            (*             end *)
+            (*             ~init:( *)
+            (*               let open Machine.Syntax in *)
+            (*               let module MockCode = functor (Machine : Primus.Machine.S) -> struct *)
+            (*                                       module Eval = Primus.Interpreter.Make(Machine) *)
+            (*                                       let exec = Eval.sub mocksub *)
+            (*                                     end *)
+            (*               in *)
+            (*               let unlink = (Linker.lookup mocksub_name) >>| fun code -> *)
+            (*                   match code with *)
+            (*                   | Some _ -> Linker.unlink mocksub_name *)
+            (*                   | None -> Machine.return () *)
+            (*               in *)
+            (*               Machine.join unlink >>= fun () -> *)
+            (*               (Linker.link *)
+            (*                 ~name:(Sub.name mocksub) *)
+            (*                 ~tid:(Term.tid mocksub) *)
+            (*                 (module MockCode)) >>= fun () -> *)
+            (*               Machine.Local.update cs_state ~f:(fun s -> *)
+            (*                   { s with mock_sub_tid = Some (Term.tid mocksub); mock_frees})) in *)
+            (* let () = match res with *)
+            (*   | Ok (Normal, proj', kb_state') -> printf "primus exited normal (Normal)\n%!" *)
+            (*   | Ok (Exn Primus.Interpreter.Halt, proj', kb_state') -> *)
+            (*      printf "primus exited normal (Halt)\n%!" *)
+            (*   | Ok (Exn e, proj', kb_state') -> *)
+            (*      printf "primus exited with exception %s\n%!" @@ Primus.Exn.to_string e *)
+            (*   | Error e -> failwith @@ Bap_knowledge.Knowledge.Conflict.to_string e in *)
             let binop_str = Common.binop_to_string op in
             let left_str = if is_left
                            then Some (I.to_string operand)

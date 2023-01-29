@@ -16,6 +16,7 @@ S alert.ml
 S comp_simp.ml
 S calling_context.ml
 S checker.ml
+S symbolic.ml
 S silent_stores.ml
 S data_section.ml
 S taint.ml
@@ -32,4 +33,4 @@ S test_abstract_memory.ml
 
 B _build
 
-PKG bap core_kernel stdio graphlib zarith ounit2 monads bap-primus
+PKG bap core_kernel stdio graphlib zarith ounit2 monads bap-primus z3

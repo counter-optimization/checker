@@ -22,7 +22,7 @@ debug: bap-plugin
 release: $(PLUGIN_NAME)
 
 bap-plugin: *.ml
-	bapbuild -pkg bap-primus -j $(BAPBUILD_JOB_SLOTS) $(PLUGIN_NAME)
+	bapbuild -pkg z3 -pkg bap-primus -j $(BAPBUILD_JOB_SLOTS) $(PLUGIN_NAME)
 
 libna_argon2id: debug
 	@echo -n "Starting analysis of argon2id"
