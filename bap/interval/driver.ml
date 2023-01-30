@@ -142,7 +142,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                  ~(bss_init_stores : Global_function_pointers.global_const_store list)
                  ~(config : Config.t)
                  ~(do_ss_checks : bool)
-                 ~(do_cs_checks : bool) : check_sub_result =
+                 ~(do_cs_checks : bool)
+                 ctxt : check_sub_result =
   let () = printf "Running analysis on sub %s\n%!" (Sub.name sub) in
   let prog = Project.program proj in
   let edges, tidmap = Edge_builder.run_one sub proj in
@@ -260,6 +261,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                 AbsInt.denote_elt elt) in
 
      let () = printf "Done running abstract interpreter\n%!" in
+
+     let no_symex = Extension.Configuration.get ctxt Common.no_symex_param in
+     let use_symex = not no_symex in
      
      (* Build up checker infra and run the checkers
       * This next part is an abomination of Ocaml code
@@ -292,7 +296,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
          (* let () = Format.printf "checking edge (%a, %a)\n%!" *)
          (*                        Calling_context.pp from_cc *)
          (*                        Calling_context.pp to_cc in *)
-         Chkr.check_elt insn liveness in_state sub proj in
+         Chkr.check_elt insn liveness in_state sub proj use_symex in
 
      let run_checker (module Chkr : Checker.S with type env = E.t) (es : 'a Calling_context.edges) : Chkr.warns =
        List.fold edges
@@ -436,7 +440,7 @@ let check_config config img ctxt proj : unit =
           ~is_toplevel:false
           ~config
       else
-        let current_res = run_analyses sub img proj
+        let current_res = run_analyses sub img proj ctxt
                                        ~is_toplevel
                                        ~bss_init_stores:global_store_data
                                        ~do_cs_checks

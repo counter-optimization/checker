@@ -48,6 +48,10 @@ let do_cs_checks_param = Extension.Configuration.flag
                            ~aliases:["comp-simp"; "x86-cs"]
                            "cs"
 
+let no_symex_param = Extension.Configuration.flag
+                       ~doc:"Don't do last ditch symex checks in addition to interval analysis"
+                       "no-symex"
+
 let int_of_sz = function
   | `r8 -> 8
   | `r16 -> 16

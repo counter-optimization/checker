@@ -33,14 +33,16 @@ module Checker(N : NumericDomain) = struct
                tid : Tid.t;
                sub : sub term;
                proj : project;
+               do_symex : bool;
                symex_state : SymExChecker.state;
                liveness : Live_variables.t } 
 
-    let init in_state tid liveness sub dep_bound proj =
+    let init in_state tid liveness sub dep_bound do_symex proj =
       { warns = Alert.Set.empty;
         env = in_state;
         tid = tid;
         proj;
+        do_symex;
         sub;
         symex_state = { SymExChecker.default_state
                         with dep_bound };
@@ -155,7 +157,8 @@ module Checker(N : NumericDomain) = struct
        then
          begin
            get_dependent_defs >>= fun deps ->
-           let can_do_last_symex_check = Option.is_some deps in
+           ST.get () >>= fun st ->
+           let can_do_last_symex_check = st.do_symex && Option.is_some deps in
            if can_do_last_symex_check
            then
              let deps = Option.value_exn deps in
@@ -182,7 +185,7 @@ module Checker(N : NumericDomain) = struct
                                        reason = Alert.SilentStores;
                                        desc = alert_desc;
                                        left_val = None;
-                                       right_val = None;
+                                       right_val = None; 
                                        problematic_operands = None }
                in
                ST.put { st with warns = Alert.Set.add st.warns alert } >>= fun () ->
@@ -258,6 +261,7 @@ module Checker(N : NumericDomain) = struct
         (live : Live_variables.t)
         (env : Env.t)
         (sub : sub term)
+        do_symex
         proj
       : warns =
     let tid = Term.tid d in
@@ -266,13 +270,13 @@ module Checker(N : NumericDomain) = struct
     if SS.mem dont_care_vars lhs_var_name
     then empty
     else
-      let init_state = State.init env tid live sub dep_bound proj in
+      let init_state = State.init env tid live sub dep_bound do_symex proj in
       let rhs = Def.rhs d in
       let _, final_state = ST.run (check_exp rhs) init_state in
       final_state.warns
   
-  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : Env.t) (sub : sub term) proj : warns =
+  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : Env.t) (sub : sub term) proj do_symex : warns =
     match e with
-    | `Def d -> check_def d live env sub proj
+    | `Def d -> check_def d live env sub do_symex proj
     | _ -> empty
 end

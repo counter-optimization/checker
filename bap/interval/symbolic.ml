@@ -265,10 +265,7 @@ module Executor = struct
     (match lhs_symvalue with
       | Some lhs_symvalue -> ST.return lhs_symvalue
       | None ->
-         let bw = match ABI.size_of_var_name lhs_varname with
-           | Some bw -> bw
-           | None -> 64
-         in
+         let bw = Bitv.get_size (Expr.get_sort rhs_symvalue) in
          fresh_bv_for_symbolic lhs_symname bw
     ) >>= fun lhs_symvalue ->
     let eq_ctr = Bool.mk_eq ctxt lhs_symvalue rhs_symvalue in

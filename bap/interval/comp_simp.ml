@@ -177,10 +177,11 @@ module Checker(N : NumericDomain) = struct
         liveness : Live_variables.t;
         symex_state : SymExChecker.state;
         sub : sub term;
+        do_symex : bool;
         proj : Project.t
       } 
 
-    let init in_state tid liveness sub dep_bound proj : t =
+    let init in_state tid liveness sub dep_bound do_symex proj : t =
       { warns = Alert.Set.empty;
         env = in_state;
         tid = tid;
@@ -188,6 +189,7 @@ module Checker(N : NumericDomain) = struct
         symex_state = { SymExChecker.default_state
                         with dep_bound };
         proj;
+        do_symex = do_symex;
         sub }
   end
 
@@ -300,7 +302,7 @@ module Checker(N : NumericDomain) = struct
           result_acc >>= fun () ->
           ST.get () >>= fun st ->
           get_dependent_defs >>= fun deps ->
-          let can_do_last_symex_check = Option.is_some deps in
+          let can_do_last_symex_check = st.do_symex && Option.is_some deps in
           if can_do_last_symex_check
           then
             let deps = Option.value_exn deps in
@@ -509,7 +511,7 @@ module Checker(N : NumericDomain) = struct
        don't comp simp check the lifted flag calculations, and
        don't comp simp check if the def is not tainted--all members of the rhs
          expression tree are untainted then *)
-  let check_def (d : def term) (live : Live_variables.t) (env : E.t) (sub : sub term) proj : warns =
+  let check_def (d : def term) (live : Live_variables.t) (env : E.t) (sub : sub term) do_symex proj : warns =
     let tid = Term.tid d in
     let lhs = Def.lhs d in
     let lhs_var_name = Var.name lhs in
@@ -520,13 +522,13 @@ module Checker(N : NumericDomain) = struct
       if not is_tainted
       then empty
       else
-        let init_state = State.init env tid live sub dep_bound proj in
+        let init_state = State.init env tid live sub dep_bound do_symex proj in
         let rhs = Def.rhs d in
         let _, final_state = ST.run (check_exp rhs) init_state in
         final_state.warns
   
-  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : E.t) (sub : sub term) proj : warns =
+  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : E.t) (sub : sub term) proj do_symex : warns =
     match e with
-    | `Def d -> check_def d live env sub proj
+    | `Def d -> check_def d live env sub do_symex proj
     | _ -> empty
 end
