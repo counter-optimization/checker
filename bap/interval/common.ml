@@ -134,6 +134,57 @@ module SymExChecker = struct
     }
 end
 
+module EvalStats = struct
+    type t = {
+        total_considered : int;
+        taint_pruned : int;
+        interval_pruned : int;
+        interproc_pruned : int;
+        symex_pruned : int;
+        
+        interval_verified : int;
+        symex_verified : int;
+      }
+
+    let init = {
+        total_considered = 0;
+        taint_pruned = 0;
+        interval_pruned = 0;
+        interproc_pruned = 0;
+        symex_pruned = 0;
+        interval_verified = 0;
+        symex_verified = 0;
+      }
+
+    let incr_total_considered st =
+      { st with
+        total_considered = st.total_considered + 1 }
+
+    let incr_taint_pruned st =
+      { st with
+        taint_pruned = st.taint_pruned + 1 }
+
+    let incr_interval_pruned st =
+      { st with
+        interval_pruned = st.interval_pruned + 1 }
+
+    let incr_interproc_pruned st =
+      { st with
+        interproc_pruned = st.interproc_pruned + 1 }
+
+    let incr_symex_pruned st =
+      { st with
+        symex_pruned = st.symex_pruned + 1 }
+
+    let incr_symex_verified st =
+      { st with
+        symex_verified = st.symex_verified + 1 }
+
+    let incr_interval_verified st =
+      { st with
+        interval_verified = st.interval_verified + 1 }
+end
+
 module CalleeRel = struct
   module T = struct
     type t = { caller : Tid.t; callee : Tid.t; callsite : Tid.t }
@@ -400,7 +451,8 @@ module DomainKey : KeyT = struct
     | _ -> Neq
 end
 
-let binop_to_string (b : Bil.binop) : string =
+let binop_to_string ?(smtlib2compat : bool = false)
+      (b : Bil.binop) : string =
   match b with
    | Bil.PLUS -> "+"
    | Bil.MINUS -> "-"
@@ -413,7 +465,11 @@ let binop_to_string (b : Bil.binop) : string =
    | Bil.RSHIFT -> ">>"
    | Bil.ARSHIFT -> ">>>"
    | Bil.AND -> "&"
-   | Bil.OR -> "|"
+   | Bil.OR ->
+      (* pipe is a problem for smtlib2 format string *)
+      if smtlib2compat
+      then "!$"
+      else "|"
    | Bil.XOR -> "^"
    | Bil.EQ -> "="
    | Bil.NEQ -> "<>"
@@ -421,6 +477,74 @@ let binop_to_string (b : Bil.binop) : string =
    | Bil.LE -> "<="
    | Bil.SLT -> "-<"
    | Bil.SLE -> "-<="
+
+let unop_to_str (unop : Bil.unop) : string =
+  (match unop with
+   | Bil.NEG -> "~"
+   | Bil.NOT -> "!")
+
+let cast_to_str (cast : Bil.cast) : string =
+  (match cast with
+   | Bil.UNSIGNED -> "unsigned"
+   | Bil.SIGNED -> "signed"
+   | Bil.HIGH -> "high"
+   | Bil.LOW -> "low")
+
+(* this must output to a valid SMT-LIB2 symbol
+   as it is used for syntactic tracking of memory
+   cells in the symbolic compiler.
+   according to this reference:
+   https://smtlib.github.io/jSMTLIB/SMTLIBTutorial.pdf
+   this is a string of the family:
+   [a-zA-Z~!@$%^&*_+=<>.?/-] [0-9a-zA-Z~!@$%^&*_+=<>.?/-]* *)
+let rec exp_to_string (e : Bil.exp) : string =
+  let sz_to_str = function
+      | `r8 -> "8"
+      | `r16 -> "16"
+      | `r32 -> "32"
+      | `r64 -> "64"
+      | `r128 -> "128"
+      | `r256 -> "256" in
+  let endian_to_str = function
+    | BigEndian -> "be"
+    | LittleEndian -> "le" in
+  (match e with
+   | Bil.Load (_, idx, endian, sz) ->
+      let sz_str = sz_to_str sz in
+      let end_str = endian_to_str endian in
+      let idx_str = exp_to_string idx in
+      sprintf "mem<%s?%s>?%s" idx_str end_str sz_str
+   | Bil.Store (_, idx, value, endian , sz) -> 
+      let sz_str = sz_to_str sz in
+      let end_str = endian_to_str endian in
+      let idx_str = exp_to_string idx in
+      let val_str = exp_to_string value in
+      sprintf "mem<%s?%s>?%s<-%s" idx_str end_str sz_str val_str
+   | Bil.BinOp (op, left, right) ->
+      exp_to_string left ^
+        binop_to_string ~smtlib2compat:true op ^
+          exp_to_string right
+   | Bil.UnOp (op, left) ->
+      unop_to_str op ^ exp_to_string left
+   | Bil.Var v -> Var.name v
+   | Bil.Int w ->
+      let ws = Word.to_string w in
+      let ws = String.drop_prefix ws 1 in
+      let ws = Stringext.replace_all ws ~pattern:":" ~with_:"?" in
+      let () = printf "word to string is %s\n%!" ws in
+      ws
+   | Bil.Cast (cast, sz, exp) ->
+      sprintf "%s(%d.%s)" (cast_to_str cast) sz (exp_to_string exp)
+   | Bil.Let (var, exp, bod) ->
+      sprintf "let%s=%sin%s" (Var.name var) (exp_to_string exp) (exp_to_string bod)
+   | Bil.Unknown (str, _typ) -> sprintf "unknown%s" str
+   | Bil.Ite (if_, then_, else_) ->
+      sprintf "if%sthen%selse%s"
+        (exp_to_string if_) (exp_to_string then_) (exp_to_string else_)
+   | Bil.Extract (hi, lo, exp) ->
+      sprintf "extract<%d.%d.%s>" hi lo (exp_to_string exp)
+   | Bil.Concat (left, right) ->
+      sprintf "<%s@@%s>" (exp_to_string left) (exp_to_string right))
 
 let elt_to_tid (e : Blk.elt) : tid =
   match e with

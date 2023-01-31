@@ -178,7 +178,8 @@ module Checker(N : NumericDomain) = struct
         symex_state : SymExChecker.state;
         sub : sub term;
         do_symex : bool;
-        proj : Project.t
+        proj : Project.t;
+        estats : EvalStats.t;
       } 
 
     let init in_state tid liveness sub dep_bound do_symex proj : t =
@@ -190,6 +191,7 @@ module Checker(N : NumericDomain) = struct
                         with dep_bound };
         proj;
         do_symex = do_symex;
+        estats = EvalStats.init;
         sub }
   end
 
@@ -200,6 +202,10 @@ module Checker(N : NumericDomain) = struct
   open ST.Syntax
 
   type state = State.t
+
+  let update_eval_stats updater : unit ST.t =
+    ST.update @@ fun st ->
+    { st with estats = updater st.estats }
 
   (* todo, make an optional CL arg *)
   let dep_bound = 10
@@ -299,6 +305,7 @@ module Checker(N : NumericDomain) = struct
       let check_operand result_acc special_for_bw =
         if could_be_special special_for_bw operand
         then
+          let () = printf "[compsimp] Could be special value\n%!" in
           result_acc >>= fun () ->
           ST.get () >>= fun st ->
           get_dependent_defs >>= fun deps ->
@@ -306,16 +313,14 @@ module Checker(N : NumericDomain) = struct
           if can_do_last_symex_check
           then
             let deps = Option.value_exn deps in
-            let start' = Time_ns.now () in
+            let () = printf "[compsimp] can do last symex check\n%!" in
+            let () = printf "[compsimp] deps are:\n%!";
+                     List.iter deps ~f:(printf "%a\n%!" Def.ppo) in
             let do_check = Symbolic.Executor.eval_def_list deps in
             let init_st = Symbolic.Executor.init ~do_cs:true deps st.tid in
             let (), fini_st = Symbolic.Executor.run do_check init_st in
             let failed_cs_left = fini_st.failed_cs_left in
             let failed_cs_right = fini_st.failed_cs_right in
-            let end' = Time_ns.now () in
-            let () = printf "Finished last ditch symex. start: %s, end: %s\n%!"
-                       (Time_ns.to_string start')
-                       (Time_ns.to_string end') in
             let () = Format.printf
                        "Last ditch symex failed left? %B failed right? %B\n%!"
                        failed_cs_left failed_cs_right in

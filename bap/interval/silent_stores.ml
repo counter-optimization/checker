@@ -34,6 +34,7 @@ module Checker(N : NumericDomain) = struct
                sub : sub term;
                proj : project;
                do_symex : bool;
+               estats : Common.EvalStats.t;
                symex_state : SymExChecker.state;
                liveness : Live_variables.t } 
 
@@ -43,6 +44,7 @@ module Checker(N : NumericDomain) = struct
         tid = tid;
         proj;
         do_symex;
+        estats = EvalStats.init;
         sub;
         symex_state = { SymExChecker.default_state
                         with dep_bound };
@@ -54,6 +56,10 @@ module Checker(N : NumericDomain) = struct
     include Monad.State.Make(State)(Monad.Ident) 
   end
   open ST.Syntax
+
+  let update_eval_stats updater : unit ST.t =
+    ST.update @@ fun st ->
+    { st with estats = updater st.estats }
 
   type state = State.t
 
@@ -137,6 +143,7 @@ module Checker(N : NumericDomain) = struct
                    | Ok (v, _) -> v
                    | Error e -> failwith @@ Error.to_string_hum e)
     | Bil.Store (mem, idx, v, endian, size) ->
+       update_eval_stats EvalStats.incr_total_considered >>= fun () ->
        ST.get () >>= fun st ->
        check_exp idx >>= fun idx_val ->
        let load_of_old_val = Bil.Load (mem, idx, endian, size) in
@@ -145,10 +152,8 @@ module Checker(N : NumericDomain) = struct
          | Ok (old_val, _) -> old_val
          | Error e ->
             let () = printf "silentstores.check_exp: %s\n" @@
-                       Error.to_string_hum e
-            in
-            N.top
-       in
+                       Error.to_string_hum e in
+            N.top in
        check_exp v >>= fun new_val ->
        let old_tainted = is_tainted old_val in
        let new_tainted = is_tainted new_val in
@@ -162,15 +167,10 @@ module Checker(N : NumericDomain) = struct
            if can_do_last_symex_check
            then
              let deps = Option.value_exn deps in
-             let start' = Time_ns.now () in
              let do_check = Symbolic.Executor.eval_def_list deps in
              let init_st = Symbolic.Executor.init ~do_ss:true deps st.tid in
              let (), fini_st = Symbolic.Executor.run do_check init_st in
              let failed_ss = fini_st.failed_ss in
-             let end' = Time_ns.now () in
-             let () = printf "Finished last ditch symex ss. start: %s, end: %s\n%!"
-                        (Time_ns.to_string start')
-                        (Time_ns.to_string end') in
              let () = Format.printf "Last ditch symex failed ss? %B\n%!" failed_ss in
              if failed_ss
              then
@@ -191,6 +191,7 @@ module Checker(N : NumericDomain) = struct
                ST.put { st with warns = Alert.Set.add st.warns alert } >>= fun () ->
                ST.return N.bot
              else
+               update_eval_stats EvalStats.incr_symex_pruned >>= fun () ->
                ST.return N.bot
            else
              let alert_desc = "Store of val, prev val, or mem idx is tainted" in
@@ -210,6 +211,7 @@ module Checker(N : NumericDomain) = struct
              ST.return N.bot
          end
        else
+         update_eval_stats EvalStats.incr_taint_pruned >>= fun () ->
          ST.return N.bot
     | Bil.Var _
       | Bil.Int _

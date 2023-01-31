@@ -260,7 +260,7 @@ module Executor = struct
     let cs' = st.constraints in
     { st with constraints = ctr :: cs' }
 
-  let push_def_constraint lhs_varname lhs_symname rhs_symvalue : unit ST.t =
+  let push_def_constraint lhs_symname rhs_symvalue : unit ST.t =
     get_value_in_env lhs_symname >>= fun lhs_symvalue ->
     (match lhs_symvalue with
       | Some lhs_symvalue -> ST.return lhs_symvalue
@@ -372,37 +372,40 @@ module Executor = struct
 
   let rec eval_exp (exp : Bil.exp) : Expr.expr option ST.t =
     match exp with
-    | Bil.Load (_, _, _, sz) ->
+    | Bil.Load (_, idx, en, sz) ->
        set_was_load true >>= fun () ->
-       make_fresh_symbolic >>= fun fresh ->
+       let symname = Common.exp_to_string exp in
        let sz = Common.int_of_sz sz in
-       fresh_bv_for_symbolic fresh sz >>= fun value ->
+       fresh_bv_for_symbolic symname sz >>= fun value ->
        ST.return @@ Some value
-    | Bil.Store (_, idx, v, _, sz) ->
-       ST.gets @@ (fun st -> st.do_check, st.do_ss) >>= fun (do_check, do_ss) ->
-       if do_check && do_ss
+    | Bil.Store (mem, idx, v, en, sz) ->
+       ST.get () >>= fun st ->
+       let mockload = Bil.Load (mem, idx, en, sz) in
+       let memcellsymname = Common.exp_to_string mockload in
+       eval_exp v >>= fun mcv ->
+       let curval = match mcv with
+         | Some curval -> curval
+         | None -> failwith "In symex, unsupported data in store"
+       in
+       (if st.do_check && st.do_ss
        then
-         get_last_loaded_symname >>= fun symname ->
-         begin
-           match symname with
-           | None ->
-              SilentStoreChecks.fail_ss >>= fun () ->
-              ST.return None
-           | Some symname ->
-              get_value_in_env_exn symname >>= fun symval ->
-              eval_exp v >>= fun mcv ->
-              let curval = match mcv with
-                | Some curval -> curval
-                | None -> failwith "In symex, unsupported data in store"
-              in
-              ST.get () >>= fun st_wo_constraints ->
-              add_neq_constraint curval symval >>= fun () ->
-              check_now SilentStoreChecks.on_fail >>= fun _store_safe ->
-              (* ST.put st_wo_constraints >>= fun () -> *)
-              ST.return None
-         end
+         has_value_in_env memcellsymname >>= fun valpresent ->
+         if valpresent
+         then
+           get_value_in_env_exn memcellsymname >>= fun symval ->
+           ST.get () >>= fun st_wo_constraints ->
+           add_neq_constraint curval symval >>= fun () ->
+           check_now SilentStoreChecks.on_fail >>= fun _store_safe ->
+           (* ST.put st_wo_constraints >>= fun () -> *)
+           ST.return None
+         else
+           SilentStoreChecks.fail_ss >>= fun () ->
+           ST.return None
        else
-         ST.return None
+         ST.return None) >>= fun res ->
+       (* do a store now to syntactic mem cell *)
+       push_def_constraint memcellsymname curval >>= fun () ->
+       ST.return res
     | Bil.BinOp (op, x, y) ->
        eval_exp x >>= fun ml ->
        eval_exp y >>= fun mr ->
@@ -413,6 +416,8 @@ module Executor = struct
             begin
               if do_check && do_cs
               then
+                let () = printf "[compsimp] Doing checks on exp: %a\n%!"
+                           Exp.ppo exp in
                 CompSimpChecks.check_binop op l r >>= fun (do_left_checks, do_right_checks) ->
                 ST.get () >>= fun ini_st ->
                 do_left_checks >>= fun () ->
@@ -499,21 +504,22 @@ module Executor = struct
        end
 
   let eval_def dt : unit ST.t =
-    let tid = Term.tid dt in
-    ST.update (fun st ->
-      { st with do_check = Tid.equal tid st.target_tid }) >>= fun () ->
+    ST.return (Term.tid dt) >>= fun tid ->
+    ST.update (fun st -> 
+    { st with do_check = Tid.equal tid st.target_tid }) >>= fun () ->
+    let () = printf "In symbolic.eval_def, evalling def term: %a\n%!"
+               Tid.ppo tid in
     let rhs = Def.rhs dt in
     ST.gets (fun st ->
-    printf "tid is %a, doing check? %B\n%!"
-      Tid.ppo tid
-      st.do_check) >>= fun () ->
+    printf "done evalling rhs of tid %a doing check? %B\n%!"
+      Tid.ppo tid st.do_check) >>= fun () ->
     eval_exp rhs >>= fun mr ->
     match mr with
     | Some result ->
        let lhs = Def.lhs dt in
        let varname = Var.name lhs in
        new_symbolic varname >>= fun symname ->
-       push_def_constraint varname symname result >>= fun () ->
+       push_def_constraint symname result >>= fun () ->
        set_last_loaded_symname symname >>= fun () ->
        ST.update (fun st -> { st with do_check = false }) >>= fun () ->
        set_symbolic_val symname result
@@ -521,15 +527,29 @@ module Executor = struct
        ST.update @@ fun st -> { st with do_check = false }
 
   let eval_def_list defs : unit ST.t =
+    let rec loop defs : unit ST.t =
+      ST.get () >>= fun st ->
+      if not st.failed_ss && not st.failed_cs_left && not st.failed_cs_right
+      then
+        match defs with
+        | d :: defs' ->
+           eval_def d >>= fun () ->
+           loop defs'
+        | [] -> ST.return ()
+      else ST.return ()
+    in
     let () = Solver.reset solver in (* clear old def constraints *)
-    let init = ST.return () in
-    List.fold defs ~init ~f:(fun st dt ->
-        ST.get () >>= fun st ->
-        if not st.failed_ss && not st.failed_cs_left && not st.failed_cs_right
-        then
-          eval_def dt
-        else
-          ST.return ())
+    (* let init = ST.return () in *)
+    let () = printf "in symbolic.eval_def_list: defs are\n%!";
+             List.iter defs ~f:(printf "%a\n%!" Def.ppo) in
+    loop defs
+    (* List.fold defs ~init ~f:(fun st dt -> *)
+    (*     ST.get () >>= fun st -> *)
+    (*     if not st.failed_ss && not st.failed_cs_left && not st.failed_cs_right *)
+    (*     then *)
+    (*       eval_def dt *)
+    (*     else *)
+    (*       ST.return ()) *)
 
   let eval_blk blk : unit ST.t =
     let defs = Term.enum def_t blk |> Sequence.to_list in
