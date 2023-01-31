@@ -32,6 +32,7 @@ libna_argon2id: debug
 	--uarch-checker-config-file=crypto_pwhash.uarch_checker.config \
 	--uarch-checker-ss \
 	--uarch-checker-cs \
+	--uarch-checker-no-symex \
 	--no-optimization --bil-optimization=0 \
 	../../test/libna/bap_ld_scalar_mult.o > libna.crypto_pwhash_argon2id.debug.log 2>&1
 	@echo -n "Done with analysis of argon2id"
@@ -45,6 +46,7 @@ libna_aesni: debug
 	--uarch-checker-target-function=crypto_aead_aes256gcm_encrypt \
 	--uarch-checker-ss \
 	--uarch-checker-cs \
+	--uarch-checker-no-symex \
 	--no-optimization --bil-optimization=0 \
 	../../test/libna/bap_ld_scalar_mult.o > libna.crypto_aead_aes256gcm_encrypt.debug.log 2>&1
 	@echo -n "Done with analysis of aesni "
@@ -58,6 +60,7 @@ libna_crypto_sign: debug
 	--uarch-checker-config-file=crypto_sign.uarch_checker.config \
 	--uarch-checker-ss \
 	--uarch-checker-cs \
+	--uarch-checker-no-symex \
 	--no-optimization --bil-optimization=0 \
 	../../test/libna/bap_ld_scalar_mult.o > libna.crypto_sign.debug.log 2>&1
 	@echo -n "Done with analysis of crypto_sign "
@@ -71,6 +74,7 @@ libna_aead: debug
 	--uarch-checker-target-function=crypto_aead_chacha20poly1305_encrypt \
 	--uarch-checker-ss \
 	--uarch-checker-cs \
+	--uarch-checker-no-symex \
 	--no-optimization --bil-optimization=0 \
 	../../test/libna/bap_ld_scalar_mult.o > libna.crypto_aead_chacha20poly1305_encrypt.debug.log 2>&1
 	@echo -n "Done with analysis of chacha20poly1305 "

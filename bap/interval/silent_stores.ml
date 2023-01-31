@@ -160,21 +160,51 @@ module Checker(N : NumericDomain) = struct
        (* let idx_tainted = is_tainted idx_val in *)
        if old_tainted || new_tainted (* || idx_tainted *)
        then
-         begin
-           get_dependent_defs >>= fun deps ->
-           ST.get () >>= fun st ->
-           let can_do_last_symex_check = st.do_symex && Option.is_some deps in
-           if can_do_last_symex_check
-           then
-             let deps = Option.value_exn deps in
-             let do_check = Symbolic.Executor.eval_def_list deps in
-             let init_st = Symbolic.Executor.init ~do_ss:true deps st.tid in
-             let (), fini_st = Symbolic.Executor.run do_check init_st in
-             let failed_ss = fini_st.failed_ss in
-             let () = Format.printf "Last ditch symex failed ss? %B\n%!" failed_ss in
-             if failed_ss
+         (* do interval based may-be-equal check *)
+         let old_val_intvl = get_intvl old_val in
+         let new_val_intvl = get_intvl new_val in
+         let intersect = Wrapping_interval.meet old_val_intvl new_val_intvl in
+         if Wrapping_interval.equal intersect Wrapping_interval.bot
+         then
+           (* it is safe according to interval analysis *)
+           update_eval_stats EvalStats.incr_interval_pruned >>= fun () ->
+           ST.return N.bot
+         else
+           begin
+             get_dependent_defs >>= fun deps ->
+             ST.get () >>= fun st ->
+             let can_do_last_symex_check = st.do_symex && Option.is_some deps in
+             if can_do_last_symex_check
              then
-               let alert_desc = "Silent stores failed last ditch sym ex check" in
+               let deps = Option.value_exn deps in
+               let do_check = Symbolic.Executor.eval_def_list deps in
+               let init_st = Symbolic.Executor.init ~do_ss:true deps st.tid in
+               let (), fini_st = Symbolic.Executor.run do_check init_st in
+               let failed_ss = fini_st.failed_ss in
+               let () = Format.printf "Last ditch symex failed ss? %B\n%!" failed_ss in
+               if failed_ss
+               then
+                 let alert_desc = "Silent stores failed last ditch sym ex check" in
+                 let alert : Alert.t = { tid = st.tid;
+                                         opcode = None;
+                                         addr = None;
+                                         rpo_idx = None;
+                                         sub_name = None;
+                                         flags_live = SS.empty;
+                                         is_live = None;
+                                         reason = Alert.SilentStores;
+                                         desc = alert_desc;
+                                         left_val = None;
+                                         right_val = None; 
+                                         problematic_operands = None }
+                 in
+                 ST.put { st with warns = Alert.Set.add st.warns alert } >>= fun () ->
+                 ST.return N.bot
+               else
+                 update_eval_stats EvalStats.incr_symex_pruned >>= fun () ->
+                 ST.return N.bot
+             else
+               let alert_desc = "Store of val, prev val, or mem idx is tainted" in
                let alert : Alert.t = { tid = st.tid;
                                        opcode = None;
                                        addr = None;
@@ -185,31 +215,11 @@ module Checker(N : NumericDomain) = struct
                                        reason = Alert.SilentStores;
                                        desc = alert_desc;
                                        left_val = None;
-                                       right_val = None; 
-                                       problematic_operands = None }
-               in
+                                       right_val = None;
+                                       problematic_operands = None } in
                ST.put { st with warns = Alert.Set.add st.warns alert } >>= fun () ->
                ST.return N.bot
-             else
-               update_eval_stats EvalStats.incr_symex_pruned >>= fun () ->
-               ST.return N.bot
-           else
-             let alert_desc = "Store of val, prev val, or mem idx is tainted" in
-             let alert : Alert.t = { tid = st.tid;
-                                     opcode = None;
-                                     addr = None;
-                                     rpo_idx = None;
-                                     sub_name = None;
-                                     flags_live = SS.empty;
-                                     is_live = None;
-                                     reason = Alert.SilentStores;
-                                     desc = alert_desc;
-                                     left_val = None;
-                                     right_val = None;
-                                     problematic_operands = None } in
-             ST.put { st with warns = Alert.Set.add st.warns alert } >>= fun () ->
-             ST.return N.bot
-         end
+           end
        else
          update_eval_stats EvalStats.incr_taint_pruned >>= fun () ->
          ST.return N.bot

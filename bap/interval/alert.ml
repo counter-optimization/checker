@@ -185,6 +185,79 @@ module OpcodeAndAddrFiller = struct
     |> Set.map ~f:(fun alert -> set_opcode_for_alert alert opcode_lut)
 end
 
+module SubNameResolverFiller = struct
+
+  type cls
+
+  type resolved_db = (word * string) seq [@@deriving compare, sexp]
+
+  let named_symbols : (cls, unit) KB.cls = KB.Class.declare "named-symbols" ()
+                                             ~package:Common.package
+
+  let dom = KB.Domain.flat
+              ~inspect:sexp_of_resolved_db
+              ~join:(fun left right -> Ok (Seq.append right left))
+              ~empty:Seq.empty
+              ~equal:(fun left right ->
+                0 = compare_resolved_db left right)
+              "resolved_db_domain"
+
+  let seq = KB.Class.property named_symbols "seq" dom
+              ~package:Common.package
+  
+  let unresolved_prefix = "sub_"
+
+  let needs_resolving alert =
+    match alert.sub_name with
+    | None -> false
+    | Some subname ->
+       String.is_prefix subname ~prefix:unresolved_prefix
+
+  let resolve_name unresolvedname db =
+    let queryable_name = String.chop_prefix_if_exists unresolvedname
+                           ~prefix:unresolved_prefix
+                         |> String.uppercase in
+    let entry_matches (addrs, name) = String.is_substring addrs
+                                        ~substring:queryable_name in
+    match Seq.find db ~f:entry_matches with
+    | Some (_addrs, name) -> name
+    | None ->
+       let () = printf "In Alert.SubNameResolverFiller.resolve_name, couldn't resolve name for symbol: %s" unresolvedname in
+       unresolvedname
+
+  let resolve_sub_names alerts proj =
+    let open KB.Monad_infix in
+    let filename = Option.value_exn (Project.get proj filename) in
+    let get_named_symbols =
+      begin
+        Theory.Unit.for_file filename >>= fun unit ->
+        KB.collect Image.Spec.slot unit >>= fun ogre ->
+        let query = Ogre.Query.(select @@ from Image.Scheme.named_symbol) in
+        match Ogre.eval (Ogre.collect query) ogre with
+        | Error err ->
+           failwith @@ sprintf "In getting named symbols : %s" (Error.to_string_hum err)
+        | Ok o ->
+           let word_seq = Seq.map o ~f:(fun (addrf, name) ->
+                              (Word.of_int64 addrf, name)) in
+           KB.Object.create named_symbols >>= fun named_sym_obj ->
+           KB.provide seq named_sym_obj word_seq >>= fun () ->
+           KB.return named_sym_obj
+      end in
+    let named_symbols = Toplevel.eval seq get_named_symbols in
+    let queryable_named_symbols = Seq.map named_symbols ~f:(fun (addr, name) ->
+                                      Word.to_string addr, name) in
+    let () = printf "queryable named symbols are:\n%!";
+             Seq.iter queryable_named_symbols ~f:(fun (addrs, name) ->
+                 printf "(%s, %s)\n%!" addrs name) in
+    Set.map alerts ~f:(fun alert ->
+        if needs_resolving alert
+        then 
+          let unresolved = Option.value_exn alert.sub_name in
+          let resolved = resolve_name unresolved queryable_named_symbols in
+          { alert with sub_name = Some resolved }
+        else alert)
+end
+
 (* RPO = reverse post-order traversal *)
 module RpoIdxAlertFiller = struct
 

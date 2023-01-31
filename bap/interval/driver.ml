@@ -346,8 +346,10 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let alerts_with_liveness = Alert.LivenessFiller.set_for_alert_set alerts_with_ops_addrs liveness in
 
      let alerts_with_rpo_indices = Alert.RpoIdxAlertFiller.set_rpo_indices_for_alert_set alerts_with_liveness sub proj rpo_traversal in
+
+     let alerts_with_resolved_names = Alert.SubNameResolverFiller.resolve_sub_names alerts_with_rpo_indices proj in
        
-     let all_alerts = alerts_with_rpo_indices in
+     let all_alerts = alerts_with_resolved_names in
      
      (* get callees--both direct and indirect calls--of this call *)
      let () = Format.printf "Getting callees for sub %s\n%!" (Sub.name sub) in
