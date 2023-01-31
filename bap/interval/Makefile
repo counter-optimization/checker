@@ -17,12 +17,29 @@ COMP_SIMP_TEST_DIR = comp-simp-test-cases
 
 .PHONY: clean bap-plugin libna_aesni libna_argon2id libna_aead libna_crypto_sign release debug
 
+release: bap-plugin
+
 debug: bap-plugin
 
-release: $(PLUGIN_NAME)
-
 bap-plugin: *.ml
-	bapbuild -pkg z3 -pkg bap-primus -j $(BAPBUILD_JOB_SLOTS) $(PLUGIN_NAME)
+	 bapbuild -pkg z3 -pkg bap-primus -j $(BAPBUILD_JOB_SLOTS) $(PLUGIN_NAME)
+
+global_check: debug
+	@echo -n "Starting checking of libsodium (global)"
+	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
+	-bap \
+	--plugin-path=. \
+	--pass=uarch-checker \
+	--uarch-checker-output-csv-file=./libna.checker.output.csv \
+	--uarch-checker-config-file=libsodium.uarch_checker.config \
+	--uarch-checker-ss \
+	--uarch-checker-cs \
+	--uarch-checker-no-symex \
+	--no-optimization \
+	--bil-optimization=0 \
+	../../test/libna/bap_ld_scalar_mult.o &> libna.debug.log
+	@echo -n "Done with analysis of argon2id"
+	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 
 libna_argon2id: debug
 	@echo -n "Starting analysis of argon2id"
@@ -82,38 +99,6 @@ libna_aead: debug
 
 tags: $(TEST_SRCS)
 	-ctags -e --etags-include=$(BAP_MASTER_REPO) --etags-include=$(Z_PLUGIN_LIB_BASE) --etags-include=$(JANESTREET_CORE_BASE) -R $^
-
-$(PLUGIN_NAME): $(BUILD_DIR)/$(PLUGIN_NAME)
-	ln -sf $^ $@
-
-$(BUILD_DIR)/$(PLUGIN_NAME): $(BUILD_DIR)/uarch_checker.cmxs $(BUILD_DIR)/uarch_checker.cma
-	bapbundle pack -name uarch_checker -main $(BUILD_DIR)/uarch_checker.cmxs -main $(BUILD_DIR)/uarch_checker.cma -provides uarch_checker $@
-
-$(BUILD_DIR)/uarch_checker.cmxs: $(BUILD_DIR)/uarch_checker.cmxa
-	ocamlfind ocamlopt -shared -linkall -ccopt -L -ccopt $(BUILD_DIR) $< -o $@
-
-$(BUILD_DIR)/uarch_checker.cmxa: $(TEST_NATIVES)
-	ocamlfind ocamlopt -a -thread $(OCAML_PKGS) $(TEST_NATIVES) -o $@
-
-$(BUILD_DIR)/uarch_checker.cma: $(TEST_OBJS)
-	ocamlfind ocamlc -a -custom -thread $(OCAML_PKGS) $(TEST_OBJS) -o $@
-
-$(BUILD_DIR)/%.cmo: %.ml | $(BUILD_DIR)
-	ocamlfind ocamlc -c -thread -I $(BUILD_DIR) $(OCAML_PKGS) -o $@ $<
-
-$(BUILD_DIR)/%.cmx: %.ml | $(BUILD_DIR)
-	ocamlfind ocamlopt -c -O3 -thread -I $(BUILD_DIR) $(OCAML_PKGS) -o $@ $<
-
-$(BUILD_DIR):
-	mkdir $(BUILD_DIR)
-
-depends: $(BUILD_DIR)/.depends
-
-$(BUILD_DIR)/.depends: $(TEST_SRCS) | $(BUILD_DIR)
-	cp $(TEST_SRCS) $(BUILD_DIR)
-	ocamlfind ocamldep -nocwd -I $(BUILD_DIR) $(addprefix $(BUILD_DIR)/, $(TEST_SRCS)) > $@
-
-include $(BUILD_DIR)/.depends
 
 clean:
 	-ocamlbuild -clean

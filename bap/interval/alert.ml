@@ -222,8 +222,7 @@ module SubNameResolverFiller = struct
     match Seq.find db ~f:entry_matches with
     | Some (_addrs, name) -> name
     | None ->
-       let () = printf "In Alert.SubNameResolverFiller.resolve_name, couldn't resolve name for symbol: %s" unresolvedname in
-       unresolvedname
+       failwith @@ sprintf "In Alert.SubNameResolverFiller.resolve_name, couldn't resolve name for symbol: %s" unresolvedname
 
   let resolve_sub_names alerts proj =
     let open KB.Monad_infix in
@@ -246,9 +245,9 @@ module SubNameResolverFiller = struct
     let named_symbols = Toplevel.eval seq get_named_symbols in
     let queryable_named_symbols = Seq.map named_symbols ~f:(fun (addr, name) ->
                                       Word.to_string addr, name) in
-    let () = printf "queryable named symbols are:\n%!";
-             Seq.iter queryable_named_symbols ~f:(fun (addrs, name) ->
-                 printf "(%s, %s)\n%!" addrs name) in
+    (* let () = printf "queryable named symbols are:\n%!"; *)
+    (*          Seq.iter queryable_named_symbols ~f:(fun (addrs, name) -> *)
+    (*              printf "(%s, %s)\n%!" addrs name) in *)
     Set.map alerts ~f:(fun alert ->
         if needs_resolving alert
         then 
