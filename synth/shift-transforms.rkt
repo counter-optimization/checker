@@ -152,6 +152,28 @@
   (list
    (shl-r/m64-cl rax)))
 
+(define attempt-lshift64-imm
+  (list
+    ; split up rax
+    (mov-r64-imm64 r10 (bv (expt 2 63) 64))
+    (mov-r/m64-r64 r11 r10)
+    (mov-r/m16-r16 r11w ax) ; r11 contains lower 16 bits
+    (mov-r/m16-imm16 ax (bv 1 16)) ; rax contains upper 48 bits
+    ; perform shifts
+    (shl-r/m64-imm8 r11 (bv 25 8))
+    (shl-r/m64-imm8 rax (bv 25 8))
+    ; mutate r11 to make adding safe
+    (rol-r/m64-imm8 r10 (bv 25 8))
+    (sub-r/m64-r64 r11 r10)
+    ; recombine
+    (add-r/m64-r64 rax r11)
+    (sub-r/m64-r64 rax r10)
+  ))
+
+(define spec-lshift64-imm
+  (list
+   (shl-r/m64-imm8 rax (bv 25 8))))
+
 ; ---------- Bitwise RSHIFT ----------
 
 ; Dest rax, src rcx
