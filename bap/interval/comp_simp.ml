@@ -408,9 +408,11 @@ module Checker(N : NumericDomain) = struct
     let was_taint_pruned = (not check_right && not check_left) ||
                              (not check_right && was_sub_binop)
     in
-    let incr_by = if was_taint_pruned then 1 else 0 in
-    update_eval_stats (fun estats ->
-        { estats with taint_pruned = estats.taint_pruned + incr_by })
+    let updater = if was_taint_pruned
+                  then EvalStats.incr_taint_pruned
+                  else fun x -> x
+    in
+    update_eval_stats updater
 
   let specials_of_binop (op : binop) : (I.t -> I.t) list * (I.t -> I.t) list =
     let one i = I.of_int ~width:(I.bitwidth i) 1 in
@@ -565,3 +567,4 @@ module Checker(N : NumericDomain) = struct
     | `Def d -> check_def d live env sub do_symex proj
     | _ -> { warns = empty; stats = EvalStats.init }
 end
+ 
