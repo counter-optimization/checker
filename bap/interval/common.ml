@@ -528,11 +528,19 @@ let rec exp_to_string (e : Bil.exp) : string =
       unop_to_str op ^ exp_to_string left
    | Bil.Var v -> Var.name v
    | Bil.Int w ->
-      let ws = Word.to_string w in
-      let ws = String.drop_prefix ws 1 in
-      let ws = Stringext.replace_all ws ~pattern:":" ~with_:"?" in
-      let () = printf "word to string is %s\n%!" ws in
-      ws
+      (* just to_string'ing a Word.t adds the signedness and
+         bitwidth to the string. used the formattters just gives
+         the value as a string *)
+      (* let () = printf "word is %a\n%!" Word.ppo w in *)
+      Format.sprintf "%a" Word.pps w
+      (* let () = printf "word pp to string is: %s\n%!" wpps in *)
+      (* let ws = Word.to_string w in *)
+      (* let () = printf "word as string is %s\n%!" ws in *)
+      (* let ws = String.drop_prefix ws 1 in *)
+      (* let ws = String.map ws *)
+      (*            ~f:(fun c -> if Char.equal c ':' then '?' else c) in *)
+      (* let () = printf "word to string is %s\n%!" ws in *)
+      (* ws *)
    | Bil.Cast (cast, sz, exp) ->
       sprintf "%s(%d.%s)" (cast_to_str cast) sz (exp_to_string exp)
    | Bil.Let (var, exp, bod) ->
