@@ -141,7 +141,6 @@ module EvalStats = struct
         interval_pruned : int;
         interproc_pruned : int;
         symex_pruned : int;
-        
         interval_verified : int;
         symex_verified : int;
       }
@@ -155,6 +154,36 @@ module EvalStats = struct
         interval_verified = 0;
         symex_verified = 0;
       }
+
+    let to_json_string s =
+      let field_to_string value name = sprintf "\"%s\" : \"%d\"" name value in
+      let total_considered = field_to_string s.total_considered "total_considered" in
+      let taint_pruned = field_to_string s.taint_pruned "taint_pruned" in
+      let interval_pruned = field_to_string s.interval_pruned "interval_pruned" in
+      let interproc_pruned = field_to_string s.interproc_pruned "interproc_pruned" in
+      let symex_pruned = field_to_string s.symex_pruned "symex_pruned" in
+      let interval_verified = field_to_string s.interval_verified "interval_verified" in
+      let symex_verified = field_to_string s.symex_verified "symex_verified" in
+      let all_fields = [total_considered;
+                        taint_pruned;
+                        interval_pruned;
+                        interproc_pruned;
+                        symex_pruned;
+                        interval_verified;
+                        symex_verified]
+      in
+      let all_fields_newlined = String.concat ~sep:"\n" all_fields in
+      let json = sprintf "{\n%s}" all_fields_newlined in
+      json
+
+    let combine x y =
+      { total_considered = x.total_considered + y.total_considered;
+        taint_pruned = x.taint_pruned + y.taint_pruned;
+        interval_pruned = x.interval_pruned + y.interval_pruned;
+        interproc_pruned = x.interproc_pruned + y.interproc_pruned;
+        symex_pruned = x.symex_pruned + y.symex_pruned;
+        interval_verified = x.interval_verified + y.interval_verified;
+        symex_verified = x.symex_verified + y.symex_verified }
 
     let incr_total_considered st =
       { st with
@@ -184,6 +213,12 @@ module EvalStats = struct
       { st with
         interval_verified = st.interval_verified + 1 }
 end
+
+type 'a checker_res = { warns : 'a; stats : EvalStats.t }
+
+let combine_checker_res x y f =
+  { warns = f x.warns y.warns;
+    stats = EvalStats.combine x.stats y.stats }
 
 module CalleeRel = struct
   module T = struct

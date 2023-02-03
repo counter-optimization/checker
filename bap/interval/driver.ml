@@ -14,11 +14,21 @@ module CR = Common.CalleeRel
 module CRS = CR.Set
 module ABI = Common.AMD64SystemVABI
 
-type check_sub_result = { callees : CRS.t;
-                          liveness_info : Live_variables.t;
-                          alerts : Alert.Set.t }
+type check_sub_result = {
+    callees : CRS.t;
+    liveness_info : Live_variables.t;
+    csevalstats : EvalStats.t;
+    ssevalstats : EvalStats.t;
+    alerts : Alert.Set.t
+}
 
 type checker_alerts = Alert.Set.t
+
+type analysis_result = {
+    alerts : checker_alerts;
+    csevalstats : EvalStats.t;
+    ssevalstats : EvalStats.t
+}
 
 module SubSet = struct
   include Set.Make_binable_using_comparator(Sub)
@@ -132,6 +142,8 @@ let should_skip_analysis (edges : Edge_builder.edges)
             let empty_alerts = Alert.Set.empty in
             Some { alerts = empty_alerts;
                    callees = callee_rels;
+                   csevalstats = EvalStats.init;
+                   ssevalstats = EvalStats.init;
                    liveness_info = Live_variables.IsUsedPass.UseRel.empty }
        end
        | _ -> failwith "in should_skip_analysis, subroutine is single instruction but non jump instruction. this case is not yet handled." 
@@ -186,10 +198,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      
      let args = Term.enum arg_t sub in
      let argnames = Seq.map args ~f:(fun a -> Arg.var a |> T.Var.name) |> Seq.to_list in
-     let () = printf "Arg names of sub (%s) are:\n%!" @@ Sub.name sub;
-              List.iter argnames ~f:(fun a -> printf "%s\n%!" a) in
-
-     
 
      let with_canary_set = E.set_stack_canary empty in
 
@@ -198,20 +206,20 @@ let run_analyses sub img proj ~(is_toplevel : bool)
          | Ok env' -> env'
          | Error e -> failwith @@ Error.to_string_hum e in
      let env_with_img_set = E.set_img env_with_rsp_set img in
-     let env_with_bss_initd =
-       List.fold bss_init_stores
-                 ~init:(Ok env_with_img_set)
-                 ~f:(fun env' store ->
-                   Or_error.bind env' ~f:(fun env' ->
-                                   E.store_global env' ~addr:store.addr
-                                                  ~data:store.data
-                                                  ~valtype:CellType.Ptr)) in
+     (* let env_with_bss_initd = *)
+     (*   List.fold bss_init_stores *)
+     (*             ~init:(Ok env_with_img_set) *)
+     (*             ~f:(fun env' store -> *)
+     (*               Or_error.bind env' ~f:(fun env' -> *)
+     (*                               E.store_global env' ~addr:store.addr *)
+     (*                                              ~data:store.data *)
+     (*                                              ~valtype:CellType.Ptr)) in *)
      
-     let env_with_bss_initd = match env_with_bss_initd with
-       | Ok env -> env 
-       | Error e ->
-          let inner_err_msg = Error.to_string_hum e in
-          failwith @@ sprintf "in run_analysis setting bss inits : %s" inner_err_msg in
+     (* let env_with_bss_initd = match env_with_bss_initd with *)
+     (*   | Ok env -> env  *)
+     (*   | Error e -> *)
+     (*      let inner_err_msg = Error.to_string_hum e in *)
+     (*      failwith @@ sprintf "in run_analysis setting bss inits : %s" inner_err_msg in *)
 
      (* let final_env = env_with_bss_initd in *)
 
@@ -221,7 +229,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                      |> List.filter ~f:ABI.var_name_is_arg in
      
      let final_env = List.fold true_args
-                               ~init:env_with_bss_initd
+                               ~init:env_with_img_set
                                ~f:(fun mem argname ->
                                  E.init_arg ~name:argname config sub mem) in
      
@@ -273,7 +281,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      (* the env to run the checker in is stored in the insn to be checked
           here, the solution envs are stored/keyed by calling context,
           the instructions are still just by tid though. *)
-     let analyze_edge (module Chkr : Checker.S with type env = E.t) (e : 'a Calling_context.Edge.t) : Chkr.warns =
+     let combine_res x y = Common.combine_checker_res x y Alert.Set.union in
+     let analyze_edge (module Chkr : Checker.S with type env = E.t) (e : 'a Calling_context.Edge.t) : Alert.Set.t Common.checker_res =
        let from_cc = Calling_context.Edge.from_ e in
        let to_cc = Calling_context.Edge.to_ e in
        let to_tid = Calling_context.to_insn_tid to_cc in
@@ -292,20 +301,19 @@ let run_analyses sub img proj ~(is_toplevel : bool)
            | None ->
               failwith @@
                 sprintf
-                  "In running checker %s, couldn't find tid %a" Chkr.name Tid.pps to_tid in
-         (* let () = Format.printf "checking edge (%a, %a)\n%!" *)
-         (*                        Calling_context.pp from_cc *)
-         (*                        Calling_context.pp to_cc in *)
-         Chkr.check_elt insn liveness in_state sub proj use_symex in
-
-     let run_checker (module Chkr : Checker.S with type env = E.t) (es : 'a Calling_context.edges) : Chkr.warns =
+                  "In running checker %s, couldn't find tid %a"
+                  Chkr.name Tid.pps to_tid
+         in
+         Chkr.check_elt insn liveness in_state sub proj use_symex
+     in
+     let run_checker (module Chkr : Checker.S with type env = E.t) (es : 'a Calling_context.edges) : Alert.Set.t Common.checker_res =
        List.fold edges
-         ~init:Alert.Set.empty
-         ~f:(fun alerts edge ->
-           let alerts' = analyze_edge (module Chkr) edge in
-           Alert.Set.union alerts alerts') in
-
-     let comp_simp_alerts =
+         ~init:{ warns = Alert.Set.empty; stats = EvalStats.init }
+         ~f:(fun acc edge ->
+           let res = analyze_edge (module Chkr) edge in
+           combine_res acc res)
+     in
+     let comp_simp_res =
        if do_cs_checks
        then
          begin
@@ -313,43 +321,40 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                       with type env = E.t = struct
                include Comp_simp.Checker(FinalDomain)
                type env = E.t
-             end in
+             end
+           in
            let () = printf "Starting comp simp checker...\n%!" in
-           let alerts = run_checker (module CSChecker) edges in
+           let res = run_checker (module CSChecker) edges in
            let () = printf "Done running comp simp checker.\n%!" in
-           alerts
+           res
          end
-       else Alert.Set.empty in
-
-     let silent_store_alerts =
+       else { warns = Alert.Set.empty; stats = EvalStats.init }
+     in
+     let silent_store_res =
        if do_ss_checks
        then
          begin
            let module SSChecker : Checker.S with type env = E.t = struct
                include Silent_stores.Checker(FinalDomain)
                type env = E.t
-             end in
-           
+             end
+           in
            let () = printf "Starting silent stores checker...\n%!" in
-           let alerts = run_checker (module SSChecker) edges in
+           let res = run_checker (module SSChecker) edges in
            let () = printf "Done running silent stores checker.\n%!" in
-           alerts
+           res
          end
-       else Alert.Set.empty in
-     
-     let all_alerts = Alert.Set.union comp_simp_alerts silent_store_alerts in
-
-     let alerts_with_subs = Alert.Set.map all_alerts ~f:(fun alert ->
-                                            { alert with sub_name = Some (Sub.name sub) }) in
+       else { warns = Alert.Set.empty; stats = EvalStats.init }
+     in
+     let all_alerts = Alert.Set.union comp_simp_res.warns silent_store_res.warns in
+     let alerts_with_subs = Alert.Set.map all_alerts
+                              ~f:(fun alert ->
+                                { alert with sub_name = Some (Sub.name sub) }) in
      let alerts_with_ops_addrs = Alert.OpcodeAndAddrFiller.set_opcode_and_addr_for_alert_set alerts_with_subs proj in
-     
      let alerts_with_liveness = Alert.LivenessFiller.set_for_alert_set alerts_with_ops_addrs liveness in
-
      let alerts_with_rpo_indices = Alert.RpoIdxAlertFiller.set_rpo_indices_for_alert_set alerts_with_liveness sub proj rpo_traversal in
-
-     let alerts_with_resolved_names = Alert.SubNameResolverFiller.resolve_sub_names alerts_with_rpo_indices proj in
-       
-     let all_alerts = alerts_with_resolved_names in
+     (* let alerts_with_resolved_names = Alert.SubNameResolverFiller.resolve_sub_names alerts_with_rpo_indices proj in *)
+     let all_alerts = alerts_with_rpo_indices in
      
      (* get callees--both direct and indirect calls--of this call *)
      let () = Format.printf "Getting callees for sub %s\n%!" (Sub.name sub) in
@@ -359,8 +364,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let callee_analysis_results = GetCallees.get sub proj analysis_results in
      let callees = List.filter callee_analysis_results ~f:Or_error.is_ok
                    |> List.map ~f:Or_error.ok_exn
-                   |> CalleeRel.Set.of_list in
-
+                   |> CalleeRel.Set.of_list
+     in
      (* print all callee errs *)
      let () = List.filter callee_analysis_results ~f:Or_error.is_error
               |> List.iter
@@ -369,12 +374,13 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                           Format.printf "In getting callees for sub %s : %s\n%!"
                                         (Sub.name sub)
                                         (Error.to_string_hum err)
-                       | Ok _ -> ()) in
-     
-     (* let () = Format.printf "Callees are: \n%!" in *)
-     (* let () = CRS.print callees in *)
-     
-     { alerts = all_alerts; callees = callees; liveness_info = liveness }
+                       | Ok _ -> ())
+     in
+     { alerts = all_alerts;
+       callees = callees;
+       csevalstats = comp_simp_res.stats;
+       ssevalstats = silent_store_res.stats;
+       liveness_info = liveness }
 
 let iter_insns sub : unit =
   let irg = Sub.to_cfg sub in
@@ -404,26 +410,26 @@ let check_config config img ctxt proj : unit =
   let worklist = SubSet.of_sequence target_fns in
   let processed = SubSet.empty in
   let init_res = Alert.Set.empty in
-
   let global_store_data = Global_function_pointers.Libsodium.Analysis.get_all_init_fn_ptr_data ctxt proj in
   let () = Format.printf "Global stores are:\n%!";
            List.iter global_store_data ~f:(fun { data; addr } ->
                        Format.printf "mem[%a] <- %a\n%!"
                                      Word.pp addr
-                                     Word.pp data) in
-
+                                     Word.pp data)
+  in
   let do_ss_checks = Extension.Configuration.get ctxt Common.do_ss_checks_param in
   let do_cs_checks = Extension.Configuration.get ctxt Common.do_cs_checks_param in
-  
   let rec loop ~(worklist : SubSet.t)
                ~(processed : SubSet.t)
                ~(res : checker_alerts)
                ~(liveness : Live_variables.t)
                ~(is_toplevel : bool)
-               ~(config : Config.t) : checker_alerts =
+               ~(csevalstats : EvalStats.t)
+               ~(ssevalstats : EvalStats.t)
+               ~(config : Config.t) : analysis_result =
     let worklist_wo_procd = Set.diff worklist processed in
     if SubSet.is_empty worklist_wo_procd
-    then res
+    then { alerts = res; csevalstats; ssevalstats } 
     else
       let sub = Set.min_elt_exn worklist_wo_procd in
       let worklist_wo_procd_wo_sub = Set.remove worklist_wo_procd sub in
@@ -439,6 +445,8 @@ let check_config config img ctxt proj : unit =
           ~processed:next_processed
           ~res
           ~liveness
+          ~csevalstats
+          ~ssevalstats
           ~is_toplevel:false
           ~config
       else
@@ -447,30 +455,43 @@ let check_config config img ctxt proj : unit =
                                        ~bss_init_stores:global_store_data
                                        ~do_cs_checks
                                        ~do_ss_checks
-                                       ~config in
+                                       ~config
+        in
         let callee_subs = CRS.to_list current_res.callees
                           |> List.map ~f:(fun (r : CR.t) -> sub_of_tid_exn r.callee proj)
-                          |> SubSet.of_list in
+                          |> SubSet.of_list
+        in
         let () = SubSet.iter callee_subs ~f:(fun callee ->
             printf "CallOf: (%s, %s)\n%!" (Sub.name sub) (Sub.name callee)) in
         let next_worklist = SubSet.union worklist_wo_procd_wo_sub callee_subs in
         let all_alerts = Alert.Set.union res current_res.alerts in
+        let total_cs_stats = EvalStats.combine current_res.csevalstats csevalstats in
+        let total_ss_stats = EvalStats.combine current_res.ssevalstats ssevalstats in
         loop ~worklist:next_worklist
           ~processed:next_processed
           ~res:all_alerts
           ~liveness:current_res.liveness_info
           ~config
-          ~is_toplevel:false in
-  
+          ~csevalstats:total_cs_stats
+          ~ssevalstats:total_ss_stats
+          ~is_toplevel:false
+  in
   (* Run the analyses and checkers *)
-  let checker_alerts = loop ~worklist
-                            ~processed
-                            ~liveness:Live_variables.IsUsedPass.UseRel.empty
-                            ~res:init_res
-                            ~is_toplevel:true
-                            ~config in
+  let analysis_results = loop ~worklist
+                           ~processed
+                           ~liveness:Live_variables.IsUsedPass.UseRel.empty
+                           ~res:init_res
+                           ~csevalstats:EvalStats.init
+                           ~ssevalstats:EvalStats.init
+                           ~is_toplevel:true
+                           ~config
+  in
+  let all_alerts = analysis_results.alerts in
+  let cs_stats = analysis_results.csevalstats in
+  let ss_stats = analysis_results.ssevalstats in
   let () = Format.printf "Done processing all functions\n%!" in
-  
-  (* just print to stdout for now *)
+  let () = printf "cs stats:\n%s%!" @@ EvalStats.to_json_string cs_stats in
+  let () = printf "ss stats:\n%s%!" @@ EvalStats.to_json_string ss_stats in
   let csv_out_file_name = Extension.Configuration.get ctxt Common.output_csv_file_param in
-  Alert.save_alerts_to_csv_file ~filename:csv_out_file_name checker_alerts
+  let () = printf "writing checker alerts to file: %s\n%!" csv_out_file_name in
+  Alert.save_alerts_to_csv_file ~filename:csv_out_file_name all_alerts

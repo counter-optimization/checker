@@ -148,8 +148,11 @@ module Executor = struct
       Expr.mk_numeral_string ctxt (Z.to_string x) s
 
   let extract hi lo x =
+    let () = printf "in symbolic.extract: hi=%d, lo=%d, x=%s\n%!" hi lo @@
+               Expr.to_string x in
     let xs = Bitv.get_size (Expr.get_sort x)
     and ns = hi-lo+1 in
+      let () = printf "in symbolc.extract, x size is: %d\n%!" xs in
     if ns > xs
     then if lo = 0
       then Bitv.mk_zero_ext ctxt (ns-xs) x
@@ -421,13 +424,20 @@ module Executor = struct
                 CompSimpChecks.check_binop op l r >>= fun (do_left_checks, do_right_checks) ->
                 ST.get () >>= fun ini_st ->
                 do_left_checks >>= fun () ->
+                let start' = Time_ns.now () in
                 check_now CompSimpChecks.on_left_fail >>= fun _left_safe ->
+                let end' = Time_ns.now () in
+                let left_chk_time = Time_ns.diff end' start' |> Time_ns.Span.to_int_ns in
                 ST.gets (fun st -> st.failed_cs_left) >>= fun failed_cs_left ->
                 ST.put ini_st >>= fun () ->
                 do_right_checks >>= fun () ->
+                let start' = Time_ns.now () in
                 check_now CompSimpChecks.on_right_fail >>= fun _right_safe ->
+                let end' = Time_ns.now () in
+                let right_chk_time = Time_ns.diff end' start' |> Time_ns.Span.to_int_ns in
                 ST.gets (fun st -> st.failed_cs_right) >>= fun failed_cs_right ->
                 ST.put ini_st >>= fun () ->
+                let () = printf "In symex checker, left check time is %dns, right check time was %dns\n%!" left_chk_time right_chk_time in
                 ST.update @@ fun st ->
                 { st with failed_cs_left; failed_cs_right }
               else
@@ -534,11 +544,16 @@ module Executor = struct
         match defs with
         | d :: defs' ->
            eval_def d >>= fun () ->
+           ST.gets (fun st ->
+               printf "Solver st after def (%a) is:\n%!" Def.ppo d;
+               List.iter st.constraints ~f:(fun cstr ->
+                   printf "%s\n%!" @@ Expr.to_string cstr)
+             ) >>= fun () ->
            loop defs'
         | [] -> ST.return ()
       else ST.return ()
     in
-    let () = Solver.reset solver in (* clear old def constraints *)
+    (* let () = Solver.reset solver in (\* clear old def constraints *\) *)
     (* let init = ST.return () in *)
     let () = printf "in symbolic.eval_def_list: defs are\n%!";
              List.iter defs ~f:(printf "%a\n%!" Def.ppo) in

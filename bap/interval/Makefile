@@ -27,17 +27,14 @@ bap-plugin: *.ml
 global_check: debug
 	@echo -n "Starting checking of libsodium (global)"
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
-	-bap \
-	--plugin-path=. \
-	--pass=uarch-checker \
+	-bap --plugin-path=. --pass=uarch-checker \
 	--uarch-checker-output-csv-file=./libna.checker.output.csv \
 	--uarch-checker-config-file=libsodium.uarch_checker.config \
 	--uarch-checker-ss \
 	--uarch-checker-cs \
 	--uarch-checker-no-symex \
-	--no-optimization \
-	--bil-optimization=0 \
-	../../test/libna/bap_ld_scalar_mult.o &> libna.debug.log
+	--no-optimization --bil-optimization=0 \
+	../../test/libna/bap_ld_scalar_mult.o > libna.debug.log 2>&1 
 	@echo -n "Done with analysis of argon2id"
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 

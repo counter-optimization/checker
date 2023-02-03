@@ -323,18 +323,22 @@ module Checker(N : NumericDomain) = struct
             let failed_cs_right = fini_st.failed_cs_right in
             let () = Format.printf
                        "Last ditch symex failed left? %B failed right? %B\n%!"
-                       failed_cs_left failed_cs_right in
-            let should_fail = (is_left && failed_cs_right) ||
-                                (not is_left && failed_cs_right) in
+                       failed_cs_left failed_cs_right
+            in
+            let should_fail = (is_left && failed_cs_left) ||
+                                (not is_left && failed_cs_right)
+            in
             if should_fail
             then 
               let binop_str = Common.binop_to_string op in
               let left_str = if is_left
                              then Some (I.to_string operand)
-                             else None in
+                             else None
+              in
               let right_str = if not is_left
                               then Some (I.to_string operand)
-                              else None in
+                              else None
+              in
               let alert : Alert.t = { tid = st.tid;
                                       opcode = None;
                                       addr = None;
@@ -346,19 +350,23 @@ module Checker(N : NumericDomain) = struct
                                       desc = binop_str;
                                       left_val = left_str;
                                       right_val = right_str;
-                                      problematic_operands = Some [problematic_operand_indice] } in
+                                      problematic_operands = Some [problematic_operand_indice] }
+              in
               ST.update @@ fun old_st ->
                            { old_st with warns = Alert.Set.add old_st.warns alert }
             else
+              update_eval_stats EvalStats.incr_symex_pruned >>= fun () ->
               ST.return ()
           else
             let binop_str = Common.binop_to_string op in
             let left_str = if is_left
                            then Some (I.to_string operand)
-                           else None in
+                           else None
+            in
             let right_str = if not is_left
                             then Some (I.to_string operand)
-                            else None in
+                            else None
+            in
             let alert : Alert.t = { tid = st.tid;
                                     opcode = None;
                                     addr = None;
@@ -370,23 +378,39 @@ module Checker(N : NumericDomain) = struct
                                     desc = binop_str;
                                     left_val = left_str;
                                     right_val = right_str;
-                                    problematic_operands = Some [problematic_operand_indice] } in
+                                    problematic_operands = Some [problematic_operand_indice] }
+            in
             ST.update @@ fun old_st ->
                          { old_st with warns = Alert.Set.add old_st.warns alert }
         else
-          result_acc in
-      check_operand in
+          update_eval_stats EvalStats.incr_interval_pruned >>= fun () ->
+          result_acc
+      in
+      check_operand
+    in
     (if check_left
     then List.fold left_specials
            ~init:(ST.return ())
            ~f:(fold_checker ~is_left:true)
      else ST.return ())
     >>= fun () ->
-    if check_right
+    (if check_right
     then List.fold right_specials
            ~init:(ST.return ())
            ~f:(fold_checker ~is_left:false)
-    else ST.return ()
+     else ST.return ()) >>= fun () ->
+    (* compute eval stats after the check *)
+    let was_sub_binop = match op with
+      | Bil.PLUS -> false (* todo: handle the case where bap lifts sub to plus of a negative *)
+      | Bil.MINUS -> true
+      | _ -> false
+    in
+    let was_taint_pruned = (not check_right && not check_left) ||
+                             (not check_right && was_sub_binop)
+    in
+    let incr_by = if was_taint_pruned then 1 else 0 in
+    update_eval_stats (fun estats ->
+        { estats with taint_pruned = estats.taint_pruned + incr_by })
 
   let specials_of_binop (op : binop) : (I.t -> I.t) list * (I.t -> I.t) list =
     let one i = I.of_int ~width:(I.bitwidth i) 1 in
@@ -467,11 +491,13 @@ module Checker(N : NumericDomain) = struct
     | Bil.BinOp (op, x, y) ->
        check_exp x >>= fun x' ->
        check_exp y >>= fun y' ->
-       let should_check_left = is_tainted x' && not (is_const x) in
-       let should_check_right = is_tainted y' && not (is_const y) in
+       let should_check_left = is_tainted x' in
+       let should_check_right = is_tainted y' in
+       update_eval_stats EvalStats.incr_total_considered >>= fun () ->
        let checker = check_binop op
                                  ~check_left:should_check_left
-                                 ~check_right:should_check_right in
+                                 ~check_right:should_check_right
+       in
        checker x' y' >>= fun () ->
        let binop = AI.denote_binop op in
        let expr_res = binop x' y' in
@@ -516,24 +542,26 @@ module Checker(N : NumericDomain) = struct
        don't comp simp check the lifted flag calculations, and
        don't comp simp check if the def is not tainted--all members of the rhs
          expression tree are untainted then *)
-  let check_def (d : def term) (live : Live_variables.t) (env : E.t) (sub : sub term) do_symex proj : warns =
+  let check_def (d : def term) (live : Live_variables.t) (env : E.t) (sub : sub term) do_symex proj : warns Common.checker_res =
     let tid = Term.tid d in
     let lhs = Def.lhs d in
     let lhs_var_name = Var.name lhs in
     if ABI.var_name_is_flag lhs_var_name
-    then empty
+    then { warns = empty; stats = EvalStats.init }
     else
-      let is_tainted = is_tainted @@ E.lookup lhs_var_name env in
-      if not is_tainted
-      then empty
-      else
-        let init_state = State.init env tid live sub dep_bound do_symex proj in
-        let rhs = Def.rhs d in
-        let _, final_state = ST.run (check_exp rhs) init_state in
-        final_state.warns
+      let init_state = State.init env tid live sub dep_bound do_symex proj in
+      let rhs = Def.rhs d in
+      let _, final_state = ST.run (check_exp rhs) init_state in
+      { warns = final_state.warns; stats = final_state.estats }
+      (* let is_tainted = is_tainted @@ E.lookup lhs_var_name env in *)
+      (* if not is_tainted *)
+      (* then *)
+      (*   let stats = EvalStats.(init |> incr_taint_pruned) in *)
+      (*   { warns = empty; stats } *)
+      (* else *)
   
-  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : E.t) (sub : sub term) proj do_symex : warns =
+  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : E.t) (sub : sub term) proj do_symex : warns Common.checker_res =
     match e with
     | `Def d -> check_def d live env sub do_symex proj
-    | _ -> empty
+    | _ -> { warns = empty; stats = EvalStats.init }
 end

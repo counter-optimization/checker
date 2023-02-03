@@ -275,20 +275,20 @@ module Checker(N : NumericDomain) = struct
         (sub : sub term)
         do_symex
         proj
-      : warns =
+      : warns Common.checker_res =
     let tid = Term.tid d in
     let lhs = Def.lhs d in
     let lhs_var_name = Var.name lhs in
     if SS.mem dont_care_vars lhs_var_name
-    then empty
+    then { warns = empty; stats = EvalStats.init }
     else
       let init_state = State.init env tid live sub dep_bound do_symex proj in
       let rhs = Def.rhs d in
       let _, final_state = ST.run (check_exp rhs) init_state in
-      final_state.warns
+      { warns = final_state.warns; stats = final_state.estats }
   
-  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : Env.t) (sub : sub term) proj do_symex : warns =
+  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : Env.t) (sub : sub term) proj do_symex : warns Common.checker_res =
     match e with
     | `Def d -> check_def d live env sub do_symex proj
-    | _ -> empty
+    | _ -> { warns = empty; stats = EvalStats.init }
 end

@@ -8,6 +8,6 @@ module type S = sig
   type t = warns
   type env
 
-  val check_elt : Blk.elt -> Live_variables.t -> env -> sub term -> project -> bool -> warns
+  val check_elt : Blk.elt -> Live_variables.t -> env -> sub term -> project -> bool -> warns Common.checker_res 
   val name : string
 end
