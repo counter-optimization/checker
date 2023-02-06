@@ -116,9 +116,10 @@ module OpcodeAndAddrFiller = struct
                  KB.collect Theory.Label.addr label >>= fun maybe_addr ->
                  KB.collect Theory.Semantics.slot label >>= fun (insn : Insn.t) ->
                  let opcode_str = Insn.name insn in
-                 let maybe_addr_bitvector = Option.bind maybe_addr ~f:(fun addr ->
-                                                          let addr = Bitvector.code_addr target addr in
-                                                          Some (Bitvector.to_string addr)) in
+                 let maybe_addr_bitvector =
+                   Option.bind maybe_addr ~f:(fun addr ->
+                       let addr = Bitvector.code_addr target addr in
+                       Some (Format.sprintf "%a" Bitvector.pps addr)) in
                  let addr_str = Option.value maybe_addr_bitvector ~default:"" in
                  let bir_terms = KB.Value.get Term.slot sema in
                  let tids_lists = List.map bir_terms ~f:(fun b ->
@@ -255,6 +256,190 @@ module SubNameResolverFiller = struct
           let resolved = resolve_name unresolved queryable_named_symbols in
           { alert with sub_name = Some resolved }
         else alert)
+end
+
+module InsnIdxFiller = struct
+  type insn_idx = int
+
+  type addr_string = String.t
+  
+  type lut = (addr_string, insn_idx, String.comparator_witness) Map.t
+
+  type subname = String.t
+
+  module AddrMap = struct
+    include Map.Make_using_comparator(Int64)
+  end
+  
+  type bound = (addr * addr) [@@deriving sexp, compare, bin_io]
+  
+  (** (symbol_name, (start_addr, end_addr)) *)
+  type t = (string * bound) [@@deriving sexp, compare, bin_io]
+
+  type addr_set = Core.Set.M(Word).t
+  type fn_addrs = (subname, addr_set, String.comparator_witness) Map.t
+  type fn_bounds = (subname, bound, String.comparator_witness) Map.t
+
+  let cls : (t, unit) KB.cls = KB.Class.declare "symbol-starts-and-ends" ()
+                                 ~package:Common.package
+
+  let dom : t Seq.t KB.domain = KB.Domain.flat "symbol-starts-and-ends-seq-domain"
+                                  ~equal:(Seq.equal (fun x y -> compare x y = 0))
+                                  ~empty:Seq.empty
+
+  let result_slot = KB.Class.property
+                      cls
+                      "symbol-starts-and-ends-result-slot"
+                      dom
+                      ~package:Common.package
+
+  type all_addrs_idx
+  let all_addrs_cls : (all_addrs_idx, unit) KB.cls = KB.Class.declare "all-addrs" ()
+                                                       ~package:Common.package
+  let all_addrs_dom : Core.Set.M(Word).t KB.domain = KB.Domain.flat "all-addrs-domain"
+                                                  ~equal:Core.Set.equal
+                                                  ~empty:(Core.Set.empty (module Word))
+  let all_addrs_result_slot = KB.Class.property
+                                all_addrs_cls
+                                "all-addrs-result-slot"
+                                all_addrs_dom
+                                ~package:Common.package
+
+  open KB.Monad_infix 
+
+  (** (declare symbol-chunk (addr int) (size int) (root int))
+      (declare named-symbol (addr int) (name str))
+      (declare named-symbol (addr int) (name str))
+      (symbol-chunk 4298432 787 4298432)
+      (named-symbol 4298432 argon2_initialize) *)
+  let get_all_fn_addr_ranges proj : fn_bounds =
+    let filename = Option.value_exn (Project.get proj filename) in
+    (* let syms = Project.symbols proj |> Symtab.to_sequence in *)
+    (* let () = Seq.iter syms ~f:(fun sym -> Symtab. *)
+    let get_all_addr_ranges =
+      begin
+        Theory.Unit.for_file filename >>= fun unit ->
+        KB.collect Image.Spec.slot unit >>= fun ogre_doc ->
+        let named_sym_q = Ogre.Query.(select @@ from Image.Scheme.named_symbol) in
+        let symbol_ch_q = Ogre.Query.(select @@ from Image.Scheme.symbol_chunk) in
+        let named_sym_q_res = Ogre.eval (Ogre.collect named_sym_q) ogre_doc in
+        let symbol_ch_q_res = Ogre.eval (Ogre.collect symbol_ch_q) ogre_doc in
+        let named_syms, symbol_chunks =
+          match named_sym_q_res, symbol_ch_q_res with
+          | Ok ns, Ok sc -> ns, sc
+          | Error e1, Error e2 ->
+             failwith @@
+               sprintf "Error running query in Alert.InsnIdxFiller: %s && %s"
+                 (Error.to_string_hum e1)
+                 (Error.to_string_hum e2)
+          | Error e, _
+            | _, Error e ->
+             failwith @@
+               sprintf "Error running query in Alert.InsnIdxFiller: %s" @@
+                 Error.to_string_hum e
+        in
+        let named_syms = AddrMap.of_sequence_exn named_syms in
+        let symbol_sizes = Seq.map symbol_chunks ~f:(fun reg ->
+                               (reg.addr, reg.size))
+                           |> AddrMap.of_sequence_exn
+        in
+        let sym_addrs = AddrMap.keys named_syms in
+        let names_with_bounds =
+          List.map sym_addrs ~f:(fun sym_addr ->
+              let name = AddrMap.find_exn named_syms sym_addr in
+              let size = AddrMap.find_exn symbol_sizes sym_addr
+                         |> Word.of_int64 in
+              let start = Word.of_int64 sym_addr in
+              let bound = Word.(start + size - (one 64)) in
+              (name, (start, bound)))
+        in
+        let result = Seq.of_list names_with_bounds in
+        KB.Object.create cls >>= fun bounds_obj ->
+        KB.provide result_slot bounds_obj result >>= fun () ->
+        KB.return bounds_obj
+      end 
+    in
+    let symbol_addr_ranges = Toplevel.eval result_slot get_all_addr_ranges in
+    Map.of_sequence_exn (module String) symbol_addr_ranges
+
+  let get_all_addrs proj : Core.Set.M(Word).t =
+    let get_all_labels =
+      begin
+        KB.objects Theory.Program.cls >>= fun progs ->
+        let maddrs =
+          Seq.map progs ~f:(KB.collect Theory.Label.addr) in
+        KB.Seq.filter maddrs
+          ~f:(fun maddr -> maddr >>| Option.is_some) >>= fun filtered_addrs ->
+        KB.Seq.map filtered_addrs ~f:(fun maddr ->
+            maddr >>| (fun o -> Option.value_exn o)) >>= fun all_addrs ->
+        let word_addrs = Seq.map all_addrs ~f:(fun a ->
+                             Word.of_int64 @@ Bitvec.to_int64 a)
+                         |> Core.Set.of_sequence (module Word) in
+        KB.Object.create all_addrs_cls >>= fun result_obj ->
+        KB.provide all_addrs_result_slot result_obj word_addrs >>= fun () ->
+        KB.return result_obj
+      end
+    in
+    Toplevel.eval all_addrs_result_slot get_all_labels
+
+  let set_for_alert_set alerts proj =
+    let symbol_addr_ranges = get_all_fn_addr_ranges proj in
+    let all_addrs = get_all_addrs proj |> Core.Set.to_sequence in
+    let all_addrs_to_symbols =
+      Map.to_alist ~key_order:`Decreasing symbol_addr_ranges
+      |> Seq.of_list
+      |> Seq.fold ~init:(Map.empty (module Word))
+           ~f:(fun m (sym, (lo, hi)) ->
+             let size = Word.(hi - lo + (one 64)) |> Word.to_int_exn in
+             let all_addrs =
+               List.init size ~f:(fun i -> Word.(lo + (of_int ~width:64 i))) in
+             List.fold all_addrs ~init:m ~f:(fun m addr ->
+                 Map.set m ~key:addr ~data:sym))
+    in
+    let symbols_to_addrs =
+      Seq.fold all_addrs ~init:(Map.empty (module String))
+        ~f:(fun m addr ->
+          let addrs_fn = Map.find all_addrs_to_symbols addr in
+          match addrs_fn with
+          | Some sym ->
+             let cur_addrs = match Map.find m sym with
+               | Some addr_set -> addr_set
+               | None -> Core.Set.empty (module Word)
+             in
+             let with_this_addr = Core.Set.add cur_addrs addr in
+             Map.set m ~key:sym ~data:with_this_addr
+          | None ->
+             failwith @@
+               sprintf "Couldn't find addr %a in all labels in Alert.InsnIdxFiller"
+                 Word.pps addr)
+    in
+    let addr_to_str = sprintf "%a" Word.pps in
+    let addr_strings_to_indices =
+      Map.fold symbols_to_addrs ~init:(Map.empty (module String))
+        ~f:(fun ~key ~data m ->
+          let sorted_addrs = Core.Set.to_sequence ~order:`Decreasing data in
+          Seq.foldi sorted_addrs ~init:m
+            ~f:(fun idx m addr ->
+              let addr_s = addr_to_str addr in
+              Map.set m ~key:addr_s ~data:(key, idx)))
+    in
+    Set.map alerts ~f:(fun a ->
+        match a.addr with
+        | None ->
+           failwith @@
+             sprintf "Addr for alert with tid %a not set in InsnIdxFiller"
+               Tid.pps a.tid
+        | Some addr_s ->
+           let (sub, insn_idx) =
+             match Map.find addr_strings_to_indices addr_s with
+             | Some res -> res
+             | None ->
+                failwith @@
+                  sprintf "Couldn't find insn indice for addr %s"
+                    addr_s
+           in
+           { a with sub_name = Some sub;
+                    rpo_idx = Some insn_idx })
 end
 
 (* RPO = reverse post-order traversal *)

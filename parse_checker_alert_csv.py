@@ -28,20 +28,21 @@ if __name__ == '__main__':
     cs_opcodes = set()
     ss_opcodes = set()
     
-    for arg in sys.argv[1:]:
-        csv_file_name = arg
-
+    for csv_file_name in sys.argv[1:]:
         # calculate mir_opcodes -> live flags for all alerts
         with open(csv_file_name, mode="r") as csv_file:
             reader = csv.DictReader(csv_file)
 
             opcodes_to_live_flags = dict()
             opcodes_to_addrs = dict()
+            subs = set()
 
             logger.info(f"Processing csv file: {csv_file_name}")
             for row in reader:
                 logger.debug(f"Opcode ({row['mir_opcode']}) has live flags csv row: {row['live_flags']}")
                 opcode = row['mir_opcode']
+
+                subs.add(row['subroutine_name'])
 
                 if is_comp_simp_warn(row):
                     cs_opcodes.add(opcode)
