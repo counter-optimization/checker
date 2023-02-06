@@ -15,6 +15,8 @@ JANESTREET_CORE_BASE=/Users/mkf727/.opam/bap-alpha/lib/core
 
 COMP_SIMP_TEST_DIR = comp-simp-test-cases
 
+LIBNA=../../test/libna/libna_jammed_together.o
+
 .PHONY: clean bap-plugin libna_aesni libna_argon2id libna_aead libna_crypto_sign release debug
 
 release: bap-plugin
@@ -34,7 +36,7 @@ global_check: debug
 	--uarch-checker-cs \
 	--uarch-checker-no-symex \
 	--no-optimization --bil-optimization=0 \
-	../../test/libna/bap_ld_scalar_mult.o > libna.debug.log 2>&1 
+	$(LIBNA) > libna.debug.log 2>&1 
 	@echo -n "Done with analysis of argon2id"
 	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
 
