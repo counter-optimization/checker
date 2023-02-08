@@ -650,8 +650,8 @@ module Make(N : NumericDomain)
 
        (if Z.gt offs_size max_ptd_to_elts
         then
-          let () = printf "in load_of_bil_exp, pointer %s points to too many elements. maybe an unconstrained pointer?\n%!" (Exp.to_string idx) in
-          let () = printf "in load_of_bil_exp, returning top instead\n%!" in
+          (* let () = printf "in load_of_bil_exp, pointer %s points to too many elements. maybe an unconstrained pointer?\n%!" (Exp.to_string idx) in *)
+          (* let () = printf "in load_of_bil_exp, returning top instead\n%!" in *)
           Ok (N.top, m)
         else
           (* let () = printf "in load_of_bil_exp, computing is_global\n%!" in *)

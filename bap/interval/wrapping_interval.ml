@@ -242,9 +242,9 @@ let binop op left right : t =
   match left, right with
   | Interval {lo=lo1; hi=hi1; width=width1; signed=signed1},
     Interval {lo=lo2; hi=hi2; width=width2; signed=signed2} ->
-     let () = if width1 <> width2
-              then Format.printf "Width mismatch, width1: %d, width2: %d\n%!" width1 width2
-              else () in
+     (* let () = if width1 <> width2 *)
+     (*          then Format.printf "Width mismatch, width1: %d, width2: %d\n%!" width1 width2 *)
+     (*          else () in *)
      let x1 = op lo1 lo2 in
      let x2 = op lo1 hi2 in
      let x3 = op hi1 lo2 in

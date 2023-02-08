@@ -291,6 +291,23 @@ module Checker(N : NumericDomain) = struct
   let get_frees_of_mock_sub msub : Set.M(Var).t ST.t =
     ST.return @@ Sub.free_vars msub
 
+  let get_widths_of_free_vars msub : (string * int) list ST.t =
+    get_frees_of_mock_sub msub >>= fun freevars ->
+    ST.gets @@ fun st ->
+    Set.to_list freevars
+    |> List.filter ~f:(fun fv -> not @@ String.equal "mem" @@ Var.name fv) 
+    |> List.map ~f:(fun fv ->
+           let fvname = Var.name fv in
+           let width = E.lookup fvname st.env
+                       |> get_intvl
+                       |> Wrapping_interval.get_width
+           in
+           match width with
+           | Some width -> (fvname, width)
+           | None -> failwith @@
+                       sprintf "Couldn't get width for freevar: %s" fvname)
+    
+
   (* todo, don't do the symbolic execution twice *)
   let check_binop_operands (specials : (I.t -> I.t) list * (I.t -> I.t) list)
                            (op : binop) ~(check_left : bool) ~(check_right : bool)
@@ -305,7 +322,7 @@ module Checker(N : NumericDomain) = struct
       let check_operand result_acc special_for_bw =
         if could_be_special special_for_bw operand
         then
-          let () = printf "[compsimp] Could be special value\n%!" in
+          (* let () = printf "[compsimp] Could be special value\n%!" in *)
           result_acc >>= fun () ->
           ST.get () >>= fun st ->
           get_dependent_defs >>= fun deps ->
@@ -313,18 +330,20 @@ module Checker(N : NumericDomain) = struct
           if can_do_last_symex_check
           then
             let deps = Option.value_exn deps in
-            let () = printf "[compsimp] can do last symex check\n%!" in
-            let () = printf "[compsimp] deps are:\n%!";
-                     List.iter deps ~f:(printf "%a\n%!" Def.ppo) in
+            build_mock_sub_for_mx deps >>= fun mocksub ->
+            get_widths_of_free_vars mocksub >>= fun freevarwidths ->
+            (* let () = printf "[compsimp] can do last symex check\n%!" in *)
+            (* let () = printf "[compsimp] deps are:\n%!"; *)
+            (*          List.iter deps ~f:(printf "%a\n%!" Def.ppo) in *)
             let do_check = Symbolic.Executor.eval_def_list deps in
-            let init_st = Symbolic.Executor.init ~do_cs:true deps st.tid in
+            let init_st = Symbolic.Executor.init ~do_cs:true deps st.tid freevarwidths in
             let (), fini_st = Symbolic.Executor.run do_check init_st in
             let failed_cs_left = fini_st.failed_cs_left in
             let failed_cs_right = fini_st.failed_cs_right in
-            let () = Format.printf
-                       "Last ditch symex failed left? %B failed right? %B\n%!"
-                       failed_cs_left failed_cs_right
-            in
+            (* let () = Format.printf *)
+            (*            "Last ditch symex failed left? %B failed right? %B\n%!" *)
+            (*            failed_cs_left failed_cs_right *)
+            (* in *)
             let should_fail = (is_left && failed_cs_left) ||
                                 (not is_left && failed_cs_right)
             in
@@ -474,7 +493,8 @@ module Checker(N : NumericDomain) = struct
     let eval_in_ai (e : Bil.exp) (st : State.t) : N.t ST.t =
       let exp_evaler = AI.denote_exp e in
       let (res, _) = AI.ST.run exp_evaler st.env in
-      ST.return res in
+      ST.return res
+    in
     match e with
     | Bil.Load (_mem, idx, _endian, size) ->
        check_exp idx >>= fun offs ->

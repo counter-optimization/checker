@@ -124,11 +124,34 @@ module Checker(N : NumericDomain) = struct
     in
     dep_defs
 
-  (* TODO: don't flag on constants *)
-  (* cases:
-   * 1) if there has never been a store to this location and
-   *    the new value or the idx is not secret, do not alert
-   *)
+  let build_mock_sub_for_mx (defs : def term list) : sub term ST.t =
+    let blk = Blk.create ~defs () in
+    let free_vars = Blk.free_vars blk in
+    ST.update @@ (fun st ->
+      { st with symex_state = { st.symex_state with mock_free_vars = free_vars } })
+    >>= fun () ->
+    ST.gets @@ fun st ->
+               Sub.create ~blks:[blk] ~name:st.symex_state.mock_sub_name ()
+
+  let get_frees_of_mock_sub msub : Set.M(Var).t ST.t =
+    ST.return @@ Sub.free_vars msub
+
+  let get_widths_of_free_vars msub : (string * int) list ST.t =
+    get_frees_of_mock_sub msub >>= fun freevars ->
+    ST.gets @@ fun st ->
+    Set.to_list freevars
+    |> List.filter ~f:(fun fv -> not @@ String.equal "mem" @@ Var.name fv)
+    |> List.map ~f:(fun fv ->
+           let fvname = Var.name fv in
+           let width = Env.lookup fvname st.env
+                       |> get_intvl
+                       |> Wrapping_interval.get_width
+           in
+           match width with
+           | Some width -> (fvname, width)
+           | None -> failwith @@
+                       sprintf "Couldn't get width for freevar: %s" fvname)
+  
   let rec check_exp (e : Bil.exp) : N.t ST.t =
     let eval_in_ai (e : Bil.exp) (st : State.t) : N.t ST.t =
       let exp_evaler = AI.denote_exp e in
@@ -177,11 +200,13 @@ module Checker(N : NumericDomain) = struct
              if can_do_last_symex_check
              then
                let deps = Option.value_exn deps in
+               build_mock_sub_for_mx deps >>= fun mocksub ->
+               get_widths_of_free_vars mocksub >>= fun freevarwidths ->
                let do_check = Symbolic.Executor.eval_def_list deps in
-               let init_st = Symbolic.Executor.init ~do_ss:true deps st.tid in
+               let init_st = Symbolic.Executor.init ~do_ss:true deps st.tid freevarwidths in
                let (), fini_st = Symbolic.Executor.run do_check init_st in
                let failed_ss = fini_st.failed_ss in
-               let () = Format.printf "Last ditch symex failed ss? %B\n%!" failed_ss in
+               (* let () = Format.printf "Last ditch symex failed ss? %B\n%!" failed_ss in *)
                if failed_ss
                then
                  let alert_desc = "Silent stores failed last ditch sym ex check" in

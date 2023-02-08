@@ -35,7 +35,8 @@ module Executor = struct
       do_cs : bool;
       failed_ss : bool;
       failed_cs_left : bool;
-      failed_cs_right : bool
+      failed_cs_right : bool;
+      freevarwidths : (string * int) list
     }
 
   type t
@@ -50,9 +51,17 @@ module Executor = struct
   end
   open ST.Syntax
 
+  let debug_print_sym_env st : unit =
+    printf "var map is:\n%!";
+    List.iter st.symbolic_var_map ~f:(fun (varname, symname) ->
+        printf "(%s, %s)\n%!" varname symname);
+    printf "env map is:\n%!";
+    List.iter st.env ~f:(fun (symname, expr) ->
+        printf "(%s, %s)\n%!" symname (Expr.to_string expr))
+
   let init ?(do_ss : bool = false)
         ?(do_cs : bool = false)
-        defs target_tid = {
+        defs target_tid freevarwidths = {
       defs;
       target_tid;
       fresh_var_idx = 0;
@@ -66,7 +75,8 @@ module Executor = struct
       do_cs;
       failed_ss = false;
       failed_cs_left = false;
-      failed_cs_right = false
+      failed_cs_right = false;
+      freevarwidths
     }
 
   let coerce_shift op ctxt x y =
@@ -139,6 +149,8 @@ module Executor = struct
   let unop op x = z3_of_unop op ctxt x
 
   let word x =
+    let () = printf "in symbolic.word, word is %a, bitwidth is %d\n%!"
+               Word.ppo x (Word.bitwidth x) in
     let s = Bitv.mk_sort ctxt (Word.bitwidth x) in
     let x = Word.to_bitvec x in
     if Bitvec.fits_int x
@@ -278,6 +290,15 @@ module Executor = struct
     let neq = Bool.mk_not ctxt @@ Bool.mk_eq ctxt left right in
     push_constraint neq
 
+  let set_free_vars : unit ST.t =
+    ST.gets (fun st -> st.freevarwidths) >>= fun freevarwidths ->
+    List.fold freevarwidths ~init:(ST.return ())
+      ~f:(fun st (varname, width) ->
+        st >>= fun () ->
+        new_symbolic varname >>= fun symname ->
+        fresh_bv_for_symbolic symname width >>= fun symval ->
+        set_symbolic_val symname symval)
+
   module SilentStoreChecks = struct
     let on_fail = fun st -> { st with failed_ss = true }
     
@@ -374,6 +395,9 @@ module Executor = struct
        ST.return false
 
   let rec eval_exp (exp : Bil.exp) : Expr.expr option ST.t =
+    ST.get () >>= fun _ ->
+    let () = printf "in symbolic eval_exp, evaluating exp %a\n%!"
+               Exp.ppo exp in
     match exp with
     | Bil.Load (_, idx, en, sz) ->
        set_was_load true >>= fun () ->
@@ -398,7 +422,18 @@ module Executor = struct
            get_value_in_env_exn memcellsymname >>= fun symval ->
            ST.get () >>= fun st_wo_constraints ->
            add_neq_constraint curval symval >>= fun () ->
+           let start' = Time_ns.now () in
            check_now SilentStoreChecks.on_fail >>= fun _store_safe ->
+           let end' = Time_ns.now () in
+           let chk_time = Time_ns.diff end' start' |> Time_ns.Span.to_int_ns in
+
+           ST.get () >>= fun st_w_constraints ->
+           let () = Solver.add solver st_w_constraints.constraints in
+           let () = printf "[silentstores] constraints were:\n%!";
+                    printf "%s\n%!" @@ Solver.to_string solver in
+           let () = Solver.reset solver in
+           let () = printf "[silentstores] check time was: %d\n%!" chk_time in
+           
            (* ST.put st_wo_constraints >>= fun () -> *)
            ST.return None
          else
@@ -419,8 +454,6 @@ module Executor = struct
             begin
               if do_check && do_cs
               then
-                let () = printf "[compsimp] Doing checks on exp: %a\n%!"
-                           Exp.ppo exp in
                 CompSimpChecks.check_binop op l r >>= fun (do_left_checks, do_right_checks) ->
                 ST.get () >>= fun ini_st ->
                 do_left_checks >>= fun () ->
@@ -428,6 +461,13 @@ module Executor = struct
                 check_now CompSimpChecks.on_left_fail >>= fun _left_safe ->
                 let end' = Time_ns.now () in
                 let left_chk_time = Time_ns.diff end' start' |> Time_ns.Span.to_int_ns in
+                (* for profiling *)
+                ST.get () >>= fun with_left_const ->
+                let () = Solver.add solver with_left_const.constraints in
+                let () = printf "left check constraints were:\n%!";
+                         printf "%s\n%!" @@ Solver.to_string solver in
+                let () = Solver.reset solver in
+                
                 ST.gets (fun st -> st.failed_cs_left) >>= fun failed_cs_left ->
                 ST.put ini_st >>= fun () ->
                 do_right_checks >>= fun () ->
@@ -435,9 +475,16 @@ module Executor = struct
                 check_now CompSimpChecks.on_right_fail >>= fun _right_safe ->
                 let end' = Time_ns.now () in
                 let right_chk_time = Time_ns.diff end' start' |> Time_ns.Span.to_int_ns in
+                (* for profiling *)
+                ST.get () >>= fun with_right_const ->
+                let () = Solver.add solver with_right_const.constraints in
+                let () = printf "right check constraints were:\n%!";
+                         printf "%s\n%!" @@ Solver.to_string solver in
+                let () = Solver.reset solver in
+                
                 ST.gets (fun st -> st.failed_cs_right) >>= fun failed_cs_right ->
                 ST.put ini_st >>= fun () ->
-                let () = printf "In symex checker, left check time is %dns, right check time was %dns\n%!" left_chk_time right_chk_time in
+                let () = printf "In symex checker, left check time is %d, right check time was %d\n%!" left_chk_time right_chk_time in
                 ST.update @@ fun st ->
                 { st with failed_cs_left; failed_cs_right }
               else
@@ -522,7 +569,8 @@ module Executor = struct
     let rhs = Def.rhs dt in
     ST.gets (fun st ->
     printf "done evalling rhs of tid %a doing check? %B\n%!"
-      Tid.ppo tid st.do_check) >>= fun () ->
+      Tid.ppo tid st.do_check;
+    debug_print_sym_env st) >>= fun () ->
     eval_exp rhs >>= fun mr ->
     match mr with
     | Some result ->
@@ -553,10 +601,14 @@ module Executor = struct
         | [] -> ST.return ()
       else ST.return ()
     in
-    (* let () = Solver.reset solver in (\* clear old def constraints *\) *)
+    let () = Solver.reset solver in (* clear old def constraints *)
     (* let init = ST.return () in *)
     let () = printf "in symbolic.eval_def_list: defs are\n%!";
              List.iter defs ~f:(printf "%a\n%!" Def.ppo) in
+    set_free_vars >>= fun () ->
+    ST.gets (fun st ->
+        printf "done setting free vars\n%!";
+        debug_print_sym_env st) >>= fun () ->
     loop defs
     (* List.fold defs ~init ~f:(fun st dt -> *)
     (*     ST.get () >>= fun st -> *)
