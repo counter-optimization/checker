@@ -316,7 +316,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
            let rand_bound = 1001 in
            let rand_num = Random.int rand_bound in
            let do_check = rand_num < 30 in
-           let do_check = true in
            if do_check
            then
               let res = analyze_edge (module Chkr) edge in
