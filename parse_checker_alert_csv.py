@@ -73,3 +73,5 @@ if __name__ == '__main__':
     logger.info("Printing all SS opcodes")
     for opcode in sorted(ss_opcodes):
         print(opcode)
+
+    print(f"total transforms needed: {len(cs_opcodes) + len(ss_opcodes)}")

@@ -33,16 +33,18 @@ module Checker(N : NumericDomain) = struct
                tid : Tid.t;
                sub : sub term;
                proj : project;
+               profiling_data_path : string;
                do_symex : bool;
                estats : Common.EvalStats.t;
                symex_state : SymExChecker.state;
                liveness : Live_variables.t } 
 
-    let init in_state tid liveness sub dep_bound do_symex proj =
+    let init in_state tid liveness sub dep_bound do_symex proj profiling_data_path =
       { warns = Alert.Set.empty;
         env = in_state;
         tid = tid;
         proj;
+        profiling_data_path;
         do_symex;
         estats = EvalStats.init;
         sub;
@@ -203,7 +205,7 @@ module Checker(N : NumericDomain) = struct
                build_mock_sub_for_mx deps >>= fun mocksub ->
                get_widths_of_free_vars mocksub >>= fun freevarwidths ->
                let do_check = Symbolic.Executor.eval_def_list deps in
-               let init_st = Symbolic.Executor.init ~do_ss:true deps st.tid freevarwidths in
+               let init_st = Symbolic.Executor.init ~do_ss:true deps st.tid freevarwidths st.profiling_data_path in
                let (), fini_st = Symbolic.Executor.run do_check init_st in
                let failed_ss = fini_st.failed_ss in
                (* let () = Format.printf "Last ditch symex failed ss? %B\n%!" failed_ss in *)
@@ -300,6 +302,7 @@ module Checker(N : NumericDomain) = struct
         (sub : sub term)
         do_symex
         proj
+        profiling_data_path
       : warns Common.checker_res =
     let tid = Term.tid d in
     let lhs = Def.lhs d in
@@ -307,13 +310,13 @@ module Checker(N : NumericDomain) = struct
     if SS.mem dont_care_vars lhs_var_name
     then { warns = empty; stats = EvalStats.init }
     else
-      let init_state = State.init env tid live sub dep_bound do_symex proj in
+      let init_state = State.init env tid live sub dep_bound do_symex proj profiling_data_path in
       let rhs = Def.rhs d in
       let _, final_state = ST.run (check_exp rhs) init_state in
       { warns = final_state.warns; stats = final_state.estats }
   
-  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : Env.t) (sub : sub term) proj do_symex : warns Common.checker_res =
+  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : Env.t) (sub : sub term) proj do_symex profiling_data_path : warns Common.checker_res =
     match e with
-    | `Def d -> check_def d live env sub do_symex proj
+    | `Def d -> check_def d live env sub do_symex proj profiling_data_path
     | _ -> { warns = empty; stats = EvalStats.init }
 end

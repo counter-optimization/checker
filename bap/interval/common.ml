@@ -33,6 +33,13 @@ let secrets_csv_file_param = Extension.Configuration.parameter
                                Extension.Type.path
                                "secrets-csv-file"
 
+let symex_profiling_output_file_path_param = Extension.Configuration.parameter
+                                       ~doc:"CSV file where symex profiling data is stored"
+                               Extension.Type.path
+                               "symex-profiling-output-file"
+
+
+
 let config_file_path_param = Extension.Configuration.parameter
                                ~doc:"Path to cio config file"
                                Extension.Type.string

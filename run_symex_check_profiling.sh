@@ -6,10 +6,7 @@ function run_bap {
 	--uarch-checker-config-file=libsodium.uarch_checker.config \
 	--uarch-checker-ss \
 	--uarch-checker-cs \
+	--uarch-checker-symex-profiling-output-file=./symex-profiling-data-$1.csv \
 	--no-optimization --bil-optimization=0 \
-	$1 >> $2 2>&1
+	$2 &> $3
 }
-
-while true; do
-    run_bap $1 $2 $3
-done

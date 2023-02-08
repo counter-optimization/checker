@@ -91,13 +91,6 @@ module Mxtor = struct
          in
          let first_blk_tid = Term.tid first_blk in
          init_free_vars s >>= fun () ->
-         let now = Time_ns.now () in
-         let () = Format.printf "(%a) sym ex actual start at %s\n%!"
-                    Tid.pp target_tid
-                  @@ Time_ns.to_string now in
-         (* let () = printf "in on_start, execing linker on tid %a (parent sub tid %a)\n%!" *)
-         (*            Tid.ppo first_blk_tid *)
-         (*            Tid.ppo target_tid in *)
          Linker.exec (`tid first_blk_tid) >>= fun () ->
          Eval.halt >>=
            never_returns
@@ -176,16 +169,18 @@ module Checker(N : NumericDomain) = struct
         tid : Tid.t;
         liveness : Live_variables.t;
         symex_state : SymExChecker.state;
+        profiling_data_path : string;
         sub : sub term;
         do_symex : bool;
         proj : Project.t;
         estats : EvalStats.t;
       } 
 
-    let init in_state tid liveness sub dep_bound do_symex proj : t =
+    let init in_state tid liveness sub dep_bound do_symex proj profiling_data_path : t =
       { warns = Alert.Set.empty;
         env = in_state;
         tid = tid;
+        profiling_data_path;
         liveness = liveness;
         symex_state = { SymExChecker.default_state
                         with dep_bound };
@@ -300,10 +295,12 @@ module Checker(N : NumericDomain) = struct
            let fvname = Var.name fv in
            let width = E.lookup fvname st.env
                        |> get_intvl
-                       |> Wrapping_interval.get_width
-           in
+                       |> Wrapping_interval.get_width in
            match width with
-           | Some width -> (fvname, width)
+           | Some width ->
+              let () = printf "in comp simp, free var %s has width %d\n%!"
+                    fvname width in
+              (fvname, width)
            | None -> failwith @@
                        sprintf "Couldn't get width for freevar: %s" fvname)
     
@@ -336,7 +333,7 @@ module Checker(N : NumericDomain) = struct
             (* let () = printf "[compsimp] deps are:\n%!"; *)
             (*          List.iter deps ~f:(printf "%a\n%!" Def.ppo) in *)
             let do_check = Symbolic.Executor.eval_def_list deps in
-            let init_st = Symbolic.Executor.init ~do_cs:true deps st.tid freevarwidths in
+            let init_st = Symbolic.Executor.init ~do_cs:true deps st.tid freevarwidths st.profiling_data_path in
             let (), fini_st = Symbolic.Executor.run do_check init_st in
             let failed_cs_left = fini_st.failed_cs_left in
             let failed_cs_right = fini_st.failed_cs_right in
@@ -564,14 +561,14 @@ module Checker(N : NumericDomain) = struct
        don't comp simp check the lifted flag calculations, and
        don't comp simp check if the def is not tainted--all members of the rhs
          expression tree are untainted then *)
-  let check_def (d : def term) (live : Live_variables.t) (env : E.t) (sub : sub term) do_symex proj : warns Common.checker_res =
+  let check_def (d : def term) (live : Live_variables.t) (env : E.t) (sub : sub term) do_symex proj profiling_data_path : warns Common.checker_res =
     let tid = Term.tid d in
     let lhs = Def.lhs d in
     let lhs_var_name = Var.name lhs in
     if ABI.var_name_is_flag lhs_var_name
     then { warns = empty; stats = EvalStats.init }
     else
-      let init_state = State.init env tid live sub dep_bound do_symex proj in
+      let init_state = State.init env tid live sub dep_bound do_symex proj profiling_data_path in
       let rhs = Def.rhs d in
       let _, final_state = ST.run (check_exp rhs) init_state in
       { warns = final_state.warns; stats = final_state.estats }
@@ -582,9 +579,9 @@ module Checker(N : NumericDomain) = struct
       (*   { warns = empty; stats } *)
       (* else *)
   
-  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : E.t) (sub : sub term) proj do_symex : warns Common.checker_res =
+  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : E.t) (sub : sub term) proj do_symex profiling_data_path : warns Common.checker_res =
     match e with
-    | `Def d -> check_def d live env sub do_symex proj
+    | `Def d -> check_def d live env sub do_symex proj profiling_data_path
     | _ -> { warns = empty; stats = EvalStats.init }
 end
  
