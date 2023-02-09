@@ -17,7 +17,7 @@
   rax rcx rdx rbx rsp rbp rsi rdi r8 r9 r10 r11 r12 r13 r14 r15
   eax ecx edx ebx esp ebp esi edi r8d r9d r10d r11d r12d r13d r14d r15d
   ax cx dx bx sp bp si di r8w r9w r10w r11w r12w r13w r14w r15w
-  al cl dl r9b r10b r11b r12b r13b
+  al cl dl r9b r10b r11b r12b r13b ah
   register-indirect register-indirect?)
 
 
@@ -140,7 +140,7 @@
 
 ; gpr8
 
-(define gprs8 '(al cl dl bl spl bpl sil dil r8b r9b r10b r11b r12b r13b r14b r15b))
+(define gprs8 '(al cl dl bl spl bpl sil dil r8b r9b r10b r11b r12b r13b r14b r15b ah))
 
 (define-gpr gpr8 (rex reg)
   #:size 8
@@ -253,6 +253,7 @@
 (define r12b (symbol->gpr8 'r12b))
 (define r13b (symbol->gpr8 'r13b))
 
+(define ah (symbol->gpr8 'ah))
 
 ; displacement
 
