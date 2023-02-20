@@ -312,6 +312,14 @@ module InsnIdxFiller = struct
       (declare named-symbol (addr int) (name str))
       (symbol-chunk 4298432 787 4298432)
       (named-symbol 4298432 argon2_initialize) *)
+  (** Some functions have more than one symbol, like curve25519 sandy2x
+      ladder which is an assembly file that has a function that starts with
+      two labels:
+      #define  ladder  crypto_scalarmult_curve25519_sandy2x_ladder
+      #define _ladder _crypto_scalarmult_curve25519_sandy2x_ladder
+      ladder:
+      _ladder:
+      mov %rsp,%r11 *)
   let get_all_fn_addr_ranges proj : fn_bounds =
     let filename = Option.value_exn (Project.get proj filename) in
     (* let syms = Project.symbols proj |> Symtab.to_sequence in *)
@@ -338,20 +346,32 @@ module InsnIdxFiller = struct
                sprintf "Error running query in Alert.InsnIdxFiller: %s" @@
                  Error.to_string_hum e
         in
-        let named_syms = AddrMap.of_sequence_exn named_syms in
-        let symbol_sizes = Seq.map symbol_chunks ~f:(fun reg ->
-                               (reg.addr, reg.size))
+        (** the addrmap can't have duplicate keys. remove all non-linked
+            symbols since they all have v_addr of 0 causing an exception
+            to be raised when addrmap.of_sequence_exn is built. *)
+        let named_syms = AddrMap.of_sequence_reduce named_syms
+                  ~f:(fun name1 name2 ->
+                    if String.length name1 <= String.length name2
+                    then name1
+                    else name2)
+        in
+        let symbol_sizes = Seq.map symbol_chunks
+                             ~f:(fun reg -> (reg.addr, reg.size))
                            |> AddrMap.of_sequence_exn
         in
-        let sym_addrs = AddrMap.keys named_syms in
         let names_with_bounds =
-          List.map sym_addrs ~f:(fun sym_addr ->
-              let name = AddrMap.find_exn named_syms sym_addr in
-              let size = AddrMap.find_exn symbol_sizes sym_addr
-                         |> Word.of_int64 in
-              let start = Word.of_int64 sym_addr in
-              let bound = Word.(start + size - (one 64)) in
-              (name, (start, bound)))
+          AddrMap.fold named_syms  ~init:[] ~f:(fun ~key ~data acc ->
+              let name = data in
+              let sym_addr = key in
+              match AddrMap.find symbol_sizes sym_addr with
+              | None ->
+                 let () = Format.printf "Couldn't find symbol size for addr %a\n%!" Int64.pp sym_addr in
+                 acc
+              | Some size ->
+                 let size = Word.of_int64 size in
+                 let start = Word.of_int64 sym_addr in
+                 let bound = Word.(start + size - (one 64)) in
+                 (name, (start, bound)) :: acc)
         in
         let result = Seq.of_list names_with_bounds in
         KB.Object.create cls >>= fun bounds_obj ->

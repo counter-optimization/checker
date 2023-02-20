@@ -313,15 +313,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
        List.fold edges
          ~init:{ warns = Alert.Set.empty; stats = EvalStats.init }
          ~f:(fun acc edge ->
-           let rand_bound = 1001 in
-           let rand_num = Random.int rand_bound in
-           let do_check = rand_num < 30 in
-           if do_check
-           then
-              let res = analyze_edge (module Chkr) edge in
-              combine_res acc res
-           else
-             acc)
+           let res = analyze_edge (module Chkr) edge in
+           combine_res acc res)
      in
      let comp_simp_res =
        if do_cs_checks
@@ -498,7 +491,7 @@ let check_config config img ctxt proj : unit =
                            ~config
   in
   let all_alerts = analysis_results.alerts in
-  (* let all_alerts = Alert.InsnIdxFiller.set_for_alert_set all_alerts proj in *)
+  let all_alerts = Alert.InsnIdxFiller.set_for_alert_set all_alerts proj in
   let cs_stats = analysis_results.csevalstats in
   let ss_stats = analysis_results.ssevalstats in
   let () = Format.printf "Done processing all functions\n%!" in
