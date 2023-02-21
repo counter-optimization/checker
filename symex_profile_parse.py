@@ -1,5 +1,6 @@
 import csv
 import sys
+import re
 from random import choices
 
 import matplotlib.pyplot as plt
@@ -9,18 +10,28 @@ import statistics
 # silentstores uses leftconstraints
 symex_profiling_csv_fieldnames = ['is_cs', 'is_ss','sstime','lefttime','righttime','leftconstraints','rightconstraints','dependentdefs']
 
-binop_syms = ['+',
-              '-',
-              '*',
-              '/',
-              '%',
-              '<',
-              '>',
-              '&',
-              '|',
-              '^',
-              '<<',
-              '>>']
+binop_syms = [' + ',
+              ' - ',
+              ' * ',
+              ' / ',
+              ' % ',
+              ' < ',
+              ' > ',
+              ' & ',
+              ' | ',
+              ' ^ ',
+              ' << ',
+              ' >> ']
+
+def contains_128_bit_mul(depdefs):
+     """
+     not a fullproof check since not handling XMM/YMM regs,
+     just this format:
+     extend:128[RCX] * extend:128[RSI]
+     """
+     target_rex = re.compile(r"(extend|pad):128\[.*?\] \* (extend|pad):128\[.*?\]")
+     is_found = re.search(target_rex, depdefs) is not None
+     return is_found
 
 def pull_symbol_distributions(dependentdefs):
     counts = [dependentdefs.count(sym) for sym in binop_syms]
@@ -87,8 +98,31 @@ if __name__ == '__main__':
     fig.savefig('all-ss-times.png', bbox_inches='tight')
     
     # computation simplification statistics and plotting
-    fig, ax = plt.subplots(figsize=(11,8))
 
+    # what do the dependent defs look like for the cs check
+    # that takes the most amount of time?
+    print_longest_N = 3000
+    num_containing_128bit_mul = 0
+    sort_key = lambda row: int(row['lefttime']) + int(row['righttime'])
+    sorted_cs = sorted(cs, key=sort_key, reverse=True)
+    with open("longest_checks_no_128bit_mul.txt", "w") as of, \
+         open("longest_checks_info.txt", "w") as f:
+        for ii in range(print_longest_N):
+            longest = sorted_cs[ii]
+            depdefs = str(longest['dependentdefs'])
+            if contains_128_bit_mul(depdefs):
+                num_containing_128bit_mul += 1
+            else:
+                of.write(f"{ii}th longest cs check (check time: {sort_key(longest) * 10**-9} seconds) has dependent defs:\n")
+                of.write(depdefs + '\n')
+                of.write(str(longest['binop_dist']) + '\n')
+            f.write(f"{ii}th longest cs check (check time: {sort_key(longest) * 10**-9} seconds) has dependent defs:\n")
+            f.write(depdefs + '\n')
+            f.write(str(longest['binop_dist']) + '\n')
+    print(f"{num_containing_128bit_mul} of the slowest {print_longest_N} comp simp symex checks contain a 128 bit multiplication")
+
+    # plot distribution of cs checking times
+    fig, ax = plt.subplots(figsize=(11,8))
     cs_times = np.array(cs_times)
     cs_bins = [400_000,
                500_000,
