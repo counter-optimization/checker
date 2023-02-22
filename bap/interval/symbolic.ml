@@ -485,20 +485,20 @@ module Executor = struct
            get_value_in_env_exn memcellsymname >>= fun symval ->
            ST.get () >>= fun st_wo_constraints ->
            add_neq_constraint curval symval >>= fun () ->
-           let start' = Time_ns.now () in
+           (* let start' = Time_ns.now () in *)
            check_now SilentStoreChecks.on_fail >>= fun _store_safe ->
-           let end' = Time_ns.now () in
-           let chk_time = Time_ns.diff end' start' |> Time_ns.Span.to_int_ns in
+           (* let end' = Time_ns.now () in *)
+           (* let chk_time = Time_ns.diff end' start' |> Time_ns.Span.to_int_ns in *)
 
-           ST.get () >>= fun st_w_constraints ->
-           let () = Solver.add solver st_w_constraints.constraints in
-           let profiling_data_csv_row = sprintf ",1,%d,,,\"%s\",,\"%s\""
-                                          chk_time
-                                          (Solver.to_string solver)
-                                          (def_terms_as_string st_w_constraints)
-           in
-           let () = write_csv_profile_data st_w_constraints profiling_data_csv_row in
-           let () = Solver.reset solver in
+           (* ST.get () >>= fun st_w_constraints -> *)
+           (* let () = Solver.add solver st_w_constraints.constraints in *)
+           (* let profiling_data_csv_row = sprintf ",1,%d,,,\"%s\",,\"%s\"" *)
+           (*                                chk_time *)
+           (*                                (Solver.to_string solver) *)
+           (*                                (def_terms_as_string st_w_constraints) *)
+           (* in *)
+           (* let () = write_csv_profile_data st_w_constraints profiling_data_csv_row in *)
+           (* let () = Solver.reset solver in *)
            (* ST.put st_wo_constraints >>= fun () -> *)
            ST.return None
          else
@@ -522,37 +522,36 @@ module Executor = struct
                 CompSimpChecks.check_binop op l r >>= fun (do_left_checks, do_right_checks) ->
                 ST.get () >>= fun ini_st ->
                 do_left_checks >>= fun () ->
-                let start' = Time_ns.now () in
+                (* let start' = Time_ns.now () in *)
                 check_now CompSimpChecks.on_left_fail >>= fun _left_safe ->
-                let end' = Time_ns.now () in
-                let left_chk_time = Time_ns.diff end' start' |> Time_ns.Span.to_int_ns in
+                (* let end' = Time_ns.now () in *)
+                (* let left_chk_time = Time_ns.diff end' start' |> Time_ns.Span.to_int_ns in *)
                 (* for profiling *)
-                ST.get () >>= fun with_left_const ->
-                let () = Solver.add solver with_left_const.constraints in
-                let left_const_str = Solver.to_string solver in
-                let () = Solver.reset solver in
+                (* ST.get () >>= fun with_left_const -> *)
+                (* let () = Solver.add solver with_left_const.constraints in *)
+                (* let left_const_str = Solver.to_string solver in *)
+                (* let () = Solver.reset solver in *)
                                 
                 ST.gets (fun st -> st.failed_cs_left) >>= fun failed_cs_left ->
                 ST.put ini_st >>= fun () ->
                 do_right_checks >>= fun () ->
-                let start' = Time_ns.now () in
+                (* let start' = Time_ns.now () in *)
                 check_now CompSimpChecks.on_right_fail >>= fun _right_safe ->
-                let end' = Time_ns.now () in
-                let right_chk_time = Time_ns.diff end' start' |> Time_ns.Span.to_int_ns in
+                (* let end' = Time_ns.now () in *)
+                (* let right_chk_time = Time_ns.diff end' start' |> Time_ns.Span.to_int_ns in *)
                 (* for profiling *)
-                ST.get () >>= fun with_right_const ->
-                let () = Solver.add solver with_right_const.constraints in
-                let right_const_str = Solver.to_string solver in
-                let () = Solver.reset solver in
-
-                let profiling_data_csv_row = sprintf "1,,,%d,%d,\"%s\",\"%s\",\"%s\""
-                                               left_chk_time
-                                               right_chk_time
-                                               left_const_str
-                                               right_const_str
-                                               (def_terms_as_string with_right_const)
-                in
-                let () = write_csv_profile_data with_right_const profiling_data_csv_row in
+                (* ST.get () >>= fun with_right_const -> *)
+                (* let () = Solver.add solver with_right_const.constraints in *)
+                (* let right_const_str = Solver.to_string solver in *)
+                (* let () = Solver.reset solver in *)
+                (* let profiling_data_csv_row = sprintf "1,,,%d,%d,\"%s\",\"%s\",\"%s\"" *)
+                (*                                left_chk_time *)
+                (*                                right_chk_time *)
+                (*                                left_const_str *)
+                (*                                right_const_str *)
+                (*                                (def_terms_as_string with_right_const) *)
+                (* in *)
+                (* let () = write_csv_profile_data with_right_const profiling_data_csv_row in *)
                 ST.gets (fun st -> st.failed_cs_right) >>= fun failed_cs_right ->
                 ST.put ini_st >>= fun () ->
                 (* let () = printf "In symex checker, left check time is %d, right check time was %d\n%!" left_chk_time right_chk_time in *)
