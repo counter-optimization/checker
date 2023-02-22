@@ -16,19 +16,20 @@ let string_of_reason = function
 module T = struct
   (* flags_live: not computed or computed and true or false *)
   (* problematic_operands: doesn't apply or a list of operand indices *)
-  type t = { sub_name : string option;
-             opcode : string option;
-             addr : word option;
-             rpo_idx : int option;
-             tid : Tid.t;
-             flags_live : SS.t;
-             is_live : bool option;
-             problematic_operands : int list option;
-             left_val : string option;
-             right_val : string option;
-             reason : reason;
-             desc : string }
-             [@@deriving sexp, bin_io, compare]
+  type t = {
+      sub_name : string option;
+      opcode : string option;
+      addr : word option;
+      rpo_idx : int option;
+      tid : Tid.t;
+      flags_live : SS.t;
+      is_live : bool option;
+      problematic_operands : int list option;
+      left_val : string option;
+      right_val : string option;
+      reason : reason;
+      desc : string
+    } [@@deriving sexp, bin_io, compare]
 end
 
 module Cmp = struct
@@ -52,9 +53,12 @@ let str_of_flags_live (flags_live : SS.t) : string =
        let cur_name_with_comma = cur_flag_name ^ "," in
        loop (next_flag_name :: rest_flags) (acc ^ cur_name_with_comma) in
   loop flags_live ""
-  
 
-module OpcodeAndAddrFiller = struct
+module type Pass = sig
+  val set_for_alert_set : Set.t -> Project.t -> Set.t
+end
+
+module OpcodeAndAddrFiller : Pass = struct
   (* let set_opcode_for_alert (alert : T.t) : T.t = *)
   (*   let st = Toplevel.current () in *)
   open KB.Monad_infix
@@ -260,7 +264,7 @@ module SubNameResolverFiller = struct
         else alert)
 end
 
-module InsnIdxFiller = struct
+module InsnIdxFiller : Pass = struct
   type insn_idx = int
 
   type addr_string = String.t
@@ -484,10 +488,11 @@ module InsnIdxFiller = struct
         alert_to_sym_and_idx alert idx_tree sym_tree)
 end
 
-module RemoveAllEmptySubName = struct
+module RemoveAllEmptySubName : Pass = struct
   let set_for_alert_set alerts proj =
     Set.filter alerts ~f:(fun alert -> Option.is_some alert.sub_name)
 end
+
 
 (* RPO = reverse post-order traversal *)
 (* module RpoIdxAlertFiller = struct *)
@@ -679,3 +684,80 @@ let save_alerts_to_csv_file ~(filename : string) (alerts : Set.t) : unit =
                            |> List.map ~f:to_csv_row in
   let final_rows = List.cons csv_header alerts_as_csv_rows in
   Out_channel.write_lines filename final_rows
+
+module RemoveSpuriousCompSimpAlerts : Pass = struct
+  let is_comp_simp_warn alert =
+    match alert.reason with
+    | CompSimp -> true
+    | _ -> false
+  
+  let is_bad_subtract_warn alert =
+    let subtract_opcode_substring = "sub" in
+    let cmp_opcode_substring = "cmp" in
+    match alert.opcode, alert.problematic_operands with
+    | None, _ -> false
+    | _, None -> false
+    | Some opcode, Some warn_op_indices ->
+       let opcode = String.lowercase opcode in
+       let is_sub = String.is_substring opcode ~substring:subtract_opcode_substring in
+       let is_sub = is_sub || String.is_substring opcode ~substring:cmp_opcode_substring in
+       let is_left_operand = Int.equal 0 in
+       let warns_on_left_operand = List.find warn_op_indices ~f:is_left_operand
+                                   |> Option.is_some
+       in
+       is_sub && warns_on_left_operand
+
+  let is_bad_mov_warn alert =
+    (** this also prunes any cmov instructions *)
+    let mov_opcode_substring = "mov" in
+    let store_opcode_substring = "stos" in
+    match alert.opcode with
+    | None -> false
+    | Some _opcode ->
+       let opcode = String.lowercase _opcode in
+       let is_mov_or_cmov = String.is_substring opcode ~substring:mov_opcode_substring in
+       let is_string_store = String.is_substring opcode ~substring:store_opcode_substring in
+       is_mov_or_cmov || is_string_store
+
+  (** these should really be pruned out by a good interprocedural taint analysis.
+      todo, revisit this once we have the interproc taint analysis. *)
+  let is_bad_stack_op alert =
+    let ret = "ret" in
+    let pop = "pop" in
+    let push = "push" in
+    match alert.opcode with
+    | None -> false
+    | Some _opcode ->
+       let opcode = String.lowercase _opcode in
+       let is_ret = String.is_substring opcode ~substring:ret in
+       let is_pop = String.is_substring opcode ~substring:pop in
+       let is_push = String.is_substring opcode ~substring:push in
+       is_ret || is_pop || is_push
+
+  let do_check_with_log checkname check alert : bool =
+    let result = check alert in
+    if result
+    then
+      let () = printf "Comp simp spurious alert pruner (%s) pruned alert:\n%!"
+                 checkname
+      in
+      let () = printf "%s\n%!" @@ to_string alert in
+      result
+    else
+      result
+  
+  let is_spurious alert =
+    do_check_with_log "SpuriousSUB" is_bad_subtract_warn alert ||
+    do_check_with_log "SpuriousMOVorCMOVorSTOS" is_bad_mov_warn alert ||
+    do_check_with_log "SpuriousStackOperation" is_bad_stack_op alert
+
+  (** accept all alerts that:
+      1) are not comp simp alerts OR
+      2) are comp simp alerts that are not spurious *)
+  let set_for_alert_set alerts proj =
+    let filter_condition alert =
+      (is_comp_simp_warn alert && not (is_spurious alert)) ||
+        not (is_comp_simp_warn alert)
+    in
+    Set.filter alerts ~f:filter_condition
+end

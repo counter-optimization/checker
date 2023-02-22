@@ -577,15 +577,25 @@ module Executor = struct
        has_symbolic_name varname >>= fun namepresent ->
        let symname = if namepresent
                      then get_symbolic_name_exn varname
-                     else new_symbolic varname in
+                     else new_symbolic varname
+       in
        symname >>= fun symname ->
        has_value_in_env symname >>= fun valpresent ->
-       let bw = match ABI.size_of_var_name varname with
+       ST.gets (fun st ->
+           List.Assoc.find st.freevarwidths ~equal:String.equal varname)
+       >>= fun maybe_bw ->
+       let bw = match maybe_bw with
          | Some bw -> bw
-         | None -> 64 in
+         | None -> (match ABI.size_of_var_name varname with
+                    | Some bw -> bw
+                    | None ->
+                       failwith @@
+                         sprintf "Couldn't get bitwidth for var %s in symex compile of var" varname)
+       in
        let symval = if valpresent
                     then get_value_in_env_exn symname
-                    else fresh_bv_for_symbolic symname bw in
+                    else fresh_bv_for_symbolic symname bw
+       in
        symval >>= fun symval ->
        ST.return @@ Some symval
     | Bil.Int w -> ST.return @@ Some (word w)

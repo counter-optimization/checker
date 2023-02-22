@@ -493,6 +493,7 @@ let check_config config img ctxt proj : unit =
   let all_alerts = analysis_results.alerts in
   let all_alerts = Alert.InsnIdxFiller.set_for_alert_set all_alerts proj in
   let all_alerts = Alert.RemoveAllEmptySubName.set_for_alert_set all_alerts proj in
+  let all_alerts = Alert.RemoveSpuriousCompSimpAlerts.set_for_alert_set all_alerts proj in
   let cs_stats = analysis_results.csevalstats in
   let ss_stats = analysis_results.ssevalstats in
   let () = Format.printf "Done processing all functions\n%!" in
