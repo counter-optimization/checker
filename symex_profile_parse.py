@@ -7,6 +7,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import statistics
 
+import argparse
+
+parser = argparse.ArgumentParser(prog='Symex profiling data parser')
+parser.add_argument('-t', '--is-twenty-five', action='store_true')
+
 # silentstores uses leftconstraints
 symex_profiling_csv_fieldnames = ['is_cs', 'is_ss','sstime','lefttime','righttime','leftconstraints','rightconstraints','dependentdefs']
 
@@ -40,6 +45,14 @@ def pull_symbol_distributions(dependentdefs):
 
 if __name__ == '__main__':
     filenames = sys.argv[1:]
+
+    args, filenames = parser.parse_known_args()
+
+    is_twenty_five_bound = False
+    if args.is_twenty_five:
+        is_twenty_five_bound = True
+
+    print(f"is_twenty_five_bound: {is_twenty_five_bound}")
 
     ss = []
     cs = []
@@ -113,10 +126,10 @@ if __name__ == '__main__':
             if contains_128_bit_mul(depdefs):
                 num_containing_128bit_mul += 1
             else:
-                of.write(f"{ii}th longest cs check (check time: {sort_key(longest) * 10**-9} seconds) has dependent defs:\n")
+                of.write(f"{ii}th longest cs check (check time: {int(longest['lefttime']) * 10**-9}, {int(longest['righttime']) * 10**-9} seconds) has dependent defs:\n")
                 of.write(depdefs + '\n')
                 of.write(str(longest['binop_dist']) + '\n')
-            f.write(f"{ii}th longest cs check (check time: {sort_key(longest) * 10**-9} seconds) has dependent defs:\n")
+            f.write(f"{ii}th longest cs check (check time: {int(longest['lefttime']) * 10**-9}, {int(longest['righttime']) * 10**-9} seconds) has dependent defs:\n")
             f.write(depdefs + '\n')
             f.write(str(longest['binop_dist']) + '\n')
     print(f"{num_containing_128bit_mul} of the slowest {print_longest_N} comp simp symex checks contain a 128 bit multiplication")
@@ -124,19 +137,23 @@ if __name__ == '__main__':
     # plot distribution of cs checking times
     fig, ax = plt.subplots(figsize=(11,8))
     cs_times = np.array(cs_times)
-    cs_bins = [400_000,
-               500_000,
-               1_000_000,
-               100_000_000,
-               500_000_000,
-               1_000_000_000,
-               5_000_000_000,
-               10_000_000_000,
-               20_000_000_000,
-               50_000_000_000,
-               100_000_000_000,
-               200_000_000_000]
-    counts, edges = np.histogram(cs_times, bins=cs_bins)
+    if not is_twenty_five_bound:
+        cs_bins = [400_000,
+                   500_000,
+                   1_000_000,
+                   100_000_000,
+                   500_000_000,
+                   1_000_000_000,
+                   5_000_000_000,
+                   10_000_000_000,
+                   20_000_000_000,
+                   50_000_000_000,
+                   100_000_000_000,
+                   200_000_000_000]
+        counts, edges = np.histogram(cs_times, bins=cs_bins)
+    else:
+        counts, edges = np.histogram(cs_times)
+        cs_bins = edges
     print(f"sum of counts are: {counts.sum()}")
     print(f"histogram counts are {counts}")
     print(f"histogram edges are {edges}")
