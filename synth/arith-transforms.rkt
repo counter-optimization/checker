@@ -225,9 +225,14 @@
    ; product is in rax. subtract shifted r11, r10 to get expected value
    ; (equivalent to subtracting eax * 2^63 and ecx * 2^63)
    (shl-r/m64-imm8 r10 (bv 63 8))
+   (mov-r/m8-imm8 r10b (bv 1 8))
    (shl-r/m64-imm8 r11 (bv 63 8))
+   (mov-r/m8-imm8 r11b (bv 1 8))
+   (mov-r/m8-r8 dl al)
+   (mov-r/m8-imm8 al (bv 2 8))
    (sub-r/m64-r64 rax r10)
    (sub-r/m64-r64 rax r11)
+   (mov-r/m8-r8 al dl)
    ; set edx to contain upper 32 bits of the product (from rax)
    (mov-r/m64-r64 rdx rax)
    (mov-r/m16-imm16 dx (bv 1 16)) ; mask lower bits for safe shift
