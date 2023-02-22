@@ -353,7 +353,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let alerts_with_subs = Alert.Set.map all_alerts
                               ~f:(fun alert ->
                                 { alert with sub_name = Some (Sub.name sub) }) in
-     let alerts_with_ops_addrs = Alert.OpcodeAndAddrFiller.set_opcode_and_addr_for_alert_set alerts_with_subs proj in
+     let alerts_with_ops_addrs = Alert.OpcodeAndAddrFiller.set_for_alert_set alerts_with_subs proj in
      let alerts_with_liveness = Alert.LivenessFiller.set_for_alert_set alerts_with_ops_addrs liveness in
      (* let alerts_with_rpo_indices = Alert.RpoIdxAlertFiller.set_rpo_indices_for_alert_set alerts_with_liveness sub proj rpo_traversal in *)
      (* let alerts_with_resolved_names = Alert.SubNameResolverFiller.resolve_sub_names alerts_with_rpo_indices proj in *)
@@ -492,6 +492,7 @@ let check_config config img ctxt proj : unit =
   in
   let all_alerts = analysis_results.alerts in
   let all_alerts = Alert.InsnIdxFiller.set_for_alert_set all_alerts proj in
+  let all_alerts = Alert.RemoveAllEmptySubName.set_for_alert_set all_alerts proj in
   let cs_stats = analysis_results.csevalstats in
   let ss_stats = analysis_results.ssevalstats in
   let () = Format.printf "Done processing all functions\n%!" in

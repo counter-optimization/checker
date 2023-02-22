@@ -1,6 +1,7 @@
 open Core
 open Bap.Std
 open Common
+(* open Interval_tree *)
 
 module Theory = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
@@ -17,7 +18,7 @@ module T = struct
   (* problematic_operands: doesn't apply or a list of operand indices *)
   type t = { sub_name : string option;
              opcode : string option;
-             addr : string option;
+             addr : word option;
              rpo_idx : int option;
              tid : Tid.t;
              flags_live : SS.t;
@@ -27,7 +28,7 @@ module T = struct
              right_val : string option;
              reason : reason;
              desc : string }
-             [@@deriving sexp, bin_io, compare, equal]
+             [@@deriving sexp, bin_io, compare]
 end
 
 module Cmp = struct
@@ -80,7 +81,7 @@ module OpcodeAndAddrFiller = struct
                                                            "final_opcode_alist"
                                                            opcode_alist_domain
   
-  type addr_alist = (tid * String.t) list [@@deriving compare, sexp, bin_io]
+  type addr_alist = (tid * word) list [@@deriving compare, sexp, bin_io]
 
   let addr_alist_cls : (addr_alist, unit) KB.cls = KB.Class.declare
                                                      ~public:true
@@ -102,8 +103,9 @@ module OpcodeAndAddrFiller = struct
                                                            "final_addr_alist"
                                                            addr_alist_domain
 
-  type map = (Tid.t, string, Tid.comparator_witness) Map.t
-  type lut = map * map
+  type tidmap = (Tid.t, string, Tid.comparator_witness) Map.t
+  type addrmap = (Tid.t, word, Tid.comparator_witness) Map.t
+  type lut = addrmap * tidmap
 
   let build_lut (proj : Project.t) : lut =
     let target = Project.target proj in
@@ -117,10 +119,10 @@ module OpcodeAndAddrFiller = struct
                  KB.collect Theory.Semantics.slot label >>= fun (insn : Insn.t) ->
                  let opcode_str = Insn.name insn in
                  let maybe_addr_bitvector =
-                   Option.bind maybe_addr ~f:(fun addr ->
-                       let addr = Bitvector.code_addr target addr in
-                       Some (Format.sprintf "%a" Bitvector.pps addr)) in
-                 let addr_str = Option.value maybe_addr_bitvector ~default:"" in
+                   Option.bind maybe_addr ~f:(fun bitv ->
+                       Option.return @@ Bitvector.code_addr target bitv)
+                 in
+                 let addr_str = Option.value maybe_addr_bitvector ~default:(Word.one 64) in
                  let bir_terms = KB.Value.get Term.slot sema in
                  let tids_lists = List.map bir_terms ~f:(fun b ->
                                              Blk.elts b
@@ -163,7 +165,7 @@ module OpcodeAndAddrFiller = struct
       | `Ok lut -> lut in
     (addr_lut, opcode_lut)
 
-  let set_addr_for_alert (alert : T.t) (addr_lut : map) : T.t =
+  let set_addr_for_alert (alert : T.t) (addr_lut : addrmap) : T.t =
     let alert_tid = alert.tid in
     match Map.find addr_lut alert_tid with
     | Some addr_str -> 
@@ -171,7 +173,7 @@ module OpcodeAndAddrFiller = struct
     | None ->
        failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut, set_addr_for_alert, couldn't get addr for alert on tid: %a" Tid.pps alert_tid
 
-  let set_opcode_for_alert (alert : T.t) (opcode_lut : map) : T.t =
+  let set_opcode_for_alert (alert : T.t) (opcode_lut : tidmap) : T.t =
     let alert_tid = alert.tid in
     match Map.find opcode_lut alert_tid with
     | Some opcode_str -> 
@@ -179,7 +181,7 @@ module OpcodeAndAddrFiller = struct
     | None ->
        failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut, set_opcode_for_alert, couldn't get opcode for alert on tid: %a" Tid.pps alert_tid
                                             
-  let set_opcode_and_addr_for_alert_set (alerts : Set.t) (proj : Project.t) : Set.t =
+  let set_for_alert_set (alerts : Set.t) (proj : Project.t) : Set.t =
     let lut : lut = build_lut proj in
     let (addr_lut, opcode_lut) = lut in
     Set.map alerts ~f:(fun alert -> set_addr_for_alert alert addr_lut)
@@ -305,7 +307,23 @@ module InsnIdxFiller = struct
                                 all_addrs_dom
                                 ~package:Common.package
 
-  open KB.Monad_infix 
+  open KB.Monad_infix
+
+  module Bound = struct
+    type point = word [@@deriving compare, sexp_of]
+    
+    type t = point * point [@@deriving compare, sexp_of]
+
+    let sexp_of_point = Word.sexp_of_t
+
+    let compare_point = Word.compare
+
+    let lower : t -> point = fst
+
+    let upper : t -> point = snd
+  end
+
+  module IntvlTree = Interval_tree.Make(Bound)
 
   (** (declare symbol-chunk (addr int) (size int) (root int))
       (declare named-symbol (addr int) (name str))
@@ -320,7 +338,7 @@ module InsnIdxFiller = struct
       ladder:
       _ladder:
       mov %rsp,%r11 *)
-  let get_all_fn_addr_ranges proj : fn_bounds =
+  let get_all_fn_addr_ranges proj =
     let filename = Option.value_exn (Project.get proj filename) in
     (* let syms = Project.symbols proj |> Symtab.to_sequence in *)
     (* let () = Seq.iter syms ~f:(fun sym -> Symtab. *)
@@ -349,38 +367,32 @@ module InsnIdxFiller = struct
         (** the addrmap can't have duplicate keys. remove all non-linked
             symbols since they all have v_addr of 0 causing an exception
             to be raised when addrmap.of_sequence_exn is built. *)
-        let named_syms = AddrMap.of_sequence_reduce named_syms
-                  ~f:(fun name1 name2 ->
-                    if String.length name1 <= String.length name2
-                    then name1
-                    else name2)
-        in
         let symbol_sizes = Seq.map symbol_chunks
                              ~f:(fun reg -> (reg.addr, reg.size))
-                           |> AddrMap.of_sequence_exn
+        in
+        let to_symbol_bound name (addr : Int64.t) (sz : Int64.t) =
+          let sz = Word.of_int64 sz in
+          let start_ = Word.of_int64 addr in
+          let end_ = Word.(start_ + sz - (one 64)) in
+          (name, (start_, end_))
         in
         let names_with_bounds =
-          AddrMap.fold named_syms  ~init:[] ~f:(fun ~key ~data acc ->
-              let name = data in
-              let sym_addr = key in
-              match AddrMap.find symbol_sizes sym_addr with
-              | None ->
-                 let () = Format.printf "Couldn't find symbol size for addr %a\n%!" Int64.pp sym_addr in
-                 acc
-              | Some size ->
-                 let size = Word.of_int64 size in
-                 let start = Word.of_int64 sym_addr in
-                 let bound = Word.(start + size - (one 64)) in
-                 (name, (start, bound)) :: acc)
+          Seq.map named_syms ~f:(fun (target_addr, name) ->
+              Seq.fold symbol_sizes ~init:[] ~f:(fun matches (cur_addr, sz) ->
+                  if Int64.equal target_addr cur_addr
+                  then to_symbol_bound name target_addr sz :: matches
+                  else matches)
+              |> Seq.of_list)
+          |> Seq.join
         in
-        let result = Seq.of_list names_with_bounds in
         KB.Object.create cls >>= fun bounds_obj ->
-        KB.provide result_slot bounds_obj result >>= fun () ->
+        KB.provide result_slot bounds_obj names_with_bounds >>= fun () ->
         KB.return bounds_obj
       end 
     in
     let symbol_addr_ranges = Toplevel.eval result_slot get_all_addr_ranges in
-    Map.of_sequence_exn (module String) symbol_addr_ranges
+    symbol_addr_ranges
+    (* Map.of_sequence_exn (module String) symbol_addr_ranges *)
 
   let get_all_addrs proj : Core.Set.M(Word).t =
     let get_all_labels =
@@ -402,136 +414,151 @@ module InsnIdxFiller = struct
     in
     Toplevel.eval all_addrs_result_slot get_all_labels
 
+  let symbol_bounds_to_interval_tree bounds =
+    Seq.fold bounds ~init:IntvlTree.empty ~f:(fun tree (name, bound) ->
+        IntvlTree.add tree bound name)
+  
+  let build_all_addrs_intvl_tree all_addrs bounds : word IntvlTree.t =
+    Seq.fold all_addrs ~init:IntvlTree.empty ~f:(fun tree (addr : word) ->
+        (** This returns a sequence of all containing bounds *)
+        let addr_bds = IntvlTree.lookup bounds addr in
+        Seq.fold addr_bds ~init:tree ~f:(fun tree (bd, _symname) ->
+            IntvlTree.add tree bd addr))
+
+  (** for polymorphism *)
+  let get_indices = IntvlTree.lookup
+  let get_syms = IntvlTree.lookup
+
+  let get_insn_idx addrs addr : int option =
+    Option.(>>|) 
+      (List.findi addrs ~f:(fun _idx -> Word.equal addr))
+      fst
+  
+  let alert_to_sym_and_idx alert idx_tree sym_tree : T.t =
+    let addr = match alert.addr with
+      | Some addr -> addr
+      | None ->
+         failwith "Alert addresses should be filled out before filling insn indices and symbol names"
+    in
+    let syms = get_syms sym_tree addr in
+    let addrs = get_indices idx_tree addr in
+    let sorted_addrs = List.sort (Seq.to_list addrs) ~compare:(fun l r ->
+                           Word.compare (snd l) (snd r))
+                     |> List.map ~f:snd 
+    in
+    let () = Seq.iter syms ~f:(fun (_, s) ->
+                 printf "addr %a in sym %s\n%!" Word.ppo addr s) in
+    (* let () = List.iter sorted_addrs ~f:(fun i -> *)
+    (*              printf "addr %a has addrs %a\n%!" Word.ppo addr Word.ppo i) in *)
+    let sym = if Seq.length syms > 1
+              then
+                let () = printf "in Alert.InsnIdxFiller, addr %a has more than one symbol:\n%!"
+                           Word.ppo addr in
+                let () = Seq.iter syms ~f:(fun (_, s) ->
+                             printf "addr %a in sym %s\n%!" Word.ppo addr s) in
+                Some (snd @@ Seq.hd_exn syms)
+              else
+                match Seq.hd syms with
+                | Some sym -> Some (snd @@ sym)
+                | None ->
+                   let () = printf "in Alert.InsnIdxFiller, couldn't find sym for addr %a" Word.ppo addr
+                   in
+                   None
+    in
+    let insn_idx = match get_insn_idx sorted_addrs addr with
+      | Some idx -> Some idx
+      | None ->
+         let () = printf "in Alert.InsnIdxFiller, couldn't find insn idx for addr %a in list %s" Word.ppo addr (List.to_string ~f:Word.to_string sorted_addrs)
+         in
+         None
+    in
+    { alert with sub_name = sym;
+                 rpo_idx = insn_idx }
+
   let set_for_alert_set alerts proj =
     let symbol_addr_ranges = get_all_fn_addr_ranges proj in
+    let sym_tree = symbol_bounds_to_interval_tree symbol_addr_ranges in
     let all_addrs = get_all_addrs proj |> Core.Set.to_sequence in
-    let all_addrs_to_symbols =
-      Map.to_alist ~key_order:`Decreasing symbol_addr_ranges
-      |> Seq.of_list
-      |> Seq.fold ~init:(Map.empty (module Word))
-           ~f:(fun m (sym, (lo, hi)) ->
-             let size = Word.(hi - lo + (one 64)) |> Word.to_int_exn in
-             let all_addrs =
-               List.init size ~f:(fun i -> Word.(lo + (of_int ~width:64 i))) in
-             List.fold all_addrs ~init:m ~f:(fun m addr ->
-                 Map.set m ~key:addr ~data:sym))
-    in
-    let symbols_to_addrs =
-      Seq.fold all_addrs ~init:(Map.empty (module String))
-        ~f:(fun m addr ->
-          let addrs_fn = Map.find all_addrs_to_symbols addr in
-          match addrs_fn with
-          | Some sym ->
-             let cur_addrs = match Map.find m sym with
-               | Some addr_set -> addr_set
-               | None -> Core.Set.empty (module Word)
-             in
-             let with_this_addr = Core.Set.add cur_addrs addr in
-             Map.set m ~key:sym ~data:with_this_addr
-          | None ->
-             failwith @@
-               sprintf "Couldn't find addr %a in all labels in Alert.InsnIdxFiller"
-                 Word.pps addr)
-    in
-    let addr_to_str = sprintf "%a" Word.pps in
-    let addr_strings_to_indices =
-      Map.fold symbols_to_addrs ~init:(Map.empty (module String))
-        ~f:(fun ~key ~data m ->
-          let sorted_addrs = Core.Set.to_sequence ~order:`Decreasing data in
-          Seq.foldi sorted_addrs ~init:m
-            ~f:(fun idx m addr ->
-              let addr_s = addr_to_str addr in
-              Map.set m ~key:addr_s ~data:(key, idx)))
-    in
-    Set.map alerts ~f:(fun a ->
-        match a.addr with
-        | None ->
-           failwith @@
-             sprintf "Addr for alert with tid %a not set in InsnIdxFiller"
-               Tid.pps a.tid
-        | Some addr_s ->
-           let (sub, insn_idx) =
-             match Map.find addr_strings_to_indices addr_s with
-             | Some res -> res
-             | None ->
-                failwith @@
-                  sprintf "Couldn't find insn indice for addr %s"
-                    addr_s
-           in
-           { a with sub_name = Some sub;
-                    rpo_idx = Some insn_idx })
+    let idx_tree = build_all_addrs_intvl_tree all_addrs sym_tree in
+    Set.map alerts ~f:(fun alert ->
+        alert_to_sym_and_idx alert idx_tree sym_tree)
+end
+
+module RemoveAllEmptySubName = struct
+  let set_for_alert_set alerts proj =
+    Set.filter alerts ~f:(fun alert -> Option.is_some alert.sub_name)
 end
 
 (* RPO = reverse post-order traversal *)
-module RpoIdxAlertFiller = struct
+(* module RpoIdxAlertFiller = struct *)
 
-  type lut = (Tid.t, string, Tid.comparator_witness) Map.t
+(*   type lut = (Tid.t, string, Tid.comparator_witness) Map.t *)
   
-  let set_rpo_idx_for_alert (alert : T.t) (rpo_addrs : string list) : T.t =
-    let this_addr : string = match alert.addr with
-      | Some addr_str -> addr_str
-      | None -> failwith "In RpoIdxAlertFiller.set_rpo_idx_for_alert, alerts should have addr strings filled out before filling out rpo indices" in
-    let rpo_idx = match List.findi rpo_addrs ~f:(fun _idx elt ->
-                                           String.equal elt this_addr) with
-      | Some (rpo_idx, _elt) -> rpo_idx
-      | None -> failwith @@ sprintf "In RpoIdxAlertFiller.set_rpo_idx_for_alert, didn't find addr %s, probably mismatch in alert vs sub" this_addr in
-    { alert with rpo_idx = Some rpo_idx }
+(*   let set_rpo_idx_for_alert (alert : T.t) (rpo_addrs : string list) : T.t = *)
+(*     let this_addr : string = match alert.addr with *)
+(*       | Some addr_str -> addr_str *)
+(*       | None -> failwith "In RpoIdxAlertFiller.set_rpo_idx_for_alert, alerts should have addr strings filled out before filling out rpo indices" in *)
+(*     let rpo_idx = match List.findi rpo_addrs ~f:(fun _idx elt -> *)
+(*                                            String.equal elt this_addr) with *)
+(*       | Some (rpo_idx, _elt) -> rpo_idx *)
+(*       | None -> failwith @@ sprintf "In RpoIdxAlertFiller.set_rpo_idx_for_alert, didn't find addr %s, probably mismatch in alert vs sub" this_addr in *)
+(*     { alert with rpo_idx = Some rpo_idx } *)
 
-  let build_lut_for_sub sub : lut =
-    let blks = Term.enum blk_t sub in
-    let defs = Seq.map blks ~f:(Term.enum def_t) |> Seq.join in
-    let jmps = Seq.map blks ~f:(Term.enum jmp_t) |> Seq.join in
-    let phis = Seq.map blks ~f:(Term.enum phi_t) |> Seq.join in
-    let tid_and_addr_of_term : 'a. 'a term -> (tid * string) option = fun t ->
-      let tid = Term.tid t in
-      begin
-        match Term.get_attr t address with
-        | Some addr -> Some addr
-        | None ->
-           let () = printf "In RpoIdxAlertFiller.build_lut_for_sub, didn't find addr for tid %a" Tid.ppo tid in
-           None
-      end
-      |> Option.bind ~f:(fun addr ->
-             let addr_str = Word.to_string addr in
-             Some (tid, addr_str)) in
-    let def_alist = Seq.map defs ~f:tid_and_addr_of_term in
-    let jmp_alist = Seq.map jmps ~f:tid_and_addr_of_term in
-    let phi_alist = Seq.map phis ~f:tid_and_addr_of_term in
-    let all_alist = Seq.append def_alist jmp_alist
-                    |> Seq.append phi_alist
-                    |> Seq.filter ~f:Option.is_some
-                    |> Seq.map ~f:(fun p -> Option.value_exn p)
-                    |> Seq.to_list in
-    Map.of_alist_exn (module Tid) all_alist
+(*   let build_lut_for_sub sub : lut = *)
+(*     let blks = Term.enum blk_t sub in *)
+(*     let defs = Seq.map blks ~f:(Term.enum def_t) |> Seq.join in *)
+(*     let jmps = Seq.map blks ~f:(Term.enum jmp_t) |> Seq.join in *)
+(*     let phis = Seq.map blks ~f:(Term.enum phi_t) |> Seq.join in *)
+(*     let tid_and_addr_of_term : 'a. 'a term -> (tid * string) option = fun t -> *)
+(*       let tid = Term.tid t in *)
+(*       begin *)
+(*         match Term.get_attr t address with *)
+(*         | Some addr -> Some addr *)
+(*         | None -> *)
+(*            let () = printf "In RpoIdxAlertFiller.build_lut_for_sub, didn't find addr for tid %a" Tid.ppo tid in *)
+(*            None *)
+(*       end *)
+(*       |> Option.bind ~f:(fun addr -> *)
+(*              let addr_str = Word.to_string addr in *)
+(*              Some (tid, addr_str)) in *)
+(*     let def_alist = Seq.map defs ~f:tid_and_addr_of_term in *)
+(*     let jmp_alist = Seq.map jmps ~f:tid_and_addr_of_term in *)
+(*     let phi_alist = Seq.map phis ~f:tid_and_addr_of_term in *)
+(*     let all_alist = Seq.append def_alist jmp_alist *)
+(*                     |> Seq.append phi_alist *)
+(*                     |> Seq.filter ~f:Option.is_some *)
+(*                     |> Seq.map ~f:(fun p -> Option.value_exn p) *)
+(*                     |> Seq.to_list in *)
+(*     Map.of_alist_exn (module Tid) all_alist *)
 
-  let set_rpo_indices_for_alert_set (alerts : Set.t)
-                                    (sub : sub term)
-                                    (proj : Project.t)
-                                    (rpo_traversal : Calling_context.t Sequence.t) : Set.t =
-    (* let () = printf "Setting rpo indices for sub %s\n%!" @@ Sub.name sub in *)
-    let rpo_tids = Seq.map rpo_traversal ~f:Calling_context.to_insn_tid in
-    (* let () = printf "Rpo tids are:\n%!"; *)
-    (*          Seq.iter rpo_tids ~f:(fun tid -> printf "%a\n%!" Tid.ppo tid) in *)
-    (* let lut = OpcodeAndAddrFiller.build_lut proj in *)
-    (* let (addr_lut, _) = lut in *)
-    let addr_lut = build_lut_for_sub sub in
-    (* let () = printf "addr_lut is:\n%!"; *)
-    (*          Map.iteri addr_lut ~f:(fun ~key ~data -> *)
-    (*                      printf "\t%a : %s\n%!" Tid.ppo key data) in *)
-    let addr_of_tid_exn tid : string option = match Map.find addr_lut tid with
-      | Some tid -> Some tid
-      | None ->
-         let () = printf "In RpoIdxAlertFiller.set_rpo_indices_for_alert_set, couldn't find addr in addr_lut for tid %a"
-                    Tid.ppo tid in
-         None in
-    let rpo_addrs = Seq.map rpo_tids ~f:addr_of_tid_exn in
-    let grouped_rpo_addrs = Seq.to_list rpo_addrs
-                            |> List.filter ~f:Option.is_some
-                            |> List.map ~f:(fun mrpo -> Option.value_exn mrpo)
-                            |> List.group ~break:String.(<>) in
-    let rpo_addrs = List.map grouped_rpo_addrs ~f:List.hd_exn in
-    Set.map alerts ~f:(fun a -> set_rpo_idx_for_alert a rpo_addrs)
-end
+(*   let set_rpo_indices_for_alert_set (alerts : Set.t) *)
+(*                                     (sub : sub term) *)
+(*                                     (proj : Project.t) *)
+(*                                     (rpo_traversal : Calling_context.t Sequence.t) : Set.t = *)
+(*     (\* let () = printf "Setting rpo indices for sub %s\n%!" @@ Sub.name sub in *\) *)
+(*     let rpo_tids = Seq.map rpo_traversal ~f:Calling_context.to_insn_tid in *)
+(*     (\* let () = printf "Rpo tids are:\n%!"; *\) *)
+(*     (\*          Seq.iter rpo_tids ~f:(fun tid -> printf "%a\n%!" Tid.ppo tid) in *\) *)
+(*     (\* let lut = OpcodeAndAddrFiller.build_lut proj in *\) *)
+(*     (\* let (addr_lut, _) = lut in *\) *)
+(*     let addr_lut = build_lut_for_sub sub in *)
+(*     (\* let () = printf "addr_lut is:\n%!"; *\) *)
+(*     (\*          Map.iteri addr_lut ~f:(fun ~key ~data -> *\) *)
+(*     (\*                      printf "\t%a : %s\n%!" Tid.ppo key data) in *\) *)
+(*     let addr_of_tid_exn tid : string option = match Map.find addr_lut tid with *)
+(*       | Some tid -> Some tid *)
+(*       | None -> *)
+(*          let () = printf "In RpoIdxAlertFiller.set_rpo_indices_for_alert_set, couldn't find addr in addr_lut for tid %a" *)
+(*                     Tid.ppo tid in *)
+(*          None in *)
+(*     let rpo_addrs = Seq.map rpo_tids ~f:addr_of_tid_exn in *)
+(*     let grouped_rpo_addrs = Seq.to_list rpo_addrs *)
+(*                             |> List.filter ~f:Option.is_some *)
+(*                             |> List.map ~f:(fun mrpo -> Option.value_exn mrpo) *)
+(*                             |> List.group ~break:String.(<>) in *)
+(*     let rpo_addrs = List.map grouped_rpo_addrs ~f:List.hd_exn in *)
+(*     Set.map alerts ~f:(fun a -> set_rpo_idx_for_alert a rpo_addrs) *)
+(* end *)
 
 module LivenessFiller = struct
   type liveness = Live_variables.t
@@ -606,7 +633,8 @@ let to_string (x : t) : string =
                        Tid.pps tid in
        failwith err_msg in
   let opcode_str = Option.value opcode ~default:"" in
-  let addr_str = Option.value addr ~default:"" in
+  let addr_str = Option.value addr ~default:(Word.one 64)
+                 |> sprintf "%a" Word.pps in
   let rpo_idx_str = match rpo_idx with
     | Some i -> Int.to_string i
     | None -> "" in

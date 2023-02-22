@@ -1041,8 +1041,7 @@ module AbstractInterpreter(N: NumericDomain)
               0003b2d9: ZF := 0 = #12582455
 
               for now, return top *)
-           ST.return N.top
-        
+           ST.return N.bot
         | Bil.Let (var, exp, body) ->
            ST.get () >>= fun prestate -> 
            denote_exp exp >>= fun binding ->

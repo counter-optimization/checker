@@ -203,7 +203,7 @@ module Checker(N : NumericDomain) = struct
     { st with estats = updater st.estats }
 
   (* todo, make an optional CL arg *)
-  let dep_bound = 10
+  let dep_bound = 25
 
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with

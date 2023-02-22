@@ -357,7 +357,8 @@ let booleq x y : t =
      if Z.(leq (max lo1 lo2) (min hi1 hi2))
      then b1
      else b0
-  | _ -> failwith "in wrapping_interval.bool_eq, can't compare two non intervals"
+  | _ -> b0
+     (* failwith "in wrapping_interval.bool_eq, can't compare two non intervals" *)
 
 let boolneq x y =
   match x, y with
