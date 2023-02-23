@@ -64,6 +64,9 @@ module Executor = struct
     printf "var map is:\n%!";
     List.iter st.symbolic_var_map ~f:(fun (varname, symname) ->
         printf "(%s, %s)\n%!" varname symname);
+    printf "freevarwidths alist is:\n%!";
+    List.iter st.freevarwidths ~f:(fun (varname, width) ->
+        printf "(%s, %d)\n%!" varname width);
     printf "env map is:\n%!";
     List.iter st.env ~f:(fun (symname, expr) ->
         printf "(%s, %s)\n%!" symname (expr_to_str expr))
@@ -581,22 +584,25 @@ module Executor = struct
        in
        symname >>= fun symname ->
        has_value_in_env symname >>= fun valpresent ->
-       ST.gets (fun st ->
-           List.Assoc.find st.freevarwidths ~equal:String.equal varname)
-       >>= fun maybe_bw ->
-       let bw = match maybe_bw with
-         | Some bw -> bw
-         | None -> (match ABI.size_of_var_name varname with
-                    | Some bw -> bw
-                    | None ->
-                       failwith @@
-                         sprintf "Couldn't get bitwidth for var %s in symex compile of var" varname)
-       in
-       let symval = if valpresent
-                    then get_value_in_env_exn symname
-                    else fresh_bv_for_symbolic symname bw
-       in
-       symval >>= fun symval ->
+       begin
+         if valpresent
+         then get_value_in_env_exn symname
+         else
+           begin
+             ST.gets (fun st ->
+                 List.Assoc.find st.freevarwidths ~equal:String.equal varname)
+             >>= fun maybe_bw ->
+             let bw = match maybe_bw with
+               | Some bw -> bw
+               | None -> (match ABI.size_of_var_name varname with
+                          | Some bw -> bw
+                          | None ->
+                             failwith @@
+                               sprintf "Couldn't get bitwidth for var %s in symex compile of var" varname)
+             in
+             fresh_bv_for_symbolic symname bw
+           end
+       end >>= fun symval ->
        ST.return @@ Some symval
     | Bil.Int w -> ST.return @@ Some (word w)
     | Bil.Cast (typ, sz, x) ->
@@ -682,13 +688,12 @@ module Executor = struct
       else ST.return ()
     in
     let () = Solver.reset solver in (* clear old def constraints *)
-    (* let init = ST.return () in *)
-    (* let () = printf "in symbolic.eval_def_list: defs are\n%!"; *)
-    (*          List.iter defs ~f:(printf "%a\n%!" Def.ppo) in *)
+    let () = printf "in symbolic.eval_def_list: defs are\n%!";
+             List.iter defs ~f:(printf "%a\n%!" Def.ppo) in
     set_free_vars >>= fun () ->
-    (* ST.gets (fun st -> *)
-    (*     printf "done setting free vars\n%!"; *)
-    (*     debug_print_sym_env st) >>= fun () -> *)
+    ST.gets (fun st ->
+        printf "done setting free vars\n%!";
+        debug_print_sym_env st) >>= fun () ->
     loop defs
     (* List.fold defs ~init ~f:(fun st dt -> *)
     (*     ST.get () >>= fun st -> *)
