@@ -298,8 +298,8 @@ module Checker(N : NumericDomain) = struct
                        |> Wrapping_interval.get_width in
            match width with
            | Some width ->
-              let () = printf "in comp simp, free var %s has width %d\n%!"
-                    fvname width in
+              (* let () = printf "in comp simp, free var %s has width %d\n%!" *)
+              (*       fvname width in *)
               (fvname, width)
            | None -> failwith @@
                        sprintf "Couldn't get width for freevar: %s" fvname)
