@@ -244,3 +244,271 @@
 (define spec-mul32
   (list
    (mul-r/m32 ecx)))
+
+
+(define attempt-mul64
+  (list
+   ; save arguments (rax and rcx)
+   (mov-r/m64-r64 r10 rcx)
+   (mov-r/m64-r64 r11 rax)
+
+   ; calculate first term: x[31:] * y[31:]
+    ; prepare arguments
+   (mov-r64-imm64 rdx (bv (expt 2 63) 64))
+   (mov-r/m32-r32 ecx r10d)
+   (sub-r/m64-r64 rcx rdx)
+
+   (mov-r/m32-r32 eax r11d) 
+   (sub-r/m64-r64 rax rdx)
+   (mov-r/m64-r64 r12 rax)
+    ; perform safe mul
+   (mul-r/m64 rcx)
+    ; revert mask in result
+   (shl-r/m64-imm8 rcx (bv 63 8))
+   (mov-r/m8-imm8 cl (bv 1 8))
+   (shl-r/m64-imm8 r12 (bv 63 8))
+   (mov-r/m8-imm8 r12b (bv 1 8))
+   (mov-r/m8-r8 dl al)
+   (mov-r/m8-imm8 al (bv 2 8))
+   (sub-r/m64-r64 rax rcx)
+   (sub-r/m64-r64 rax r12)
+   (mov-r/m8-r8 al dl)
+    ; save result
+   (mov-r/m64-r64 r13 rax)
+
+   ; calculate 2nd term: x[31:] * y[:32]
+    ; prepare arguments
+   (mov-r64-imm64 rdx (bv (expt 2 63) 64))
+   (mov-r/m32-r32 ecx r10d)
+   (sub-r/m64-r64 rcx rdx)
+
+   (mov-r/m64-r64 rax r11)
+   (mov-r/m8-r8 al (bv 1 8))
+   (shr-r/m64-imm8 rax (bv 32 8))
+   (sub-r/m64-r64 rax rdx)
+   (sub-r/m64-r64 rax rdx)
+   (mov-r/m64-r64 r12 rax)
+    ; perform safe mul
+   (mul-r/m64 rcx)
+    ; revert mask in result
+   (shl-r/m64-imm8 rcx (bv 63 8))
+   (mov-r/m8-imm8 cl (bv 1 8))
+   (shl-r/m64-imm8 r12 (bv 63 8))
+   (mov-r/m8-imm8 r12b (bv 1 8))
+   (mov-r/m8-r8 dl al)
+   (mov-r/m8-imm8 al (bv 2 8))
+   (sub-r/m64-r64 rax rcx)
+   (sub-r/m64-r64 rax r12)
+   (mov-r/m8-r8 al dl)
+    ; save result
+    ; use PUSH in actual transform
+   (mov-r/m64-r64 r14 rax)
+
+   ; calculate 3rd term: x[:32] * y[31:]
+    ; prepare arguments
+   (mov-r64-imm64 rdx (bv (expt 2 63) 64))
+   (mov-r/m64-r64 rcx r10)
+   (mov-r/m8-r8 cl (bv 1 8))
+   (shr-r/m64-imm8 rcx (bv 32 8))
+   (sub-r/m64-r64 rcx rdx)
+   (sub-r/m64-r64 rcx rdx)
+
+   (mov-r/m32-r32 eax r11d)
+   (sub-r/m64-r64 rax rdx)
+   (mov-r/m64-r64 r12 rax)
+    ; perform safe mul
+   (mul-r/m64 rcx)
+    ; revert mask in result
+   (shl-r/m64-imm8 rcx (bv 63 8))
+   (mov-r/m8-imm8 cl (bv 1 8))
+   (shl-r/m64-imm8 r12 (bv 63 8))
+   (mov-r/m8-imm8 r12b (bv 1 8))
+   (mov-r/m8-r8 dl al)
+   (mov-r/m8-imm8 al (bv 2 8))
+   (sub-r/m64-r64 rax rcx)
+   (sub-r/m64-r64 rax r12)
+   (mov-r/m8-r8 al dl)
+    ; save result
+    ; use PUSH in actual transform
+   (mov-r/m64-r64 r15 rax)
+
+   ; calculate 4th term: x[:32] * y[:32]
+    ; prepare arguments
+   (mov-r64-imm64 rdx (bv (expt 2 63) 64))
+   (mov-r/m64-r64 rcx r10)
+   (mov-r/m8-r8 cl (bv 1 8))
+   (shr-r/m64-imm8 rcx (bv 32 8))
+   (sub-r/m64-r64 rcx rdx)
+   (sub-r/m64-r64 rcx rdx)
+
+   (mov-r/m64-r64 rax r11)
+   (mov-r/m8-r8 al (bv 1 8))
+   (shr-r/m64-imm8 rax (bv 32 8))
+   (sub-r/m64-r64 rax rdx)
+   (sub-r/m64-r64 rax rdx)
+   (mov-r/m64-r64 r12 rax)
+    ; perform safe mul
+   (mul-r/m64 rcx)
+    ; revert mask in result
+   (shl-r/m64-imm8 rcx (bv 63 8))
+   (mov-r/m8-imm8 cl (bv 1 8))
+   (shl-r/m64-imm8 r12 (bv 63 8))
+   (mov-r/m8-imm8 r12b (bv 1 8))
+   (mov-r/m8-r8 dl al)
+   (mov-r/m8-imm8 al (bv 2 8))
+   (sub-r/m64-r64 rax rcx)
+   (sub-r/m64-r64 rax r12)
+   (mov-r/m8-r8 al dl)
+    ; rax contains result
+
+   ; recombine terms
+    ; put 4th term (upper 64 bits) in rdx
+   (mov-r/m64-r64 rdx rax)
+    ; put 1st term (lower 64 bits) in rax
+   (mov-r/m64-r64 rax r13)
+    ; safely add 3rd term (middle 64 bits)
+      (mov-r/m64-r64 rcx r15) ; use POP in real transform
+      (mov-r/m64-imm32 r11 (bv 0 32))
+      (shld-r/m64-r64-imm8 r11 rcx (bv 32 8))
+      ; now r11 has the upper 32 bits of 3rd term in its lower half
+      (mov-r/m32-r32 ecx ecx)
+      (sub-r/m64-imm32 rcx (bv (expt 2 31) 32))
+      (sub-r/m64-imm32 rcx (bv (expt 2 31) 32))
+      (shl-r/m64-imm8 rcx (bv 32 8))
+      ; now rcx has the lower 32 bits of 3rd term in its upper half
+      ; mask lower bits in rcx, rax so we can add safely
+      (mov-r/m8-r8 r12b al)
+      (mov-r/m8-imm8 al (bv 1 8))
+      (mov-r/m8-imm8 cl (bv 1 8))
+      ; perform addition
+      (add-r/m64-r64 rax rcx)
+      (adc-r/m64-r64 rdx r11)
+      (mov-r/m8-r8 al r12b)
+    ; safely add 2nd term (middle 64 bits)
+      (mov-r/m64-r64 rcx r14) ; use POP in real transform
+      (mov-r/m64-imm32 r11 (bv 0 32))
+      (shld-r/m64-r64-imm8 r11 rcx (bv 32 8))
+      ; now r11 has the upper 32 bits of 3rd term in its lower half
+      (mov-r/m32-r32 ecx ecx)
+      (sub-r/m64-imm32 rcx (bv (expt 2 31) 32))
+      (sub-r/m64-imm32 rcx (bv (expt 2 31) 32))
+      (shl-r/m64-imm8 rcx (bv 32 8))
+      ; now rcx has the lower 32 bits of 3rd term in its upper half
+      ; mask lower bits in rcx, rax so we can add safely
+      (mov-r/m8-r8 r12b al)
+      (mov-r/m8-imm8 al (bv 1 8))
+      (mov-r/m8-imm8 cl (bv 1 8))
+      ; perform addition
+      (add-r/m64-r64 rax rcx)
+      (adc-r/m64-r64 rdx r11)
+      (mov-r/m8-r8 al r12b)
+    ; product should be correct now
+
+   ; restore rcx
+   (mov-r/m64-r64 rcx r10)
+  ))
+
+(define spec-mul64
+  (list
+   (mul-r/m64 rcx)))
+
+(define attempt-mul64-p1
+  (list
+   ; save arguments (rax and rcx)
+   (mov-r/m64-r64 r10 rcx)
+   (mov-r/m64-r64 r11 rax)
+
+   ; calculate first term: x[31:] * y[31:]
+    ; prepare arguments
+  ;  (mov-r64-imm64 rdx (bv (expt 2 63) 64))
+  ;  (mov-r/m32-r32 ecx r10d)
+  ;  (sub-r/m64-r64 rcx rdx)
+
+  ;  (mov-r/m32-r32 eax r11d) 
+  ;  (sub-r/m64-r64 rax rdx)
+  ;  (mov-r/m64-r64 r12 rax)
+  ;   ; perform safe mul
+  ;  (mul-r/m64 rcx)
+  ;   ; revert mask in result
+  ;  (shl-r/m64-imm8 rcx (bv 63 8))
+  ;  (mov-r/m8-imm8 cl (bv 1 8))
+  ;  (shl-r/m64-imm8 r12 (bv 63 8))
+  ;  (mov-r/m8-imm8 r12b (bv 1 8))
+  ;  (mov-r/m8-r8 dl al)
+  ;  (mov-r/m8-imm8 al (bv 2 8))
+  ;  (sub-r/m64-r64 rax rcx)
+  ;  (sub-r/m64-r64 rax r12)
+  ;  (mov-r/m8-r8 al dl)
+  ;   ; save result
+  ;  (mov-r/m64-r64 r13 rax)
+
+   ; calculate 2nd term: x[31:] * y[:32]
+    ; prepare arguments
+   (mov-r64-imm64 rdx (bv (expt 2 63) 64))
+   (mov-r/m32-r32 ecx r10d)
+   (sub-r/m64-r64 rcx rdx)
+
+   (mov-r/m64-r64 rax r11)
+   (mov-r/m8-imm8 al (bv 1 8))
+   (shr-r/m64-imm8 rax (bv 32 8))
+   (sub-r/m64-r64 rax rdx)
+   (sub-r/m64-r64 rax rdx)
+   (mov-r/m64-r64 r12 rax)
+    ; perform safe mul
+   (mul-r/m64 rcx)
+    ; revert mask in result
+   (shl-r/m64-imm8 rcx (bv 63 8))
+   (mov-r/m8-imm8 cl (bv 1 8))
+   (shl-r/m64-imm8 r12 (bv 63 8))
+   (mov-r/m8-imm8 r12b (bv 1 8))
+   (mov-r/m8-r8 dl al)
+   (mov-r/m8-imm8 al (bv 2 8))
+   (sub-r/m64-r64 rax rcx)
+   (sub-r/m64-r64 rax r12)
+   (mov-r/m8-r8 al dl)
+    ; save result
+    ; use PUSH in actual transform
+   (mov-r/m64-r64 r14 rax)
+
+   ; recombine terms
+    ; put 1st term (lower 64 bits) in rax
+  ;  (mov-r/m64-r64 rax r13)
+   (mov-r/m64-imm32 rax (bv 0 32))
+   (mov-r/m64-imm32 rdx (bv 0 32))
+
+    ; safely add 2nd term (middle 64 bits)
+      (mov-r/m64-r64 rcx r14) ; use POP in real transform
+      (mov-r/m64-imm32 r11 (bv 0 32))
+      (shld-r/m64-r64-imm8 r11 rcx (bv 32 8))
+      ; now r11 has the upper 32 bits of 3rd term in its lower half
+      (mov-r/m32-r32 ecx ecx)
+      (sub-r/m64-imm32 rcx (bv (expt 2 31) 32))
+      (sub-r/m64-imm32 rcx (bv (expt 2 31) 32))
+      (shl-r/m64-imm8 rcx (bv 32 8))
+      ; now rcx has the lower 32 bits of 3rd term in its upper half
+      ; mask lower bits in rcx, rax so we can add safely
+      (mov-r/m8-r8 r12b al)
+      (mov-r/m8-imm8 al (bv 1 8))
+      (mov-r/m8-imm8 cl (bv 1 8))
+      ; perform addition
+      (add-r/m64-r64 rax rcx)
+      (adc-r/m64-r64 rdx r11)
+      (mov-r/m8-r8 al r12b)
+
+   ; restore rcx
+   (mov-r/m64-r64 rcx r10)
+   (mov-r/m32-r32 ecx ecx)
+  ))
+
+(define spec-mul64-p1
+  (list
+  ;  (mov-r/m32-r32 eax eax)
+   (mov-r/m32-r32 ecx ecx)
+   (mul-r/m64 rcx)))
+
+(define spec-mul64-p2
+  (list
+   (shr-r/m64-imm8 rax (bv 32 8))
+   (shl-r/m64-imm8 rax (bv 32 8))
+   (mov-r/m32-r32 ecx ecx)
+   (mul-r/m64 rcx)))
