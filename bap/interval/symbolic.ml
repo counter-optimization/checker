@@ -33,6 +33,8 @@ module Executor = struct
       do_check : bool;
       do_ss : bool;
       do_cs : bool;
+      do_cs_left : bool;
+      do_cs_right : bool;
       profiling_data_path : string;
       failed_ss : bool;
       failed_cs_left : bool;
@@ -97,6 +99,8 @@ module Executor = struct
 
   let init ?(do_ss : bool = false)
         ?(do_cs : bool = false)
+        ?(do_cs_left = false)
+        ?(do_cs_right = false)
         defs target_tid freevarwidths
         profiling_data_path = {
       defs;
@@ -110,6 +114,8 @@ module Executor = struct
       do_check = false;
       do_ss;
       do_cs;
+      do_cs_left;
+      do_cs_right;
       profiling_data_path;
       failed_ss = false;
       failed_cs_left = false;
@@ -360,7 +366,15 @@ module Executor = struct
         new_symbolic varname >>= fun symname ->
         let allowed_width = match ABI.size_of_var_name varname with
           | Some size -> size
-          | None -> set_width width
+          | None -> 
+            if String.equal "#12571244" varname ||
+               String.equal "12571244" varname
+            then 
+              let () = printf "varname equals #12571244\n%!" in
+              8
+            else
+              let () = printf "varname does not equal #12571244\n%!" in
+              set_width width
         in
         fresh_bv_for_symbolic symname allowed_width >>= fun symval ->
         set_symbolic_val symname symval)
@@ -488,21 +502,21 @@ module Executor = struct
            get_value_in_env_exn memcellsymname >>= fun symval ->
            ST.get () >>= fun st_wo_constraints ->
            add_neq_constraint curval symval >>= fun () ->
-           (* let start' = Time_ns.now () in *)
+           let start' = Time_ns.now () in
            check_now SilentStoreChecks.on_fail >>= fun _store_safe ->
-           (* let end' = Time_ns.now () in *)
-           (* let chk_time = Time_ns.diff end' start' |> Time_ns.Span.to_int_ns in *)
+           let end' = Time_ns.now () in
+           let chk_time = Time_ns.diff end' start' |> Time_ns.Span.to_int_ns in
 
-           (* ST.get () >>= fun st_w_constraints -> *)
-           (* let () = Solver.add solver st_w_constraints.constraints in *)
-           (* let profiling_data_csv_row = sprintf ",1,%d,,,\"%s\",,\"%s\"" *)
-           (*                                chk_time *)
-           (*                                (Solver.to_string solver) *)
-           (*                                (def_terms_as_string st_w_constraints) *)
-           (* in *)
-           (* let () = write_csv_profile_data st_w_constraints profiling_data_csv_row in *)
-           (* let () = Solver.reset solver in *)
-           (* ST.put st_wo_constraints >>= fun () -> *)
+           ST.get () >>= fun st_w_constraints ->
+           let () = Solver.add solver st_w_constraints.constraints in
+           let profiling_data_csv_row = sprintf ",1,%d,,,\"%s\",,\"%s\""
+                                          chk_time
+                                          (Solver.to_string solver)
+                                          (def_terms_as_string st_w_constraints)
+           in
+           let () = write_csv_profile_data st_w_constraints profiling_data_csv_row in
+           let () = Solver.reset solver in
+           ST.put st_wo_constraints >>= fun () ->
            ST.return None
          else
            SilentStoreChecks.fail_ss >>= fun () ->
@@ -524,37 +538,61 @@ module Executor = struct
               then
                 CompSimpChecks.check_binop op l r >>= fun (do_left_checks, do_right_checks) ->
                 ST.get () >>= fun ini_st ->
+                let do_left_checks = if ini_st.do_cs_left
+                                     then do_left_checks
+                                     else ST.return ()
+                in
+                let do_right_checks = if ini_st.do_cs_right
+                                      then do_right_checks
+                                      else ST.return ()
+                in
                 do_left_checks >>= fun () ->
-                (* let start' = Time_ns.now () in *)
+                let start' = Time_ns.now () in
                 check_now CompSimpChecks.on_left_fail >>= fun _left_safe ->
-                (* let end' = Time_ns.now () in *)
-                (* let left_chk_time = Time_ns.diff end' start' |> Time_ns.Span.to_int_ns in *)
+                let end' = Time_ns.now () in
+                let left_chk_time = if ini_st.do_cs_left
+                                    then
+                                      Time_ns.diff end' start'
+                                      |> Time_ns.Span.to_int_ns
+                                    else
+                                      0
+                in
                 (* for profiling *)
-                (* ST.get () >>= fun with_left_const -> *)
-                (* let () = Solver.add solver with_left_const.constraints in *)
-                (* let left_const_str = Solver.to_string solver in *)
-                (* let () = Solver.reset solver in *)
+                ST.get () >>= fun with_left_const ->
+                let () = Solver.add solver with_left_const.constraints in
+                let left_const_str = Solver.to_string solver in
+                let () = Solver.reset solver in
                                 
                 ST.gets (fun st -> st.failed_cs_left) >>= fun failed_cs_left ->
                 ST.put ini_st >>= fun () ->
                 do_right_checks >>= fun () ->
-                (* let start' = Time_ns.now () in *)
+                let start' = Time_ns.now () in
                 check_now CompSimpChecks.on_right_fail >>= fun _right_safe ->
-                (* let end' = Time_ns.now () in *)
-                (* let right_chk_time = Time_ns.diff end' start' |> Time_ns.Span.to_int_ns in *)
+                let end' = Time_ns.now () in
+                let right_chk_time = if ini_st.do_cs_right
+                                     then
+                                       Time_ns.diff end' start'
+                                       |> Time_ns.Span.to_int_ns
+                                     else
+                                       0
+                in
                 (* for profiling *)
-                (* ST.get () >>= fun with_right_const -> *)
-                (* let () = Solver.add solver with_right_const.constraints in *)
-                (* let right_const_str = Solver.to_string solver in *)
-                (* let () = Solver.reset solver in *)
-                (* let profiling_data_csv_row = sprintf "1,,,%d,%d,\"%s\",\"%s\",\"%s\"" *)
-                (*                                left_chk_time *)
-                (*                                right_chk_time *)
-                (*                                left_const_str *)
-                (*                                right_const_str *)
-                (*                                (def_terms_as_string with_right_const) *)
-                (* in *)
-                (* let () = write_csv_profile_data with_right_const profiling_data_csv_row in *)
+                ST.get () >>= fun with_right_const ->
+                let () = Solver.add solver with_right_const.constraints in
+                let right_const_str = Solver.to_string solver in
+                let () = Solver.reset solver in
+                let profiling_data_csv_row = sprintf "1,,,%d,%d,\"%s\",\"%s\",\"%s\""
+                                               left_chk_time
+                                               right_chk_time
+                                               (if ini_st.do_cs_left
+                                                then left_const_str
+                                                else "")
+                                               (if ini_st.do_cs_right
+                                                then right_const_str
+                                                else "")
+                                               (def_terms_as_string with_right_const)
+                in
+                let () = write_csv_profile_data with_right_const profiling_data_csv_row in
                 ST.gets (fun st -> st.failed_cs_right) >>= fun failed_cs_right ->
                 ST.put ini_st >>= fun () ->
                 (* let () = printf "In symex checker, left check time is %d, right check time was %d\n%!" left_chk_time right_chk_time in *)
@@ -589,8 +627,12 @@ module Executor = struct
          then get_value_in_env_exn symname
          else
            begin
-             ST.gets (fun st ->
-                 List.Assoc.find st.freevarwidths ~equal:String.equal varname)
+             let () = printf "Varname is %s, is equal? %B\n%!" varname (String.equal "#12571244" varname) in
+             (if String.equal "#12571244" varname
+             then ST.return @@ Some 8
+             else
+             (ST.gets (fun st ->
+                 List.Assoc.find st.freevarwidths ~equal:String.equal varname)))
              >>= fun maybe_bw ->
              let bw = match maybe_bw with
                | Some bw -> bw

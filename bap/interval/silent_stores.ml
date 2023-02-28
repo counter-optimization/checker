@@ -228,6 +228,9 @@ module Checker(N : NumericDomain) = struct
                  ST.put { st with warns = Alert.Set.add st.warns alert } >>= fun () ->
                  ST.return N.bot
                else
+                 let () = printf "[SilentStores] Symex pruned:\n%!";
+                          List.iter deps ~f:(printf "%a\n%!" Def.ppo)
+                 in
                  update_eval_stats EvalStats.incr_symex_pruned >>= fun () ->
                  ST.return N.bot
              else

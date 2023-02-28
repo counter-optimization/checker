@@ -371,6 +371,9 @@ module Checker(N : NumericDomain) = struct
               ST.update @@ fun old_st ->
                            { old_st with warns = Alert.Set.add old_st.warns alert }
             else
+              let () = printf "[CompSimp] Symex pruned:\n%!";
+                       List.iter deps ~f:(printf "%a\n%!" Def.ppo)
+              in
               update_eval_stats EvalStats.incr_symex_pruned >>= fun () ->
               ST.return ()
           else
