@@ -489,8 +489,8 @@ let check_config config img ctxt proj : unit =
                            ~config
   in
   let all_alerts = analysis_results.alerts in
-  let all_alerts = Alert.InsnIdxFiller.set_for_alert_set all_alerts proj in
   let all_alerts = Alert.OpcodeAndAddrFiller.set_for_alert_set all_alerts proj in
+  let all_alerts = Alert.InsnIdxFiller.set_for_alert_set all_alerts proj in
   let all_alerts = Alert.RemoveAllEmptySubName.set_for_alert_set all_alerts proj in
   let all_alerts = Alert.RemoveSpuriousCompSimpAlerts.set_for_alert_set all_alerts proj in
   let cs_stats = analysis_results.csevalstats in
