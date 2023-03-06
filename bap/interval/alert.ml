@@ -59,8 +59,6 @@ module type Pass = sig
 end
 
 module OpcodeAndAddrFiller : Pass = struct
-  (* let set_opcode_for_alert (alert : T.t) : T.t = *)
-  (*   let st = Toplevel.current () in *)
   open KB.Monad_infix
 
   type opcode_alist = (tid * String.t) list [@@deriving compare, sexp, bin_io]
@@ -568,30 +566,16 @@ end
 module LivenessFiller = struct
   type liveness = Live_variables.t
 
-  let set_for_alert (alert : t) (liveness : liveness) : t =
+  let set_for_alert liveness alert : t =
     let warn_tid = alert.tid in
-
-    (* let users : (string * tid) list = *)
-    (*   Live_variables.get_users_names_and_tids liveness ~of_tid:warn_tid in *)
-    
-    (* let flag_users : (string * tid) list = *)
-    (*   List.filter users ~f:(fun (name, tid) -> Common.var_name_is_x86_64_flag name) in *)
-
     let live_flags =
       Live_variables.get_live_flags_of_prev_def_tid liveness ~prev_def_tid:warn_tid in
-
     let is_live_flagless = Live_variables.is_live_flagless liveness ~tid:warn_tid in
-
     let is_live = is_live_flagless || not @@ SS.is_empty live_flags in
-    
-    (* let flag_users_names : SS.t = List.map flag_users ~f:fst |> SS.of_list in *)
-    
-    (* let is_live = not @@ List.is_empty users in *)
-    
     { alert with flags_live = live_flags; is_live = Some is_live }
     
   let set_for_alert_set (alerts : Set.t) (liveness : liveness) : Set.t =
-    Set.map alerts ~f:(fun single_alert -> set_for_alert single_alert liveness)
+    Set.map alerts ~f:(set_for_alert liveness)
 end
 
 let t_of_reason_and_tid (reason : reason) (tid : Tid.t) : t =

@@ -223,7 +223,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
 
      (* let final_env = env_with_bss_initd in *)
 
-     (* e.g., filter out bap's 'mem' var, the result var
+     (* e.g., filter out bap's 'mem' var and the result var
         commonly used in prog analysis *)
      let true_args = List.append argnames freenames
                      |> List.filter ~f:ABI.var_name_is_arg in
@@ -353,10 +353,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let alerts_with_subs = Alert.Set.map all_alerts
                               ~f:(fun alert ->
                                 { alert with sub_name = Some (Sub.name sub) }) in
-     let alerts_with_ops_addrs = Alert.OpcodeAndAddrFiller.set_for_alert_set alerts_with_subs proj in
-     let alerts_with_liveness = Alert.LivenessFiller.set_for_alert_set alerts_with_ops_addrs liveness in
-     (* let alerts_with_rpo_indices = Alert.RpoIdxAlertFiller.set_rpo_indices_for_alert_set alerts_with_liveness sub proj rpo_traversal in *)
-     (* let alerts_with_resolved_names = Alert.SubNameResolverFiller.resolve_sub_names alerts_with_rpo_indices proj in *)
+     
+     let alerts_with_liveness = Alert.LivenessFiller.set_for_alert_set alerts_with_subs liveness in
      let all_alerts = alerts_with_liveness in
      
      (* get callees--both direct and indirect calls--of this call *)
@@ -492,6 +490,7 @@ let check_config config img ctxt proj : unit =
   in
   let all_alerts = analysis_results.alerts in
   let all_alerts = Alert.InsnIdxFiller.set_for_alert_set all_alerts proj in
+  let all_alerts = Alert.OpcodeAndAddrFiller.set_for_alert_set all_alerts proj in
   let all_alerts = Alert.RemoveAllEmptySubName.set_for_alert_set all_alerts proj in
   let all_alerts = Alert.RemoveSpuriousCompSimpAlerts.set_for_alert_set all_alerts proj in
   let cs_stats = analysis_results.csevalstats in
