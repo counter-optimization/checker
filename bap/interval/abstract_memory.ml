@@ -563,43 +563,29 @@ module Make(N : NumericDomain)
   let load ~(offs : Wrapping_interval.t) ~(width : Wrapping_interval.t)
            ~(size : size) ~(region : Region.t) ~(mem : t) : (N.t * t) err =
     let open Or_error.Monad_infix in
-    
     let cell = C.make ~offs ~width ~region ~valtype:CellType.Unknown in
-    (* let () = printf "in load, cell is %s\n%!" (C.to_string cell) in *)
-
     let is_global = match region with | Global -> true | _ -> false in
     let global_already_loaded_from_img = global_already_read ~cell ~mem in
-  
     if is_global && not global_already_loaded_from_img
     then
-      (* let () = printf "in load, loading global from img\n%!" in *)
-      
       load_global offs size mem >>= fun data ->
       let valtype = CellType.Unknown in
-      (* and set it in the current env, so next read doesn't go to the image *)
       store ~offs ~region ~width ~data ~valtype mem >>= fun mem' ->
       Ok (data, { mem' with globals_read = Set.add mem'.globals_read cell })
     else
       let has_existing_value = cell_exists ~cell ~mem in
       if has_existing_value
       then
-        (* let () = printf "in load, loading existing value\n%!" in *)
         let data = lookup (C.name cell) mem in
         Ok (data, mem)
       else
-        (* let () = printf "in load, loading new value\n%!" in *)
         let overlap = get_overlapping_cells cell mem in
-        (* let () = printf "in load, overlapping cells are: \n%!" in *)
-        (* let () = Set.iter overlap ~f:(fun c -> printf "overlap cell: %s\n%!" (C.name c)) in  *)
-        
         let cell_as_overlap = Overlap.of_cell cell N.top mem in
-        
         if Set.length overlap >= 1
         then
-          (* let () = printf "in load, doing overlapping load\n%!" in *)
           let final = Set.fold overlap ~init:cell_as_overlap ~f:(fun current_data other_cell ->
-                                 let other_overlapper = Overlap.of_existing_cell other_cell mem in
-                                 Overlap.merge ~this:current_data ~other:other_overlapper) in
+                          let other_overlapper = Overlap.of_existing_cell other_cell mem in
+                          Overlap.merge ~this:current_data ~other:other_overlapper) in
           Ok (final.data, mem)
         else
           Ok (N.top, mem)
@@ -614,75 +600,32 @@ module Make(N : NumericDomain)
         (size : Size.t) (m : t) : (N.t * t) err =
     match e with
     | Bil.Load (_mem, idx, _endian, size) ->
-       (* let () = printf "in load_of_bil_exp, getting load from vars\n%!" in *)
-       (* let load_from_vars = Var_name_collector.run idx in *)
-       
-       (* let () = printf "in load_of_bil_exp, load from vars: \n%!" in *)
-       (* let () = SS.iter load_from_vars ~f:(fun v -> printf "%s\n%!" v) in *)
-       
-       (* let () = printf "in load_of_bil_exp, getting regions\n%!" in *)
-       (* let regions = BaseSetMap.bases_of_vars load_from_vars m.bases in *)
        let regions : Region.Set.t = get_bases idx_res in
-       (* let () = printf "in load_of_bil_exp, regions to load from:\n%!" in *)
-       (* let () = Set.iter regions ~f:Region.pp in *)
-
-       (* let () = printf "in load_of_bil_exp, getting offs intvl\n%!" in *)
        let offs = get_intvl idx_res in
-       
-       (* let () = printf "in load_of_bil_exp, computing type\n%!" in *)
-       (* let offs_type = compute_type idx m in *)
        let offs_type = get_typd idx_res in
-       
-       (* let () = printf "in load_of_bil_exp, computing is scalar\n%!" in *)
        let offs_is_scalar = CellType.is_scalar offs_type in
-
-       (* let () = printf "in load_of_bil_exp, computing width\n%!" in *)
        let width = bap_size_to_absdom size in
-
        let offs_size = match Wrapping_interval.size offs with
          | Some offs_size -> offs_size
          | None ->
             failwith @@
               sprintf "in load_of_bil_exp, couldn't convert offs %s to Z.t"
-                      (Wrapping_interval.to_string offs) in
-            
+                (Wrapping_interval.to_string offs)
+       in
        let max_ptd_to_elts = Z.of_int 64 in
-
        (if Z.gt offs_size max_ptd_to_elts
         then
-          (* let () = printf "in load_of_bil_exp, pointer %s points to too many elements. maybe an unconstrained pointer?\n%!" (Exp.to_string idx) in *)
-          (* let () = printf "in load_of_bil_exp, returning top instead\n%!" in *)
           Ok (N.top, m)
         else
-          (* let () = printf "in load_of_bil_exp, computing is_global\n%!" in *)
-          let is_global = offs_is_scalar && Set.is_empty regions in
-
-          (* let () = printf "in load_of_bil_exp, computing region\n%!" in *)
-          let regions = (if is_global
-                         then Set.add regions Region.Global
-                         else regions) |> Set.to_list
+          let is_scalar_ptr = offs_is_scalar && Set.is_empty regions in
+          let regions = if is_scalar_ptr
+                        then Set.add regions Region.Global
+                        else regions
           in
-
+          let regions = Set.to_list regions in
           let open Or_error.Monad_infix in
-          
           Wrapping_interval.to_list offs >>= fun all_offsets ->
-
-          (* let () = printf "in load_of_bil_exp, all offsets are:\n%!" in *)
-          (* let () = List.iter all_offsets ~f:(fun o -> *)
-          (*                      printf "offset: %s\n%!" (Wrapping_interval.to_string o)) in *)
-
-          (* let () = printf "in load_of_bil_exp, all regions are:\n%!" in *)
-          (* let () = List.iter regions ~f:(fun r -> *)
-          (*                      printf "region: %s\n%!" (Region.to_string r)) in *)
-          
           let regions_and_offsets = List.cartesian_product regions all_offsets in
-
-          (* let () = printf "in load_of_bil_exp, region,offset pairs are:\n%!" in *)
-          (* let () = List.iter regions_and_offsets ~f:(fun (r, o) -> *)
-          (*                      printf "reg,off: (%s, %s)\n%!" *)
-          (*                             (Region.to_string r) *)
-          (*                             (Wrapping_interval.to_string o)) in *)
-          
           List.fold regions_and_offsets
                     ~init:(Ok (N.bot, m))
                     ~f:(fun state (region, offs) ->

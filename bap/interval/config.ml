@@ -139,7 +139,9 @@ module Parser = struct
         let parsed_lines = List.map lines ~f:parsed_of_line in
         let init_fns = List.filter parsed_lines ~f:is_init_fn in
         let target_fns = List.filter parsed_lines ~f:is_target_fn in
-        { target_fns = empty_symbols; init_fns = empty_symbols; secret_args = empty_secret_map }
+        { target_fns = empty_symbols;
+          init_fns = empty_symbols;
+          secret_args = empty_secret_map }
         |> set_target_fns target_fns
         |> set_init_fns init_fns)
 end

@@ -25,6 +25,7 @@ type check_sub_result = {
 type checker_alerts = Alert.Set.t
 
 type analysis_result = {
+    callees : CRS.t;
     alerts : checker_alerts;
     csevalstats : EvalStats.t;
     ssevalstats : EvalStats.t
@@ -424,6 +425,7 @@ let check_config config img ctxt proj : unit =
   let rec loop ~(worklist : SubSet.t)
                ~(processed : SubSet.t)
                ~(res : checker_alerts)
+               ~(callees : CRS.t)
                ~(liveness : Live_variables.t)
                ~(is_toplevel : bool)
                ~(csevalstats : EvalStats.t)
@@ -431,7 +433,7 @@ let check_config config img ctxt proj : unit =
                ~(config : Config.t) : analysis_result =
     let worklist_wo_procd = Set.diff worklist processed in
     if SubSet.is_empty worklist_wo_procd
-    then { alerts = res; csevalstats; ssevalstats } 
+    then { alerts = res; csevalstats; ssevalstats; callees } 
     else
       let sub = Set.min_elt_exn worklist_wo_procd in
       let worklist_wo_procd_wo_sub = Set.remove worklist_wo_procd sub in
@@ -447,6 +449,7 @@ let check_config config img ctxt proj : unit =
           ~processed:next_processed
           ~res
           ~liveness
+          ~callees
           ~csevalstats
           ~ssevalstats
           ~is_toplevel:false
@@ -473,6 +476,7 @@ let check_config config img ctxt proj : unit =
           ~processed:next_processed
           ~res:all_alerts
           ~liveness:current_res.liveness_info
+          ~callees:current_res.callees
           ~config
           ~csevalstats:total_cs_stats
           ~ssevalstats:total_ss_stats
@@ -482,12 +486,14 @@ let check_config config img ctxt proj : unit =
   let analysis_results = loop ~worklist
                            ~processed
                            ~liveness:Live_variables.IsUsedPass.UseRel.empty
+                           ~callees:CRS.empty
                            ~res:init_res
                            ~csevalstats:EvalStats.init
                            ~ssevalstats:EvalStats.init
                            ~is_toplevel:true
                            ~config
   in
+  
   let all_alerts = analysis_results.alerts in
   let all_alerts = Alert.OpcodeAndAddrFiller.set_for_alert_set all_alerts proj in
   let all_alerts = Alert.InsnIdxFiller.set_for_alert_set all_alerts proj in
