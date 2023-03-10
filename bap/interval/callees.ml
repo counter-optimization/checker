@@ -32,7 +32,7 @@ module Getter(N : NumericDomain) = struct
   module CG = Graphs.Callgraph
 
   open Or_error.Monad_infix
-  
+
   type rel = Common.CalleeRel.t
   type t = rel list
 
@@ -157,6 +157,4 @@ module Getter(N : NumericDomain) = struct
   (* returns list of sub term of callees *)
   let get (sub : sub term) (proj : Project.t) sol : rel Or_error.t list =
     get_callees sub proj sol
-    (* get_callees sub proj sol >>= fun callees -> *)
-    (* Ok (CalleeRel.Set.of_list callees) *)
 end

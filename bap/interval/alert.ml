@@ -491,78 +491,6 @@ module RemoveAllEmptySubName : Pass = struct
     Set.filter alerts ~f:(fun alert -> Option.is_some alert.sub_name)
 end
 
-
-(* RPO = reverse post-order traversal *)
-(* module RpoIdxAlertFiller = struct *)
-
-(*   type lut = (Tid.t, string, Tid.comparator_witness) Map.t *)
-  
-(*   let set_rpo_idx_for_alert (alert : T.t) (rpo_addrs : string list) : T.t = *)
-(*     let this_addr : string = match alert.addr with *)
-(*       | Some addr_str -> addr_str *)
-(*       | None -> failwith "In RpoIdxAlertFiller.set_rpo_idx_for_alert, alerts should have addr strings filled out before filling out rpo indices" in *)
-(*     let rpo_idx = match List.findi rpo_addrs ~f:(fun _idx elt -> *)
-(*                                            String.equal elt this_addr) with *)
-(*       | Some (rpo_idx, _elt) -> rpo_idx *)
-(*       | None -> failwith @@ sprintf "In RpoIdxAlertFiller.set_rpo_idx_for_alert, didn't find addr %s, probably mismatch in alert vs sub" this_addr in *)
-(*     { alert with rpo_idx = Some rpo_idx } *)
-
-(*   let build_lut_for_sub sub : lut = *)
-(*     let blks = Term.enum blk_t sub in *)
-(*     let defs = Seq.map blks ~f:(Term.enum def_t) |> Seq.join in *)
-(*     let jmps = Seq.map blks ~f:(Term.enum jmp_t) |> Seq.join in *)
-(*     let phis = Seq.map blks ~f:(Term.enum phi_t) |> Seq.join in *)
-(*     let tid_and_addr_of_term : 'a. 'a term -> (tid * string) option = fun t -> *)
-(*       let tid = Term.tid t in *)
-(*       begin *)
-(*         match Term.get_attr t address with *)
-(*         | Some addr -> Some addr *)
-(*         | None -> *)
-(*            let () = printf "In RpoIdxAlertFiller.build_lut_for_sub, didn't find addr for tid %a" Tid.ppo tid in *)
-(*            None *)
-(*       end *)
-(*       |> Option.bind ~f:(fun addr -> *)
-(*              let addr_str = Word.to_string addr in *)
-(*              Some (tid, addr_str)) in *)
-(*     let def_alist = Seq.map defs ~f:tid_and_addr_of_term in *)
-(*     let jmp_alist = Seq.map jmps ~f:tid_and_addr_of_term in *)
-(*     let phi_alist = Seq.map phis ~f:tid_and_addr_of_term in *)
-(*     let all_alist = Seq.append def_alist jmp_alist *)
-(*                     |> Seq.append phi_alist *)
-(*                     |> Seq.filter ~f:Option.is_some *)
-(*                     |> Seq.map ~f:(fun p -> Option.value_exn p) *)
-(*                     |> Seq.to_list in *)
-(*     Map.of_alist_exn (module Tid) all_alist *)
-
-(*   let set_rpo_indices_for_alert_set (alerts : Set.t) *)
-(*                                     (sub : sub term) *)
-(*                                     (proj : Project.t) *)
-(*                                     (rpo_traversal : Calling_context.t Sequence.t) : Set.t = *)
-(*     (\* let () = printf "Setting rpo indices for sub %s\n%!" @@ Sub.name sub in *\) *)
-(*     let rpo_tids = Seq.map rpo_traversal ~f:Calling_context.to_insn_tid in *)
-(*     (\* let () = printf "Rpo tids are:\n%!"; *\) *)
-(*     (\*          Seq.iter rpo_tids ~f:(fun tid -> printf "%a\n%!" Tid.ppo tid) in *\) *)
-(*     (\* let lut = OpcodeAndAddrFiller.build_lut proj in *\) *)
-(*     (\* let (addr_lut, _) = lut in *\) *)
-(*     let addr_lut = build_lut_for_sub sub in *)
-(*     (\* let () = printf "addr_lut is:\n%!"; *\) *)
-(*     (\*          Map.iteri addr_lut ~f:(fun ~key ~data -> *\) *)
-(*     (\*                      printf "\t%a : %s\n%!" Tid.ppo key data) in *\) *)
-(*     let addr_of_tid_exn tid : string option = match Map.find addr_lut tid with *)
-(*       | Some tid -> Some tid *)
-(*       | None -> *)
-(*          let () = printf "In RpoIdxAlertFiller.set_rpo_indices_for_alert_set, couldn't find addr in addr_lut for tid %a" *)
-(*                     Tid.ppo tid in *)
-(*          None in *)
-(*     let rpo_addrs = Seq.map rpo_tids ~f:addr_of_tid_exn in *)
-(*     let grouped_rpo_addrs = Seq.to_list rpo_addrs *)
-(*                             |> List.filter ~f:Option.is_some *)
-(*                             |> List.map ~f:(fun mrpo -> Option.value_exn mrpo) *)
-(*                             |> List.group ~break:String.(<>) in *)
-(*     let rpo_addrs = List.map grouped_rpo_addrs ~f:List.hd_exn in *)
-(*     Set.map alerts ~f:(fun a -> set_rpo_idx_for_alert a rpo_addrs) *)
-(* end *)
-
 module LivenessFiller = struct
   type liveness = Live_variables.t
 
@@ -720,15 +648,15 @@ module RemoveSpuriousCompSimpAlerts : Pass = struct
 
   let do_check_with_log checkname check alert : bool =
     let result = check alert in
-    if result
-    then
-      let () = printf "Comp simp spurious alert pruner (%s) pruned alert:\n%!"
-                 checkname
-      in
-      let () = printf "%s\n%!" @@ to_string alert in
-      result
-    else
-      result
+    let () =
+      if result
+      then
+        (printf "Comp simp spurious alert pruner (%s) pruned alert:\n%!" checkname;
+         printf "%s\n%!" @@ to_string alert)
+      else
+        ()
+    in
+    result
   
   let is_spurious alert =
     do_check_with_log "SpuriousSUB" is_bad_subtract_warn alert ||

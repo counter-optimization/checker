@@ -309,25 +309,36 @@ module ReturnInsnsGetter = struct
                                 |> Sequence.to_list) in
     let tids = List.join tids_lists in
     KB.return @@ Set.of_list (module Tid) tids
+
+  let compute_all_returns =
+    KB.objects T.Program.cls >>= fun labels ->
+    let init_rets = KB.return empty in
+    Seq.fold labels ~init:init_rets ~f:(fun all_rets label ->
+        is_return_label label >>= fun is_ret ->
+        if not is_ret
+        then
+          all_rets
+        else
+          label_to_tids label >>= fun ret_tids ->
+          all_rets >>= fun all_rets ->
+          KB.return @@ Set.union all_rets ret_tids)
+    >>= fun all_ret_tids ->
+    KB.Object.create cls >>= fun to_store ->
+    KB.provide all_rets to_store all_ret_tids >>= fun () ->
+    KB.return to_store
     
   let build () : t =
-    let computation = KB.objects T.Program.cls >>= fun labels ->
-                      let init_rets = KB.return empty in
-                      Seq.fold labels ~init:init_rets ~f:(fun all_rets label ->
-                                 is_return_label label >>= fun is_ret ->
-                                 if not is_ret
-                                 then
-                                   all_rets
-                                 else
-                                   label_to_tids label >>= fun ret_tids ->
-                                   all_rets >>= fun all_rets ->
-                                   KB.return @@ Set.union all_rets ret_tids)
-                      >>= fun all_ret_tids ->
-                      KB.Object.create cls >>= fun to_store ->
-                      KB.provide all_rets to_store all_ret_tids >>= fun () ->
-                      KB.return to_store in
-    let cur_st = Toplevel.current () in 
-    match KB.run cls computation cur_st with
+    let cur_st = Toplevel.current () in
+    let get_all_return_tids =
+      KB.objects cls >>= fun all_ret_sets ->
+      if Seq.is_empty all_ret_sets
+      then compute_all_returns
+      else
+        (* only one ret set is computed, so get the first one *)
+        let only_one_ret_set = Seq.hd_exn all_ret_sets in
+        KB.return only_one_ret_set
+    in
+    match KB.run cls get_all_return_tids cur_st with
     | Ok (ret_tids, _st') -> KB.Value.get all_rets ret_tids
     | Error e ->
        failwith @@
