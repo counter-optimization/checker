@@ -315,6 +315,7 @@ module Checker(N : NumericDomain) = struct
     else
       let init_state = State.init env tid live sub dep_bound do_symex proj profiling_data_path in
       let rhs = Def.rhs d in
+      let () = printf "Checking def for silent stores: %a\n%!" Def.ppo d in
       let _, final_state = ST.run (check_exp rhs) init_state in
       { warns = final_state.warns; stats = final_state.estats }
   

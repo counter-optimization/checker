@@ -476,8 +476,9 @@ module Executor = struct
 
   let rec eval_exp (exp : Bil.exp) : Expr.expr option ST.t =
     ST.get () >>= fun _ ->
-    (* let () = printf "in symbolic eval_exp, evaluating exp %a\n%!" *)
-    (*            Exp.ppo exp in *)
+    let () = printf "in symbolic eval_exp, evaluating exp %a\n%!"
+               Exp.ppo exp
+    in
     let res = match exp with
     | Bil.Load (_, idx, en, sz) ->
        set_was_load true >>= fun () ->
@@ -697,8 +698,10 @@ module Executor = struct
     ST.return (Term.tid dt) >>= fun tid ->
     ST.update (fun st -> 
     { st with do_check = Tid.equal tid st.target_tid }) >>= fun () ->
-    (* let () = printf "In symbolic.eval_def, evalling def term: %a\n%!" *)
-    (*            Tid.ppo tid in *)
+    let () = printf "In symbolic.eval_def, evalling def term (%a) %a\n%!"
+               Tid.ppo tid
+               Def.ppo dt
+    in
     let rhs = Def.rhs dt in
     eval_exp rhs >>= fun mr ->
     (* ST.gets (fun st -> *)

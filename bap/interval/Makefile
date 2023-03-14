@@ -36,6 +36,7 @@ global_check: debug
 	--uarch-checker-config-file=libsodium.uarch_checker.config \
 	--uarch-checker-ss \
 	--uarch-checker-cs \
+	--uarch-checker-no-symex \
 	--uarch-checker-symex-profiling-output-file=./symex-profiling-data.csv \
 	--no-optimization --bil-optimization=0 \
 	$(LIBNA) > libna.debug.log 2>&1 
