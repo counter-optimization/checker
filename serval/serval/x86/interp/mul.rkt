@@ -4,6 +4,7 @@
   "common.rkt")
 
 (provide
+  mul-r/m16
   mul-r/m32
   mul-r/m64)
 
@@ -21,6 +22,16 @@
   (cpu-flag-set! cpu 'OF upper-bit)
   ; SF, ZF, AF, and PF are undefined
   (cpu-flag-havoc! cpu 'SF 'ZF 'AF 'PF))
+
+; F7 /4
+(define-insn mul-r/m16 (src)
+  #:decode [((byte #xF7) (/4 r/m))
+            (list (gpr16-no-rex r/m))]
+           [((rex/r b) (byte #xF7) (/4 r/m))
+            (list (gpr16 b r/m))]
+  #:encode (list (rex/r src) (byte #xF7) (/4 src))
+  (lambda (cpu src)
+    (interpret-mul cpu src 16)))
 
 ; F7 /4
 (define-insn mul-r/m32 (src)

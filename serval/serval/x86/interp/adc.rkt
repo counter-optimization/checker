@@ -6,6 +6,7 @@
 (provide
   adc-r/m32-imm8
   adc-r/m64-imm8
+  adc-r/m16-r16
   adc-r/m32-r32
   adc-r/m64-r64)
 
@@ -38,6 +39,16 @@
   #:encode (list (rex.w/r dst) (byte #x83) (/2 dst) (encode-imm imm8))
   (lambda (cpu dst imm8)
     (interpret-adc cpu dst (sign-extend imm8 (bitvector 64)))))
+
+; 11 /r
+(define-insn adc-r/m16-r16 (dst src)
+  #:decode [((byte #x11) (/r reg r/m))
+            (list (gpr16-no-rex r/m) (gpr16-no-rex reg))]
+           [((rex/r r b) (byte #x11) (/r reg r/m))
+            (list (gpr16 b r/m) (gpr16 r reg))]
+  #:encode (list (rex/r src dst) (byte #x11) (/r src dst))
+  (lambda (cpu dst src)
+    (interpret-adc cpu dst (cpu-gpr-ref cpu src))))
 
 ; 11 /r
 (define-insn adc-r/m32-r32 (dst src)

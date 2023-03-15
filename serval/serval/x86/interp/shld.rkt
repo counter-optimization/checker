@@ -4,6 +4,7 @@
   "common.rkt")
 
 (provide
+  shld-r/m16-r16-imm8
   shld-r/m32-r32-imm8
   shld-r/m64-r64-imm8
   shld-r/m32-r32-cl
@@ -45,6 +46,16 @@
     ; AF is undefined.
     (cpu-flag-havoc! cpu 'AF)))
 
+
+; 0F A4 /r
+(define-insn shld-r/m16-r16-imm8 (dst src imm8)
+  #:decode [((byte #x0F) (byte #xA4) (/r reg r/m) ib)
+            (list (gpr16-no-rex r/m) (gpr16-no-rex reg) ib)]
+           [((rex/r r b) (byte #x0F) (byte #xA4) (/r reg r/m) ib)
+            (list (gpr16 b r/m) (gpr16 r reg) ib)]
+  #:encode (list (rex/r src dst) (byte #x0F) (byte #xA4) (/r src dst) imm8)
+  (lambda (cpu dst src imm8)
+    (interpret-shld cpu dst src (zero-extend imm8 (bitvector 16)))))
 
 ; 0F A4 /r
 (define-insn shld-r/m32-r32-imm8 (dst src imm8)
