@@ -204,8 +204,14 @@ module Checker(N : NumericDomain) = struct
                let deps = Option.value_exn deps in
                build_mock_sub_for_mx deps >>= fun mocksub ->
                get_widths_of_free_vars mocksub >>= fun freevarwidths ->
+               let type_info = Type_determination.run deps AMD64SystemVABI.size_of_var_name in
+               let () = printf "Type state info for silent store deps:\n%!";
+                        List.iter deps ~f:(printf "%a\n%!" Def.ppo);
+                        printf "is:\n%!";
+                        Type_determination.print type_info
+               in
                let do_check = Symbolic.Executor.eval_def_list deps in
-               let init_st = Symbolic.Executor.init ~do_ss:true deps st.tid freevarwidths st.profiling_data_path in
+               let init_st = Symbolic.Executor.init ~do_ss:true deps st.tid type_info st.profiling_data_path in
                let (), fini_st = Symbolic.Executor.run do_check init_st in
                let failed_ss = fini_st.failed_ss in
                (* let () = Format.printf "Last ditch symex failed ss? %B\n%!" failed_ss in *)

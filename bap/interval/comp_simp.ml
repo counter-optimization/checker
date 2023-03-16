@@ -329,18 +329,17 @@ module Checker(N : NumericDomain) = struct
             let deps = Option.value_exn deps in
             build_mock_sub_for_mx deps >>= fun mocksub ->
             get_widths_of_free_vars mocksub >>= fun freevarwidths ->
-            (* let () = printf "[compsimp] can do last symex check\n%!" in *)
-            (* let () = printf "[compsimp] deps are:\n%!"; *)
-            (*          List.iter deps ~f:(printf "%a\n%!" Def.ppo) in *)
+            let type_info = Type_determination.run deps AMD64SystemVABI.size_of_var_name in
+            let () = printf "Type state info for comp simp deps:\n%!";
+                     List.iter deps ~f:(printf "%a\n%!" Def.ppo);
+                     printf "is:\n%!";
+                     Type_determination.print type_info
+            in
             let do_check = Symbolic.Executor.eval_def_list deps in
-            let init_st = Symbolic.Executor.init ~do_cs:true deps st.tid freevarwidths st.profiling_data_path in
+            let init_st = Symbolic.Executor.init ~do_cs:true deps st.tid type_info st.profiling_data_path in
             let (), fini_st = Symbolic.Executor.run do_check init_st in
             let failed_cs_left = fini_st.failed_cs_left in
             let failed_cs_right = fini_st.failed_cs_right in
-            (* let () = Format.printf *)
-            (*            "Last ditch symex failed left? %B failed right? %B\n%!" *)
-            (*            failed_cs_left failed_cs_right *)
-            (* in *)
             let should_fail = (is_left && failed_cs_left) ||
                                 (not is_left && failed_cs_right)
             in

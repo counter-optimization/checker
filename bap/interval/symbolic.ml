@@ -39,7 +39,7 @@ module Executor = struct
       failed_ss : bool;
       failed_cs_left : bool;
       failed_cs_right : bool;
-      freevarwidths : (string * int) list
+      type_info : Type_determination.t
     }
 
   type t
@@ -66,9 +66,8 @@ module Executor = struct
     printf "var map is:\n%!";
     List.iter st.symbolic_var_map ~f:(fun (varname, symname) ->
         printf "(%s, %s)\n%!" varname symname);
-    printf "freevarwidths alist is:\n%!";
-    List.iter st.freevarwidths ~f:(fun (varname, width) ->
-        printf "(%s, %d)\n%!" varname width);
+    printf "type info is:\n%!";
+    Type_determination.print st.type_info;
     printf "env map is:\n%!";
     List.iter st.env ~f:(fun (symname, expr) ->
         printf "(%s, %s)\n%!" symname (expr_to_str expr))
@@ -101,7 +100,7 @@ module Executor = struct
         ?(do_cs : bool = false)
         ?(do_cs_left = false)
         ?(do_cs_right = false)
-        defs target_tid freevarwidths
+        defs target_tid type_info
         profiling_data_path = {
       defs;
       target_tid;
@@ -120,7 +119,7 @@ module Executor = struct
       failed_ss = false;
       failed_cs_left = false;
       failed_cs_right = false;
-      freevarwidths
+      type_info
     }
 
   let coerce_shift op ctxt x y =
@@ -359,22 +358,18 @@ module Executor = struct
        loop width [1; 8; 16; 32; 64; 128; 256]
 
   let set_free_vars : unit ST.t =
-    ST.gets (fun st -> st.freevarwidths) >>= fun freevarwidths ->
-    List.fold freevarwidths ~init:(ST.return ())
-      ~f:(fun st (varname, width) ->
+    ST.gets (fun st -> Type_determination.get_all_typed_vars st.type_info)
+    >>= fun typed_vars ->
+    List.fold typed_vars ~init:(ST.return ())
+      ~f:(fun st varname ->
         st >>= fun () ->
+        ST.gets (fun st -> st.type_info) >>= fun type_info ->
+        let maybe_width = Type_determination.get_bitwidth varname type_info in
+        let width = Option.value_exn maybe_width in
         new_symbolic varname >>= fun symname ->
         let allowed_width = match ABI.size_of_var_name varname with
           | Some size -> size
-          | None -> 
-            if String.equal "#12571244" varname ||
-               String.equal "12571244" varname
-            then 
-              let () = printf "varname equals #12571244\n%!" in
-              8
-            else
-              let () = printf "varname does not equal #12571244\n%!" in
-              set_width width
+          | None -> set_width width
         in
         fresh_bv_for_symbolic symname allowed_width >>= fun symval ->
         set_symbolic_val symname symval)
@@ -628,22 +623,13 @@ module Executor = struct
          then get_value_in_env_exn symname
          else
            begin
-             let () = printf "Varname is %s, is equal? %B\n%!" varname (String.equal "#12571244" varname) in
-             (if String.equal "#12571244" varname
-             then ST.return @@ Some 8
-             else
-             (ST.gets (fun st ->
-                 List.Assoc.find st.freevarwidths ~equal:String.equal varname)))
-             >>= fun maybe_bw ->
-             let bw = match maybe_bw with
-               | Some bw -> bw
-               | None -> (match ABI.size_of_var_name varname with
-                          | Some bw -> bw
-                          | None ->
-                             failwith @@
-                               sprintf "Couldn't get bitwidth for var %s in symex compile of var" varname)
-             in
-             fresh_bv_for_symbolic symname bw
+             match ABI.size_of_var_name varname with
+             | Some bw -> fresh_bv_for_symbolic symname bw
+             | None ->
+                failwith @@
+                  sprintf
+                    "Couldn't get bitwidth for var %s in symex compile of var"
+                    varname
            end
        end >>= fun symval ->
        ST.return @@ Some symval
