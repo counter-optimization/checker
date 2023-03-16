@@ -131,7 +131,7 @@ let rec determine_types_from_exp (exp : Bil.exp) abi_typer : typd option ST.t =
             sprintf "Can't determine type of ITE expr: %a" Exp.pps exp
      end
   | Bil.Extract (hi, lo, left) ->
-     let final_typd = Typed.Bitvector (hi - lo) in
+     let final_typd = Typed.Bitvector (hi - lo + 1) in
      ST.return @@ Some final_typd
   | Bil.Concat (left, right) ->
      determine_types_from_exp left abi_typer >>= fun left_typd ->
