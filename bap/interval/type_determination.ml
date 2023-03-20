@@ -73,7 +73,10 @@ let is_abi_typable abi_reg_to_width varname =
 let check_types_same_exn exp left right : unit =
   if 0 <> Typed.compare left right
   then
-    failwith @@ sprintf "Types do not match on lhs, rhs of binop: %a" Exp.pps exp
+    failwith @@ sprintf "Types do not match on lhs, rhs of binop: %a (lhs type: %s) (rhs type: %s)"
+                  Exp.pps exp
+                  (Typed.to_string left)
+                  (Typed.to_string right)
   else ()
 
 let is_arith_op = function
@@ -105,13 +108,18 @@ let is_shift_op = function
   | _ -> false
 
 let rec determine_types_from_exp (exp : Bil.exp) abi_typer : typd option ST.t =
-  match exp with
+  ST.get () >>= fun st ->
+  let () = printf "starting type checking of exp %a, env is:\n%!" Exp.ppo exp;
+           State.print st.types
+  in
+  let typd = match exp with
   | Bil.Load (_, _, _, sz) ->
      ST.return @@ Option.return @@ Typed.Bitvector (Common.int_of_sz sz)
   | Bil.Store (_, _, store_data, _, sz) -> ST.return None
   | Bil.BinOp (op, left, right) ->
      determine_types_from_exp left abi_typer >>= fun left_typd ->
      determine_types_from_exp right abi_typer >>= fun right_typd ->
+     let () = printf "binop is %s\n%!" @@ Common.binop_to_string op in
      let () = match left_typd, right_typd with
        | Some left_typd, Some right_typd when is_lop op || is_arith_op op ->
           check_types_same_exn exp left_typd right_typd
@@ -144,7 +152,9 @@ let rec determine_types_from_exp (exp : Bil.exp) abi_typer : typd option ST.t =
        else
          ST.return None
   | Bil.Int word ->
-     ST.return @@ Option.return @@ Typed.Bitvector (Word.bitwidth word)
+     let typd = Typed.Bitvector (Word.bitwidth word) in
+     let () = printf "Word %a has type: %s\n%!" Word.ppo word (Typed.to_string typd) in
+     ST.return @@ Option.return typd
   | Bil.Cast (_, n, _) ->
      ST.return @@ Option.return @@ Typed.Bitvector n
   | Bil.Let (_, _, _) -> ST.return None
@@ -177,6 +187,12 @@ let rec determine_types_from_exp (exp : Bil.exp) abi_typer : typd option ST.t =
      | _ ->
         failwith @@
           sprintf "Can't type a concat of two unknown types: %a" Exp.pps exp
+  in
+  ST.get () >>= fun st ->
+  let () = printf "leaving type det of exp %a, env:\n%!" Exp.ppo exp;
+           State.print st.types
+  in
+  typd
 
 let var_is_mem_var : var -> bool = String.equal "mem"
 
