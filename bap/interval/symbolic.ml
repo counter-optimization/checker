@@ -72,21 +72,26 @@ module Executor = struct
     List.iter st.env ~f:(fun (symname, expr) ->
         printf "(%s, %s)\n%!" symname (expr_to_str expr))
 
-  let def_terms_as_string st : string =
-    let rec loop dts sofar =
-      match dts with
-      | [] -> sofar
-      | x :: xs ->
-         let cur_s = Def.to_string x in
-         let sofar' = if String.is_empty sofar
-                      then cur_s
-                      else sofar ^ "\n" ^ cur_s
-         in
-         loop xs sofar'
-    in
-    loop st.defs ""
+  let def_terms_as_string : string ST.t =
+    ST.gets @@ fun st ->
+    List.map st.defs ~f:Def.to_string
+    |> String.concat ~sep:"\n"
+    (* String.con *)
+    (* let rec loop dts sofar = *)
+    (*   match dts with *)
+    (*   | [] -> sofar *)
+    (*   | x :: xs -> *)
+    (*      let cur_s = Def.to_string x in *)
+    (*      let sofar' = if String.is_empty sofar *)
+    (*                   then cur_s *)
+    (*                   else sofar ^ "\n" ^ cur_s *)
+    (*      in *)
+    (*      loop xs sofar' *)
+    (* in *)
+    (* loop st.defs "" *)
 
-  let write_csv_profile_data st csvrow : unit =
+  let write_csv_profile_data csvrow : unit ST.t =
+    ST.gets @@ fun st -> 
     let file_path = st.profiling_data_path in
     let binary = false in
     let append = true in
@@ -405,8 +410,7 @@ module Executor = struct
 
     let compound_checks (x, nots) : unit ST.t =
       List.fold nots ~init:(ST.return ()) ~f:(fun st shldnt ->
-          st >>= fun () -> 
-          add_neq_constraint x shldnt)
+          st >>= fun () -> add_neq_constraint x shldnt)
 
     (* what a great return type *)
     let check_binop (op : Bil.binop) left right : (unit ST.t * unit ST.t) ST.t =
@@ -447,6 +451,12 @@ module Executor = struct
 
     let on_right_fail = fun st -> { st with failed_cs_right = true }
   end
+
+  let get_solver_string constraints : string =
+    let () = Solver.add solver constraints in
+    let solver_state_string = Solver.to_string solver in
+    let () = Solver.reset solver in
+    solver_state_string
 
   (* checkers use negative constraints -> this value should not
      be equal to this other value. a status of SAT then means
@@ -496,23 +506,24 @@ module Executor = struct
          if valpresent
          then
            get_value_in_env_exn memcellsymname >>= fun symval ->
-           ST.get () >>= fun st_wo_constraints ->
            add_neq_constraint curval symval >>= fun () ->
+           
            let start' = Time_ns.now () in
            check_now SilentStoreChecks.on_fail >>= fun _store_safe ->
            let end' = Time_ns.now () in
            let chk_time = Time_ns.diff end' start' |> Time_ns.Span.to_int_ns in
 
-           ST.get () >>= fun st_w_constraints ->
-           let () = Solver.add solver st_w_constraints.constraints in
+           def_terms_as_string >>= fun def_term_str ->
+           ST.gets (fun st -> st.constraints) >>= fun constraints ->
+
+           let silent_store_const_str = get_solver_string constraints in 
            let profiling_data_csv_row = sprintf ",1,%d,,,\"%s\",,\"%s\""
                                           chk_time
-                                          (Solver.to_string solver)
-                                          (def_terms_as_string st_w_constraints)
+                                          silent_store_const_str
+                                          def_term_str
            in
-           let () = write_csv_profile_data st_w_constraints profiling_data_csv_row in
-           let () = Solver.reset solver in
-           ST.put st_wo_constraints >>= fun () ->
+           write_csv_profile_data profiling_data_csv_row >>= fun () ->
+           
            ST.return None
          else
            SilentStoreChecks.fail_ss >>= fun () ->
@@ -542,41 +553,40 @@ module Executor = struct
                                       then do_right_checks
                                       else ST.return ()
                 in
+                
                 do_left_checks >>= fun () ->
                 let start' = Time_ns.now () in
-                check_now CompSimpChecks.on_left_fail >>= fun _left_safe ->
+                check_now CompSimpChecks.on_left_fail >>= fun _ ->
                 let end' = Time_ns.now () in
-                let left_chk_time = if ini_st.do_cs_left
-                                    then
-                                      Time_ns.diff end' start'
-                                      |> Time_ns.Span.to_int_ns
-                                    else
-                                      0
+                let left_chk_time =
+                  if ini_st.do_cs_left
+                  then
+                    Time_ns.Span.to_int_ns @@ Time_ns.diff end' start'
+                  else
+                    0
                 in
-                (* for profiling *)
                 ST.get () >>= fun with_left_const ->
-                let () = Solver.add solver with_left_const.constraints in
-                let left_const_str = Solver.to_string solver in
-                let () = Solver.reset solver in
-                                
-                ST.gets (fun st -> st.failed_cs_left) >>= fun failed_cs_left ->
+                let left_const_str = get_solver_string with_left_const.constraints in
+                let failed_cs_left = with_left_const.failed_cs_left in
                 ST.put ini_st >>= fun () ->
+                
                 do_right_checks >>= fun () ->
                 let start' = Time_ns.now () in
-                check_now CompSimpChecks.on_right_fail >>= fun _right_safe ->
+                check_now CompSimpChecks.on_right_fail >>= fun _ ->
                 let end' = Time_ns.now () in
-                let right_chk_time = if ini_st.do_cs_right
-                                     then
-                                       Time_ns.diff end' start'
-                                       |> Time_ns.Span.to_int_ns
-                                     else
-                                       0
+                let right_chk_time =
+                  if ini_st.do_cs_right
+                  then
+                    Time_ns.Span.to_int_ns @@ Time_ns.diff end' start'
+                  else
+                    0
                 in
                 (* for profiling *)
                 ST.get () >>= fun with_right_const ->
-                let () = Solver.add solver with_right_const.constraints in
-                let right_const_str = Solver.to_string solver in
-                let () = Solver.reset solver in
+                let right_const_str = get_solver_string with_right_const.constraints in
+                let failed_cs_right = with_right_const.failed_cs_right in
+                
+                def_terms_as_string >>= fun def_term_str ->
                 let profiling_data_csv_row = sprintf "1,,,%d,%d,\"%s\",\"%s\",\"%s\""
                                                left_chk_time
                                                right_chk_time
@@ -586,14 +596,12 @@ module Executor = struct
                                                (if ini_st.do_cs_right
                                                 then right_const_str
                                                 else "")
-                                               (def_terms_as_string with_right_const)
+                                               def_term_str
                 in
-                let () = write_csv_profile_data with_right_const profiling_data_csv_row in
-                ST.gets (fun st -> st.failed_cs_right) >>= fun failed_cs_right ->
-                ST.put ini_st >>= fun () ->
+                write_csv_profile_data profiling_data_csv_row >>= fun () ->
                 (* let () = printf "In symex checker, left check time is %d, right check time was %d\n%!" left_chk_time right_chk_time in *)
                 ST.update @@ fun st ->
-                { st with failed_cs_left; failed_cs_right }
+                { ini_st with failed_cs_left; failed_cs_right }
               else
                 ST.return ()
             end >>= fun () ->
@@ -626,10 +634,8 @@ module Executor = struct
              match ABI.size_of_var_name varname with
              | Some bw -> fresh_bv_for_symbolic symname bw
              | None ->
-                failwith @@
-                  sprintf
-                    "Couldn't get bitwidth for var %s in symex compile of var"
-                    varname
+                let () = printf "Couldn't get bitwidth for var %s in symex compile of var" varname in
+                fresh_bv_for_symbolic symname 64
            end
        end >>= fun symval ->
        ST.return @@ Some symval

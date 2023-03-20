@@ -141,6 +141,12 @@ module SymExChecker = struct
     }
 end
 
+let defs_of_sub s =
+  Term.enum blk_t s
+  |> Seq.map ~f:(Term.enum def_t)
+  |> Seq.join
+  |> Seq.to_list
+
 module EvalStats = struct
     type t = {
         total_considered : int;

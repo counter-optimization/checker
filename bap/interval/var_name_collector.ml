@@ -22,3 +22,11 @@ let rec run (e : Bil.exp) : SS.t =
   | Bil.Extract (hi, lo, e) -> run e
   | Bil.Concat (x, y) ->
      SS.union (run x) (run y)
+
+let run_on_defs (d : def term list) : SS.t =
+  let run_on_single_def d : SS.t =
+    let lhs = SS.singleton @@ Var.name @@ Def.lhs d in
+    SS.union lhs @@ run @@ Def.rhs d
+  in
+  List.fold d ~init:SS.empty ~f:(fun all curdef ->
+      SS.union all @@ run_on_single_def curdef)

@@ -107,11 +107,19 @@ let is_shift_op = function
     | Bil.ARSHIFT -> true
   | _ -> false
 
+let exp_is_var = function
+  | Bil.Var _ -> true
+  | _ -> false
+
+let get_var_exp = function
+  | Bil.Var v -> v
+  | _ -> failwith "Expression is not var in get_var_exp in type_determination"
+
 let rec determine_types_from_exp (exp : Bil.exp) abi_typer : typd option ST.t =
-  ST.get () >>= fun st ->
-  let () = printf "starting type checking of exp %a, env is:\n%!" Exp.ppo exp;
-           State.print st.types
-  in
+  (* ST.get () >>= fun st -> *)
+  (* let () = printf "starting type checking of exp %a, env is:\n%!" Exp.ppo exp; *)
+  (*          State.print st.types *)
+  (* in *)
   let typd = match exp with
   | Bil.Load (_, _, _, sz) ->
      ST.return @@ Option.return @@ Typed.Bitvector (Common.int_of_sz sz)
@@ -119,24 +127,32 @@ let rec determine_types_from_exp (exp : Bil.exp) abi_typer : typd option ST.t =
   | Bil.BinOp (op, left, right) ->
      determine_types_from_exp left abi_typer >>= fun left_typd ->
      determine_types_from_exp right abi_typer >>= fun right_typd ->
-     let () = printf "binop is %s\n%!" @@ Common.binop_to_string op in
-     let () = match left_typd, right_typd with
-       | Some left_typd, Some right_typd when is_lop op || is_arith_op op ->
-          check_types_same_exn exp left_typd right_typd
-       | _ -> ()
-     in
-     let final_typd = match left_typd, right_typd with
-       | _ when is_lop op -> Some (Typed.Bitvector 1)
-       | Some l, _ when is_arith_op op -> Some l
-       | _, Some r when is_arith_op op -> Some r
-       | Some l, _ when is_shift_op op -> Some l
-       | _, _ when is_shift_op op ->
-          failwith @@ sprintf "Can't type shift expr %a" Exp.pps exp
+     (* let () = printf "binop is %s\n%!" @@ Common.binop_to_string op in *)
+     let is_lop = is_lop op in
+     let is_arith_op = is_arith_op op in
+     let is_shift_op = is_shift_op op in
+     (match left_typd, right_typd with
+       | Some left_typd, Some right_typd when is_lop || is_arith_op ->
+          let () = check_types_same_exn exp left_typd right_typd in
+          ST.return ()
+       | Some left_typd, _ when is_lop || is_arith_op && (exp_is_var right) ->
+          let right_name = Var.name @@ get_var_exp right in
+          set_type_for_var right_name left_typd
+       | _, Some right_typd when is_lop || is_arith_op && (exp_is_var left) ->
+          let left_name = Var.name @@ get_var_exp left in
+          set_type_for_var left_name right_typd
+       | _ -> ST.return ()) >>= fun () ->
+     ST.return
+       (match left_typd, right_typd with
+       | _ when is_lop -> Some (Typed.Bitvector 1)
+       | Some l, _ when is_arith_op -> Some l
+       | _, Some r when is_arith_op -> Some r
+       | Some l, _ when is_shift_op -> Some l
+       (* | _, _ when is_shift_op -> *)
+       (*    failwith @@ sprintf "Can't type shift expr %a" Exp.pps exp *)
        | Some l, _ -> Some l
        | _, Some r -> Some r
-       | None, None -> None
-     in
-     ST.return final_typd
+       | None, None -> None)
   | Bil.UnOp (_, left) -> determine_types_from_exp left abi_typer
   | Bil.Var var ->
      let name = Var.name var in
@@ -152,9 +168,7 @@ let rec determine_types_from_exp (exp : Bil.exp) abi_typer : typd option ST.t =
        else
          ST.return None
   | Bil.Int word ->
-     let typd = Typed.Bitvector (Word.bitwidth word) in
-     let () = printf "Word %a has type: %s\n%!" Word.ppo word (Typed.to_string typd) in
-     ST.return @@ Option.return typd
+     ST.return @@ Option.return @@ Typed.Bitvector (Word.bitwidth word)
   | Bil.Cast (_, n, _) ->
      ST.return @@ Option.return @@ Typed.Bitvector n
   | Bil.Let (_, _, _) -> ST.return None
@@ -188,10 +202,10 @@ let rec determine_types_from_exp (exp : Bil.exp) abi_typer : typd option ST.t =
         failwith @@
           sprintf "Can't type a concat of two unknown types: %a" Exp.pps exp
   in
-  ST.get () >>= fun st ->
-  let () = printf "leaving type det of exp %a, env:\n%!" Exp.ppo exp;
-           State.print st.types
-  in
+  (* ST.get () >>= fun st -> *)
+  (* let () = printf "leaving type det of exp %a, env:\n%!" Exp.ppo exp; *)
+  (*          State.print st.types *)
+  (* in *)
   typd
 
 let var_is_mem_var : var -> bool = String.equal "mem"
@@ -237,6 +251,8 @@ let get_bitwidth varname type_state =
 
 let get_all_typed_vars = Map.keys
 
-let print = State.print 
-  
-    
+let print = State.print
+
+let narrow_to_vars vars type_env =
+  let keep_var = Common.SS.mem vars in
+  TypedMap.filter_keys type_env ~f:keep_var

@@ -1,5 +1,6 @@
 open Core
 open Bap.Std
+open Common
 
 type t
 
@@ -18,3 +19,5 @@ val get_bitwidth : var -> t -> int option
 val get_all_typed_vars : t -> var list
 
 val print : t -> unit
+
+val narrow_to_vars : Common.SS.t -> t -> t

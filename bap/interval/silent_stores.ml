@@ -204,7 +204,10 @@ module Checker(N : NumericDomain) = struct
                let deps = Option.value_exn deps in
                build_mock_sub_for_mx deps >>= fun mocksub ->
                get_widths_of_free_vars mocksub >>= fun freevarwidths ->
-               let type_info = Type_determination.run deps AMD64SystemVABI.size_of_var_name in
+               let all_defs_of_sub = Common.defs_of_sub st.sub in
+               let type_info = Type_determination.run all_defs_of_sub AMD64SystemVABI.size_of_var_name in
+               let dependent_vars = Var_name_collector.run_on_defs deps in
+               let type_info = Type_determination.narrow_to_vars dependent_vars type_info in
                let () = printf "Type state info for silent store deps:\n%!";
                         List.iter deps ~f:(printf "%a\n%!" Def.ppo);
                         printf "is:\n%!";
