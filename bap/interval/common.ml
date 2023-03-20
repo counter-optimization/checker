@@ -109,6 +109,8 @@ module AMD64SystemVABI = struct
     then Some 128
     else if List.mem gpr_names name ~equal
     then Some 64
+    else if SS.mem flag_names name
+    then Some 1
     else None
 end
 
