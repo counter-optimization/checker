@@ -76,19 +76,54 @@ let check_types_same_exn exp left right : unit =
     failwith @@ sprintf "Types do not match on lhs, rhs of binop: %a" Exp.pps exp
   else ()
 
+let is_arith_op = function
+  | Bil.PLUS
+    | Bil.MINUS
+    | Bil.TIMES
+    | Bil.DIVIDE
+    | Bil.SDIVIDE
+    | Bil.MOD
+    | Bil.SMOD
+    | Bil.AND
+    | Bil.OR
+    | Bil.XOR -> true
+  | _ -> false
+
+let is_lop = function
+  | Bil.EQ
+    | Bil.NEQ
+    | Bil.LT
+    | Bil.LE
+    | Bil.SLT
+    | Bil.SLE -> true
+  | _ -> false
+
+let is_shift_op = function
+  | Bil.LSHIFT
+    | Bil.RSHIFT
+    | Bil.ARSHIFT -> true
+  | _ -> false
+
 let rec determine_types_from_exp (exp : Bil.exp) abi_typer : typd option ST.t =
   match exp with
   | Bil.Load (_, _, _, sz) ->
      ST.return @@ Option.return @@ Typed.Bitvector (Common.int_of_sz sz)
   | Bil.Store (_, _, store_data, _, sz) -> ST.return None
-  | Bil.BinOp (_, left, right) ->
+  | Bil.BinOp (op, left, right) ->
      determine_types_from_exp left abi_typer >>= fun left_typd ->
      determine_types_from_exp right abi_typer >>= fun right_typd ->
      let () = match left_typd, right_typd with
-       | Some left_typd, Some right_typd -> check_types_same_exn exp left_typd right_typd
+       | Some left_typd, Some right_typd when is_lop op || is_arith_op op ->
+          check_types_same_exn exp left_typd right_typd
        | _ -> ()
      in
      let final_typd = match left_typd, right_typd with
+       | _ when is_lop op -> Some (Typed.Bitvector 1)
+       | Some l, _ when is_arith_op op -> Some l
+       | _, Some r when is_arith_op op -> Some r
+       | Some l, _ when is_shift_op op -> Some l
+       | _, _ when is_shift_op op ->
+          failwith @@ sprintf "Can't type shift expr %a" Exp.pps exp
        | Some l, _ -> Some l
        | _, Some r -> Some r
        | None, None -> None
