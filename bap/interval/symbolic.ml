@@ -343,6 +343,9 @@ module Executor = struct
     let neq = Bool.mk_not ctxt @@ Bool.mk_eq ctxt left right in
     push_constraint neq
 
+  let add_is_eq_constraint left right : unit ST.t =
+    push_constraint @@ Bool.mk_eq ctxt left right
+
   let set_width width : int =
     match width with
     | 1 -> 1
@@ -408,9 +411,12 @@ module Executor = struct
 
     let none = []
 
-    let compound_checks (x, nots) : unit ST.t =
-      List.fold nots ~init:(ST.return ()) ~f:(fun st shldnt ->
-          st >>= fun () -> add_neq_constraint x shldnt)
+    let compound_checks (x, badvals) : unit ST.t =
+      (* List.fold nots ~init:(ST.return ()) ~f:(fun st shldnt -> *)
+      (*     st >>= fun () -> add_neq_constraint x shldnt) *)
+      let eq_constrs = List.map badvals ~f:(Bool.mk_eq ctxt x) in
+      let any_eq_constr = Bool.mk_or ctxt eq_constrs in
+      push_constraint any_eq_constr
 
     (* what a great return type *)
     let check_binop (op : Bil.binop) left right : (unit ST.t * unit ST.t) ST.t =
@@ -506,7 +512,8 @@ module Executor = struct
          if valpresent
          then
            get_value_in_env_exn memcellsymname >>= fun symval ->
-           add_neq_constraint curval symval >>= fun () ->
+           (* add_neq_constraint curval symval >>= fun () -> *)
+           add_is_eq_constraint curval symval >>= fun () ->
            
            let start' = Time_ns.now () in
            check_now SilentStoreChecks.on_fail >>= fun _store_safe ->
