@@ -492,6 +492,7 @@ module Executor = struct
     in
     let res = match exp with
     | Bil.Load (_, idx, en, sz) ->
+       eval_exp idx >>= fun _idx_val ->  
        set_was_load true >>= fun () ->
        let symname = Common.exp_to_string exp in
        let sz = Common.int_of_sz sz in
@@ -501,6 +502,7 @@ module Executor = struct
        ST.get () >>= fun st ->
        let mockload = Bil.Load (mem, idx, en, sz) in
        let memcellsymname = Common.exp_to_string mockload in
+       eval_exp idx >>= fun idx_val -> 
        eval_exp v >>= fun mcv ->
        let curval = match mcv with
          | Some curval -> curval
