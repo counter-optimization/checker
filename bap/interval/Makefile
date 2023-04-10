@@ -29,8 +29,8 @@ bap-plugin: *.ml
 global_check: debug
 	# --uarch-checker-no-symex
 	# 
-	@echo -n "Starting checking of libsodium (global)"
-	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
+	@echo -n "Starting checking of libsodium (global) at "
+	@echo $$(TZ='America/Los_Angeles' date -- +"%F %T %Z")
 	-bap --plugin-path=. --pass=uarch-checker \
 	--uarch-checker-output-csv-file=./libna.checker.output.csv \
 	--uarch-checker-config-file=libsodium.uarch_checker.config \
@@ -39,8 +39,8 @@ global_check: debug
 	--uarch-checker-symex-profiling-output-file=./symex-profiling-data.csv \
 	--no-optimization --bil-optimization=0 \
 	$(LIBNA) > libna.debug.log 2>&1 
-	@echo -n "Done with analysis of argon2id"
-	@echo $$(TZ='America/Los_Angeles' date -- +"%T %Z")
+	@echo -n "Done with analysis of argon2id at "
+	@echo $$(TZ='America/Los_Angeles' date -- +"%F %T %Z")
 
 tags: $(TEST_SRCS)
 	-ctags -e --etags-include=$(BAP_MASTER_REPO) --etags-include=$(Z_PLUGIN_LIB_BASE) --etags-include=$(JANESTREET_CORE_BASE) -R $^

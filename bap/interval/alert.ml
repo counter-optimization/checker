@@ -329,7 +329,6 @@ module InsnIdxFiller : Pass = struct
 
   (** (declare symbol-chunk (addr int) (size int) (root int))
       (declare named-symbol (addr int) (name str))
-      (declare named-symbol (addr int) (name str))
       (symbol-chunk 4298432 787 4298432)
       (named-symbol 4298432 argon2_initialize) *)
   (** Some functions have more than one symbol, like curve25519 sandy2x
@@ -394,18 +393,43 @@ module InsnIdxFiller : Pass = struct
     in
     let symbol_addr_ranges = Toplevel.eval result_slot get_all_addr_ranges in
     symbol_addr_ranges
-    (* Map.of_sequence_exn (module String) symbol_addr_ranges *)
+  (* Map.of_sequence_exn (module String) symbol_addr_ranges *)
+
+  let is_noop (opcode : string) : bool =
+    let noop_prefixes = ["nop"; "xchg"; "fnop"] in
+    (* are any of the prefixes a caseless prefix of the given opcode? yes = true, no = false*)
+    List.exists noop_prefixes ~f:(fun prefix -> String.Caseless.is_prefix opcode ~prefix)
+
+  let addr_of_label = KB.collect Theory.Label.addr
+
+  let opcode_str_of_label label =
+    KB.collect Theory.Semantics.slot label >>= fun insn ->
+    KB.return @@ Insn.name insn
 
   let get_all_addrs proj : Core.Set.M(Word).t =
+    let insn_used_in_calculating_indices (maddr, opcode_str) : bool KB.t =
+      maddr >>= fun maddr ->
+      opcode_str >>= fun opcode_str ->
+      let should_use_insn = not (is_noop opcode_str) && Option.is_some maddr in
+      let () = if not @@ is_noop opcode_str
+               then Format.printf "Not using insn with opcode %s in calculating insn indices\n%!" opcode_str
+               else ()
+      in
+      KB.return should_use_insn
+    in
+    let select_addrs (maddr, _) : Bitvec.t KB.t =
+      maddr >>= fun maddr ->
+      KB.return @@ Option.value_exn maddr
+    in
     let get_all_labels =
       begin
         KB.objects Theory.Program.cls >>= fun progs ->
-        let maddrs =
-          Seq.map progs ~f:(KB.collect Theory.Label.addr) in
-        KB.Seq.filter maddrs
-          ~f:(fun maddr -> maddr >>| Option.is_some) >>= fun filtered_addrs ->
-        KB.Seq.map filtered_addrs ~f:(fun maddr ->
-            maddr >>| (fun o -> Option.value_exn o)) >>= fun all_addrs ->
+        let insn_info = Seq.map progs
+                          ~f:(fun label -> (addr_of_label label, opcode_str_of_label label))
+        in
+        KB.Seq.filter insn_info ~f:insn_used_in_calculating_indices >>= fun filtered_insns ->
+        (* from this point, no noops are considered in calculating insn indices *)
+        KB.Seq.map filtered_insns ~f:select_addrs >>= fun all_addrs ->
         let word_addrs = Seq.map all_addrs ~f:(fun a ->
                              Word.of_int64 @@ Bitvec.to_int64 a)
                          |> Core.Set.of_sequence (module Word) in
@@ -448,10 +472,6 @@ module InsnIdxFiller : Pass = struct
                            Word.compare (snd l) (snd r))
                      |> List.map ~f:snd 
     in
-    let () = Seq.iter syms ~f:(fun (_, s) ->
-                 printf "addr %a in sym %s\n%!" Word.ppo addr s) in
-    (* let () = List.iter sorted_addrs ~f:(fun i -> *)
-    (*              printf "addr %a has addrs %a\n%!" Word.ppo addr Word.ppo i) in *)
     let sym = if Seq.length syms > 1
               then
                 let () = printf "in Alert.InsnIdxFiller, addr %a has more than one symbol:\n%!"
