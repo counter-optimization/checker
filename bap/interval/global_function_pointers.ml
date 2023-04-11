@@ -31,12 +31,13 @@ module Libsodium = struct
       let subs = Term.enum sub_t prog in
       let toplevel = Seq.filter subs ~f:sub_is_toplevel_init_fn in
       if Seq.length toplevel = 1
-      then Seq.hd_exn toplevel
+      then Seq.hd toplevel
       else
-        let err_msg =
-          sprintf "In %s.get_toplevel_init_fn, couldn't find sub with name %s"
-                  analysis_name toplevel_init_fn_name in
-        failwith err_msg
+        let () =
+          printf "In %s.get_toplevel_init_fn, couldn't find sub with name %s"
+            analysis_name toplevel_init_fn_name
+        in
+        None
 
     let sub_of_tid (sub_tid : tid) (prog : Program.t) : sub term option =
       Term.find sub_t prog sub_tid
@@ -94,9 +95,9 @@ module Libsodium = struct
       worklist_loop ~processed:init_processed ~worklist:init_worklist
 
     let get_all_initializers ctxt proj =
-      let toplevel_init_fn = get_toplevel_init_fn ctxt proj in
+      Option.bind (get_toplevel_init_fn ctxt proj) ~f:(fun toplevel_init_fn ->
       let all_initializers = get_all_direct_callees toplevel_init_fn ctxt proj in
-      all_initializers
+      Some all_initializers)
 
     let get_global_store_addr (elt : Blk.elt) : addr option =
       match elt with
@@ -183,26 +184,28 @@ module Libsodium = struct
                  |> Seq.join in
       get_store_info ~allelts:elts ~prevelt:None ~stores:[]
 
-    let get_global_storing_subs ctxt proj : sub term list =
-      let all_initializers = get_all_initializers ctxt proj in
-      SubSet.filter all_initializers ~f:(fun sub ->
-                      let global_stores = global_stores_of_sub sub in
-                      let () = printf "global stores of %s are:\n%!" (Sub.name sub);
-                               List.iter global_stores ~f:(fun addr ->
-                                           Format.printf "%a\n%!" Word.pp addr) in
-                      not (List.is_empty global_stores))
-      |> SubSet.to_list
+    (* let get_global_storing_subs ctxt proj : sub term list = *)
+    (*   let all_initializers = get_all_initializers ctxt proj in *)
+    (*   SubSet.filter all_initializers ~f:(fun sub -> *)
+    (*                   let global_stores = global_stores_of_sub sub in *)
+    (*                   let () = printf "global stores of %s are:\n%!" (Sub.name sub); *)
+    (*                            List.iter global_stores ~f:(fun addr -> *)
+    (*                                        Format.printf "%a\n%!" Word.pp addr) in *)
+    (*                   not (List.is_empty global_stores)) *)
+    (*   |> SubSet.to_list *)
 
     let get_all_init_fn_ptr_data ctxt proj : global_const_store list =
-      let all_initializers = get_all_initializers ctxt proj in
-      let bss_stores = SubSet.fold all_initializers ~init:[] ~f:(fun acc sub ->
-                                     let store_info = global_store_info_of_sub sub in
-                                     List.append store_info acc) in
-      List.fold bss_stores ~init:(WordSet.empty, [])
-                ~f:(fun (added_addrs, added_stores) { addr; data } ->
-                  if WordSet.mem added_addrs addr
-                  then (added_addrs, added_stores)
-                  else (WordSet.add added_addrs addr, { addr; data } :: added_stores))
-      |> snd
+      match get_all_initializers ctxt proj with
+      | None -> []
+      | Some all_initializers ->
+         let bss_stores = SubSet.fold all_initializers ~init:[] ~f:(fun acc sub ->
+                              let store_info = global_store_info_of_sub sub in
+                              List.append store_info acc) in
+         List.fold bss_stores ~init:(WordSet.empty, [])
+           ~f:(fun (added_addrs, added_stores) { addr; data } ->
+             if WordSet.mem added_addrs addr
+             then (added_addrs, added_stores)
+             else (WordSet.add added_addrs addr, { addr; data } :: added_stores))
+         |> snd
   end
 end
