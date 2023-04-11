@@ -35,15 +35,17 @@ def get_flags_live_in(csv_row_dict):
 if __name__ == '__main__':
     cs_opcodes = set()
     ss_opcodes = set()
+
+    opcodes_to_live_flags = dict()
+    opcodes_to_flags_live_in = dict()
+    opcodes_to_addrs_live_out = dict()
+    opcodes_to_addrs_live_in = dict()
+    subs = set()
     
     for csv_file_name in sys.argv[1:]:
         # calculate mir_opcodes -> live flags for all alerts
         with open(csv_file_name, mode="r") as csv_file:
             reader = csv.DictReader(csv_file)
-
-            opcodes_to_live_flags = dict()
-            opcodes_to_addrs = dict()
-            subs = set()
 
             logger.info(f"Processing csv file: {csv_file_name}")
             for row in reader:
@@ -54,7 +56,7 @@ if __name__ == '__main__':
                 subs.add(row['subroutine_name'])
 
                 if has_flags_live_in(row) or has_live_flags(row):
-                    logger.critical(f"Row ({row}) has live flags out: {row['live_flags']}, live flags in: {row['flags_live_in']}")
+                    logger.debug(f"Row ({row}) has live flags out: {row['live_flags']}, live flags in: {row['flags_live_in']}")
 
                 if is_comp_simp_warn(row):
                     cs_opcodes.add(opcode)
@@ -62,27 +64,57 @@ if __name__ == '__main__':
                 if is_silent_store_warn(row):
                     ss_opcodes.add(opcode)
 
-                if is_comp_simp_warn(row) and has_live_flags(row):
+                if has_flags_live_in(row):
+                    flags_live_in = get_flags_live_in(row)
+                    if opcode == "SHR64ri" and "ZF" in flags_live_in:
+                        logger.critical(f"shift with flags live in: {row['addr']} {opcode}")
+                    cur_flags = opcodes_to_flags_live_in.get(opcode, set())
+                    cur_flags |= flags_live_in
+                    opcodes_to_flags_live_in[opcode] = cur_flags
+
+                    addr = row['addr']
+                    cur_addrs = opcodes_to_addrs_live_in.get(opcode, set())
+                    cur_addrs.add(addr)
+                    opcodes_to_addrs_live_in[opcode] = cur_addrs
+
+                if has_live_flags(row):
                     live_flags = get_live_flags(row)
                     cur_flags = opcodes_to_live_flags.get(opcode, set())
                     cur_flags |= live_flags
                     opcodes_to_live_flags[opcode] = cur_flags
 
                     addrs = row['addr']
-                    cur_addrs = opcodes_to_addrs.get(opcode, set())
+                    cur_addrs = opcodes_to_addrs_live_out.get(opcode, set())
                     cur_addrs.add(addrs)
-                    opcodes_to_addrs[opcode] = cur_addrs
+                    opcodes_to_addrs_live_out[opcode] = cur_addrs
 
-            logger.info("Printing live flag info")
-            for opcode, live_flags in opcodes_to_live_flags.items():
-                addrs = opcodes_to_addrs[opcode]
-                print(f"{opcode} ({len(addrs)}) ({addrs}): {live_flags}")
+    print("Flag live out info:")
+    for opcode, live_flags in opcodes_to_live_flags.items():
+        addrs = opcodes_to_addrs_live_out[opcode]
+        print(f"{opcode} ({len(addrs)}) ({addrs}): {live_flags}")
 
-    logger.info("Printing all CS opcodes")
+    print("Flag live in info:")
+    for opcode, flags_live_in in opcodes_to_flags_live_in.items():
+        addrs = opcodes_to_addrs_live_in[opcode]
+        print(f"{opcode} ({len(addrs)}) ({addrs}): {flags_live_in}")
+
+    print("Opcodes of leaky instructions whose flags are used:")
+    for opcode, live_flags in opcodes_to_live_flags.items():
+        addrs = opcodes_to_addrs_live_out[opcode]
+        # print(f"{opcode} ({len(addrs)}) ({addrs}): {live_flags}")
+        print(f"{opcode}: {live_flags}")
+
+    print("Opcodes of leaky instructions and the flags they must preserve:")
+    for opcode, flags_live_in in opcodes_to_flags_live_in.items():
+        addrs = opcodes_to_addrs_live_in[opcode]
+        # print(f"{opcode} ({len(addrs)}) ({addrs}): {flags_live_in}")
+        print(f"{opcode}: {flags_live_in}")
+
+    print("Printing all CS opcodes")
     for opcode in sorted(cs_opcodes):
         print(opcode)
 
-    logger.info("Printing all SS opcodes")
+    print("Printing all SS opcodes")
     for opcode in sorted(ss_opcodes):
         print(opcode)
 

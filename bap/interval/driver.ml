@@ -337,7 +337,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      
 
      (* here, liveness means classical dataflow liveness *)
-     let dataflow_liveness = Liveness.run_on_cfg (module G) cfg tidmap in
+     let dataflow_liveness = Liveness.run_on_cfg (module G) cfg tidmap liveness in
      let alerts_with_dataflow_liveness =
        Alert.DataflowLivenessFiller.set_for_alert_set
          alerts_with_liveness
