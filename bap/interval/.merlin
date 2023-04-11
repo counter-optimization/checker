@@ -27,6 +27,7 @@ S type_domain.ml
 S bases_domain.ml
 S var_name_collector.ml
 S live_variables.ml
+S liveness.ml
 S test_main.ml
 S test_wrapping_interval.ml
 S test_abstract_memory.ml

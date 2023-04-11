@@ -28,7 +28,8 @@ module T = struct
       left_val : string option;
       right_val : string option;
       reason : reason;
-      desc : string
+      desc : string;
+      flags_live_in : SS.t
     } [@@deriving sexp, bin_io, compare]
 end
 
@@ -511,6 +512,11 @@ module RemoveAllEmptySubName : Pass = struct
     Set.filter alerts ~f:(fun alert -> Option.is_some alert.sub_name)
 end
 
+(** this is really more data dependency analysis like for backward slicing. 
+    it was originally used for some liveness analysis, like: are any flags
+    of a leaky instruction used?
+    but since also adding the classical data flow liveness analysis, the
+    name hasn't aged well and needs changing after paper submission *)
 module LivenessFiller = struct
   type liveness = Live_variables.t
 
@@ -526,6 +532,16 @@ module LivenessFiller = struct
     Set.map alerts ~f:(set_for_alert liveness)
 end
 
+module DataflowLivenessFiller = struct
+  let set_for_alert (liveness : Liveness.t) alert : t =
+    let live_vars : SS.t = Liveness.live_at_tid alert.tid liveness in
+    let flags_live_in = SS.inter live_vars AMD64SystemVABI.flag_names in
+    { alert with flags_live_in = flags_live_in }
+
+  let set_for_alert_set (alerts : Set.t) liveness : Set.t =
+    Set.map alerts ~f:(set_for_alert liveness)
+end
+
 let t_of_reason_and_tid (reason : reason) (tid : Tid.t) : t =
   { sub_name = None;
     opcode = None;
@@ -538,7 +554,8 @@ let t_of_reason_and_tid (reason : reason) (tid : Tid.t) : t =
     left_val = None;
     right_val = None;
     problematic_operands = None;
-    desc = ""
+    desc = "";
+    flags_live_in = SS.empty
   }
 
 let add_problematic_operands (x : t) (prob_op : int list) : t =
@@ -561,7 +578,8 @@ let to_string (x : t) : string =
         flags_live;
         is_live;
         reason;
-        desc } = x in
+        desc;
+        flags_live_in } = x in
   let sub_name_str = match sub_name with
     | Some sub_name -> sub_name
     | None ->
@@ -587,9 +605,10 @@ let to_string (x : t) : string =
     | None -> ""
     | Some is_live -> Bool.to_string is_live in
   let reason_str = string_of_reason reason in
+  let flags_live_in_str = str_of_flags_live flags_live_in in
   (* if you change this next part, then change csv_header below also *)
   sprintf
-    "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\""
+    "\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\""
     sub_name_str
     opcode_str
     addr_str
@@ -602,8 +621,9 @@ let to_string (x : t) : string =
     is_live_str
     reason_str
     desc
+    flags_live_in_str
 
-let csv_header : string = "subroutine_name,mir_opcode,addr,rpo_idx,tid,problematic_operands,left_operand,right_operand,live_flags,is_live,alert_reason,description"
+let csv_header : string = "subroutine_name,mir_opcode,addr,rpo_idx,tid,problematic_operands,left_operand,right_operand,live_flags,is_live,alert_reason,description,flags_live_in"
 
 let to_csv_row (alert : t) : string = (to_string alert)
 

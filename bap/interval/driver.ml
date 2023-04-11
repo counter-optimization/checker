@@ -207,47 +207,24 @@ let run_analyses sub img proj ~(is_toplevel : bool)
          | Ok env' -> env'
          | Error e -> failwith @@ Error.to_string_hum e in
      let env_with_img_set = E.set_img env_with_rsp_set img in
-     (* let env_with_bss_initd = *)
-     (*   List.fold bss_init_stores *)
-     (*             ~init:(Ok env_with_img_set) *)
-     (*             ~f:(fun env' store -> *)
-     (*               Or_error.bind env' ~f:(fun env' -> *)
-     (*                               E.store_global env' ~addr:store.addr *)
-     (*                                              ~data:store.data *)
-     (*                                              ~valtype:CellType.Ptr)) in *)
-     
-     (* let env_with_bss_initd = match env_with_bss_initd with *)
-     (*   | Ok env -> env  *)
-     (*   | Error e -> *)
-     (*      let inner_err_msg = Error.to_string_hum e in *)
-     (*      failwith @@ sprintf "in run_analysis setting bss inits : %s" inner_err_msg in *)
-
-     (* let final_env = env_with_bss_initd in *)
-
      (* e.g., filter out bap's 'mem' var and the result var
         commonly used in prog analysis *)
      let true_args = List.append argnames freenames
-                     |> List.filter ~f:ABI.var_name_is_arg in
-     
+                     |> List.filter ~f:ABI.var_name_is_arg
+     in
      let final_env = List.fold true_args
                                ~init:env_with_img_set
                                ~f:(fun mem argname ->
-                                 E.init_arg ~name:argname config sub mem) in
-     
-     (* let () = Format.printf "Initial memory+env is: %!" in *)
-     (* let () = E.pp final_env in *)
-     (* let () = Format.printf "\n%!" in *)
-
+                                 E.init_arg ~name:argname config sub mem)
+     in
      let rpo_traversal = Graphlib.reverse_postorder_traverse (module G) cfg in
      let first_node = match Seq.hd rpo_traversal with
        | Some n -> n
-       | None -> failwith "in driver, cfg building init sol, couldn't get first node" in
-
+       | None -> failwith "in driver, cfg building init sol, couldn't get first node"
+     in
      let with_args = G.Node.Map.set G.Node.Map.empty ~key:first_node ~data:final_env in
      let init_sol = Solution.create with_args empty in
-
      let () = printf "Running abstract interpreter\n%!" in
-     
      let analysis_results = Graphlib.fixpoint
                               (module G)
                               cfg
@@ -354,9 +331,19 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let alerts_with_subs = Alert.Set.map all_alerts
                               ~f:(fun alert ->
                                 { alert with sub_name = Some (Sub.name sub) }) in
-     
+
+     (* this is really dependency analysis info, not liveness info *)
      let alerts_with_liveness = Alert.LivenessFiller.set_for_alert_set alerts_with_subs liveness in
-     let all_alerts = alerts_with_liveness in
+     
+
+     (* here, liveness means classical dataflow liveness *)
+     let dataflow_liveness = Liveness.run_on_cfg (module G) cfg tidmap in
+     let alerts_with_dataflow_liveness =
+       Alert.DataflowLivenessFiller.set_for_alert_set
+         alerts_with_liveness
+         dataflow_liveness
+     in
+     let all_alerts = alerts_with_dataflow_liveness in
      
      (* get callees--both direct and indirect calls--of this call *)
      let () = Format.printf "Getting callees for sub %s\n%!" (Sub.name sub) in

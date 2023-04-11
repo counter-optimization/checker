@@ -232,7 +232,8 @@ module Checker(N : NumericDomain) = struct
                                          desc = alert_desc;
                                          left_val = None;
                                          right_val = None; 
-                                         problematic_operands = None }
+                                         problematic_operands = None;
+                                         flags_live_in = SS.empty }
                  in
                  ST.put { st with warns = Alert.Set.add st.warns alert } >>= fun () ->
                  ST.return N.bot
@@ -250,6 +251,7 @@ module Checker(N : NumericDomain) = struct
                                        rpo_idx = None;
                                        sub_name = None;
                                        flags_live = SS.empty;
+                                       flags_live_in = SS.empty;
                                        is_live = None;
                                        reason = Alert.SilentStores;
                                        desc = alert_desc;
