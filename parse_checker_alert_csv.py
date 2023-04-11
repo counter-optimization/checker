@@ -7,7 +7,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 """
-let csv_header : string = "subroutine_name,mir_opcode,addr,tid,problematic_operands,left_operand,right_operand,live_flags,is_live,alert_reason,description"
+let csv_header : string = "subroutine_name,mir_opcode,addr,tid,problematic_operands,left_operand,right_operand,live_flags,is_live,alert_reason,description,flags_live_in"
 """
 
 def is_comp_simp_warn(csv_row_dict) -> bool:
@@ -24,6 +24,14 @@ def get_live_flags(csv_row_dict):
     live_flags = str.split(live_flags_csv_str, sep=',')
     return set(live_flags)
 
+def has_flags_live_in(csv_row_dict) -> bool:
+    return len(csv_row_dict['flags_live_in']) != 0
+
+def get_flags_live_in(csv_row_dict):
+    flags_live_in_csv_str = csv_row_dict['flags_live_in']
+    flags_live_in = str.split(flags_live_in_csv_str, sep=',')
+    return set(flags_live_in)
+    
 if __name__ == '__main__':
     cs_opcodes = set()
     ss_opcodes = set()
@@ -40,9 +48,13 @@ if __name__ == '__main__':
             logger.info(f"Processing csv file: {csv_file_name}")
             for row in reader:
                 logger.debug(f"Opcode ({row['mir_opcode']}) has live flags csv row: {row['live_flags']}")
+                logger.debug(f"Opcode ({row['mir_opcode']}) has flags live *in* csv row: {row['flags_live_in']}")
                 opcode = row['mir_opcode']
 
                 subs.add(row['subroutine_name'])
+
+                if has_flags_live_in(row) or has_live_flags(row):
+                    logger.critical(f"Row ({row}) has live flags out: {row['live_flags']}, live flags in: {row['flags_live_in']}")
 
                 if is_comp_simp_warn(row):
                     cs_opcodes.add(opcode)
