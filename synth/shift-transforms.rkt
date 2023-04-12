@@ -170,6 +170,27 @@
     (sub-r/m64-r64 rax r10)
   ))
 
+; CF- and ZF-correct
+(define attempt-lshift64-imm-cf
+  (list
+    ; split up rax
+    (mov-r64-imm64 r10 (bv (expt 2 63) 64))
+    (mov-r/m64-r64 r11 r10)
+    (mov-r/m16-r16 r11w ax) ; r11 contains lower 16 bits
+    (mov-r/m16-imm16 ax (bv 1 16)) ; rax contains upper 48 bits
+    ; perform shifts
+    (shl-r/m64-imm8 r11 (bv 25 8))
+    (shl-r/m64-imm8 rax (bv 25 8))
+    (setc r12b) ; save CF into arbitrary scratch reg
+    ; mutate r11 to make adding safe
+    (rol-r/m64-imm8 r10 (bv 25 8))
+    (sub-r/m64-r64 r11 r10)
+    ; recombine
+    (add-r/m64-r64 rax r11)
+    (sub-r/m64-r64 rax r10)
+    (bt-r/m64-imm8 r12 (bv 0 8)) ; restore CF
+  ))
+
 (define spec-lshift64-imm
   (list
    (shl-r/m64-imm8 rax (bv 25 8))))
@@ -319,6 +340,33 @@
 (define spec-rshift64
   (list
    (shr-r/m64-cl rax)))
+
+; CF- and ZF-correct
+(define attempt-rshift64-imm-cf
+  (list
+    ; split up rax
+    (mov-r64-imm64 r10 (bv (expt 2 63) 64))
+    (mov-r/m64-r64 r11 r10)
+    (mov-r/m16-r16 r11w ax) ; r11 contains lower 16 bits
+    (mov-r/m16-imm16 ax (bv 1 16)) ; rax contains upper 48 bits
+    ; perform shifts
+    (shr-r/m64-imm8 r11 (bv 25 8))
+    (shr-r/m64-imm8 rax (bv 25 8))
+    (setc r12b) ; save CF into arbitrary scratch reg
+    ; mutate rax to make adding safe
+    (shr-r/m64-imm8 r10 (bv 25 8))
+    (shl-r/m64-1 r10)
+    (sub-r/m64-r64 rax r10)
+    ; recombine
+    (add-r/m64-r64 rax r11)
+    (shr-r/m64-1 r10)
+    (add-r/m64-r64 rax r10)
+    (bt-r/m64-imm8 r12 (bv 0 8)) ; restore CF
+  ))
+
+(define spec-rshift64-imm
+  (list
+   (shr-r/m64-imm8 rax (bv 25 8))))
 
 ; ---------- Bitwise ARSHIFT ----------
 
