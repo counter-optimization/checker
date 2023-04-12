@@ -27,6 +27,11 @@ let get_all_phis (sub : sub term) : phi term list =
   List.map blks ~f:(fun b -> Term.enum phi_t b |> Seq.to_list)
   |> List.join
 
+let get_all_jmps (sub : sub term) : jmp term list =
+  let blks = Term.enum blk_t sub |> Seq.to_list in
+  List.map blks ~f:(fun b -> Term.enum jmp_t b |> Seq.to_list)
+  |> List.join
+
 module GetDefsPass : sig
   (* create a map from var name to the tid where it is defined. this
    is the GetDefsPass.t type *)
@@ -143,6 +148,14 @@ module IsUsedPass = struct
                   let used_defining_tid = GetDefsPass.def_tid_of_var_name defmap used in
                   { used; user_tid; used_defining_tid; user })
 
+  let jmp_to_uses (j : jmp term) (defmap : GetDefsPass.t) : t list =
+    let used_names = Var_name_collector.run @@ Jmp.cond j in
+    let user_tid = Term.tid j in
+    Set.to_list used_names
+    |> List.map ~f:(fun used ->
+           let used_defining_tid = GetDefsPass.def_tid_of_var_name defmap used in
+           { used; user_tid; used_defining_tid; user = "" })
+
   let to_string (rel : t) : string =
     let user_tid_s = Tid.to_string rel.user_tid in
     let used_tid_s = match rel.used_defining_tid with
@@ -163,11 +176,14 @@ module IsUsedPass = struct
   let run (sub : Sub.t) (defs_mapping : GetDefsPass.t) : UseRel.t =
     let all_defs = get_all_defs sub in
     let all_phis = get_all_phis sub in
+    let all_jmps = get_all_jmps sub in
     let all_def_usages = List.map all_defs ~f:(fun d -> def_to_uses d defs_mapping)
                          |> List.join in
     let all_phi_usages = List.map all_phis ~f:(fun p -> phi_to_uses p defs_mapping)
                          |> List.join in
-    let rel_list = List.append all_phi_usages all_def_usages in
+    let all_jmp_usages = List.map all_jmps ~f:(fun j -> jmp_to_uses j defs_mapping)
+                         |> List.join in
+    let rel_list = List.append all_jmp_usages @@ List.append all_phi_usages all_def_usages in
     UseRel.of_list rel_list
 end
 
