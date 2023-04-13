@@ -265,7 +265,7 @@ end
 
 module InsnIdxFiller = struct
   let set_for_alert (idx_map : Idx_calculator.t) (alert : T.t) : T.t =
-    if Idx_calculator.contains_tid alert.tid
+    if Idx_calculator.contains_tid alert.tid idx_map
     then
       match Idx_calculator.get_idx alert.tid idx_map with
       | Some canonical_insn_idx ->

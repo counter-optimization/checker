@@ -332,7 +332,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                               ~f:(fun alert ->
                                 { alert with sub_name = Some (Sub.name sub) }) in
      let idx_map = Idx_calculator.build sub in
-     let alerts_with_indices = Alert.InsnInxFiller.set_for_alert_set idx_map alerts_with_subs in
+     let alerts_with_indices = Alert.InsnIdxFiller.set_for_alert_set idx_map alerts_with_subs in
      (* this is really dependency analysis info, not liveness info *)
      let alerts_with_liveness = Alert.LivenessFiller.set_for_alert_set alerts_with_indices liveness in
      (* here, liveness means classical dataflow liveness *)

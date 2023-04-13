@@ -56,7 +56,7 @@ let build sub : state =
   let idx_map = build_idx_map_for_blks blks in
   { subname = name; sub; blks; idx_map }
 
-let contains_tid tid idx_map =
+let contains_tid (tid : tid) { idx_map; _ }=
   Tid_map.mem idx_map tid
 
 let get_idx tid { idx_map; _ } : idx option =
