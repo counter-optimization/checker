@@ -331,11 +331,10 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let alerts_with_subs = Alert.Set.map all_alerts
                               ~f:(fun alert ->
                                 { alert with sub_name = Some (Sub.name sub) }) in
-
+     let idx_map = Idx_calculator.build sub in
+     let alerts_with_indices = Alert.InsnInxFiller.set_for_alert_set idx_map alerts_with_subs in
      (* this is really dependency analysis info, not liveness info *)
-     let alerts_with_liveness = Alert.LivenessFiller.set_for_alert_set alerts_with_subs liveness in
-     
-
+     let alerts_with_liveness = Alert.LivenessFiller.set_for_alert_set alerts_with_indices liveness in
      (* here, liveness means classical dataflow liveness *)
      let dataflow_liveness = Liveness.run_on_cfg (module G) cfg tidmap liveness in
      let alerts_with_dataflow_liveness =
@@ -483,7 +482,7 @@ let check_config config img ctxt proj : unit =
   
   let all_alerts = analysis_results.alerts in
   let all_alerts = Alert.OpcodeAndAddrFiller.set_for_alert_set all_alerts proj in
-  let all_alerts = Alert.InsnIdxFiller.set_for_alert_set all_alerts proj in
+  (* let all_alerts = Alert.InsnIdxFiller.set_for_alert_set all_alerts proj in *)
   let all_alerts = Alert.RemoveAllEmptySubName.set_for_alert_set all_alerts proj in
   let all_alerts = Alert.RemoveSpuriousCompSimpAlerts.set_for_alert_set all_alerts proj in
   let cs_stats = analysis_results.csevalstats in
