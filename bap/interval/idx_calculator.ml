@@ -1,5 +1,9 @@
 open Core
 open Bap.Std
+open Graphlib.Std
+
+module Cfg = Bap.Std.Graphs.Cfg
+module IrCfg = Bap.Std.Graphs.Ir
 
 type idx = int
 
@@ -50,9 +54,15 @@ let build_idx_map_for_blks (blks : blk term Seq.t) : idx Tid_map.t =
   Seq.fold blks ~init:idx_map ~f:(fun idx_map blk ->
       build_idx_map_for_blk blk idx_map)
 
+let rpo_of_sub sub : blk term Seq.t =
+  let cfg = Sub.to_cfg sub in
+  let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) cfg in
+  let blks = Seq.map nodes ~f:Graphs.Ir.Node.label in
+  blks
+
 let build sub : state =
   let name = Sub.name sub in
-  let blks = Term.enum blk_t sub in
+  let blks = rpo_of_sub sub in
   let idx_map = build_idx_map_for_blks blks in
   { subname = name; sub; blks; idx_map }
 
