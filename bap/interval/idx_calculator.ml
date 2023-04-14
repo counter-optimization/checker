@@ -5,7 +5,52 @@ open Graphlib.Std
 module Cfg = Bap.Std.Graphs.Cfg
 module IrCfg = Bap.Std.Graphs.Ir
 
+(**
+VAR CASE:
+000007ba: #12582866 := 3
+000007be: #12582865 := R11
+000007c4: R11 := #12582865 - #12582866 + pad:64[CF]
+
+INT CASES:
+ZERO CASE:
+  ((bap:insn ((SBB64ri32 R11 R11 0x0)))
+   (bap:mem ("401110: 49 81 db 00 00 00 00"))
+   (bap:bil-code
+    "{
+       #12582879 := R11
+       R11 := #12582879 - pad:64[CF]
+       OF := high:1[#12582879 & (#12582879 ^ R11)]
+       CF := #12582879 < pad:64[CF] | pad:64[CF] < 0
+       AF := 0x10 = (0x10 & (R11 ^ #12582879))
+       PF :=
+         ~low:1[let $3 = R11 >> 4 ^ R11 in let $4 = $3 >> 2 ^ $3 in $4 >> 1 ^
+     $4]
+       SF := high:1[R11]
+       ZF := 0 = R11
+     }")
+
+NON-ZERO CASE:
+(0x40111b
+  ((bap:insn ((SBB64ri32 R11 R11 0x1)))
+   (bap:mem ("40111b: 49 81 db 01 00 00 00"))
+   (bap:bil-code
+    "{
+       #12582875 := R11
+       R11 := #12582875 - 1 + pad:64[CF]
+       OF := high:1[(1 ^ #12582875) & (#12582875 ^ R11)]
+       CF := #12582875 < 1 + pad:64[CF] | 1 + pad:64[CF] < 1
+       AF := 0x10 = (0x10 & (R11 ^ 1 ^ #12582875))
+       PF :=
+         ~low:1[let $3 = R11 >> 4 ^ R11 in let $4 = $3 >> 2 ^ $3 in $4 >> 1 ^
+     $4]
+       SF := high:1[R11]
+       ZF := 0 = R11
+     }")
+ *)
+
 type idx = int
+
+module Env = Map.Make_binable_using_comparator(String)
 
 type state = {
     subname : string;
@@ -16,50 +61,97 @@ type state = {
 
 type t = state
 
-let get_exp_as_const_int : Bil.exp -> int option = function
+let rec is_idx_insn ?(in_sub : bool = false) ?(in_plus : bool = false) exp =
+  let () = printf "exp is: %s\n%!" (match exp with
+                                    | Bil.BinOp (op, _, _) ->
+                                       Common.binop_to_string op
+                                    | _ -> "") in
+  match exp with
+  | Bil.BinOp (Bil.MINUS, left, right) ->
+     (match left with
+      | Bil.Var _ -> true
+      | _ -> false)
+     &&
+     is_idx_insn ~in_sub:true right
+  | Bil.BinOp (Bil.PLUS, left, right) ->
+     in_sub
+     &&
+       (match left with
+        | Bil.Int _ -> true
+        | Bil.Var _ -> true
+        | _ -> false)
+     &&
+       is_idx_insn ~in_sub ~in_plus:true right
+  | Bil.Cast (cast, sz, subexp) ->
+     in_sub
+     &&
+       in_plus
+     &&
+     (match subexp with
+      | Bil.Var v -> String.Caseless.equal "cf" @@ Var.name v
+      | _ -> false)
+  | _ -> false
+
+let get_idx_from_idx_insn_rhs exp (env : word Env.t) tid : int =
+  let fail () =
+    failwith @@ sprintf "In Idx_calculator, get_idx_from_idx_insn_rhs: unknown idx insn format for tid: %a" Tid.pps tid
+  in
+  match exp with
+  | Bil.BinOp (Bil.MINUS, left, (Bil.BinOp (Bil.PLUS, idx_holder, _))) ->
+     let idx_word = match idx_holder with
+       | Bil.Int w -> w
+       | Bil.Var v -> Option.value_exn @@ Env.find env @@ Var.name v
+       | _ -> fail ()
+     in
+     (match Word.to_int idx_word with
+      | Ok i ->
+         let () = printf "in Idx_calculator, int: %d, word: %a\n%!" i Word.ppo idx_word in
+         i
+      | Error _ -> fail ())
+  | _ -> fail ()
+
+let try_assigning_consts (lhs : Var.t) (rhs : Bil.exp) (env : word Env.t) : word Env.t =
+  match rhs with
   | Bil.Int w ->
-     let () = printf "in Idx_calculator.get_exp_as_const_int, word is %a\n%!" Word.ppo w in
-     (match Word.to_int w with
-                  | Ok i ->
-                     let () = printf "in Idx_calculator, int: %d, word: %a\n%!" i Word.ppo w in
-                     Some i
-                  | Error _ ->
-                     let err_msg = sprintf "Couldn't convert word %a in idx_calculator" Word.pps w in
-                     failwith err_msg)
-  | _ -> None
+     let varname = Var.name lhs in
+     Env.set ~key:varname ~data:w env
+  | _ -> env
 
 let build_idx_map_for_blk basic_blk idx_map : idx Tid_map.t =
   let start_idx : idx option = None in
-  let rec loop defterms cur_idx idx_map =
+  let rec loop defterms cur_idx idx_map env =
     if Seq.is_empty defterms
     then idx_map
     else
       let curdef = Seq.hd_exn defterms in
       let () = printf "Processing def term: %a\n%!" Def.ppo curdef in
       let rest_defs = Option.value_exn (Seq.tl defterms) in
-      let assigned_var = Var.name @@ Def.lhs curdef in
+      let lhs = Def.lhs curdef in 
+      let assigned_var = Var.name lhs in
       let () = printf "Var assigned is: %s\n%!" assigned_var in
       let () = if Option.is_some cur_idx
                then printf "Cur idx is %d\n%!" @@ Option.value_exn cur_idx
                else printf "No cur idx\n%!"
       in
-      if String.Caseless.equal "r11" assigned_var
+      let rhs = Def.rhs curdef in
+      let env = try_assigning_consts lhs rhs env in
+      let current_tid = Term.tid curdef in
+      if String.Caseless.equal "r11" assigned_var && is_idx_insn rhs
       then
-        let rhs = Def.rhs curdef in
-        let cur_idx = get_exp_as_const_int rhs in
-        let () = printf "New cur_idx is: %d\n%!" @@ Option.value_exn cur_idx in
-        loop rest_defs cur_idx idx_map
+        let cur_idx = get_idx_from_idx_insn_rhs rhs env current_tid in
+        let () = printf "New cur_idx is: %d\n%!" cur_idx in
+        loop rest_defs (Some cur_idx) idx_map env
       else
-        let current_tid = Term.tid curdef in
-        let () = printf "Assigned tid %a to curidx\n%!" Tid.ppo current_tid in
+        let () = printf "Assigning tid %a to curidx\n%!" Tid.ppo current_tid in
         let idx_map = match cur_idx with
           | Some insn_idx -> Tid_map.set idx_map ~key:current_tid ~data:insn_idx 
           | None -> idx_map
         in
-        loop rest_defs cur_idx idx_map
+        loop rest_defs cur_idx idx_map env
   in
   let defterms = Term.enum def_t basic_blk in
-  loop defterms start_idx idx_map
+  let init_env : word Env.t = Env.empty in
+  loop defterms start_idx idx_map init_env
 
 let build_idx_map_for_blks (blks : blk term Seq.t) : idx Tid_map.t =
   let idx_map : idx Tid_map.t = Tid_map.empty in
