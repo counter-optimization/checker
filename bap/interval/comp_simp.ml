@@ -328,7 +328,7 @@ module Checker(N : NumericDomain) = struct
           then
             let deps = Option.value_exn deps in
             build_mock_sub_for_mx deps >>= fun mocksub ->
-            get_widths_of_free_vars mocksub >>= fun freevarwidths ->
+            (* get_widths_of_free_vars mocksub >>= fun freevarwidths -> *)
             let all_defs_of_sub = Common.defs_of_sub st.sub in
             let type_info = Type_determination.run all_defs_of_sub AMD64SystemVABI.size_of_var_name in
             let dependent_vars = Var_name_collector.run_on_defs deps in
