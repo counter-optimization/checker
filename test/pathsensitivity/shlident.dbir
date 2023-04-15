@@ -1,0 +1,69 @@
+R13 := RCX
+
+R12 := 0xFFFFFFFF
+
+R12 := high:56[R12].low:8[RCX]
+
+RCX := pad:64[low:32[R12]]
+
+R12 := 0
+
+RCX := RCX & 0x1F
+OF := 0
+CF := 0
+AF := unknown[bits]:u1
+PF := ~low:1[let $0 = RCX >> 4 ^ RCX in let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+SF := high:1[RCX]
+ZF := 0 = RCX
+
+#12582910 := R12
+#12582909 := 0
+R12 := R12
+CF := #12582910 < #12582909
+OF := high:1[(#12582910 ^ #12582909) & (#12582910 ^ R12)]
+AF := 0x10 = (0x10 & (R12 ^ #12582910 ^ #12582909))
+PF := ~low:1[let $0 = R12 >> 4 ^ R12 in let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+SF := high:1[R12]
+ZF := 0 = R12
+
+R12 := 63:8[R12].pad:8[ZF]
+
+R10 := if ZF then RAX else R10
+
+RCX := if ZF then R12 else RCX
+
+R11 := 0xFFFFFFFFFFFFFFFF
+
+R11 := high:56[R11].low:8[RAX]
+
+#12582907 := R11
+R11 := R11 << (RCX & 0x3F)
+if ((RCX & 0x3F) <> 0) {
+  CF := low:1[#12582907 >> 0x40 - (RCX & 0x3F)]
+  SF := high:1[R11]
+  ZF := 0 = R11
+  PF := ~low:1[let $0 = R11 >> 4 ^ R11 in let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+  AF := unknown[bits]:u1
+  if ((RCX & 0x3F) = 1) {
+    OF := (high:1[R11] | CF) & ~(high:1[R11] & CF)
+  }
+  else {
+    OF := unknown[bits]:u1
+  }
+}
+
+RAX := high:56[RAX].low:8[R11]
+
+#12582905 := R12
+#12582904 := 0
+R12 := R12
+CF := #12582905 < #12582904
+OF := high:1[(#12582905 ^ #12582904) & (#12582905 ^ R12)]
+AF := 0x10 = (0x10 & (R12 ^ #12582905 ^ #12582904))
+PF := ~low:1[let $0 = R12 >> 4 ^ R12 in let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+SF := high:1[R12]
+ZF := 0 = R12
+
+RAX := if ~ZF then R10 else RAX
+
+RCX := R13

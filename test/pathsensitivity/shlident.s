@@ -4,13 +4,13 @@
 	.globl shlident
 
 shlident:
-	mov %rcx, %r12
+	mov %rcx, %r13
 	mov $0xFFFFFFFF, %r12
 	mov %cl, %r12b
 	mov %r12d, %ecx
 	mov $0x0, %r12
 	and $0x1F, %rcx
-	cmp %rcx, 0
+	sub $0x0, %r12
 	setz %r12b
 	cmovz %rax, %r10
 	cmovz %r12, %rcx
@@ -18,6 +18,6 @@ shlident:
 	mov %al, %r11b
 	shl %cl, %r11
 	mov %r11b, %al
-	cmp %r12, 0
+	sub $0x0, %r12
 	cmovne %r10, %rax
 	mov %r13, %rcx

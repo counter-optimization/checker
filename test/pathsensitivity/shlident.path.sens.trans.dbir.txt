@@ -1,0 +1,1717 @@
+(in-package shlident.o)
+(in-class core:program)
+(bap:start-pseudo-node
+  ((core:label-aliases (start-pseudo-node))
+   (core:label-name (start-pseudo-node))))
+(bap:exit-pseudo-node
+  ((core:label-aliases (exit-pseudo-node))
+   (core:label-name (exit-pseudo-node))))
+(0x0
+  ((bap:insn ((MOV64rr R13 RCX)))
+   (bap:mem ("0: 49 89 cd"))
+   (bap:bil-code "{
+                    R13 := RCX
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "00000062:
+                    00000063: R13 := RCX")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((R13 RCX)))
+     (bap:insn-asm "movq %rcx, %r13")
+     (bap:insn-opcode MOV64rr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%00000062))
+     (bap:bil "{
+                 R13 := RCX
+               }")
+     (core:insn-code ("49 89 cd"))))
+   (core:label-addr (0x0))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x3
+  ((bap:insn ((MOV64ri R12 0xffffffff)))
+   (bap:mem ("3: 49 bc ff ff ff ff 00 00 00 00"))
+   (bap:bil-code "{
+                    R12 := 0xFFFFFFFF
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "00000068:
+                    00000069: R12 := 0xFFFFFFFF")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((R12 4294967295)))
+     (bap:insn-asm "movabsq $0xffffffff, %r12")
+     (bap:insn-opcode MOV64ri)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%00000068))
+     (bap:bil "{
+                 R12 := 0xFFFFFFFF
+               }")
+     (core:insn-code ("49 bc ff ff ff ff 00 00 00 00"))))
+   (core:label-addr (0x3))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0xd
+  ((bap:insn ((MOV8rr R12B CL)))
+   (bap:mem ("d: 41 88 cc"))
+   (bap:bil-code "{
+                    R12 := high:56[R12].low:8[RCX]
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "00000072:
+                    00000073: R12 := high:56[R12].low:8[RCX]")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((R12B CL)))
+     (bap:insn-asm "movb %cl, %r12b")
+     (bap:insn-opcode MOV8rr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%00000072))
+     (bap:bil "{
+                 R12 := high:56[R12].low:8[RCX]
+               }")
+     (core:insn-code ("41 88 cc"))))
+   (core:label-addr (0xd))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x10
+  ((bap:insn ((MOV32rr ECX R12D)))
+   (bap:mem ("10: 44 89 e1"))
+   (bap:bil-code "{
+                    RCX := pad:64[low:32[R12]]
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "0000007a:
+                    0000007b: RCX := pad:64[low:32[R12]]")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((ECX R12D)))
+     (bap:insn-asm "movl %r12d, %ecx")
+     (bap:insn-opcode MOV32rr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%0000007a))
+     (bap:bil "{
+                 RCX := pad:64[low:32[R12]]
+               }")
+     (core:insn-code ("44 89 e1"))))
+   (core:label-addr (0x10))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x13
+  ((bap:insn ((MOV64ri32 R12 0x0)))
+   (bap:mem ("13: 49 c7 c4 00 00 00 00"))
+   (bap:bil-code "{
+                    R12 := 0
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "00000080:
+                    00000081: R12 := 0")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((R12 0)))
+     (bap:insn-asm "movq $0x0, %r12")
+     (bap:insn-opcode MOV64ri32)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%00000080))
+     (bap:bil "{
+                 R12 := 0
+               }")
+     (core:insn-code ("49 c7 c4 00 00 00 00"))))
+   (core:label-addr (0x13))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x1a
+  ((bap:insn ((AND64ri8 RCX RCX 0x1f)))
+   (bap:mem ("1a: 48 83 e1 1f"))
+   (bap:bil-code
+    "{
+       RCX := RCX & 0x1F
+       OF := 0
+       CF := 0
+       AF := unknown[bits]:u1
+       PF :=
+         ~low:1[let $0 = RCX >> 4 ^ RCX in let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^
+     $1]
+       SF := high:1[RCX]
+       ZF := 0 = RCX
+     }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph
+      "00000092:
+       00000093: RCX := RCX & 0x1F
+       00000096: OF := 0
+       00000099: CF := 0
+       0000009c: AF := unknown[bits]:u1
+       000000a1: PF :=
+                 ~low:1[let $0 = RCX >> 4 ^ RCX in
+                        let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+       000000a5: SF := high:1[RCX]
+       000000a9: ZF := 0 = RCX")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((RCX RCX 31)))
+     (bap:insn-asm "andq $0x1f, %rcx")
+     (bap:insn-opcode AND64ri8)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%00000092))
+     (bap:bil
+      "{
+         RCX := RCX & 0x1F
+         OF := 0
+         CF := 0
+         AF := unknown[bits]:u1
+         PF :=
+           ~low:1[let $0 = RCX >> 4 ^ RCX in let $1 = $0 >> 2 ^ $0 in $1 >> 1
+       ^ $1]
+         SF := high:1[RCX]
+         ZF := 0 = RCX
+       }")
+     (core:insn-code ("48 83 e1 1f"))))
+   (core:label-addr (0x1a))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x1e
+  ((bap:insn ((CMP64mr Nil 0x1 Nil 0x0 Nil RCX)))
+   (bap:mem ("1e: 48 39 0c 25 00 00 00 00"))
+   (bap:bil-code
+    "{
+       #12582910 := mem[0, el]:u64 - RCX
+       CF := mem[0, el]:u64 < RCX
+       OF := high:1[(mem[0, el]:u64 ^ RCX) & (mem[0, el]:u64 ^ #12582910)]
+       AF := 0x10 = (0x10 & (#12582910 ^ mem[0, el]:u64 ^ RCX))
+       PF :=
+         ~low:1[let $0 = #12582910 >> 4 ^ #12582910 in
+                let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+       SF := high:1[#12582910]
+       ZF := 0 = #12582910
+     }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph
+      "000000c5:
+       000000c6: #12582910 := mem[0, el]:u64 - RCX
+       000000cb: CF := mem[0, el]:u64 < RCX
+       000000d2: OF := high:1[(mem[0, el]:u64 ^ RCX) & (mem[0, el]:u64 ^
+       #12582910)]
+       000000d8: AF := 0x10 = (0x10 & (#12582910 ^ mem[0, el]:u64 ^
+       RCX))
+       000000dd: PF :=
+                 ~low:1[let $0 = #12582910 >> 4 ^ #12582910 in
+                        let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+       000000e1: SF := high:1[#12582910]
+       000000e5: ZF := 0 = #12582910")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((Nil 1 Nil 0 Nil RCX)))
+     (bap:insn-asm "cmpq %rcx, 0x0")
+     (bap:insn-opcode CMP64mr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load true)
+       (:store false)))
+     (bap:bir (%000000c5))
+     (bap:bil
+      "{
+         #12582910 := mem[0, el]:u64 - RCX
+         CF := mem[0, el]:u64 < RCX
+         OF := high:1[(mem[0, el]:u64 ^ RCX) & (mem[0, el]:u64 ^ #12582910)]
+         AF := 0x10 = (0x10 & (#12582910 ^ mem[0, el]:u64 ^ RCX))
+         PF :=
+           ~low:1[let $0 = #12582910 >> 4 ^ #12582910 in
+                  let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+         SF := high:1[#12582910]
+         ZF := 0 = #12582910
+       }")
+     (core:insn-code ("48 39 0c 25 00 00 00 00"))))
+   (core:label-addr (0x1e))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x26
+  ((bap:insn ((SETCCr R12B 0x4)))
+   (bap:mem ("26: 41 0f 94 c4"))
+   (bap:bil-code "{
+                    R12 := 63:8[R12].pad:8[ZF]
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "000000ee:
+                    000000ef: R12 := 63:8[R12].pad:8[ZF]")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((R12B 4)))
+     (bap:insn-asm "sete %r12b")
+     (bap:insn-opcode SETCCr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%000000ee))
+     (bap:bil "{
+                 R12 := 63:8[R12].pad:8[ZF]
+               }")
+     (core:insn-code ("41 0f 94 c4"))))
+   (core:label-addr (0x26))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x2a
+  ((bap:insn ((CMOV64rr R10 R10 RAX 0x4)))
+   (bap:mem ("2a: 4c 0f 44 d0"))
+   (bap:bil-code "{
+                    R10 := if ZF then RAX else R10
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "000000fa:
+                    000000fb: R10 := if ZF then RAX else R10")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((R10 R10 RAX 4)))
+     (bap:insn-asm "cmoveq %rax, %r10")
+     (bap:insn-opcode CMOV64rr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%000000fa))
+     (bap:bil "{
+                 R10 := if ZF then RAX else R10
+               }")
+     (core:insn-code ("4c 0f 44 d0"))))
+   (core:label-addr (0x2a))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x2e
+  ((bap:insn ((CMOV64rr RCX RCX R12 0x4)))
+   (bap:mem ("2e: 49 0f 44 cc"))
+   (bap:bil-code "{
+                    RCX := if ZF then R12 else RCX
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "00000106:
+                    00000107: RCX := if ZF then R12 else RCX")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((RCX RCX R12 4)))
+     (bap:insn-asm "cmoveq %r12, %rcx")
+     (bap:insn-opcode CMOV64rr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%00000106))
+     (bap:bil "{
+                 RCX := if ZF then R12 else RCX
+               }")
+     (core:insn-code ("49 0f 44 cc"))))
+   (core:label-addr (0x2e))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x32
+  ((bap:insn ((MOV64ri32 R11 -0x1)))
+   (bap:mem ("32: 49 c7 c3 ff ff ff ff"))
+   (bap:bil-code "{
+                    R11 := 0xFFFFFFFFFFFFFFFF
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "0000010c:
+                    0000010d: R11 := 0xFFFFFFFFFFFFFFFF")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((R11 -1)))
+     (bap:insn-asm "movq $-0x1, %r11")
+     (bap:insn-opcode MOV64ri32)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%0000010c))
+     (bap:bil "{
+                 R11 := 0xFFFFFFFFFFFFFFFF
+               }")
+     (core:insn-code ("49 c7 c3 ff ff ff ff"))))
+   (core:label-addr (0x32))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x39
+  ((bap:insn ((MOV8rr R11B AL)))
+   (bap:mem ("39: 41 88 c3"))
+   (bap:bil-code "{
+                    R11 := high:56[R11].low:8[RAX]
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "00000116:
+                    00000117: R11 := high:56[R11].low:8[RAX]")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((R11B AL)))
+     (bap:insn-asm "movb %al, %r11b")
+     (bap:insn-opcode MOV8rr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%00000116))
+     (bap:bil "{
+                 R11 := high:56[R11].low:8[RAX]
+               }")
+     (core:insn-code ("41 88 c3"))))
+   (core:label-addr (0x39))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x3c
+  ((bap:insn ((SHL64rCL R11 R11)))
+   (bap:mem ("3c: 49 d3 e3"))
+   (bap:bil-code
+    "{
+       #12582908 := R11
+       R11 := R11 << (RCX & 0x3F)
+       if ((RCX & 0x3F) <> 0) {
+         CF := low:1[#12582908 >> 0x40 - (RCX & 0x3F)]
+         SF := high:1[R11]
+         ZF := 0 = R11
+         PF :=
+           ~low:1[let $0 = R11 >> 4 ^ R11 in let $1 = $0 >> 2 ^ $0 in $1 >> 1
+     ^ $1]
+         AF := unknown[bits]:u1
+         if ((RCX & 0x3F) = 1) {
+           OF := (high:1[R11] | CF) & ~(high:1[R11] & CF)
+         }
+         else {
+           OF := unknown[bits]:u1
+         }
+       }
+     }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph
+      "00000134:
+       00000135: #12582908 := R11
+       0000013a: R11 := R11 << (RCX & 0x3F)
+       0000016c: goto %00000167
+       00000167:
+       00000169: when (RCX & 0x3F) <> 0 goto %0000013f
+       0000016a: goto %00000168
+       0000013f:
+       00000140: CF := low:1[#12582908 >> 0x40 - (RCX & 0x3F)]
+       00000144: SF := high:1[R11]
+       00000148: ZF := 0 = R11
+       0000014d: PF :=
+                 ~low:1[let $0 = R11 >> 4 ^ R11 in
+                        let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+       00000150: AF := unknown[bits]:u1
+       00000162: goto %0000015c
+       0000015c:
+       0000015e: when (RCX & 0x3F) = 1 goto %00000157
+       0000015f: goto %0000015a
+       0000015a:
+       0000015b: OF := unknown[bits]:u1
+       00000161: goto %0000015d
+       0000015d:
+       0000016b: goto %00000168
+       00000157:
+       00000158: OF := (high:1[R11] | CF) & ~(high:1[R11] & CF)
+       00000160: goto %0000015d
+       00000168:
+       ")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((R11 R11)))
+     (bap:insn-asm "shlq %cl, %r11")
+     (bap:insn-opcode SHL64rCL)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir
+      (%00000134
+       %00000167
+       %0000013f
+       %0000015c
+       %0000015a
+       %0000015d
+       %00000157
+       %00000168))
+     (bap:bil
+      "{
+         #12582908 := R11
+         R11 := R11 << (RCX & 0x3F)
+         if ((RCX & 0x3F) <> 0) {
+           CF := low:1[#12582908 >> 0x40 - (RCX & 0x3F)]
+           SF := high:1[R11]
+           ZF := 0 = R11
+           PF :=
+             ~low:1[let $0 = R11 >> 4 ^ R11 in let $1 = $0 >> 2 ^ $0 in $1 >>
+       1 ^ $1]
+           AF := unknown[bits]:u1
+           if ((RCX & 0x3F) = 1) {
+             OF := (high:1[R11] | CF) & ~(high:1[R11] & CF)
+           }
+           else {
+             OF := unknown[bits]:u1
+           }
+         }
+       }")
+     (core:insn-code ("49 d3 e3"))))
+   (core:label-addr (0x3c))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x3f
+  ((bap:insn ((MOV8rr AL R11B)))
+   (bap:mem ("3f: 44 88 d8"))
+   (bap:bil-code "{
+                    RAX := high:56[RAX].low:8[R11]
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "00000176:
+                    00000177: RAX := high:56[RAX].low:8[R11]")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((AL R11B)))
+     (bap:insn-asm "movb %r11b, %al")
+     (bap:insn-opcode MOV8rr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%00000176))
+     (bap:bil "{
+                 RAX := high:56[RAX].low:8[R11]
+               }")
+     (core:insn-code ("44 88 d8"))))
+   (core:label-addr (0x3f))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x42
+  ((bap:insn ((CMP64mr Nil 0x1 Nil 0x0 Nil R12)))
+   (bap:mem ("42: 4c 39 24 25 00 00 00 00"))
+   (bap:bil-code
+    "{
+       #12582906 := mem[0, el]:u64 - R12
+       CF := mem[0, el]:u64 < R12
+       OF := high:1[(mem[0, el]:u64 ^ R12) & (mem[0, el]:u64 ^ #12582906)]
+       AF := 0x10 = (0x10 & (#12582906 ^ mem[0, el]:u64 ^ R12))
+       PF :=
+         ~low:1[let $0 = #12582906 >> 4 ^ #12582906 in
+                let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+       SF := high:1[#12582906]
+       ZF := 0 = #12582906
+     }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph
+      "00000193:
+       00000194: #12582906 := mem[0, el]:u64 - R12
+       00000199: CF := mem[0, el]:u64 < R12
+       000001a0: OF := high:1[(mem[0, el]:u64 ^ R12) & (mem[0, el]:u64 ^
+       #12582906)]
+       000001a6: AF := 0x10 = (0x10 & (#12582906 ^ mem[0, el]:u64 ^
+       R12))
+       000001ab: PF :=
+                 ~low:1[let $0 = #12582906 >> 4 ^ #12582906 in
+                        let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+       000001af: SF := high:1[#12582906]
+       000001b3: ZF := 0 = #12582906")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((Nil 1 Nil 0 Nil R12)))
+     (bap:insn-asm "cmpq %r12, 0x0")
+     (bap:insn-opcode CMP64mr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load true)
+       (:store false)))
+     (bap:bir (%00000193))
+     (bap:bil
+      "{
+         #12582906 := mem[0, el]:u64 - R12
+         CF := mem[0, el]:u64 < R12
+         OF := high:1[(mem[0, el]:u64 ^ R12) & (mem[0, el]:u64 ^ #12582906)]
+         AF := 0x10 = (0x10 & (#12582906 ^ mem[0, el]:u64 ^ R12))
+         PF :=
+           ~low:1[let $0 = #12582906 >> 4 ^ #12582906 in
+                  let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+         SF := high:1[#12582906]
+         ZF := 0 = #12582906
+       }")
+     (core:insn-code ("4c 39 24 25 00 00 00 00"))))
+   (core:label-addr (0x42))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x4a
+  ((bap:insn ((CMOV64rr RAX RAX R10 0x5)))
+   (bap:mem ("4a: 49 0f 45 c2"))
+   (bap:bil-code "{
+                    RAX := if ~ZF then R10 else RAX
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "000001be:
+                    000001bf: RAX := if ~ZF then R10 else RAX")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((RAX RAX R10 5)))
+     (bap:insn-asm "cmovneq %r10, %rax")
+     (bap:insn-opcode CMOV64rr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%000001be))
+     (bap:bil "{
+                 RAX := if ~ZF then R10 else RAX
+               }")
+     (core:insn-code ("49 0f 45 c2"))))
+   (core:label-addr (0x4a))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x4e
+  ((bap:insn ((MOV64rr RCX R13)))
+   (bap:mem ("4e: 4c 89 e9"))
+   (bap:bil-code "{
+                    RCX := R13
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "000001c6:
+                    000001c7: RCX := R13")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((RCX R13)))
+     (bap:insn-asm "movq %r13, %rcx")
+     (bap:insn-opcode MOV64rr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%000001c6))
+     (bap:bil "{
+                 RCX := R13
+               }")
+     (core:insn-code ("4c 89 e9"))))
+   (core:label-addr (0x4e))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(in-class bap:toplevel)
+(bap:main
+  ((bap:disassembly-result13 <opaque>)
+   (bap:target12 <opaque>)
+   (bap:load11 <opaque>)))
+(in-class core:theory)
+(core-internal:'(bap\:bir bap\:jump-dests bap\:bil-fp-emu)
+  ((core:instance
+    ((bap:bir bap:bil core:empty bap:jump-dests bap:bil-fp-emu)))))
+(core-internal:'(bap\:bil-fp-emu)
+  ((core:instance
+    ((bap:bil core:empty bap:bil-fp-emu)
+     "semantics in BIL, including FP emulation"))))
+(core-internal:'(bap\:jump-dests)
+  ((core:instance
+    ((core:empty bap:jump-dests) "an approximation of jump destinations"))))
+(core-internal:'(bap\:bir)
+  ((core:instance
+    ((bap:bir core:empty) "Builds the graphical representation of a program."))))
+(in-class core:unit)
+(file:shlident.o
+  ((bap:unit-encoding bap:llvm-x86_64)
+   (bap:symbol-table <opaque>)
+   (bap:primus-lisp-context
+    (context (patterns enabled) (x86-floating-points intrinsic-semantics)))
+   (bap:unit-memory
+    (((lower 0) (upper 0x50) (value (segment ".text 0 81")))
+     ((lower 0) (upper 0x50) (value (section ".text")))
+     ((lower 0) (upper 0x50) (value (code-region ())))
+     ((lower 0x58) (upper 0x87) (value (segment ".symtab 0x58 48")))
+     ((lower 0x88) (upper 0xA7) (value (segment ".strtab 0x88 32")))
+     ((lower 0x58) (upper 0x87) (value (section ".symtab")))
+     ((lower 0x88) (upper 0xA7) (value (section ".strtab")))))
+   (bap:unit-spec
+    ((declare vendor (name str))
+     (declare system (name str))
+     (declare subarch (name str))
+     (declare segment (addr int) (size int) (r bool) (w bool) (x bool))
+     (declare section (addr int) (size int))
+     (declare require (name str))
+     (declare named-region (addr int) (size int) (name str))
+     (declare mapped (addr int) (size int) (off int))
+     (declare llvm:virtual-segment-command (name str) (addr int) (size int))
+     (declare
+      llvm:symbol-entry
+      (name str)
+      (addr int)
+      (size int)
+      (off int)
+      (value int))
+     (declare
+      llvm:segment-command-flags
+      (name str)
+      (r bool)
+      (w bool)
+      (x bool))
+     (declare llvm:segment-command (name str) (off int) (size int))
+     (declare llvm:section-flags (name str) (r bool) (w bool) (x bool))
+     (declare llvm:section-entry (name str) (addr int) (size int) (off int))
+     (declare llvm:relocation (at int) (addr int))
+     (declare llvm:relative-relocation (at int))
+     (declare llvm:name-reference (at int) (name str))
+     (declare llvm:macho-symbol (name str) (value int))
+     (declare llvm:entry-point (addr int))
+     (declare
+      llvm:elf-virtual-program-header
+      (name str)
+      (addr int)
+      (size int))
+     (declare
+      llvm:elf-program-header-flags
+      (name str)
+      (ld bool)
+      (r bool)
+      (w bool)
+      (x bool))
+     (declare llvm:elf-program-header (name str) (off int) (size int))
+     (declare
+      llvm:coff-virtual-section-header
+      (name str)
+      (addr int)
+      (size int))
+     (declare llvm:coff-import-library (name str))
+     (declare llvm:code-entry (name str) (off int) (size int))
+     (declare llvm:base-address (addr int))
+     (declare is-little-endian (flag bool))
+     (declare is-executable (flag bool))
+     (declare format (name str))
+     (declare entry-point (addr int))
+     (declare code-region (addr int) (size int) (off int))
+     (declare bits (size int))
+     (declare bias (off int))
+     (declare base-address (addr int))
+     (declare arch (name str))
+     (declare abi (name str))
+     (vendor )
+     (system )
+     (subarch )
+     (segment 88 48 true false false)
+     (segment 0 81 true false true)
+     (segment 136 32 true false false)
+     (section 88 48)
+     (section 0 81)
+     (section 136 32)
+     (named-region 88 48 .symtab)
+     (named-region 0 81 .text)
+     (named-region 136 32 .strtab)
+     (mapped 88 48 152)
+     (mapped 0 81 64)
+     (mapped 136 32 200)
+     (llvm:section-flags .strtab true false false)
+     (llvm:section-flags .text true false true)
+     (llvm:section-flags .symtab true false false)
+     (llvm:section-entry .strtab 136 32 200)
+     (llvm:section-entry .text 0 81 64)
+     (llvm:section-entry .symtab 88 48 152)
+     (llvm:entry-point 0)
+     (llvm:code-entry .text 64 81)
+     (llvm:base-address 0)
+     (is-little-endian true)
+     (is-executable false)
+     (format elf)
+     (entry-point 0)
+     (code-region 0 81 64)
+     (bits 64)
+     (bias 0)
+     (base-address 0)
+     (arch x86_64)
+     (abi unknown)))
+   (bap:unit-arch x86_64)
+   (core:unit-source ((core:source-language bap:primus-lisp)))
+   (core:unit-target bap:x86_64-gnu-elf)
+   (core:unit-bias (0x0))
+   (core:unit-path (shlident.o))))
+(in-package shlident.o)
+(in-class core:program)
+(bap:start-pseudo-node
+  ((core:label-aliases (start-pseudo-node))
+   (core:label-name (start-pseudo-node))))
+(bap:exit-pseudo-node
+  ((core:label-aliases (exit-pseudo-node))
+   (core:label-name (exit-pseudo-node))))
+(0x0
+  ((bap:insn ((MOV64rr R13 RCX)))
+   (bap:mem ("0: 49 89 cd"))
+   (bap:bil-code "{
+                    R13 := RCX
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "00000062:
+                    00000063: R13 := RCX")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((R13 RCX)))
+     (bap:insn-asm "movq %rcx, %r13")
+     (bap:insn-opcode MOV64rr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%00000062))
+     (bap:bil "{
+                 R13 := RCX
+               }")
+     (core:insn-code ("49 89 cd"))))
+   (core:label-addr (0x0))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x3
+  ((bap:insn ((MOV64ri R12 0xffffffff)))
+   (bap:mem ("3: 49 bc ff ff ff ff 00 00 00 00"))
+   (bap:bil-code "{
+                    R12 := 0xFFFFFFFF
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "00000068:
+                    00000069: R12 := 0xFFFFFFFF")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((R12 4294967295)))
+     (bap:insn-asm "movabsq $0xffffffff, %r12")
+     (bap:insn-opcode MOV64ri)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%00000068))
+     (bap:bil "{
+                 R12 := 0xFFFFFFFF
+               }")
+     (core:insn-code ("49 bc ff ff ff ff 00 00 00 00"))))
+   (core:label-addr (0x3))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0xd
+  ((bap:insn ((MOV8rr R12B CL)))
+   (bap:mem ("d: 41 88 cc"))
+   (bap:bil-code "{
+                    R12 := high:56[R12].low:8[RCX]
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "00000072:
+                    00000073: R12 := high:56[R12].low:8[RCX]")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((R12B CL)))
+     (bap:insn-asm "movb %cl, %r12b")
+     (bap:insn-opcode MOV8rr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%00000072))
+     (bap:bil "{
+                 R12 := high:56[R12].low:8[RCX]
+               }")
+     (core:insn-code ("41 88 cc"))))
+   (core:label-addr (0xd))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x10
+  ((bap:insn ((MOV32rr ECX R12D)))
+   (bap:mem ("10: 44 89 e1"))
+   (bap:bil-code "{
+                    RCX := pad:64[low:32[R12]]
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "0000007a:
+                    0000007b: RCX := pad:64[low:32[R12]]")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((ECX R12D)))
+     (bap:insn-asm "movl %r12d, %ecx")
+     (bap:insn-opcode MOV32rr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%0000007a))
+     (bap:bil "{
+                 RCX := pad:64[low:32[R12]]
+               }")
+     (core:insn-code ("44 89 e1"))))
+   (core:label-addr (0x10))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x13
+  ((bap:insn ((MOV64ri32 R12 0x0)))
+   (bap:mem ("13: 49 c7 c4 00 00 00 00"))
+   (bap:bil-code "{
+                    R12 := 0
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "00000080:
+                    00000081: R12 := 0")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((R12 0)))
+     (bap:insn-asm "movq $0x0, %r12")
+     (bap:insn-opcode MOV64ri32)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%00000080))
+     (bap:bil "{
+                 R12 := 0
+               }")
+     (core:insn-code ("49 c7 c4 00 00 00 00"))))
+   (core:label-addr (0x13))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x1a
+  ((bap:insn ((AND64ri8 RCX RCX 0x1f)))
+   (bap:mem ("1a: 48 83 e1 1f"))
+   (bap:bil-code
+    "{
+       RCX := RCX & 0x1F
+       OF := 0
+       CF := 0
+       AF := unknown[bits]:u1
+       PF :=
+         ~low:1[let $0 = RCX >> 4 ^ RCX in let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^
+     $1]
+       SF := high:1[RCX]
+       ZF := 0 = RCX
+     }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph
+      "00000092:
+       00000093: RCX := RCX & 0x1F
+       00000096: OF := 0
+       00000099: CF := 0
+       0000009c: AF := unknown[bits]:u1
+       000000a1: PF :=
+                 ~low:1[let $0 = RCX >> 4 ^ RCX in
+                        let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+       000000a5: SF := high:1[RCX]
+       000000a9: ZF := 0 = RCX")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((RCX RCX 31)))
+     (bap:insn-asm "andq $0x1f, %rcx")
+     (bap:insn-opcode AND64ri8)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%00000092))
+     (bap:bil
+      "{
+         RCX := RCX & 0x1F
+         OF := 0
+         CF := 0
+         AF := unknown[bits]:u1
+         PF :=
+           ~low:1[let $0 = RCX >> 4 ^ RCX in let $1 = $0 >> 2 ^ $0 in $1 >> 1
+       ^ $1]
+         SF := high:1[RCX]
+         ZF := 0 = RCX
+       }")
+     (core:insn-code ("48 83 e1 1f"))))
+   (core:label-addr (0x1a))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x1e
+  ((bap:insn ((CMP64mr Nil 0x1 Nil 0x0 Nil RCX)))
+   (bap:mem ("1e: 48 39 0c 25 00 00 00 00"))
+   (bap:bil-code
+    "{
+       #12582910 := mem[0, el]:u64 - RCX
+       CF := mem[0, el]:u64 < RCX
+       OF := high:1[(mem[0, el]:u64 ^ RCX) & (mem[0, el]:u64 ^ #12582910)]
+       AF := 0x10 = (0x10 & (#12582910 ^ mem[0, el]:u64 ^ RCX))
+       PF :=
+         ~low:1[let $0 = #12582910 >> 4 ^ #12582910 in
+                let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+       SF := high:1[#12582910]
+       ZF := 0 = #12582910
+     }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph
+      "000000c5:
+       000000c6: #12582910 := mem[0, el]:u64 - RCX
+       000000cb: CF := mem[0, el]:u64 < RCX
+       000000d2: OF := high:1[(mem[0, el]:u64 ^ RCX) & (mem[0, el]:u64 ^
+       #12582910)]
+       000000d8: AF := 0x10 = (0x10 & (#12582910 ^ mem[0, el]:u64 ^
+       RCX))
+       000000dd: PF :=
+                 ~low:1[let $0 = #12582910 >> 4 ^ #12582910 in
+                        let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+       000000e1: SF := high:1[#12582910]
+       000000e5: ZF := 0 = #12582910")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((Nil 1 Nil 0 Nil RCX)))
+     (bap:insn-asm "cmpq %rcx, 0x0")
+     (bap:insn-opcode CMP64mr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load true)
+       (:store false)))
+     (bap:bir (%000000c5))
+     (bap:bil
+      "{
+         #12582910 := mem[0, el]:u64 - RCX
+         CF := mem[0, el]:u64 < RCX
+         OF := high:1[(mem[0, el]:u64 ^ RCX) & (mem[0, el]:u64 ^ #12582910)]
+         AF := 0x10 = (0x10 & (#12582910 ^ mem[0, el]:u64 ^ RCX))
+         PF :=
+           ~low:1[let $0 = #12582910 >> 4 ^ #12582910 in
+                  let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+         SF := high:1[#12582910]
+         ZF := 0 = #12582910
+       }")
+     (core:insn-code ("48 39 0c 25 00 00 00 00"))))
+   (core:label-addr (0x1e))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x26
+  ((bap:insn ((SETCCr R12B 0x4)))
+   (bap:mem ("26: 41 0f 94 c4"))
+   (bap:bil-code "{
+                    R12 := 63:8[R12].pad:8[ZF]
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "000000ee:
+                    000000ef: R12 := 63:8[R12].pad:8[ZF]")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((R12B 4)))
+     (bap:insn-asm "sete %r12b")
+     (bap:insn-opcode SETCCr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%000000ee))
+     (bap:bil "{
+                 R12 := 63:8[R12].pad:8[ZF]
+               }")
+     (core:insn-code ("41 0f 94 c4"))))
+   (core:label-addr (0x26))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x2a
+  ((bap:insn ((CMOV64rr R10 R10 RAX 0x4)))
+   (bap:mem ("2a: 4c 0f 44 d0"))
+   (bap:bil-code "{
+                    R10 := if ZF then RAX else R10
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "000000fa:
+                    000000fb: R10 := if ZF then RAX else R10")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((R10 R10 RAX 4)))
+     (bap:insn-asm "cmoveq %rax, %r10")
+     (bap:insn-opcode CMOV64rr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%000000fa))
+     (bap:bil "{
+                 R10 := if ZF then RAX else R10
+               }")
+     (core:insn-code ("4c 0f 44 d0"))))
+   (core:label-addr (0x2a))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x2e
+  ((bap:insn ((CMOV64rr RCX RCX R12 0x4)))
+   (bap:mem ("2e: 49 0f 44 cc"))
+   (bap:bil-code "{
+                    RCX := if ZF then R12 else RCX
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "00000106:
+                    00000107: RCX := if ZF then R12 else RCX")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((RCX RCX R12 4)))
+     (bap:insn-asm "cmoveq %r12, %rcx")
+     (bap:insn-opcode CMOV64rr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%00000106))
+     (bap:bil "{
+                 RCX := if ZF then R12 else RCX
+               }")
+     (core:insn-code ("49 0f 44 cc"))))
+   (core:label-addr (0x2e))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x32
+  ((bap:insn ((MOV64ri32 R11 -0x1)))
+   (bap:mem ("32: 49 c7 c3 ff ff ff ff"))
+   (bap:bil-code "{
+                    R11 := 0xFFFFFFFFFFFFFFFF
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "0000010c:
+                    0000010d: R11 := 0xFFFFFFFFFFFFFFFF")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((R11 -1)))
+     (bap:insn-asm "movq $-0x1, %r11")
+     (bap:insn-opcode MOV64ri32)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%0000010c))
+     (bap:bil "{
+                 R11 := 0xFFFFFFFFFFFFFFFF
+               }")
+     (core:insn-code ("49 c7 c3 ff ff ff ff"))))
+   (core:label-addr (0x32))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x39
+  ((bap:insn ((MOV8rr R11B AL)))
+   (bap:mem ("39: 41 88 c3"))
+   (bap:bil-code "{
+                    R11 := high:56[R11].low:8[RAX]
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "00000116:
+                    00000117: R11 := high:56[R11].low:8[RAX]")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((R11B AL)))
+     (bap:insn-asm "movb %al, %r11b")
+     (bap:insn-opcode MOV8rr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%00000116))
+     (bap:bil "{
+                 R11 := high:56[R11].low:8[RAX]
+               }")
+     (core:insn-code ("41 88 c3"))))
+   (core:label-addr (0x39))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x3c
+  ((bap:insn ((SHL64rCL R11 R11)))
+   (bap:mem ("3c: 49 d3 e3"))
+   (bap:bil-code
+    "{
+       #12582908 := R11
+       R11 := R11 << (RCX & 0x3F)
+       if ((RCX & 0x3F) <> 0) {
+         CF := low:1[#12582908 >> 0x40 - (RCX & 0x3F)]
+         SF := high:1[R11]
+         ZF := 0 = R11
+         PF :=
+           ~low:1[let $0 = R11 >> 4 ^ R11 in let $1 = $0 >> 2 ^ $0 in $1 >> 1
+     ^ $1]
+         AF := unknown[bits]:u1
+         if ((RCX & 0x3F) = 1) {
+           OF := (high:1[R11] | CF) & ~(high:1[R11] & CF)
+         }
+         else {
+           OF := unknown[bits]:u1
+         }
+       }
+     }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph
+      "00000134:
+       00000135: #12582908 := R11
+       0000013a: R11 := R11 << (RCX & 0x3F)
+       0000016c: goto %00000167
+       00000167:
+       00000169: when (RCX & 0x3F) <> 0 goto %0000013f
+       0000016a: goto %00000168
+       0000013f:
+       00000140: CF := low:1[#12582908 >> 0x40 - (RCX & 0x3F)]
+       00000144: SF := high:1[R11]
+       00000148: ZF := 0 = R11
+       0000014d: PF :=
+                 ~low:1[let $0 = R11 >> 4 ^ R11 in
+                        let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+       00000150: AF := unknown[bits]:u1
+       00000162: goto %0000015c
+       0000015c:
+       0000015e: when (RCX & 0x3F) = 1 goto %00000157
+       0000015f: goto %0000015a
+       0000015a:
+       0000015b: OF := unknown[bits]:u1
+       00000161: goto %0000015d
+       0000015d:
+       0000016b: goto %00000168
+       00000157:
+       00000158: OF := (high:1[R11] | CF) & ~(high:1[R11] & CF)
+       00000160: goto %0000015d
+       00000168:
+       ")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((R11 R11)))
+     (bap:insn-asm "shlq %cl, %r11")
+     (bap:insn-opcode SHL64rCL)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir
+      (%00000134
+       %00000167
+       %0000013f
+       %0000015c
+       %0000015a
+       %0000015d
+       %00000157
+       %00000168))
+     (bap:bil
+      "{
+         #12582908 := R11
+         R11 := R11 << (RCX & 0x3F)
+         if ((RCX & 0x3F) <> 0) {
+           CF := low:1[#12582908 >> 0x40 - (RCX & 0x3F)]
+           SF := high:1[R11]
+           ZF := 0 = R11
+           PF :=
+             ~low:1[let $0 = R11 >> 4 ^ R11 in let $1 = $0 >> 2 ^ $0 in $1 >>
+       1 ^ $1]
+           AF := unknown[bits]:u1
+           if ((RCX & 0x3F) = 1) {
+             OF := (high:1[R11] | CF) & ~(high:1[R11] & CF)
+           }
+           else {
+             OF := unknown[bits]:u1
+           }
+         }
+       }")
+     (core:insn-code ("49 d3 e3"))))
+   (core:label-addr (0x3c))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x3f
+  ((bap:insn ((MOV8rr AL R11B)))
+   (bap:mem ("3f: 44 88 d8"))
+   (bap:bil-code "{
+                    RAX := high:56[RAX].low:8[R11]
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "00000176:
+                    00000177: RAX := high:56[RAX].low:8[R11]")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((AL R11B)))
+     (bap:insn-asm "movb %r11b, %al")
+     (bap:insn-opcode MOV8rr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%00000176))
+     (bap:bil "{
+                 RAX := high:56[RAX].low:8[R11]
+               }")
+     (core:insn-code ("44 88 d8"))))
+   (core:label-addr (0x3f))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x42
+  ((bap:insn ((CMP64mr Nil 0x1 Nil 0x0 Nil R12)))
+   (bap:mem ("42: 4c 39 24 25 00 00 00 00"))
+   (bap:bil-code
+    "{
+       #12582906 := mem[0, el]:u64 - R12
+       CF := mem[0, el]:u64 < R12
+       OF := high:1[(mem[0, el]:u64 ^ R12) & (mem[0, el]:u64 ^ #12582906)]
+       AF := 0x10 = (0x10 & (#12582906 ^ mem[0, el]:u64 ^ R12))
+       PF :=
+         ~low:1[let $0 = #12582906 >> 4 ^ #12582906 in
+                let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+       SF := high:1[#12582906]
+       ZF := 0 = #12582906
+     }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph
+      "00000193:
+       00000194: #12582906 := mem[0, el]:u64 - R12
+       00000199: CF := mem[0, el]:u64 < R12
+       000001a0: OF := high:1[(mem[0, el]:u64 ^ R12) & (mem[0, el]:u64 ^
+       #12582906)]
+       000001a6: AF := 0x10 = (0x10 & (#12582906 ^ mem[0, el]:u64 ^
+       R12))
+       000001ab: PF :=
+                 ~low:1[let $0 = #12582906 >> 4 ^ #12582906 in
+                        let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+       000001af: SF := high:1[#12582906]
+       000001b3: ZF := 0 = #12582906")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((Nil 1 Nil 0 Nil R12)))
+     (bap:insn-asm "cmpq %r12, 0x0")
+     (bap:insn-opcode CMP64mr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load true)
+       (:store false)))
+     (bap:bir (%00000193))
+     (bap:bil
+      "{
+         #12582906 := mem[0, el]:u64 - R12
+         CF := mem[0, el]:u64 < R12
+         OF := high:1[(mem[0, el]:u64 ^ R12) & (mem[0, el]:u64 ^ #12582906)]
+         AF := 0x10 = (0x10 & (#12582906 ^ mem[0, el]:u64 ^ R12))
+         PF :=
+           ~low:1[let $0 = #12582906 >> 4 ^ #12582906 in
+                  let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+         SF := high:1[#12582906]
+         ZF := 0 = #12582906
+       }")
+     (core:insn-code ("4c 39 24 25 00 00 00 00"))))
+   (core:label-addr (0x42))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x4a
+  ((bap:insn ((CMOV64rr RAX RAX R10 0x5)))
+   (bap:mem ("4a: 49 0f 45 c2"))
+   (bap:bil-code "{
+                    RAX := if ~ZF then R10 else RAX
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "000001be:
+                    000001bf: RAX := if ~ZF then R10 else RAX")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((RAX RAX R10 5)))
+     (bap:insn-asm "cmovneq %r10, %rax")
+     (bap:insn-opcode CMOV64rr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%000001be))
+     (bap:bil "{
+                 RAX := if ~ZF then R10 else RAX
+               }")
+     (core:insn-code ("49 0f 45 c2"))))
+   (core:label-addr (0x4a))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(0x4e
+  ((bap:insn ((MOV64rr RCX R13)))
+   (bap:mem ("4e: 4c 89 e9"))
+   (bap:bil-code "{
+                    RCX := R13
+                  }")
+   (bap:arch x86_64)
+   (core:semantics
+    ((bap:ir-graph "000001c6:
+                    000001c7: RCX := R13")
+     (bap:insn-dests (()))
+     (bap:insn-ops ((RCX R13)))
+     (bap:insn-asm "movq %r13, %rcx")
+     (bap:insn-opcode MOV64rr)
+     (bap:insn-properties
+      ((:invalid false)
+       (:jump false)
+       (:cond false)
+       (:indirect false)
+       (:call false)
+       (:return false)
+       (:barrier false)
+       (:affect-control-flow false)
+       (:load false)
+       (:store false)))
+     (bap:bir (%000001c6))
+     (bap:bil "{
+                 RCX := R13
+               }")
+     (core:insn-code ("4c 89 e9"))))
+   (core:label-addr (0x4e))
+   (core:label-unit (2))
+   (core:encoding bap:llvm-x86_64)))
+(in-class bap:toplevel)
+(bap:main
+  ((bap:disassembly-result13 <opaque>)
+   (bap:target12 <opaque>)
+   (bap:load11 <opaque>)))
+(in-class core:theory)
+(core-internal:'(bap\:bir bap\:jump-dests bap\:bil-fp-emu)
+  ((core:instance
+    ((bap:bir bap:bil core:empty bap:jump-dests bap:bil-fp-emu)))))
+(core-internal:'(bap\:bil-fp-emu)
+  ((core:instance
+    ((bap:bil core:empty bap:bil-fp-emu)
+     "semantics in BIL, including FP emulation"))))
+(core-internal:'(bap\:jump-dests)
+  ((core:instance
+    ((core:empty bap:jump-dests) "an approximation of jump destinations"))))
+(core-internal:'(bap\:bir)
+  ((core:instance
+    ((bap:bir core:empty) "Builds the graphical representation of a program."))))
+(in-class core:unit)
+(file:shlident.o
+  ((bap:unit-encoding bap:llvm-x86_64)
+   (bap:symbol-table <opaque>)
+   (bap:primus-lisp-context
+    (context (patterns enabled) (x86-floating-points intrinsic-semantics)))
+   (bap:unit-memory
+    (((lower 0) (upper 0x50) (value (segment ".text 0 81")))
+     ((lower 0) (upper 0x50) (value (section ".text")))
+     ((lower 0) (upper 0x50) (value (code-region ())))
+     ((lower 0x58) (upper 0x87) (value (segment ".symtab 0x58 48")))
+     ((lower 0x88) (upper 0xA7) (value (segment ".strtab 0x88 32")))
+     ((lower 0x58) (upper 0x87) (value (section ".symtab")))
+     ((lower 0x88) (upper 0xA7) (value (section ".strtab")))))
+   (bap:unit-spec
+    ((declare vendor (name str))
+     (declare system (name str))
+     (declare subarch (name str))
+     (declare segment (addr int) (size int) (r bool) (w bool) (x bool))
+     (declare section (addr int) (size int))
+     (declare require (name str))
+     (declare named-region (addr int) (size int) (name str))
+     (declare mapped (addr int) (size int) (off int))
+     (declare llvm:virtual-segment-command (name str) (addr int) (size int))
+     (declare
+      llvm:symbol-entry
+      (name str)
+      (addr int)
+      (size int)
+      (off int)
+      (value int))
+     (declare
+      llvm:segment-command-flags
+      (name str)
+      (r bool)
+      (w bool)
+      (x bool))
+     (declare llvm:segment-command (name str) (off int) (size int))
+     (declare llvm:section-flags (name str) (r bool) (w bool) (x bool))
+     (declare llvm:section-entry (name str) (addr int) (size int) (off int))
+     (declare llvm:relocation (at int) (addr int))
+     (declare llvm:relative-relocation (at int))
+     (declare llvm:name-reference (at int) (name str))
+     (declare llvm:macho-symbol (name str) (value int))
+     (declare llvm:entry-point (addr int))
+     (declare
+      llvm:elf-virtual-program-header
+      (name str)
+      (addr int)
+      (size int))
+     (declare
+      llvm:elf-program-header-flags
+      (name str)
+      (ld bool)
+      (r bool)
+      (w bool)
+      (x bool))
+     (declare llvm:elf-program-header (name str) (off int) (size int))
+     (declare
+      llvm:coff-virtual-section-header
+      (name str)
+      (addr int)
+      (size int))
+     (declare llvm:coff-import-library (name str))
+     (declare llvm:code-entry (name str) (off int) (size int))
+     (declare llvm:base-address (addr int))
+     (declare is-little-endian (flag bool))
+     (declare is-executable (flag bool))
+     (declare format (name str))
+     (declare entry-point (addr int))
+     (declare code-region (addr int) (size int) (off int))
+     (declare bits (size int))
+     (declare bias (off int))
+     (declare base-address (addr int))
+     (declare arch (name str))
+     (declare abi (name str))
+     (vendor )
+     (system )
+     (subarch )
+     (segment 88 48 true false false)
+     (segment 0 81 true false true)
+     (segment 136 32 true false false)
+     (section 88 48)
+     (section 0 81)
+     (section 136 32)
+     (named-region 88 48 .symtab)
+     (named-region 0 81 .text)
+     (named-region 136 32 .strtab)
+     (mapped 88 48 152)
+     (mapped 0 81 64)
+     (mapped 136 32 200)
+     (llvm:section-flags .strtab true false false)
+     (llvm:section-flags .text true false true)
+     (llvm:section-flags .symtab true false false)
+     (llvm:section-entry .strtab 136 32 200)
+     (llvm:section-entry .text 0 81 64)
+     (llvm:section-entry .symtab 88 48 152)
+     (llvm:entry-point 0)
+     (llvm:code-entry .text 64 81)
+     (llvm:base-address 0)
+     (is-little-endian true)
+     (is-executable false)
+     (format elf)
+     (entry-point 0)
+     (code-region 0 81 64)
+     (bits 64)
+     (bias 0)
+     (base-address 0)
+     (arch x86_64)
+     (abi unknown)))
+   (bap:unit-arch x86_64)
+   (core:unit-source ((core:source-language bap:primus-lisp)))
+   (core:unit-target bap:x86_64-gnu-elf)
+   (core:unit-bias (0x0))
+   (core:unit-path (shlident.o))))
+0000022d: program
