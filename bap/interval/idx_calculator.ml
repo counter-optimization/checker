@@ -100,7 +100,11 @@ let get_idx_from_idx_insn_rhs exp (env : word Env.t) tid : int =
   | Bil.BinOp (Bil.MINUS, left, (Bil.BinOp (Bil.PLUS, idx_holder, _))) ->
      let idx_word = match idx_holder with
        | Bil.Int w -> w
-       | Bil.Var v -> Option.value_exn @@ Env.find env @@ Var.name v
+       | Bil.Var v ->
+          let varname = Var.name v in
+          (match Env.find env varname with
+          | Some w -> w
+          | None -> fail ())
        | _ -> fail ()
      in
      (match Word.to_int idx_word with
