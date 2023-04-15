@@ -659,8 +659,12 @@ module Executor = struct
        end
     | Bil.Let (_, _, _) ->
        failwith "in Symbolic.Executor.eval_exp, no support for let"
+    | Bil.Unknown (_, (Imm n)) ->
+       make_fresh_symbolic >>= fun symname ->
+       fresh_bv_for_symbolic symname n >>= fun bv ->
+       ST.return @@ Some bv
     | Bil.Unknown (_, _) ->
-       failwith "in Symbolic.Executor.eval_exp, no support for unk"
+       failwith "in Symbolic.Executor.eval_exp, no support for generic unk"
     | Bil.Ite (i, t, e) ->
        eval_exp i >>= fun mi ->
        eval_exp t >>= fun mt ->

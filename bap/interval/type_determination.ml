@@ -172,7 +172,10 @@ let rec determine_types_from_exp (exp : Bil.exp) abi_typer : typd option ST.t =
   | Bil.Cast (_, n, _) ->
      ST.return @@ Option.return @@ Typed.Bitvector n
   | Bil.Let (_, _, _) -> ST.return None
-  | Bil.Unknown (_, _) -> ST.return None
+  | Bil.Unknown (_, (Imm n)) ->
+     ST.return @@ Option.return @@ Typed.Bitvector n
+  | Bil.Unknown (_, _) ->
+     ST.return None
   | Bil.Ite (_, then', else') ->
      determine_types_from_exp then' abi_typer >>= fun then_typd ->
      determine_types_from_exp else' abi_typer >>= fun else_typd ->
