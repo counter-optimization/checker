@@ -56,8 +56,8 @@ if __name__ == '__main__':
                 subs.add(row['subroutine_name'])
 
 
-                if row['rpo_idx'] != "":
-                    logger.critical(f"Row ({row}) has rpo_idx")
+                if row['rpo_idx'] == "":
+                    logger.critical(f"Row ({row}) has no rpo_idx")
                 
                 if has_flags_live_in(row) or has_live_flags(row):
                     logger.debug(f"Row ({row}) has live flags out: {row['live_flags']}, live flags in: {row['flags_live_in']}")

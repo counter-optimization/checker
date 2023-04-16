@@ -654,6 +654,23 @@ let save_alerts_to_csv_file ~(filename : string) (alerts : Set.t) : unit =
   let final_rows = List.cons csv_header alerts_as_csv_rows in
   Out_channel.write_lines filename final_rows
 
+module RemoveAndWarnEmptyInsnIdxAlerts : Pass = struct
+  let warn_on_no_insn_idx alert : unit =
+    let csv_row = to_csv_row alert in 
+    printf "Alert for tid (%a) has empty insn idx. Full alert csv row is: %s\n%!"
+      Tid.ppo alert.tid csv_row
+  
+  let has_insn_idx alert : bool =
+    match alert.rpo_idx with
+    | Some _ -> true
+    | None ->
+       let () = warn_on_no_insn_idx alert in
+       false
+
+  let set_for_alert_set alerts _proj =
+    Set.filter alerts ~f:has_insn_idx
+end
+
 module RemoveSpuriousCompSimpAlerts : Pass = struct
   let is_comp_simp_warn alert =
     match alert.reason with

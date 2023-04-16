@@ -221,6 +221,7 @@ module Checker(N : NumericDomain) = struct
                if failed_ss
                then
                  let alert_desc = "Silent stores failed last ditch sym ex check" in
+                 let () = printf "%s\n%!" alert_desc in
                  let alert : Alert.t = { tid = st.tid;
                                          opcode = None;
                                          addr = None;
