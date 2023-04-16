@@ -671,6 +671,21 @@ module RemoveAndWarnEmptyInsnIdxAlerts : Pass = struct
     Set.filter alerts ~f:has_insn_idx
 end
 
+(* these are not supported by us right now *)
+module RemoveAlertsForCallInsns : Pass = struct
+  let call_insn_prefix = "call"
+   
+  let is_alert_on_call_insn alert : bool =
+    match alert.opcode with
+    | Some opcode_str ->
+       String.Caseless.is_prefix opcode_str ~prefix:call_insn_prefix
+    | None -> false
+
+  let set_for_alert_set alerts _proj =
+    let is_not_call_alert = fun alert -> not @@ is_alert_on_call_insn alert in
+    Set.filter alerts ~f:is_not_call_alert
+end
+
 module RemoveSpuriousCompSimpAlerts : Pass = struct
   let is_comp_simp_warn alert =
     match alert.reason with
