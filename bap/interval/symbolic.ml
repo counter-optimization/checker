@@ -12,7 +12,8 @@ module Bool = Z3.Boolean
 module Solver = Z3.Solver
 
 let ctxt = Z3.mk_context [
-                 "model", "true";
+               "model", "true";
+               "timeout", "15000"
                  (* "timeout", "200" (* in unsigned ms *) *)
                ]
 
@@ -484,6 +485,32 @@ module Executor = struct
     | Solver.SATISFIABLE ->
        ST.update onfail >>= fun () ->
        ST.return false
+
+  let rec supports_exp (exp : Bil.exp) : bool =
+    match exp with
+    | Bil.Load (_, idx_exp, _, _) ->
+       supports_exp idx_exp
+    | Bil.Store (_, idx, v, _, _) ->
+       supports_exp idx && supports_exp v
+    | Bil.BinOp (_, l, r) ->
+       supports_exp l && supports_exp r
+    | Bil.UnOp (_, l) ->
+       supports_exp l
+    | Bil.Var _ -> true
+    | Bil.Int _ -> true
+    | Bil.Cast (_, _, subexp) ->
+       supports_exp subexp
+    | Bil.Let (_, _, _) -> false
+    | Bil.Unknown (_, (Imm n)) -> true
+    | Bil.Unknown (_, _) -> false
+    | Bil.Ite (cond, then_, else_) ->
+       supports_exp cond &&
+         supports_exp then_ &&
+           supports_exp else_
+    | Bil.Extract (_, _, subexp) -> 
+       supports_exp subexp
+    | Bil.Concat (l, r) ->
+       supports_exp l && supports_exp r
 
   let rec eval_exp (exp : Bil.exp) : Expr.expr option ST.t =
     ST.get () >>= fun _ ->

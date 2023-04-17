@@ -323,62 +323,63 @@ module Checker(N : NumericDomain) = struct
           result_acc >>= fun () ->
           ST.get () >>= fun st ->
           get_dependent_defs >>= fun deps ->
-          let can_do_last_symex_check = st.do_symex && Option.is_some deps in
+          let can_do_last_symex_check = false in(* st.do_symex && Option.is_some deps in *)
           if can_do_last_symex_check
           then
-            let deps = Option.value_exn deps in
-            build_mock_sub_for_mx deps >>= fun mocksub ->
-            (* get_widths_of_free_vars mocksub >>= fun freevarwidths -> *)
-            let all_defs_of_sub = Common.defs_of_sub st.sub in
-            let type_info = Type_determination.run all_defs_of_sub AMD64SystemVABI.size_of_var_name in
-            let dependent_vars = Var_name_collector.run_on_defs deps in
-            let type_info = Type_determination.narrow_to_vars dependent_vars type_info in
-            let () = printf "Type state info for comp simp deps:\n%!";
-                     List.iter deps ~f:(printf "%a\n%!" Def.ppo);
-                     printf "is:\n%!";
-                     Type_determination.print type_info
-            in
-            let do_check = Symbolic.Executor.eval_def_list deps in
-            let init_st = Symbolic.Executor.init ~do_cs:true deps st.tid type_info st.profiling_data_path in
-            let (), fini_st = Symbolic.Executor.run do_check init_st in
-            let failed_cs_left = fini_st.failed_cs_left in
-            let failed_cs_right = fini_st.failed_cs_right in
-            let should_fail = (is_left && failed_cs_left) ||
-                                (not is_left && failed_cs_right)
-            in
-            if should_fail
-            then 
-              let binop_str = Common.binop_to_string op in
-              let left_str = if is_left
-                             then Some (I.to_string operand)
-                             else None
-              in
-              let right_str = if not is_left
-                              then Some (I.to_string operand)
-                              else None
-              in
-              let alert : Alert.t = { tid = st.tid;
-                                      opcode = None;
-                                      addr = None;
-                                      rpo_idx = None;
-                                      sub_name = None;
-                                      flags_live = SS.empty;
-                                      flags_live_in = SS.empty;
-                                      is_live = None;
-                                      reason = Alert.CompSimp;
-                                      desc = binop_str;
-                                      left_val = left_str;
-                                      right_val = right_str;
-                                      problematic_operands = Some [problematic_operand_indice] }
-              in
-              ST.update @@ fun old_st ->
-                           { old_st with warns = Alert.Set.add old_st.warns alert }
-            else
-              let () = printf "[CompSimp] Symex pruned:\n%!";
-                       List.iter deps ~f:(printf "%a\n%!" Def.ppo)
-              in
-              update_eval_stats EvalStats.incr_symex_pruned >>= fun () ->
-              ST.return ()
+            ST.return ()
+            (* let deps = Option.value_exn deps in *)
+            (* build_mock_sub_for_mx deps >>= fun mocksub -> *)
+            (* (\* get_widths_of_free_vars mocksub >>= fun freevarwidths -> *\) *)
+            (* let all_defs_of_sub = Common.defs_of_sub st.sub in *)
+            (* let type_info = Type_determination.run all_defs_of_sub AMD64SystemVABI.size_of_var_name in *)
+            (* let dependent_vars = Var_name_collector.run_on_defs deps in *)
+            (* let type_info = Type_determination.narrow_to_vars dependent_vars type_info in *)
+            (* let () = printf "Type state info for comp simp deps:\n%!"; *)
+            (*          List.iter deps ~f:(printf "%a\n%!" Def.ppo); *)
+            (*          printf "is:\n%!"; *)
+            (*          Type_determination.print type_info *)
+            (* in *)
+            (* let do_check = Symbolic.Executor.eval_def_list deps in *)
+            (* let init_st = Symbolic.Executor.init ~do_cs:true deps st.tid type_info st.profiling_data_path in *)
+            (* let (), fini_st = Symbolic.Executor.run do_check init_st in *)
+            (* let failed_cs_left = fini_st.failed_cs_left in *)
+            (* let failed_cs_right = fini_st.failed_cs_right in *)
+            (* let should_fail = (is_left && failed_cs_left) || *)
+            (*                     (not is_left && failed_cs_right) *)
+            (* in *)
+            (* if should_fail *)
+            (* then  *)
+            (*   let binop_str = Common.binop_to_string op in *)
+            (*   let left_str = if is_left *)
+            (*                  then Some (I.to_string operand) *)
+            (*                  else None *)
+            (*   in *)
+            (*   let right_str = if not is_left *)
+            (*                   then Some (I.to_string operand) *)
+            (*                   else None *)
+            (*   in *)
+            (*   let alert : Alert.t = { tid = st.tid; *)
+            (*                           opcode = None; *)
+            (*                           addr = None; *)
+            (*                           rpo_idx = None; *)
+            (*                           sub_name = None; *)
+            (*                           flags_live = SS.empty; *)
+            (*                           flags_live_in = SS.empty; *)
+            (*                           is_live = None; *)
+            (*                           reason = Alert.CompSimp; *)
+            (*                           desc = binop_str; *)
+            (*                           left_val = left_str; *)
+            (*                           right_val = right_str; *)
+            (*                           problematic_operands = Some [problematic_operand_indice] } *)
+            (*   in *)
+            (*   ST.update @@ fun old_st -> *)
+            (*                { old_st with warns = Alert.Set.add old_st.warns alert } *)
+            (* else *)
+            (*   let () = printf "[CompSimp] Symex pruned:\n%!"; *)
+            (*            List.iter deps ~f:(printf "%a\n%!" Def.ppo) *)
+            (*   in *)
+            (*   update_eval_stats EvalStats.incr_symex_pruned >>= fun () -> *)
+            (*   ST.return () *)
           else
             let binop_str = Common.binop_to_string op in
             let left_str = if is_left

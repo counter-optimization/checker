@@ -203,6 +203,13 @@ end
 
 type name_and_tid = string * tid
 
+let def_is_live analysis_results (def : def term) : bool =
+  let deftid = Term.tid def in
+  IsUsedPass.UseRel.exists analysis_results ~f:(fun rel ->
+      match rel.used_defining_tid with
+      | Some othertid -> Tid.equal deftid othertid
+      | None -> false)
+
 let unssa_var_name (name : string) : string =
   let ssa_suffix_start_char = '.' in
   match String.rindex name ssa_suffix_start_char with
