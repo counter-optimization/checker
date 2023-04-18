@@ -252,7 +252,11 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let use_symex = not no_symex in
 
      let symex_profiling_out_file = Extension.Configuration.get ctxt Common.symex_profiling_output_file_path_param in
-     
+
+     let () = printf "Getting unsupported tids for function %s\n%!" @@ Sub.name sub in
+     let checker_blacklisted_tids = UnsupportedFunctionFilter.get_unsupported_tids sub in
+     let () = printf "Unsupported insn tids are:\n%!";
+              Set.iter checker_blacklisted_tids ~f:(printf "%a\n%!" Tid.ppo) in
      
      (* Build up checker infra and run the checkers
       * This next part is an abomination of Ocaml code
@@ -277,15 +281,21 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                    Chkr.name
                    Tid.pps to_tid
        else
-         let insn = match Tid_map.find tidmap to_tid with
-           | Some elt -> elt
-           | None ->
-              failwith @@
-                sprintf
-                  "In running checker %s, couldn't find tid %a"
-                  Chkr.name Tid.pps to_tid
-         in
-         Chkr.check_elt insn liveness in_state sub proj use_symex symex_profiling_out_file
+         if Set.mem checker_blacklisted_tids to_tid
+         then
+           let () = printf "Skipping analysis of unsupported or blacklisted insn at tid: %a\n%!" Tid.ppo to_tid in
+           let warns = Alert.Set.empty in
+           let stats = EvalStats.incr_unsupported_pruned @@ EvalStats.init in
+           { warns; stats }
+         else
+           let insn = match Tid_map.find tidmap to_tid with
+             | Some elt -> elt
+             | None ->
+                failwith @@
+                  sprintf
+                    "In running checker %s, couldn't find tid %a"
+                    Chkr.name Tid.pps to_tid in
+           Chkr.check_elt insn liveness in_state sub proj use_symex symex_profiling_out_file
      in
      let run_checker (module Chkr : Checker.S with type env = E.t) (es : 'a Calling_context.edges) : Alert.Set.t Common.checker_res =
        List.fold edges

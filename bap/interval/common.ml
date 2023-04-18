@@ -158,6 +158,7 @@ module EvalStats = struct
         symex_pruned : int;
         interval_verified : int;
         symex_verified : int;
+        unsupported_pruned : int;
       }
 
     let init = {
@@ -167,6 +168,7 @@ module EvalStats = struct
         interproc_pruned = 0;
         symex_pruned = 0;
         interval_verified = 0;
+        unsupported_pruned = 0;
         symex_verified = 0;
       }
 
@@ -179,11 +181,13 @@ module EvalStats = struct
       let symex_pruned = field_to_string s.symex_pruned "symex_pruned" in
       let interval_verified = field_to_string s.interval_verified "interval_verified" in
       let symex_verified = field_to_string s.symex_verified "symex_verified" in
+      let unsupported_pruned = field_to_string s.unsupported_pruned "unsupported_pruned" in
       let all_fields = [total_considered;
                         taint_pruned;
                         interval_pruned;
                         interproc_pruned;
                         symex_pruned;
+                        unsupported_pruned;
                         interval_verified;
                         symex_verified]
       in
@@ -198,6 +202,7 @@ module EvalStats = struct
         interproc_pruned = x.interproc_pruned + y.interproc_pruned;
         symex_pruned = x.symex_pruned + y.symex_pruned;
         interval_verified = x.interval_verified + y.interval_verified;
+        unsupported_pruned = x.unsupported_pruned + y.unsupported_pruned;
         symex_verified = x.symex_verified + y.symex_verified }
 
     let incr_total_considered st =
@@ -219,6 +224,10 @@ module EvalStats = struct
     let incr_symex_pruned st =
       { st with
         symex_pruned = st.symex_pruned + 1 }
+
+    let incr_unsupported_pruned st =
+      { st with
+        unsupported_pruned = st.unsupported_pruned + 1 }
 
     let incr_symex_verified st =
       { st with
@@ -272,6 +281,79 @@ module CalleeRel = struct
       iter s ~f:(fun r -> T.print_hum r ~f)
   end
 end
+
+module UnsupportedFunctionFilter : sig
+  type opcode = string
+
+  type opcode_info = (tid * opcode)
+
+  type t = Set.M(Tid).t
+
+  val get_unsupported_tids : sub term -> t
+  
+end = struct
+  type opcode = string
+
+  type opcode_info = (tid * opcode)
+
+  type t = Set.M(Tid).t
+
+  module OpcodeFilters : sig
+    
+    val is_dont_care_opcode : opcode -> bool
+    
+  end = struct
+    let filters = ["call"; "push"]
+    
+    let is_dont_care_opcode (opcode : opcode) =
+      let prefixes_this_opcode = fun prefix ->
+        String.Caseless.is_prefix opcode ~prefix in
+      List.exists filters ~f:prefixes_this_opcode
+  end
+
+  let cls : (t, unit) KB.cls = KB.Class.declare
+                               "sbb-insn-tids"
+                               ()
+                               ~package
+                               ~public:true
+
+  let dom = KB.Domain.powerset
+              (module Tid)
+              "tid-powerset-domain"
+              ~inspect:Tid.sexp_of_t 
+
+  let slot = KB.Class.property
+               cls
+               "all-tids-set"
+               dom
+               ~public:true
+               ~package
+
+  open KB.Monad_infix
+              
+  let filter_for_blacklisted_tids (tids : tid Seq.t) : t =
+    Toplevel.eval slot
+    (KB.Seq.filter tids ~f:(fun tid ->
+    KB.collect T.Semantics.slot tid >>= fun insn ->
+    let opcode = Insn.name insn in
+    KB.return @@ OpcodeFilters.is_dont_care_opcode opcode)
+    >>= fun checker_blacklisted_tids ->
+    let tid_set = Set.of_sequence (module Tid) checker_blacklisted_tids in
+    KB.Object.create cls >>= fun obj ->
+    KB.provide slot obj tid_set >>= fun () ->
+    KB.return obj)
+        
+  let get_unsupported_tids (sub : sub term) : t =
+    let sub = sub in
+    let cfg = Sub.to_cfg sub in
+    let nodes = Graphlib.postorder_traverse (module Graphs.Ir) cfg in
+    let blks = Seq.map nodes ~f:Graphs.Ir.Node.label in
+    let insns = Seq.map blks ~f:(Term.enum def_t) in
+    let all_insns : def term Seq.t = Seq.join insns in
+    let all_tids = Seq.map all_insns ~f:Term.tid in
+    let checker_blacklisted_tids = filter_for_blacklisted_tids all_tids in
+    checker_blacklisted_tids
+end 
 
 module ReturnInsnsGetter = struct
   type all_rets = (tid, Tid.comparator_witness) Set.t
