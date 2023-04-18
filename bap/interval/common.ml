@@ -336,6 +336,7 @@ end = struct
     (KB.Seq.filter tids ~f:(fun tid ->
     KB.collect T.Semantics.slot tid >>= fun insn ->
     let opcode = Insn.name insn in
+    let () = printf "Blacklist filtering debug: Insn with tid %a has opcode: %s\n%!" Tid.ppo tid opcode in
     KB.return @@ OpcodeFilters.is_dont_care_opcode opcode)
     >>= fun checker_blacklisted_tids ->
     let tid_set = Set.of_sequence (module Tid) checker_blacklisted_tids in
