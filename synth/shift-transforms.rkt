@@ -111,6 +111,7 @@
    (mov-r/m8-r8 r13b cl)
    (mov-r/m32-r32 ecx r13d)
    (mov-r64-imm64 r13 (bv 0 64))
+   (mov-r64-imm64 r11 (bv 0 64))
    (and-r/m64-imm8 rcx (bv #x1F 8))
    (cmp-r/m64-imm8 rcx (bv 0 8))
    (setz r11b)
@@ -317,6 +318,34 @@
 (define spec-rshift16
   (list
    (shr-r/m16-cl ax)))
+
+(define attempt-rshift32-path-sensitivable
+  (list
+   ; save rcx
+   (mov-r/m64-r64 r13 rcx) ; TODO: replace with push
+   (mov-r64-imm64 r12 (bv (expt 2 31) 64))
+   (mov-r/m8-r8 r12b cl)
+   (mov-r/m32-r32 ecx r12d)
+   (mov-r64-imm64 r12 (bv 0 64))
+   (and-r/m64-imm8 rcx (bv #x1F 8))
+   (cmp-r/m64-imm8 rcx (bv 0 8))
+   (setz r12b)
+   ; save eax, set rcx if shift amt = 0
+   (cmovz-r32-r32 r10d eax)
+   (cmovz-r64-r64 rcx r12)
+      ; perform safe shift
+      (mov-r/m32-r32 eax eax)
+      (mov-r64-imm64 r11 (bv (expt 2 63) 64))
+      (sub-r/m64-r64 rax r11)
+      (and-r/m8-imm8 cl (bv (- (expt 2 5) 1) 8))
+      (shr-r/m64-cl rax)
+      (mov-r/m32-r32 eax eax)
+   ; restore eax if r12 =/ 0
+   (cmp-r/m32-imm8 r12d (bv 0 8))
+   (cmovne-r32-r32 eax r10d)
+   ; restore rcx
+   (mov-r/m64-r64 rcx r13) ; TODO: replace with pop
+  ))
 
 (define attempt-rshift32
   (list
