@@ -14,6 +14,31 @@
 (define regs-lshift
   (list rax rcx))
 
+(define attempt-lshift8-path-sensitivable
+  (list
+   (mov-r/m64-r64 r13 rcx) ; TODO: replace with push
+   (mov-r64-imm64 r12 (bv (expt 2 31) 64))
+   (mov-r/m8-r8 r12b cl)
+   (mov-r/m32-r32 ecx r12d)
+   (mov-r64-imm64 r12 (bv 0 64))
+   (and-r/m64-imm8 rcx (bv #x1F 8))
+   (cmp-r/m64-imm8 rcx (bv 0 8))
+   (setz r12b)
+   ; save rax, set rcx if shift amt = 0
+   (cmovz-r64-r64 r10 rax)
+   (cmovz-r64-r64 rcx r12)
+      ; perform safe shift
+      (mov-r64-imm64 r11 (bv (expt 2 63) 64))
+      (mov-r/m8-r8 r11b al)
+      (and-r/m8-imm8 cl (bv (- (expt 2 5) 1) 8))
+      (shl-r/m64-cl r11)
+      (mov-r/m8-r8 al r11b)
+   ; restore rax if r12 =/ 0
+   (cmp-r/m32-imm8 r12d (bv 0 8))
+   (cmovne-r64-r64 rax r10)
+   ; restore rcx
+   (mov-r/m64-r64 rcx r13))) ; TODO: replace with pop
+
 (define attempt-lshift8
   (list
    ; save rcx
@@ -77,6 +102,34 @@
 (define spec-lshift16
   (list
    (shl-r/m16-cl ax)))
+
+(define attempt-lshift32-path-sensitivable
+  (list
+  ; save rcx
+   (mov-r/m64-r64 r12 rcx) ; TODO: replace with push
+   (mov-r64-imm64 r13 (bv (expt 2 31) 64))
+   (mov-r/m8-r8 r13b cl)
+   (mov-r/m32-r32 ecx r13d)
+   (mov-r64-imm64 r13 (bv 0 64))
+   (and-r/m64-imm8 rcx (bv #x1F 8))
+   (cmp-r/m64-imm8 rcx (bv 0 8))
+   (setz r11b)
+   ; save eax, set rcx if shift amt = 0
+   (cmovz-r32-r32 r10d eax)
+   (cmovz-r64-r64 rcx r11)
+      ; perform safe shift
+      (mov-r/m32-r32 eax eax)
+      (sub-r/m64-imm32 rax (bv (expt 2 31) 64))
+      (sub-r/m64-imm32 rax (bv (expt 2 31) 64))
+      (and-r/m8-imm8 cl (bv (- (expt 2 5) 1) 8))
+      (shl-r/m64-cl rax)
+      (mov-r/m32-r32 eax eax)
+   ; restore eax if r11 =/ 0
+   (cmp-r/m32-imm8 r11d (bv 0 8))
+   (cmovne-r32-r32 eax r10d)
+   ; restore rcx
+   (mov-r/m64-r64 rcx r12) ; TODO: replace with pop
+  ))
 
 (define attempt-lshift32
   (list

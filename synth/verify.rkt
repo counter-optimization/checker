@@ -45,9 +45,8 @@
   )
 
 (module+ main
-  (define-symbolic* tester (bitvector 32))
-  (define test (verify (bveq tester (bvsub (bvsub tester (bv (expt 2 31) 32)) (bv (expt 2 31) 32)))))
-  (displayln test)
-  (displayln (bv (sub1 (expt 2 32)) 32))
-  (define cex (verify (comp-simp-verify attempt-mul16-p12 spec-mul16-p12 (list ax cx))))
+  (displayln "running verification...")
+  ; (define cex (verify (comp-simp-verify attempt-mul16-p12 spec-mul16-p12 (list ax cx))))
+  (define cex (verify (comp-simp-verify attempt-lshift32-path-sensitivable spec-lshift32 (list cl eax))))
+  (displayln "done")
   cex)
