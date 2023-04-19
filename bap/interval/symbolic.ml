@@ -13,7 +13,7 @@ module Solver = Z3.Solver
 
 let ctxt = Z3.mk_context [
                "model", "true";
-               (* "timeout", "1000" *)
+               "timeout", "1000"
                  (* "timeout", "200" (* in unsigned ms *) *)
                ]
 
@@ -481,10 +481,17 @@ module Executor = struct
        let () = printf "UNSAT: %s\n%!" reason in
        ST.return true
     | Solver.UNKNOWN ->
-       failwith @@
-         Format.sprintf "in Symbolic.Executor.check_now, error checking constraints for solver: %s : %s"
-           (Solver.to_string solver)
-           (Solver.get_reason_unknown solver)
+       let reason = Solver.get_reason_unknown solver in
+       if String.Caseless.equal reason "timeout"
+       then
+         let () = printf "[SilentStores] symbolic compilation timed out for tid: %a\n%!" Tid.ppo st.target_tid in
+         ST.update onfail >>= fun () ->
+         ST.return false
+       else
+         failwith @@
+           Format.sprintf "in Symbolic.Executor.check_now, error checking constraints for solver: %s : %s"
+             (Solver.to_string solver)
+             reason
     | Solver.SATISFIABLE ->
        ST.update onfail >>= fun () ->
        ST.return false
