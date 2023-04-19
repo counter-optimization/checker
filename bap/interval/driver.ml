@@ -363,18 +363,16 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let callee_analysis_results = GetCallees.get sub proj analysis_results in
      let callees = List.filter callee_analysis_results ~f:Or_error.is_ok
                    |> List.map ~f:Or_error.ok_exn
-                   |> CalleeRel.Set.of_list
-     in
+                   |> CalleeRel.Set.of_list in
      (* print all callee errs *)
-     let () = List.filter callee_analysis_results ~f:Or_error.is_error
-              |> List.iter
-                   ~f:(function
-                       | Error err ->
-                          Format.printf "In getting callees for sub %s : %s\n%!"
-                                        (Sub.name sub)
-                                        (Error.to_string_hum err)
-                       | Ok _ -> ())
-     in
+     (* let () = List.filter callee_analysis_results ~f:Or_error.is_error *)
+     (*          |> List.iter *)
+     (*               ~f:(function *)
+     (*                   | Error err -> *)
+     (*                      Format.printf "In getting callees for sub %s : %s\n%!" *)
+     (*                                    (Sub.name sub) *)
+     (*                                    (Error.to_string_hum err) *)
+     (*                   | Ok _ -> ()) in *)
      { alerts = all_alerts;
        callees = callees;
        csevalstats = comp_simp_res.stats;

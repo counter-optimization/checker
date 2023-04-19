@@ -13,7 +13,7 @@ module Solver = Z3.Solver
 
 let ctxt = Z3.mk_context [
                "model", "true";
-               "timeout", "1000"
+               "timeout", "50"
                  (* "timeout", "200" (* in unsigned ms *) *)
                ]
 
