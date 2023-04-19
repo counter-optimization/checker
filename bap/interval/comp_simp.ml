@@ -320,7 +320,7 @@ module Checker(N : NumericDomain) = struct
           (* let () = printf "[compsimp] Could be special value\n%!" in *)
           result_acc >>= fun () ->
           ST.get () >>= fun st ->
-          get_dependent_defs >>= fun deps ->
+          (* get_dependent_defs >>= fun deps -> *)
           let can_do_last_symex_check = false in(* st.do_symex && Option.is_some deps in *)
           if can_do_last_symex_check
           then

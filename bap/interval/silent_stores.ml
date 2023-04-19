@@ -282,11 +282,10 @@ module Checker(N : NumericDomain) = struct
            ST.return N.bot
          else
            begin
-             (* get_dependent_defs >>= fun deps -> *)
-             get_prev_n_insns >>= fun deps ->
              ST.get () >>= fun st ->
              if st.do_symex
              then
+               get_prev_n_insns >>= fun deps ->
                (* let deps = Option.value_exn deps in *)
                build_mock_sub_for_mx deps >>= fun mocksub ->
                (* get_widths_of_free_vars mocksub >>= fun freevarwidths -> *)
