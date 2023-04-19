@@ -87,11 +87,11 @@ let insns_of_node n idx_st =
       | `Def d ->
          let tid = Term.tid d in
          let part_of_indexing = Idx_calculator.is_part_of_idx_insn idx_st tid in
-         let () = if part_of_indexing
-                  then
-                    printf "in Edge_builder.insns_of_node: skipping idx insn def: %a\n%!" Def.ppo d
-                  else
-                    printf "in Edge_builder.insns_of_node: keeping def: %a\n%!" Def.ppo d in
+         (* let () = if part_of_indexing *)
+         (*          then *)
+         (*            printf "in Edge_builder.insns_of_node: skipping idx insn def: %a\n%!" Def.ppo d *)
+         (*          else *)
+         (*            printf "in Edge_builder.insns_of_node: keeping def: %a\n%!" Def.ppo d in *)
          not part_of_indexing
       | _ -> true)
 

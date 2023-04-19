@@ -418,6 +418,10 @@ let check_config config img ctxt proj : unit =
                                      Word.pp data)
   in
 
+  let () = printf "Computing all return insns:\n%!" in
+  let () = ReturnInsnsGetter.compute_all_returns () in
+  let () = printf "Done.\n%!" in
+
   (* let () = printf "Building the set of all SBB R11, _ tids\n%!" in *)
   (* let () = Remove_non_indexed_insns.build_all_idx_insn_tids_set () in *)
   (* let () = printf "done\n%!" in *)

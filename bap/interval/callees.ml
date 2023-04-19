@@ -45,7 +45,7 @@ module Getter(N : NumericDomain) = struct
 
   let is_ret_branch (j : jmp term) (ret_insn_tids : ReturnInsnsGetter.t) : bool =
     let jmp_tid = Term.tid j in
-    ReturnInsnsGetter.is_return jmp_tid ret_insn_tids
+    ReturnInsnsGetter.is_return ret_insn_tids jmp_tid
 
   let sub_name_of_tid_exn (proj : Project.t) (tid : Tid.t) : string =
     let prog = Project.program proj in
@@ -141,7 +141,7 @@ module Getter(N : NumericDomain) = struct
   let get_callees sub proj sol : rel Or_error.t list =
     let prog = Project.program proj in
     let blks = Term.enum blk_t sub in
-    let ret_jmp_tids = Common.ReturnInsnsGetter.build () in
+    let ret_jmp_tids = ReturnInsnsGetter.get_all_returns () in
     let jmp_terms = Seq.map blks ~f:(fun b -> Term.enum jmp_t b |> Seq.to_list)
                     |> Seq.to_list
                     |> List.join in

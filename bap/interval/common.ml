@@ -401,8 +401,9 @@ module ReturnInsnsGetter = struct
     let tids = List.join tids_lists in
     KB.return @@ Set.of_list (module Tid) tids
 
-  let compute_all_returns =
-    KB.objects T.Program.cls >>= fun labels ->
+  let compute_all_returns () : unit =
+    Toplevel.exec
+    (KB.objects T.Program.cls >>= fun labels ->
     let init_rets = KB.return empty in
     Seq.fold labels ~init:init_rets ~f:(fun all_rets label ->
         is_return_label label >>= fun is_ret ->
@@ -415,27 +416,37 @@ module ReturnInsnsGetter = struct
           KB.return @@ Set.union all_rets ret_tids)
     >>= fun all_ret_tids ->
     KB.Object.create cls >>= fun to_store ->
-    KB.provide all_rets to_store all_ret_tids >>= fun () ->
-    KB.return to_store
-    
-  let build () : t =
-    let cur_st = Toplevel.current () in
-    let get_all_return_tids =
-      KB.objects cls >>= fun all_ret_sets ->
-      if Seq.is_empty all_ret_sets
-      then compute_all_returns
-      else
-        (* only one ret set is computed, so get the first one *)
-        let only_one_ret_set = Seq.hd_exn all_ret_sets in
-        KB.return only_one_ret_set
-    in
-    match KB.run cls get_all_return_tids cur_st with
-    | Ok (ret_tids, _st') -> KB.Value.get all_rets ret_tids
-    | Error e ->
-       failwith @@
-         sprintf "in ReturnInsnsGetter.build, error : %s" (KB.Conflict.to_string e)
+    KB.provide all_rets to_store all_ret_tids)(*  >>= fun () -> *)
+  (* KB.return to_store *)
 
-  let is_return (tid : tid) (all_rets : all_rets) : bool = Set.mem all_rets tid
+  let get_all_returns () : t =
+    Toplevel.eval all_rets
+      (KB.objects cls >>= fun objs ->
+       KB.return @@ Seq.hd_exn objs)
+    
+  let build () : t = Set.empty (module Tid)
+    (* let cur_st = Toplevel.current () in *)
+    (* let get_all_return_tids = *)
+    (*   KB.objects cls >>= fun all_ret_sets -> *)
+    (*   if Seq.is_empty all_ret_sets *)
+    (*   then compute_all_returns () *)
+    (*   else *)
+    (*     (\* only one ret set is computed, so get the first one *\) *)
+    (*     let only_one_ret_set = Seq.hd_exn all_ret_sets in *)
+    (*     KB.return only_one_ret_set *)
+    (* in *)
+    (* match KB.run cls get_all_return_tids cur_st with *)
+    (* | Ok (ret_tids, _st') -> KB.Value.get all_rets ret_tids *)
+    (* | Error e -> *)
+    (*    failwith @@ *)
+    (*      sprintf "in ReturnInsnsGetter.build, error : %s" (KB.Conflict.to_string e) *)
+
+  let is_return : t -> tid -> bool = Set.mem
+
+  (* let is_singly_computable_return (tid : tid) : bool = *)
+  (*   KB.collect T.Semantics.slot tid >>= fun insn -> *)
+  (*   let is_return = Insn.is Insn.return insn in *)
+  (*   KB.return is_return) *)
 end
 
 let sub_of_tid_for_prog (p : Program.t) (t : Tid.t) : sub term Or_error.t =
