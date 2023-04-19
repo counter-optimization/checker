@@ -304,8 +304,6 @@ module Checker(N : NumericDomain) = struct
            | None -> failwith @@
                        sprintf "Couldn't get width for freevar: %s" fvname)
     
-
-  (* todo, don't do the symbolic execution twice *)
   let check_binop_operands (specials : (I.t -> I.t) list * (I.t -> I.t) list)
                            (op : binop) ~(check_left : bool) ~(check_right : bool)
                            (left : N.t) (right : N.t) : unit ST.t =

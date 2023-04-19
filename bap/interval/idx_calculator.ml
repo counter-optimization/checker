@@ -62,10 +62,10 @@ type state = {
 type t = state
 
 let rec is_idx_insn ?(in_sub : bool = false) ?(in_plus : bool = false) exp =
-  let () = printf "exp is: %s\n%!" (match exp with
-                                    | Bil.BinOp (op, _, _) ->
-                                       Common.binop_to_string op
-                                    | _ -> "") in
+  (* let () = printf "exp is: %s\n%!" (match exp with *)
+  (*                                   | Bil.BinOp (op, _, _) -> *)
+  (*                                      Common.binop_to_string op *)
+  (*                                   | _ -> "") in *)
   match exp with
   | Bil.BinOp (Bil.MINUS, left, right) ->
      (match left with
@@ -108,9 +108,8 @@ let get_idx_from_idx_insn_rhs exp (env : word Env.t) tid : int =
        | _ -> fail ()
      in
      (match Word.to_int idx_word with
-      | Ok i ->
-         let () = printf "in Idx_calculator, int: %d, word: %a\n%!" i Word.ppo idx_word in
-         i
+      | Ok i -> i
+         (* let () = printf "in Idx_calculator, int: %d, word: %a\n%!" i Word.ppo idx_word in *)
       | Error _ -> fail ())
   | _ -> fail ()
 
@@ -128,25 +127,25 @@ let build_idx_map_for_blk basic_blk idx_map : idx Tid_map.t =
     then idx_map
     else
       let curdef = Seq.hd_exn defterms in
-      let () = printf "Processing def term: %a\n%!" Def.ppo curdef in
+      (* let () = printf "Processing def term: %a\n%!" Def.ppo curdef in *)
       let rest_defs = Option.value_exn (Seq.tl defterms) in
       let lhs = Def.lhs curdef in 
       let assigned_var = Var.name lhs in
-      let () = printf "Var assigned is: %s\n%!" assigned_var in
-      let () = if Option.is_some cur_idx
-               then printf "Cur idx is %d\n%!" @@ Option.value_exn cur_idx
-               else printf "No cur idx\n%!"
-      in
+      (* let () = printf "Var assigned is: %s\n%!" assigned_var in *)
+      (* let () = if Option.is_some cur_idx *)
+      (*          then printf "Cur idx is %d\n%!" @@ Option.value_exn cur_idx *)
+      (*          else printf "No cur idx\n%!" *)
+      (* in *)
       let rhs = Def.rhs curdef in
       let env = try_assigning_consts lhs rhs env in
       let current_tid = Term.tid curdef in
       if String.Caseless.equal "r11" assigned_var && is_idx_insn rhs
       then
         let cur_idx = get_idx_from_idx_insn_rhs rhs env current_tid in
-        let () = printf "New cur_idx is: %d\n%!" cur_idx in
+        (* let () = printf "New cur_idx is: %d\n%!" cur_idx in *)
         loop rest_defs (Some cur_idx) idx_map env
       else
-        let () = printf "Assigning tid %a to curidx\n%!" Tid.ppo current_tid in
+        (* let () = printf "Assigning tid %a to curidx\n%!" Tid.ppo current_tid in *)
         let idx_map = match cur_idx with
           | Some insn_idx -> Tid_map.set idx_map ~key:current_tid ~data:insn_idx 
           | None -> idx_map
@@ -170,13 +169,13 @@ let rpo_of_sub sub : blk term Seq.t =
 
 let build sub : state =
   let name = Sub.name sub in
-  let () = printf "Building lut, idx_map, for sub: %s\n%!" name in
+  (* let () = printf "Building lut, idx_map, for sub: %s\n%!" name in *)
   let blks = rpo_of_sub sub in
   let idx_map = build_idx_map_for_blks blks in
-  let () = printf "idx_map is:\n%!";
-           Tid_map.iteri idx_map ~f:(fun ~key ~data ->
-               printf "\t%a -> %d\n%!" Tid.ppo key data)
-  in
+  (* let () = printf "idx_map is:\n%!"; *)
+  (*          Tid_map.iteri idx_map ~f:(fun ~key ~data -> *)
+  (*              printf "\t%a -> %d\n%!" Tid.ppo key data) *)
+  (* in *)
   { subname = name; sub; blks; idx_map }
 
 let contains_tid (tid : tid) { idx_map; _ }=
