@@ -296,7 +296,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                   sprintf
                     "In running checker %s, couldn't find tid %a"
                     Chkr.name Tid.pps to_tid in
-           Chkr.check_elt insn liveness in_state sub proj use_symex symex_profiling_out_file
+           Chkr.check_elt insn liveness in_state sub idx_st proj use_symex symex_profiling_out_file
      in
      let run_checker (module Chkr : Checker.S with type env = E.t) (es : 'a Calling_context.edges) : Alert.Set.t Common.checker_res =
        List.fold edges

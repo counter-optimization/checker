@@ -36,12 +36,13 @@ module Checker(N : NumericDomain) = struct
         proj : project;
         profiling_data_path : string;
         do_symex : bool;
+        idx_st : Idx_calculator.t;
         estats : Common.EvalStats.t;
         symex_state : SymExChecker.state;
         liveness : Live_variables.t
     } 
 
-    let init in_state tid liveness sub dep_bound do_symex proj profiling_data_path =
+    let init in_state tid liveness sub dep_bound do_symex idx_st proj profiling_data_path =
       { warns = Alert.Set.empty;
         env = in_state;
         tid = tid;
@@ -50,6 +51,7 @@ module Checker(N : NumericDomain) = struct
         do_symex;
         estats = EvalStats.init;
         sub;
+        idx_st;
         symex_state = { SymExChecker.default_state
                         with dep_bound };
         liveness = liveness }
@@ -123,11 +125,20 @@ module Checker(N : NumericDomain) = struct
          let idx = idx + 1 in
          find_tid_in_blks ~idx rest_blks tid
 
-  let history_should_include_insn def liveness : bool =
+  let history_should_include_insn def liveness idx_st : bool =
     let rhs_exp = Def.rhs def in
     let sym_compilable = Symbolic.Executor.supports_exp rhs_exp in
-    let def_is_live = lazy (Live_variables.def_is_live liveness def) in
-    sym_compilable && (Lazy.force def_is_live)
+    (* let def_is_live = lazy (Live_variables.def_is_live liveness def) in *)
+    let is_not_part_of_idx_insn = lazy (not @@ Idx_calculator.is_part_of_idx_insn idx_st @@ Term.tid def) in
+    (* let () = printf "should include def?: %a\n%!" Def.ppo def; *)
+    (*          printf "is sym_compilable: %B, is_live: %B, is_not_part: %B\n%!" *)
+    (*            sym_compilable *)
+    (*            (Lazy.force def_is_live) *)
+    (*            (Lazy.force is_not_part_of_idx_insn) *)
+    (* in *)
+    sym_compilable &&
+      (Lazy.force is_not_part_of_idx_insn)
+        (* (Lazy.force def_is_live) *)
 
   let get_prev_n_insns : def term list ST.t =
     let rec record_n_insns_after
@@ -135,6 +146,7 @@ module Checker(N : NumericDomain) = struct
               ?(target_found : bool = false)
               ?(n : int = dep_bound)
               liveness
+              idx_st
               target_tid
               all_insns : def term list =
       if Seq.is_empty all_insns || n = 0
@@ -147,25 +159,27 @@ module Checker(N : NumericDomain) = struct
         in
         if target_found
         then
-          let recorded = if history_should_include_insn cur_def liveness
+          let recorded = if history_should_include_insn cur_def liveness idx_st
                          then cur_def :: recorded
-                         else recorded
-          in
+                         else recorded in
           record_n_insns_after
             ~recorded
             ~target_found
             ~n:(n - 1)
             liveness
+            idx_st
             target_tid
             all_insns
         else
           let cur_tid = Term.tid cur_def in
           let target_found = Tid.equal target_tid cur_tid in
+          let recorded = if target_found then cur_def :: recorded else recorded in
           record_n_insns_after
             ~recorded
             ~target_found
             ~n
             liveness
+            idx_st
             target_tid
             all_insns
     in
@@ -175,11 +189,10 @@ module Checker(N : NumericDomain) = struct
     let nodes = Graphlib.postorder_traverse (module Graphs.Ir) cfg in
     let blks = Seq.map nodes ~f:Graphs.Ir.Node.label in
     let insns = Seq.map blks ~f:(Term.enum def_t) in
-    let all_insns : def term Seq.t = Seq.join insns in
-    let n_insns_before = record_n_insns_after s.liveness s.tid all_insns in
+    let all_insns : def term Seq.t = Seq.join insns |> Seq.to_list |> List.rev |> Seq.of_list in 
+    let n_insns_before = record_n_insns_after s.liveness s.idx_st s.tid all_insns in
     let () = printf "the %d insns before def term with tid %a are:\n%!" dep_bound Tid.ppo s.tid;
-             List.iter n_insns_before ~f:(printf "%a\n%!" Def.ppo)
-    in
+             List.iter n_insns_before ~f:(printf "%a\n%!" Def.ppo) in
     n_insns_before
 
   let get_dependent_defs : def term list option ST.t =
@@ -401,6 +414,7 @@ module Checker(N : NumericDomain) = struct
         (env : Env.t)
         (sub : sub term)
         do_symex
+        idx_st
         proj
         profiling_data_path
       : warns Common.checker_res =
@@ -410,15 +424,15 @@ module Checker(N : NumericDomain) = struct
     if SS.mem dont_care_vars lhs_var_name
     then { warns = empty; stats = EvalStats.init }
     else
-      let init_state = State.init env tid live sub dep_bound do_symex proj profiling_data_path in
+      let init_state = State.init env tid live sub dep_bound do_symex idx_st proj profiling_data_path in
       let rhs = Def.rhs d in
       (* let () = printf "Checking def for silent stores w/ dep bound (%d): %a\n%!" dep_bound Def.ppo d in *)
       let _, final_state = ST.run (check_exp rhs) init_state in
       { warns = final_state.warns; stats = final_state.estats }
   
-  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : Env.t) (sub : sub term) proj do_symex profiling_data_path : warns Common.checker_res =
+  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : Env.t) (sub : sub term) idx_st proj do_symex profiling_data_path : warns Common.checker_res =
     (* let () = printf "In silent store checker, do_symex is: %B\n%!" do_symex in *)
     match e with
-    | `Def d -> check_def d live env sub do_symex proj profiling_data_path
+    | `Def d -> check_def d live env sub do_symex idx_st proj profiling_data_path
     | _ -> { warns = empty; stats = EvalStats.init }
 end

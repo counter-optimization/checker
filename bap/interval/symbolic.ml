@@ -13,7 +13,7 @@ module Solver = Z3.Solver
 
 let ctxt = Z3.mk_context [
                "model", "true";
-               "timeout", "10000"
+               (* "timeout", "1000" *)
                  (* "timeout", "200" (* in unsigned ms *) *)
                ]
 
@@ -476,7 +476,10 @@ module Executor = struct
     ST.get () >>= fun st ->
     let status = Solver.check solver st.constraints in
     match status with
-    | Solver.UNSATISFIABLE -> ST.return true
+    | Solver.UNSATISFIABLE ->
+       let reason = Solver.get_reason_unknown solver in
+       let () = printf "UNSAT: %s\n%!" reason in
+       ST.return true
     | Solver.UNKNOWN ->
        failwith @@
          Format.sprintf "in Symbolic.Executor.check_now, error checking constraints for solver: %s : %s"

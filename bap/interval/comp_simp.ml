@@ -171,17 +171,19 @@ module Checker(N : NumericDomain) = struct
         symex_state : SymExChecker.state;
         profiling_data_path : string;
         sub : sub term;
+        idx_st : Idx_calculator.t;
         do_symex : bool;
         proj : Project.t;
         estats : EvalStats.t;
       } 
 
-    let init in_state tid liveness sub dep_bound do_symex proj profiling_data_path : t =
+    let init in_state tid liveness sub dep_bound do_symex idx_st proj profiling_data_path : t =
       { warns = Alert.Set.empty;
         env = in_state;
         tid = tid;
         profiling_data_path;
         liveness = liveness;
+        idx_st;
         symex_state = { SymExChecker.default_state
                         with dep_bound };
         proj;
@@ -567,14 +569,14 @@ module Checker(N : NumericDomain) = struct
        don't comp simp check the lifted flag calculations, and
        don't comp simp check if the def is not tainted--all members of the rhs
          expression tree are untainted then *)
-  let check_def (d : def term) (live : Live_variables.t) (env : E.t) (sub : sub term) do_symex proj profiling_data_path : warns Common.checker_res =
+  let check_def (d : def term) (live : Live_variables.t) (env : E.t) (sub : sub term) do_symex idx_st proj profiling_data_path : warns Common.checker_res =
     let tid = Term.tid d in
     let lhs = Def.lhs d in
     let lhs_var_name = Var.name lhs in
     if ABI.var_name_is_flag lhs_var_name
     then { warns = empty; stats = EvalStats.init }
     else
-      let init_state = State.init env tid live sub dep_bound do_symex proj profiling_data_path in
+      let init_state = State.init env tid live sub dep_bound do_symex idx_st proj profiling_data_path in
       let rhs = Def.rhs d in
       let _, final_state = ST.run (check_exp rhs) init_state in
       { warns = final_state.warns; stats = final_state.estats }
@@ -585,9 +587,9 @@ module Checker(N : NumericDomain) = struct
       (*   { warns = empty; stats } *)
       (* else *)
   
-  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : E.t) (sub : sub term) proj do_symex profiling_data_path : warns Common.checker_res =
+  let check_elt (e : Blk.elt) (live : Live_variables.t) (env : E.t) (sub : sub term) idx_st proj do_symex profiling_data_path : warns Common.checker_res =
     match e with
-    | `Def d -> check_def d live env sub do_symex proj profiling_data_path
+    | `Def d -> check_def d live env sub do_symex idx_st proj profiling_data_path
     | _ -> { warns = empty; stats = EvalStats.init }
 end
  
