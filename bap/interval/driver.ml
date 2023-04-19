@@ -253,10 +253,10 @@ let run_analyses sub img proj ~(is_toplevel : bool)
 
      let symex_profiling_out_file = Extension.Configuration.get ctxt Common.symex_profiling_output_file_path_param in
 
-     let () = printf "Getting unsupported tids for function %s\n%!" @@ Sub.name sub in
-     let checker_blacklisted_tids = UnsupportedFunctionFilter.get_unsupported_tids sub in
-     let () = printf "Unsupported insn tids are:\n%!";
-              Set.iter checker_blacklisted_tids ~f:(printf "%a\n%!" Tid.ppo) in
+     (* let () = printf "Getting unsupported tids for function %s\n%!" @@ Sub.name sub in *)
+     (* let checker_blacklisted_tids = UnsupportedFunctionFilter.get_unsupported_tids sub in *)
+     (* let () = printf "Unsupported insn tids are:\n%!"; *)
+     (*          Set.iter checker_blacklisted_tids ~f:(printf "%a\n%!" Tid.ppo) in *)
      
      (* Build up checker infra and run the checkers
       * This next part is an abomination of Ocaml code
@@ -281,13 +281,13 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                    Chkr.name
                    Tid.pps to_tid
        else
-         if Set.mem checker_blacklisted_tids to_tid
-         then
-           let () = printf "Skipping analysis of unsupported or blacklisted insn at tid: %a\n%!" Tid.ppo to_tid in
-           let warns = Alert.Set.empty in
-           let stats = EvalStats.incr_unsupported_pruned @@ EvalStats.init in
-           { warns; stats }
-         else
+         (* if Set.mem checker_blacklisted_tids to_tid *)
+         (* then *)
+         (*   let () = printf "Skipping analysis of unsupported or blacklisted insn at tid: %a\n%!" Tid.ppo to_tid in *)
+         (*   let warns = Alert.Set.empty in *)
+         (*   let stats = EvalStats.incr_unsupported_pruned @@ EvalStats.init in *)
+         (*   { warns; stats } *)
+         (* else *)
            let insn = match Tid_map.find tidmap to_tid with
              | Some elt -> elt
              | None ->
