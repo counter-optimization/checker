@@ -412,12 +412,12 @@ module Checker(N : NumericDomain) = struct
     else
       let init_state = State.init env tid live sub dep_bound do_symex proj profiling_data_path in
       let rhs = Def.rhs d in
-      let () = printf "Checking def for silent stores w/ dep bound (%d): %a\n%!" dep_bound Def.ppo d in
+      (* let () = printf "Checking def for silent stores w/ dep bound (%d): %a\n%!" dep_bound Def.ppo d in *)
       let _, final_state = ST.run (check_exp rhs) init_state in
       { warns = final_state.warns; stats = final_state.estats }
   
   let check_elt (e : Blk.elt) (live : Live_variables.t) (env : Env.t) (sub : sub term) proj do_symex profiling_data_path : warns Common.checker_res =
-    let () = printf "In silent store checker, do_symex is: %B\n%!" do_symex in
+    (* let () = printf "In silent store checker, do_symex is: %B\n%!" do_symex in *)
     match e with
     | `Def d -> check_def d live env sub do_symex proj profiling_data_path
     | _ -> { warns = empty; stats = EvalStats.init }
