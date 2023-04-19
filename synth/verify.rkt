@@ -7,6 +7,7 @@
   "arith-transforms.rkt"
   "bitwise-transforms.rkt"
   "shift-transforms.rkt"
+  "mul-transforms.rkt"
   (prefix-in comp-simp: "synth-comp-simp-defenses-macrod.rkt"))
 
 (provide (all-defined-out))
@@ -47,6 +48,6 @@
 (module+ main
   (displayln "running verification...")
   ; (define cex (verify (comp-simp-verify attempt-mul16-p12 spec-mul16-p12 (list ax cx))))
-  (define cex (verify (comp-simp-verify attempt-rshift32-path-sensitivable spec-rshift32 (list cl eax))))
+  (define cex (verify (comp-simp-verify attempt-add64-imm32 spec-add64-imm32 regs-add (list 'CF 'ZF))))
   (displayln "done")
   cex)
