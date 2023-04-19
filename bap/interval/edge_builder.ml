@@ -3,6 +3,7 @@ open Bap.Std
 open Graphlib.Std
 open Monads.Std
 
+module Theory = Bap_core_theory.Theory
 module KB = Bap_knowledge.Knowledge
 
 module Cfg = Bap.Std.Graphs.Cfg
@@ -80,12 +81,24 @@ let add_callee callee : unit ST.t =
   ST.update @@ fun st ->
                  { st with callees = Callees.add st.callees callee }
 
-let insns_of_node n = Blk.elts @@ Graphs.Ir.Node.label n
+let insns_of_node n idx_st =
+  let elts = Blk.elts @@ Graphs.Ir.Node.label n in
+  Seq.filter elts ~f:(function
+      | `Def d ->
+         let tid = Term.tid d in
+         let part_of_indexing = Idx_calculator.is_part_of_idx_insn idx_st tid in
+         let () = if part_of_indexing
+                  then
+                    printf "in Edge_builder.insns_of_node: skipping idx insn def: %a\n%!" Def.ppo d
+                  else
+                    printf "in Edge_builder.insns_of_node: keeping def: %a\n%!" Def.ppo d in
+         not part_of_indexing
+      | _ -> true)
 
-let get_ret_insn_tid sub_nodes =
+let get_ret_insn_tid sub_nodes idx_st =
   let num = Seq.length sub_nodes in
   let last_node = Seq.nth_exn sub_nodes (num - 1) in
-  let insns = insns_of_node last_node in
+  let insns = insns_of_node last_node idx_st in
   let num_insns = Seq.length insns in
   let res =
     Seq.fold insns ~init:(None, 1) ~f:(fun (last, idx) insn ->
@@ -146,7 +159,7 @@ let sub_of_tid tid proj : sub Term.t =
   | Some sub -> sub
   | None -> failwith "Didn't find sub with that tid in the program"
 
-let last_insn_of_sub sub : Blk.elt =
+let last_insn_of_sub sub idx_st : Blk.elt =
   let irg = Sub.to_cfg sub in
   let rev_nodes = Graphlib.postorder_traverse (module Graphs.Ir) irg in
   let last_node = match Seq.hd rev_nodes with
@@ -158,13 +171,13 @@ let last_insn_of_sub sub : Blk.elt =
          failwith err_s
        end
   in
-  let last_node_insns = insns_of_node last_node in
+  let last_node_insns = insns_of_node last_node idx_st in
   let num_insns = Seq.length last_node_insns in
   Seq.nth_exn last_node_insns (num_insns - 1)
   
-let edges_of_jump j sub nodes proj : edges ST.t =
+let edges_of_jump j sub nodes proj idx_st : edges ST.t =
   let fromtid = Term.tid j in
-  let ret_insn_tid = get_ret_insn_tid nodes in
+  let ret_insn_tid = get_ret_insn_tid nodes idx_st in
   match Jmp.kind j with
   | Goto (Direct totid) ->
      let first_insn = first_insn_of_blk_tid totid sub in
@@ -184,7 +197,7 @@ let edges_of_jump j sub nodes proj : edges ST.t =
             add_callee callee >>= fun () ->
             let actual_totid = first_insn_tid_of_sub callee in
             ST.return [(fromtid, actual_totid, true)] >>= fun es ->
-            let last_elt = last_insn_of_sub callee in
+            let last_elt = last_insn_of_sub callee idx_st in
             let last_elt_tid = Tid_map.tid_of_elt last_elt in
             let return_tid = match Call.return c with
               | Some (Direct l) ->
@@ -247,7 +260,7 @@ let edges_of_insns insns sub nodes proj : edges ST.t =
   get_jmp_edges insns sub nodes proj >>= fun jmp_edges ->
   ST.return @@ List.append jmp_edges fallthroughs
 
-let get_builder_for_sub sub proj : edges ST.t =
+let get_builder_for_sub sub proj idx_st : edges ST.t =
   let irg = Sub.to_cfg sub in
   let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
   let lead_tidmap = Tid_map.t_of_sub sub in
@@ -257,11 +270,11 @@ let get_builder_for_sub sub proj : edges ST.t =
   Seq.fold nodes ~init:init_state
     ~f:(fun st node ->
       st >>= fun prev_edges -> 
-      let insns = insns_of_node node in
+      let insns = insns_of_node node idx_st in
       edges_of_insns insns sub nodes proj >>= fun new_edges ->
       ST.return @@ List.append new_edges prev_edges)
 
-let run (outermost : Sub.t) (proj : Project.t) : (edges * tidmap) =
+let run (outermost : Sub.t) (proj : Project.t) idx_st : (edges * tidmap) =
   let rec loop worklist seen edges st : edges * t =
     let eff_worklist = Callees.diff worklist seen
                        |> Callees.to_list
@@ -272,7 +285,7 @@ let run (outermost : Sub.t) (proj : Project.t) : (edges * tidmap) =
        let worklist = Callees.remove worklist sub in
        loop worklist seen edges st
     | Some sub ->
-       let builder = get_builder_for_sub sub proj in
+       let builder = get_builder_for_sub sub proj idx_st in
        let (callee_edges, callee_st) = ST.run builder st in
        let edges = List.append callee_edges edges in
        let st = merge st callee_st in
@@ -292,7 +305,7 @@ let run (outermost : Sub.t) (proj : Project.t) : (edges * tidmap) =
      failwith err_str
   | _ -> (edges, st.tidmap)
 
-let run_one (sub : Sub.t) (proj : Project.t) : (edges * tidmap) =
-  let builder = get_builder_for_sub sub proj in
+let run_one (sub : Sub.t) (proj : Project.t) (idx_st : Idx_calculator.t) : (edges * tidmap) =
+  let builder = get_builder_for_sub sub proj idx_st in
   let (edges, st) = ST.run builder empty in
   edges, st.tidmap

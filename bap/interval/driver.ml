@@ -159,7 +159,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                  ctxt : check_sub_result =
   let () = printf "Running analysis on sub %s\n%!" (Sub.name sub) in
   let prog = Project.program proj in
-  let edges, tidmap = Edge_builder.run_one sub proj in
+  let idx_st = Idx_calculator.build sub in
+  let edges, tidmap = Edge_builder.run_one sub proj idx_st in
   match should_skip_analysis edges tidmap sub prog with
   | Some res ->
      let sub_name = Sub.name sub in
@@ -172,7 +173,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let () = printf "Running liveness analysis\n%!" in
      let liveness = Live_variables.Analysis.run sub in
      (* let () = Live_variables.IsUsedPass.print_rels liveness in *)
-     
+
      (* CFG *)
      let edges = List.map edges ~f:(Calling_context.of_edge) in
      let module G = Graphlib.Make(Calling_context)(Bool) in
@@ -341,8 +342,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let alerts_with_subs = Alert.Set.map all_alerts
                               ~f:(fun alert ->
                                 { alert with sub_name = Some (Sub.name sub) }) in
-     let idx_map = Idx_calculator.build sub in
-     let alerts_with_indices = Alert.InsnIdxFiller.set_for_alert_set idx_map alerts_with_subs in
+     
+     let alerts_with_indices = Alert.InsnIdxFiller.set_for_alert_set idx_st alerts_with_subs in
      (* this is really dependency analysis info, not liveness info *)
      let alerts_with_liveness = Alert.LivenessFiller.set_for_alert_set alerts_with_indices liveness in
      (* here, liveness means classical dataflow liveness *)
@@ -416,6 +417,15 @@ let check_config config img ctxt proj : unit =
                                      Word.pp addr
                                      Word.pp data)
   in
+
+  (* let () = printf "Building the set of all SBB R11, _ tids\n%!" in *)
+  (* let () = Remove_non_indexed_insns.build_all_idx_insn_tids_set () in *)
+  (* let () = printf "done\n%!" in *)
+
+  (* let () = printf "All the sbb r11, _ tids are:\n%!" in *)
+  (* let sbb_tids = Remove_non_indexed_insns.get_set () in *)
+  (* let () = Set.iter sbb_tids ~f:(printf "%a\n%!" Tid.ppo) in *)
+  
   let do_ss_checks = Extension.Configuration.get ctxt Common.do_ss_checks_param in
   let do_cs_checks = Extension.Configuration.get ctxt Common.do_cs_checks_param in
   let rec loop ~(worklist : SubSet.t)

@@ -56,7 +56,8 @@ type state = {
     subname : string;
     sub : sub term;
     blks : blk term Seq.t;
-    idx_map : int Tid_map.t
+    idx_map : int Tid_map.t;
+    idx_insn_tids : Set.M(Tid).t
 }
 
 type t = state
@@ -120,11 +121,11 @@ let try_assigning_consts (lhs : Var.t) (rhs : Bil.exp) (env : word Env.t) : word
      Env.set ~key:varname ~data:w env
   | _ -> env
 
-let build_idx_map_for_blk basic_blk idx_map : idx Tid_map.t =
+let build_idx_map_for_blk basic_blk idx_map : (idx Tid_map.t * Set.M(Tid).t) =
   let start_idx : idx option = None in
-  let rec loop defterms cur_idx idx_map env =
+  let rec loop ?(is_idx_insn_flags : bool = false) defterms cur_idx idx_map idx_insn_tids env =
     if Seq.is_empty defterms
-    then idx_map
+    then (idx_map, idx_insn_tids)
     else
       let curdef = Seq.hd_exn defterms in
       (* let () = printf "Processing def term: %a\n%!" Def.ppo curdef in *)
@@ -142,24 +143,40 @@ let build_idx_map_for_blk basic_blk idx_map : idx Tid_map.t =
       if String.Caseless.equal "r11" assigned_var && is_idx_insn rhs
       then
         let cur_idx = get_idx_from_idx_insn_rhs rhs env current_tid in
+        let idx_insn_tids = Set.add idx_insn_tids current_tid in
+        let is_idx_insn_flags = true in
         (* let () = printf "New cur_idx is: %d\n%!" cur_idx in *)
-        loop rest_defs (Some cur_idx) idx_map env
+        (* let () = printf "Tid %a is an idx insn\n%!" Tid.ppo current_tid in *)
+        (* let () = printf "Setting is_idx_insn_flags %B\n%!" is_idx_insn_flags in *)
+        loop ~is_idx_insn_flags rest_defs (Some cur_idx) idx_map idx_insn_tids env
       else
-        (* let () = printf "Assigning tid %a to curidx\n%!" Tid.ppo current_tid in *)
-        let idx_map = match cur_idx with
-          | Some insn_idx -> Tid_map.set idx_map ~key:current_tid ~data:insn_idx 
-          | None -> idx_map
-        in
-        loop rest_defs cur_idx idx_map env
+        let cur_is_flag = Common.AMD64SystemVABI.var_name_is_flag assigned_var in
+        let is_flag_of_idx_insn = is_idx_insn_flags && cur_is_flag in
+        (* let () = printf "not sbb insns, is it a flag?: %B\n%!" cur_is_flag in *)
+        (* let () = printf "not sbb insns, is it a flag of idx insn?: %B\n%!" is_flag_of_idx_insn in *)
+        if is_flag_of_idx_insn
+        then
+          let idx_insn_tids = Set.add idx_insn_tids current_tid in
+          loop ~is_idx_insn_flags:true rest_defs cur_idx idx_map idx_insn_tids env
+        else
+          let idx_map = match cur_idx with
+            | Some insn_idx -> Tid_map.set idx_map ~key:current_tid ~data:insn_idx 
+            | None -> idx_map in
+          loop ~is_idx_insn_flags:false rest_defs cur_idx idx_map idx_insn_tids env
   in
   let defterms = Term.enum def_t basic_blk in
   let init_env : word Env.t = Env.empty in
-  loop defterms start_idx idx_map init_env
+  let idx_insn_tids = Set.empty (module Tid) in
+  loop defterms start_idx idx_map idx_insn_tids init_env
 
-let build_idx_map_for_blks (blks : blk term Seq.t) : idx Tid_map.t =
+let build_idx_map_for_blks (blks : blk term Seq.t) : (idx Tid_map.t * Set.M(Tid).t)=
   let idx_map : idx Tid_map.t = Tid_map.empty in
-  Seq.fold blks ~init:idx_map ~f:(fun idx_map blk ->
-      build_idx_map_for_blk blk idx_map)
+  let idx_insn_tids = Set.empty (module Tid) in
+  Seq.fold blks ~init:(idx_map, idx_insn_tids)
+    ~f:(fun (idx_map, idx_insn_tids) blk ->
+      let idx_map, idx_insn_tids' = build_idx_map_for_blk blk idx_map in
+      idx_map, Set.union idx_insn_tids' idx_insn_tids
+    )
 
 let rpo_of_sub sub : blk term Seq.t =
   let cfg = Sub.to_cfg sub in
@@ -171,12 +188,15 @@ let build sub : state =
   let name = Sub.name sub in
   (* let () = printf "Building lut, idx_map, for sub: %s\n%!" name in *)
   let blks = rpo_of_sub sub in
-  let idx_map = build_idx_map_for_blks blks in
+  let idx_map, idx_insn_tids = build_idx_map_for_blks blks in
   (* let () = printf "idx_map is:\n%!"; *)
   (*          Tid_map.iteri idx_map ~f:(fun ~key ~data -> *)
   (*              printf "\t%a -> %d\n%!" Tid.ppo key data) *)
   (* in *)
-  { subname = name; sub; blks; idx_map }
+  { subname = name; sub; blks; idx_map; idx_insn_tids }
+
+let is_part_of_idx_insn { idx_insn_tids; _ } tid =
+  Set.mem idx_insn_tids tid
 
 let contains_tid (tid : tid) { idx_map; _ }=
   Tid_map.mem idx_map tid

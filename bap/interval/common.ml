@@ -282,79 +282,79 @@ module CalleeRel = struct
   end
 end
 
-module UnsupportedFunctionFilter : sig
-  type opcode = string
+(* module UnsupportedFunctionFilter : sig *)
+(*   type opcode = string *)
 
-  type opcode_info = (tid * opcode)
+(*   type opcode_info = (tid * opcode) *)
 
-  type t = Set.M(Tid).t
+(*   type t = Set.M(Tid).t *)
 
-  val get_unsupported_tids : sub term -> t
+(*   val get_unsupported_tids : sub term -> t *)
   
-end = struct
-  type opcode = string
+(* end = struct *)
+(*   type opcode = string *)
 
-  type opcode_info = (tid * opcode)
+(*   type opcode_info = (tid * opcode) *)
 
-  type t = Set.M(Tid).t
+(*   type t = Set.M(Tid).t *)
 
-  module OpcodeFilters : sig
+(*   module OpcodeFilters : sig *)
     
-    val is_dont_care_opcode : opcode -> bool
+(*     val is_dont_care_opcode : opcode -> bool *)
     
-  end = struct
-    let filters = ["call"; "push"]
+(*   end = struct *)
+(*     let filters = ["call"; "push"] *)
     
-    let is_dont_care_opcode (opcode : opcode) =
-      let prefixes_this_opcode = fun prefix ->
-        String.Caseless.is_prefix opcode ~prefix in
-      List.exists filters ~f:prefixes_this_opcode
-  end
+(*     let is_dont_care_opcode (opcode : opcode) = *)
+(*       let prefixes_this_opcode = fun prefix -> *)
+(*         String.Caseless.is_prefix opcode ~prefix in *)
+(*       List.exists filters ~f:prefixes_this_opcode *)
+(*   end *)
 
-  let cls : (t, unit) KB.cls = KB.Class.declare
-                               "sbb-insn-tids"
-                               ()
-                               ~package
-                               ~public:true
+(*   let cls : (t, unit) KB.cls = KB.Class.declare *)
+(*                                "UnsupportedInsnsSet" *)
+(*                                () *)
+(*                                ~package *)
+(*                                ~public:true *)
 
-  let dom = KB.Domain.powerset
-              (module Tid)
-              "tid-powerset-domain"
-              ~inspect:Tid.sexp_of_t 
+(*   let dom = KB.Domain.powerset *)
+(*               (module Tid) *)
+(*               "tid-powerset-domain" *)
+(*               ~inspect:Tid.sexp_of_t  *)
 
-  let slot = KB.Class.property
-               cls
-               "all-tids-set"
-               dom
-               ~public:true
-               ~package
+(*   let slot = KB.Class.property *)
+(*                cls *)
+(*                "unsupported-tids-set" *)
+(*                dom *)
+(*                ~public:true *)
+(*                ~package *)
 
-  open KB.Monad_infix
+(*   open KB.Monad_infix *)
               
-  let filter_for_blacklisted_tids (tids : tid Seq.t) : t =
-    Toplevel.eval slot
-    (KB.Seq.filter tids ~f:(fun tid ->
-    KB.collect T.Semantics.slot tid >>= fun insn ->
-    let opcode = Insn.name insn in
-    let () = printf "Blacklist filtering debug: Insn with tid %a has opcode: %s\n%!" Tid.ppo tid opcode in
-    KB.return @@ OpcodeFilters.is_dont_care_opcode opcode)
-    >>= fun checker_blacklisted_tids ->
-    let tid_set = Set.of_sequence (module Tid) checker_blacklisted_tids in
-    KB.Object.create cls >>= fun obj ->
-    KB.provide slot obj tid_set >>= fun () ->
-    KB.return obj)
+(*   let filter_for_blacklisted_tids (tids : tid Seq.t) : t = *)
+(*     Toplevel.eval slot *)
+(*     (KB.Seq.filter tids ~f:(fun tid -> *)
+(*     KB.collect T.Semantics.slot tid >>= fun insn -> *)
+(*     let opcode = Insn.name insn in *)
+(*     let () = printf "Blacklist filtering debug: Insn with tid %a has opcode: %s\n%!" Tid.ppo tid opcode in *)
+(*     KB.return @@ OpcodeFilters.is_dont_care_opcode opcode) *)
+(*     >>= fun checker_blacklisted_tids -> *)
+(*     let tid_set = Set.of_sequence (module Tid) checker_blacklisted_tids in *)
+(*     KB.Object.create cls >>= fun obj -> *)
+(*     KB.provide slot obj tid_set >>= fun () -> *)
+(*     KB.return obj) *)
         
-  let get_unsupported_tids (sub : sub term) : t =
-    let sub = sub in
-    let cfg = Sub.to_cfg sub in
-    let nodes = Graphlib.postorder_traverse (module Graphs.Ir) cfg in
-    let blks = Seq.map nodes ~f:Graphs.Ir.Node.label in
-    let insns = Seq.map blks ~f:(Term.enum def_t) in
-    let all_insns : def term Seq.t = Seq.join insns in
-    let all_tids = Seq.map all_insns ~f:Term.tid in
-    let checker_blacklisted_tids = filter_for_blacklisted_tids all_tids in
-    checker_blacklisted_tids
-end 
+(*   let get_unsupported_tids (sub : sub term) : t = *)
+(*     let sub = sub in *)
+(*     let cfg = Sub.to_cfg sub in *)
+(*     let nodes = Graphlib.postorder_traverse (module Graphs.Ir) cfg in *)
+(*     let blks = Seq.map nodes ~f:Graphs.Ir.Node.label in *)
+(*     let insns = Seq.map blks ~f:(Term.enum def_t) in *)
+(*     let all_insns : def term Seq.t = Seq.join insns in *)
+(*     let all_tids = Seq.map all_insns ~f:Term.tid in *)
+(*     let checker_blacklisted_tids = filter_for_blacklisted_tids all_tids in *)
+(*     checker_blacklisted_tids *)
+(* end *)
 
 module ReturnInsnsGetter = struct
   type all_rets = (tid, Tid.comparator_witness) Set.t
