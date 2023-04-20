@@ -524,9 +524,9 @@ module Executor = struct
 
   let rec eval_exp (exp : Bil.exp) : Expr.expr option ST.t =
     ST.get () >>= fun _ ->
-    let () = printf "in symbolic eval_exp, evaluating exp %a\n%!"
-               Exp.ppo exp
-    in
+    (* let () = printf "in symbolic eval_exp, evaluating exp %a\n%!" *)
+    (*            Exp.ppo exp *)
+    (* in *)
     let res = match exp with
     | Bil.Load (_, idx, en, sz) ->
        eval_exp idx >>= fun _idx_val ->  
@@ -740,10 +740,10 @@ module Executor = struct
     ST.return (Term.tid dt) >>= fun tid ->
     ST.update (fun st -> 
     { st with do_check = Tid.equal tid st.target_tid }) >>= fun () ->
-    let () = printf "In symbolic.eval_def, evalling def term (%a) %a\n%!"
-               Tid.ppo tid
-               Def.ppo dt
-    in
+    (* let () = printf "In symbolic.eval_def, evalling def term (%a) %a\n%!" *)
+    (*            Tid.ppo tid *)
+    (*            Def.ppo dt *)
+    (* in *)
     let rhs = Def.rhs dt in
     eval_exp rhs >>= fun mr ->
     (* ST.gets (fun st -> *)
@@ -775,12 +775,12 @@ module Executor = struct
       else ST.return ()
     in
     let () = Solver.reset solver in (* clear old def constraints *)
-    let () = printf "in symbolic.eval_def_list: defs are\n%!";
-             List.iter defs ~f:(printf "%a\n%!" Def.ppo) in
+    (* let () = printf "in symbolic.eval_def_list: defs are\n%!"; *)
+    (*          List.iter defs ~f:(printf "%a\n%!" Def.ppo) in *)
     set_free_vars >>= fun () ->
-    ST.gets (fun st ->
-        printf "done setting free vars\n%!";
-        debug_print_sym_env st) >>= fun () ->
+    (* ST.gets (fun st -> *)
+    (*     printf "done setting free vars\n%!"; *)
+    (*     debug_print_sym_env st) >>= fun () -> *)
     loop defs
     (* List.fold defs ~init ~f:(fun st dt -> *)
     (*     ST.get () >>= fun st -> *)

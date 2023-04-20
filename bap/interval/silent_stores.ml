@@ -191,8 +191,8 @@ module Checker(N : NumericDomain) = struct
     let insns = Seq.map blks ~f:(Term.enum def_t) in
     let all_insns : def term Seq.t = Seq.join insns |> Seq.to_list |> List.rev |> Seq.of_list in 
     let n_insns_before = record_n_insns_after s.liveness s.idx_st s.tid all_insns in
-    let () = printf "the %d insns before def term with tid %a are:\n%!" dep_bound Tid.ppo s.tid;
-             List.iter n_insns_before ~f:(printf "%a\n%!" Def.ppo) in
+    (* let () = printf "the %d insns before def term with tid %a are:\n%!" dep_bound Tid.ppo s.tid; *)
+    (*          List.iter n_insns_before ~f:(printf "%a\n%!" Def.ppo) in *)
     n_insns_before
 
   let get_dependent_defs : def term list option ST.t =
@@ -306,11 +306,11 @@ module Checker(N : NumericDomain) = struct
                let type_info = Type_determination.run all_defs_of_sub AMD64SystemVABI.size_of_var_name in
                let dependent_vars = Var_name_collector.run_on_defs deps in
                let type_info = Type_determination.narrow_to_vars dependent_vars type_info in
-               let () = printf "Type state info for silent store deps:\n%!";
-                        List.iter deps ~f:(printf "%a\n%!" Def.ppo);
-                        printf "is:\n%!";
-                        Type_determination.print type_info
-               in
+               (* let () = printf "Type state info for silent store deps:\n%!"; *)
+               (*          List.iter deps ~f:(printf "%a\n%!" Def.ppo); *)
+               (*          printf "is:\n%!"; *)
+               (*          Type_determination.print type_info *)
+               (* in *)
                let do_check = Symbolic.Executor.eval_def_list deps in
                let init_st = Symbolic.Executor.init ~do_ss:true deps st.tid type_info st.profiling_data_path in
                let (), fini_st = Symbolic.Executor.run do_check init_st in
