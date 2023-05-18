@@ -8,13 +8,13 @@
 
 (provide (all-defined-out))
 
-; ---------- Bitwise LSHIFT ----------
+; ---------- Bitwise SHL ----------
 
 ; Dest rax, src rcx
-(define regs-lshift
+(define regs-shl
   (list rax rcx))
 
-(define attempt-lshift8-path-sensitivable
+(define attempt-shl8-path-sensitivable
   (list
    (mov-r/m64-r64 r13 rcx) ; TODO: replace with push
    (mov-r64-imm64 r12 (bv (expt 2 31) 64))
@@ -39,7 +39,7 @@
    ; restore rcx
    (mov-r/m64-r64 rcx r13))) ; TODO: replace with pop
 
-(define attempt-lshift8
+(define attempt-shl8
   (list
    ; save rcx
    (mov-r/m64-r64 r13 rcx) ; TODO: replace with push
@@ -67,11 +67,11 @@
    (mov-r/m64-r64 rcx r13) ; TODO: replace with pop
   ))
 
-(define spec-lshift8
+(define spec-shl8
   (list
    (shl-r/m8-cl al)))
 
-(define attempt-lshift16
+(define attempt-shl16
   (list
    ; save rcx
    (mov-r/m64-r64 r13 rcx) ; TODO: replace with push
@@ -99,11 +99,11 @@
    (mov-r/m64-r64 rcx r13) ; TODO: replace with pop
   ))
 
-(define spec-lshift16
+(define spec-shl16
   (list
    (shl-r/m16-cl ax)))
 
-(define attempt-lshift32-path-sensitivable
+(define attempt-shl32-path-sensitivable
   (list
   ; save rcx
    (mov-r/m64-r64 r12 rcx) ; TODO: replace with push
@@ -132,7 +132,7 @@
    (mov-r/m64-r64 rcx r12) ; TODO: replace with pop
   ))
 
-(define attempt-lshift32
+(define attempt-shl32
   (list
    ; save rcx
    (mov-r/m64-r64 r12 rcx) ; TODO: replace with push
@@ -161,11 +161,11 @@
    (mov-r/m64-r64 rcx r12) ; TODO: replace with pop
   ))
 
-(define spec-lshift32
+(define spec-shl32
   (list
    (shl-r/m32-cl eax)))
 
-(define attempt-lshift64
+(define attempt-shl64
   (list
    ; save rcx
    (mov-r/m64-r64 r14 rcx) ; TODO: replace with push
@@ -202,11 +202,11 @@
    (mov-r/m64-r64 rcx r14) ; TODO: replace with pop
   ))
 
-(define spec-lshift64
+(define spec-shl64
   (list
    (shl-r/m64-cl rax)))
 
-(define attempt-lshift64-imm
+(define attempt-shl64-imm
   (list
     ; split up rax
     (mov-r64-imm64 r10 (bv (expt 2 63) 64))
@@ -225,7 +225,7 @@
   ))
 
 ; CF- and ZF-correct
-(define attempt-lshift64-imm-cf
+(define attempt-shl64-imm-cf
   (list
     ; split up rax
     (mov-r64-imm64 r10 (bv (expt 2 63) 64))
@@ -245,17 +245,17 @@
     (bt-r/m64-imm8 r12 (bv 0 8)) ; restore CF
   ))
 
-(define spec-lshift64-imm
+(define spec-shl64-imm
   (list
    (shl-r/m64-imm8 rax (bv 25 8))))
 
-; ---------- Bitwise RSHIFT ----------
+; ---------- Bitwise SHR ----------
 
 ; Dest rax, src rcx
-(define regs-rshift
+(define regs-shr
   (list rax rcx))
 
-(define attempt-rshift8
+(define attempt-shr8
   (list
    ; save rcx
    (mov-r/m64-r64 r13 rcx) ; TODO: replace with push
@@ -283,11 +283,11 @@
    (mov-r/m64-r64 rcx r13) ; TODO: replace with pop
   ))
 
-(define spec-rshift8
+(define spec-shr8
   (list
    (shr-r/m8-cl al)))
 
-(define attempt-rshift16
+(define attempt-shr16
   (list
    ; save rcx
    (mov-r/m64-r64 r13 rcx) ; TODO: replace with push
@@ -315,11 +315,11 @@
    (mov-r/m64-r64 rcx r13) ; TODO: replace with pop
   ))
 
-(define spec-rshift16
+(define spec-shr16
   (list
    (shr-r/m16-cl ax)))
 
-(define attempt-rshift32-path-sensitivable
+(define attempt-shr32-path-sensitivable
   (list
    ; save rcx
    (mov-r/m64-r64 r13 rcx) ; TODO: replace with push
@@ -347,7 +347,7 @@
    (mov-r/m64-r64 rcx r13) ; TODO: replace with pop
   ))
 
-(define attempt-rshift32
+(define attempt-shr32
   (list
    ; save rcx
    (mov-r/m64-r64 r13 rcx) ; TODO: replace with push
@@ -376,11 +376,11 @@
    (mov-r/m64-r64 rcx r13) ; TODO: replace with pop
   ))
 
-(define spec-rshift32
+(define spec-shr32
   (list
    (shr-r/m32-cl eax)))
 
-(define attempt-rshift64
+(define attempt-shr64
   (list
    ; save rcx
    (mov-r/m64-r64 r14 rcx) ; TODO: replace with push
@@ -419,12 +419,12 @@
    (mov-r/m64-r64 rcx r14) ; TODO: replace with pop
   ))
 
-(define spec-rshift64
+(define spec-shr64
   (list
    (shr-r/m64-cl rax)))
 
 ; CF- and ZF-correct
-(define attempt-rshift64-imm-cf
+(define attempt-shr64-imm-cf
   (list
     ; split up rax
     (mov-r64-imm64 r10 (bv (expt 2 63) 64))
@@ -446,17 +446,17 @@
     (bt-r/m64-imm8 r12 (bv 0 8)) ; restore CF
   ))
 
-(define spec-rshift64-imm
+(define spec-shr64-imm
   (list
    (shr-r/m64-imm8 rax (bv 25 8))))
 
-; ---------- Bitwise ARSHIFT ----------
+; ---------- Bitwise SAR ----------
 
 ; Dest rax, src rcx
-(define regs-arshift
+(define regs-sar
   (list rax rcx))
 
-(define attempt-arshift8
+(define attempt-sar8
   (list
    ; save rcx
    (mov-r/m64-r64 r13 rcx) ; TODO: replace with push
@@ -486,11 +486,11 @@
    (mov-r/m64-r64 rcx r13) ; TODO: replace with pop
   ))
 
-(define spec-arshift8
+(define spec-sar8
   (list
    (sar-r/m8-cl al)))
 
-(define attempt-arshift16
+(define attempt-sar16
   (list
    ; save rcx
    (mov-r/m64-r64 r13 rcx) ; TODO: replace with push
@@ -520,11 +520,11 @@
    (mov-r/m64-r64 rcx r13) ; TODO: replace with pop
   ))
 
-(define spec-arshift16
+(define spec-sar16
   (list
    (sar-r/m16-cl ax)))
 
-(define attempt-arshift32
+(define attempt-sar32
   (list
    ; save rcx
    (mov-r/m64-r64 r13 rcx) ; TODO: replace with push
@@ -555,11 +555,11 @@
    (mov-r/m64-r64 rcx r13) ; TODO: replace with pop
   ))
 
-(define spec-arshift32
+(define spec-sar32
   (list
    (sar-r/m32-cl eax)))
 
-(define attempt-arshift64
+(define attempt-sar64
   (list
    ; save rcx
    (mov-r/m64-r64 r14 rcx) ; TODO: replace with push
@@ -599,6 +599,6 @@
    (mov-r/m64-r64 rcx r14) ; TODO: replace with pop
   ))
 
-(define spec-arshift64
+(define spec-sar64
   (list
    (sar-r/m64-cl rax)))
