@@ -34,6 +34,7 @@ global_check: debug
 	-bap --plugin-path=. --pass=uarch-checker \
 	--uarch-checker-output-csv-file=./libna.checker.output.csv \
 	--uarch-checker-config-file=libsodium.uarch_checker.config \
+	--uarch-checker-no-symex \
 	--uarch-checker-ss \
 	--uarch-checker-cs \
 	--uarch-checker-symex-profiling-output-file=./symex-profiling-data.csv \
