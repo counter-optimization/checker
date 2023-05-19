@@ -14,6 +14,16 @@ module CR = Common.CalleeRel
 module CRS = CR.Set
 module ABI = Common.AMD64SystemVABI
 
+module ProdIntvlxTaint = DomainProduct(Wrapping_interval)(Checker_taint.Analysis)
+module WithTypes = DomainProduct(ProdIntvlxTaint)(Type_domain)
+module FinalDomain = DomainProduct(WithTypes)(Bases_domain)
+
+module E = Abstract_memory.Make(FinalDomain)
+module R = Region
+module Rt = Region.Set
+module Vt = struct type t = Common.cell_t end
+module AbsInt = AbstractInterpreter(FinalDomain)(R)(Rt)(Vt)(E)
+
 type check_sub_result = {
     callees : CRS.t;
     liveness_info : Live_variables.t;
@@ -188,17 +198,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let cfg = Graphlib.create (module G) ~edges () in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname CfgCreation stop in
-
-     (* AbsInt *)
-     let module ProdIntvlxTaint = DomainProduct(Wrapping_interval)(Checker_taint.Analysis) in
-     let module WithTypes = DomainProduct(ProdIntvlxTaint)(Type_domain) in
-     let module FinalDomain = DomainProduct(WithTypes)(Bases_domain) in
-     
-     let module E = Abstract_memory.Make(FinalDomain) in
-     let module R = Region in
-     let module Rt = Region.Set in
-     let module Vt = struct type t = Common.cell_t end in
-     let module AbsInt = AbstractInterpreter(FinalDomain)(R)(Rt)(Vt)(E) in
 
      (* set up initial solution *)
      let start = Analysis_profiling.record_start_time () in

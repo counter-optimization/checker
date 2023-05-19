@@ -49,7 +49,8 @@ module UarchCheckerExtension = struct
     let config = Config.Parser.parse_config_file ~path:config_path in
     let () = printf "Config is:\n%!"; Config.pp config in
 
-    Driver.check_config config img ctxt proj
+    Kb_test.Builder.print_someval ()
+    (* Driver.check_config config img ctxt proj *)
     
   let register_pass ctxt =
     Project.register_pass' (pass ctxt);

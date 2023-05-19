@@ -9,6 +9,113 @@ module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 module ABI = Common.ABI
 
+module WI = Wrapping_interval
+
+module MakeChecker(N : NumericDomain) = struct
+  let should_check_elt (elt : Blk.elt) : bool =
+    match elt with
+    | `Def d ->
+       let defining = Def.lhs d |> Var.name in
+       let is_def_of_flag = ABI.var_name_is_flag defining in
+       not is_def_of_flag
+    | _ -> false
+
+  let get_intvl : N.t -> Wrapping_interval.t =
+    match N.get Wrapping_interval.key with
+    | Some f -> f
+    | None -> failwith "Couldn't extract interval information out of product domain in comp simp checker"
+
+  let check_binop (tid : tid) (binop : Bil.binop) (l : N.t) (r : N.t)
+      : Alert.t option =
+    let l = get_intvl l in
+    let r = get_intvl r in
+    let left_zero = WI.of_int ~width:(WI.bitwidth l) 0 in
+    let right_zero = WI.of_int ~width:(WI.bitwidth r) 0 in
+    let left_one = WI.of_int ~width:(WI.bitwidth l) 1 in
+    let right_one = WI.of_int ~width:(WI.bitwidth r) 1 in
+    let left_all_ones = begin
+        let bw = WI.bitwidth l in
+        let ones = Word.ones bw in
+        WI.of_word ones
+      end
+    in
+    let right_all_ones = begin
+        let bw = WI.bitwidth r in
+        let ones = Word.ones bw in
+        WI.of_word ones
+      end
+    in
+    let left_bad = ref false in
+    let right_bad = ref false in
+    let () = match binop with
+    | Bil.PLUS ->
+       left_bad := WI.contains left_zero l;
+       right_bad := WI.contains right_zero r
+    | Bil.MINUS ->
+       right_bad := WI.contains right_zero r
+    | Bil.TIMES -> 
+       left_bad := WI.contains left_zero l || WI.contains left_one l;
+       right_bad := WI.contains right_zero r || WI.contains right_one r
+    | Bil.DIVIDE ->
+       left_bad := WI.contains left_zero l;
+       right_bad := WI.contains right_one r
+    | Bil.SDIVIDE ->
+       left_bad := WI.contains left_zero l;
+       right_bad := WI.contains right_one r
+    | Bil.LSHIFT ->
+       left_bad := WI.contains left_zero l;
+       right_bad := WI.contains right_zero r
+    | Bil.RSHIFT -> 
+       left_bad := WI.contains left_zero l;
+       right_bad := WI.contains right_zero r
+    | Bil.ARSHIFT ->
+       left_bad := WI.contains left_zero l;
+       right_bad := WI.contains right_zero r
+    | Bil.AND ->
+       left_bad := WI.contains left_zero l || WI.contains left_all_ones l;
+       right_bad := WI.contains right_zero r || WI.contains right_all_ones r
+    | Bil.OR ->
+       left_bad := WI.contains left_zero l || WI.contains left_all_ones l;
+       right_bad := WI.contains right_zero r || WI.contains right_all_ones r
+    | Bil.XOR ->
+       left_bad := WI.contains left_zero l || WI.contains left_all_ones l;
+       right_bad := WI.contains right_zero r || WI.contains right_all_ones r
+    | Bil.EQ -> ()
+    | Bil.NEQ -> ()
+    | Bil.LT -> ()
+    | Bil.LE -> ()
+    | Bil.SLT -> ()
+    | Bil.SLE -> ()
+    | Bil.MOD -> ()
+    | Bil.SMOD -> ()
+    in
+    if !left_bad || !right_bad
+    then
+      let problematic_operands = [] in
+      let problematic_operands = List.append (if !left_bad then [0] else []) problematic_operands in
+      let problematic_operands = List.append (if !right_bad then [1] else []) problematic_operands in
+      let desc = binop_to_string binop in
+      let left_val = Some (WI.to_string l) in
+      let right_val = Some (WI.to_string r) in
+      Some {
+          tid;
+          desc;
+          left_val;
+          right_val;
+          opcode = None;
+          addr = None;
+          rpo_idx = None;
+          sub_name = None;
+          flags_live = SS.empty;
+          flags_live_in = SS.empty;
+          is_live = None;
+          reason = Alert.CompSimp;
+          problematic_operands = Some problematic_operands
+        }
+    else
+      None
+end
+
 module Checker(N : NumericDomain) = struct
     module E = struct
     type region = Common.Region.t
@@ -459,4 +566,4 @@ module Checker(N : NumericDomain) = struct
     | `Def d -> check_def d live env sub do_symex idx_st proj profiling_data_path
     | _ -> { warns = empty; stats = EvalStats.init }
 end
- 
+
