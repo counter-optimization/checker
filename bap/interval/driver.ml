@@ -245,8 +245,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                          Tid.pps tid
 
                                 in
-                                AbsInt.denote_elt elt) in
-
+                                AbsInt.denote_elt elt)
+     in
      let () = printf "Done running abstract interpreter\n%!" in
 
      let no_symex = Extension.Configuration.get ctxt Common.no_symex_param in
@@ -254,11 +254,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
 
      let symex_profiling_out_file = Extension.Configuration.get ctxt Common.symex_profiling_output_file_path_param in
 
-     (* let () = printf "Getting unsupported tids for function %s\n%!" @@ Sub.name sub in *)
-     (* let checker_blacklisted_tids = UnsupportedFunctionFilter.get_unsupported_tids sub in *)
-     (* let () = printf "Unsupported insn tids are:\n%!"; *)
-     (*          Set.iter checker_blacklisted_tids ~f:(printf "%a\n%!" Tid.ppo) in *)
-     
      (* Build up checker infra and run the checkers
       * This next part is an abomination of Ocaml code
       * todo: refactor this using this SO answer:
@@ -282,13 +277,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                    Chkr.name
                    Tid.pps to_tid
        else
-         (* if Set.mem checker_blacklisted_tids to_tid *)
-         (* then *)
-         (*   let () = printf "Skipping analysis of unsupported or blacklisted insn at tid: %a\n%!" Tid.ppo to_tid in *)
-         (*   let warns = Alert.Set.empty in *)
-         (*   let stats = EvalStats.incr_unsupported_pruned @@ EvalStats.init in *)
-         (*   { warns; stats } *)
-         (* else *)
            let insn = match Tid_map.find tidmap to_tid with
              | Some elt -> elt
              | None ->
@@ -339,40 +327,25 @@ let run_analyses sub img proj ~(is_toplevel : bool)
        else { warns = Alert.Set.empty; stats = EvalStats.init }
      in
      let all_alerts = Alert.Set.union comp_simp_res.warns silent_store_res.warns in
-     let alerts_with_subs = Alert.Set.map all_alerts
+     let all_alerts = Alert.Set.map all_alerts
                               ~f:(fun alert ->
-                                { alert with sub_name = Some (Sub.name sub) }) in
-     
-     let alerts_with_indices = Alert.InsnIdxFiller.set_for_alert_set idx_st alerts_with_subs in
+                                { alert with sub_name = Some (Sub.name sub) })
+     in
+     let all_alerts = Alert.InsnIdxFiller.set_for_alert_set idx_st all_alerts in
      (* this is really dependency analysis info, not liveness info *)
-     let alerts_with_liveness = Alert.LivenessFiller.set_for_alert_set alerts_with_indices liveness in
+     let all_alerts = Alert.LivenessFiller.set_for_alert_set all_alerts liveness in
      (* here, liveness means classical dataflow liveness *)
      let dataflow_liveness = Liveness.run_on_cfg (module G) cfg tidmap liveness in
-     let alerts_with_dataflow_liveness =
-       Alert.DataflowLivenessFiller.set_for_alert_set
-         alerts_with_liveness
-         dataflow_liveness
+     let all_alerts = Alert.DataflowLivenessFiller.set_for_alert_set all_alerts dataflow_liveness
      in
-     let all_alerts = alerts_with_dataflow_liveness in
-     
-     (* get callees--both direct and indirect calls--of this call *)
-     let () = Format.printf "Getting callees for sub %s\n%!" (Sub.name sub) in
      
      let module GetCallees = Callees.Getter(FinalDomain) in
 
      let callee_analysis_results = GetCallees.get sub proj analysis_results in
      let callees = List.filter callee_analysis_results ~f:Or_error.is_ok
                    |> List.map ~f:Or_error.ok_exn
-                   |> CalleeRel.Set.of_list in
-     (* print all callee errs *)
-     (* let () = List.filter callee_analysis_results ~f:Or_error.is_error *)
-     (*          |> List.iter *)
-     (*               ~f:(function *)
-     (*                   | Error err -> *)
-     (*                      Format.printf "In getting callees for sub %s : %s\n%!" *)
-     (*                                    (Sub.name sub) *)
-     (*                                    (Error.to_string_hum err) *)
-     (*                   | Ok _ -> ()) in *)
+                   |> CalleeRel.Set.of_list
+     in
      { alerts = all_alerts;
        callees = callees;
        csevalstats = comp_simp_res.stats;
