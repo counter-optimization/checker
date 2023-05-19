@@ -489,3 +489,23 @@ let check_config config img ctxt proj : unit =
   let csv_out_file_name = Extension.Configuration.get ctxt Common.output_csv_file_param in
   let () = printf "writing checker alerts to file: %s\n%!" csv_out_file_name in
   Alert.save_alerts_to_csv_file ~filename:csv_out_file_name all_alerts
+
+(*
+  Driver:
+  - Before any analyses, set the global simple expression stores (find 
+    indirect branch targets that are constants)
+
+  for each function in the config file:
+  1. Dependency analysis
+  2. Liveness analysis
+  3. Set up initial environment for abs int
+  4. Run abs int
+  5. Get all callees
+  6. Fix up alerts with extra information
+  7. Add all callees to list of functions to analyze
+     
+  which of these depend on each other?:
+  dependency and liveness are independent of everything else
+  interproc call graph matters a lot for setting up initial environment
+  callees depend on abs interp, but only simple expressions can be handled
+ *)

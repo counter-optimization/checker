@@ -282,80 +282,6 @@ module CalleeRel = struct
   end
 end
 
-(* module UnsupportedFunctionFilter : sig *)
-(*   type opcode = string *)
-
-(*   type opcode_info = (tid * opcode) *)
-
-(*   type t = Set.M(Tid).t *)
-
-(*   val get_unsupported_tids : sub term -> t *)
-  
-(* end = struct *)
-(*   type opcode = string *)
-
-(*   type opcode_info = (tid * opcode) *)
-
-(*   type t = Set.M(Tid).t *)
-
-(*   module OpcodeFilters : sig *)
-    
-(*     val is_dont_care_opcode : opcode -> bool *)
-    
-(*   end = struct *)
-(*     let filters = ["call"; "push"] *)
-    
-(*     let is_dont_care_opcode (opcode : opcode) = *)
-(*       let prefixes_this_opcode = fun prefix -> *)
-(*         String.Caseless.is_prefix opcode ~prefix in *)
-(*       List.exists filters ~f:prefixes_this_opcode *)
-(*   end *)
-
-(*   let cls : (t, unit) KB.cls = KB.Class.declare *)
-(*                                "UnsupportedInsnsSet" *)
-(*                                () *)
-(*                                ~package *)
-(*                                ~public:true *)
-
-(*   let dom = KB.Domain.powerset *)
-(*               (module Tid) *)
-(*               "tid-powerset-domain" *)
-(*               ~inspect:Tid.sexp_of_t  *)
-
-(*   let slot = KB.Class.property *)
-(*                cls *)
-(*                "unsupported-tids-set" *)
-(*                dom *)
-(*                ~public:true *)
-(*                ~package *)
-
-(*   open KB.Monad_infix *)
-              
-(*   let filter_for_blacklisted_tids (tids : tid Seq.t) : t = *)
-(*     Toplevel.eval slot *)
-(*     (KB.Seq.filter tids ~f:(fun tid -> *)
-(*     KB.collect T.Semantics.slot tid >>= fun insn -> *)
-(*     let opcode = Insn.name insn in *)
-(*     let () = printf "Blacklist filtering debug: Insn with tid %a has opcode: %s\n%!" Tid.ppo tid opcode in *)
-(*     KB.return @@ OpcodeFilters.is_dont_care_opcode opcode) *)
-(*     >>= fun checker_blacklisted_tids -> *)
-(*     let tid_set = Set.of_sequence (module Tid) checker_blacklisted_tids in *)
-(*     KB.Object.create cls >>= fun obj -> *)
-(*     KB.provide slot obj tid_set >>= fun () -> *)
-(*     KB.return obj) *)
-        
-(*   let get_unsupported_tids (sub : sub term) : t = *)
-(*     let sub = sub in *)
-(*     let cfg = Sub.to_cfg sub in *)
-(*     let nodes = Graphlib.postorder_traverse (module Graphs.Ir) cfg in *)
-(*     let blks = Seq.map nodes ~f:Graphs.Ir.Node.label in *)
-(*     let insns = Seq.map blks ~f:(Term.enum def_t) in *)
-(*     let all_insns : def term Seq.t = Seq.join insns in *)
-(*     let all_tids = Seq.map all_insns ~f:Term.tid in *)
-(*     let checker_blacklisted_tids = filter_for_blacklisted_tids all_tids in *)
-(*     checker_blacklisted_tids *)
-(* end *)
-
 module ReturnInsnsGetter = struct
   type all_rets = (tid, Tid.comparator_witness) Set.t
   
@@ -425,28 +351,8 @@ module ReturnInsnsGetter = struct
        KB.return @@ Seq.hd_exn objs)
     
   let build () : t = Set.empty (module Tid)
-    (* let cur_st = Toplevel.current () in *)
-    (* let get_all_return_tids = *)
-    (*   KB.objects cls >>= fun all_ret_sets -> *)
-    (*   if Seq.is_empty all_ret_sets *)
-    (*   then compute_all_returns () *)
-    (*   else *)
-    (*     (\* only one ret set is computed, so get the first one *\) *)
-    (*     let only_one_ret_set = Seq.hd_exn all_ret_sets in *)
-    (*     KB.return only_one_ret_set *)
-    (* in *)
-    (* match KB.run cls get_all_return_tids cur_st with *)
-    (* | Ok (ret_tids, _st') -> KB.Value.get all_rets ret_tids *)
-    (* | Error e -> *)
-    (*    failwith @@ *)
-    (*      sprintf "in ReturnInsnsGetter.build, error : %s" (KB.Conflict.to_string e) *)
 
   let is_return : t -> tid -> bool = Set.mem
-
-  (* let is_singly_computable_return (tid : tid) : bool = *)
-  (*   KB.collect T.Semantics.slot tid >>= fun insn -> *)
-  (*   let is_return = Insn.is Insn.return insn in *)
-  (*   KB.return is_return) *)
 end
 
 let sub_of_tid_for_prog (p : Program.t) (t : Tid.t) : sub term Or_error.t =
@@ -799,24 +705,6 @@ module type NumericDomain = sig
   val bitwidth : t -> int
   val sexp_of_t : t -> Sexp.t
 end
-
-(* module type NumericEnvT = *)
-(*   functor (N : NumericDomain) -> *)
-(*   sig *)
-(*     type t *)
-
-(*     val lookup : string -> t -> N.t *)
-(*     val set : string -> N.t -> t -> t *)
-(*     val mem : t -> string -> bool *)
-(*     val equal : t -> t -> bool *)
-(*     val empty : t *)
-(*     val empty_for_entry : t *)
-(*     val empty_with_args : t *)
-(*     val merge : t -> t -> t *)
-(*     val widen_threshold : int *)
-(*     val widen_with_step : int -> 'a -> t -> t -> t *)
-(*     val pp : t -> unit *)
-(*   end *)
 
 module type MemoryT =
   sig
