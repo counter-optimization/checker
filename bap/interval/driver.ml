@@ -157,10 +157,14 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                  ~(do_ss_checks : bool)
                  ~(do_cs_checks : bool)
                  ctxt : check_sub_result =
-  let () = printf "Running analysis on sub %s\n%!" (Sub.name sub) in
+  let subname = Sub.name sub in
+  let () = printf "Running analysis on sub %s\n%!" subname in
   let prog = Project.program proj in
   let idx_st = Idx_calculator.build sub in
+  let start = Analysis_profiling.record_start_time () in
   let edges, tidmap = Edge_builder.run_one sub proj idx_st in
+  let stop = Analysis_profiling.record_stop_time start in
+  let () = Analysis_profiling.record_duration_for subname Edgebuilding stop in
   match should_skip_analysis edges tidmap sub prog with
   | Some res ->
      let sub_name = Sub.name sub in
@@ -171,13 +175,19 @@ let run_analyses sub img proj ~(is_toplevel : bool)
   | None ->
      (* run the liveness analysis *)
      let () = printf "Running liveness analysis\n%!" in
+     let start = Analysis_profiling.record_start_time () in
      let liveness = Live_variables.Analysis.run sub in
+     let stop = Analysis_profiling.record_stop_time start in
+     let () = Analysis_profiling.record_duration_for subname DependencyAnalysis stop in
      (* let () = Live_variables.IsUsedPass.print_rels liveness in *)
 
      (* CFG *)
+     let start = Analysis_profiling.record_start_time () in
      let edges = List.map edges ~f:(Calling_context.of_edge) in
      let module G = Graphlib.Make(Calling_context)(Bool) in
      let cfg = Graphlib.create (module G) ~edges () in
+     let stop = Analysis_profiling.record_stop_time start in
+     let () = Analysis_profiling.record_duration_for subname CfgCreation stop in
 
      (* AbsInt *)
      let module ProdIntvlxTaint = DomainProduct(Wrapping_interval)(Checker_taint.Analysis) in
@@ -191,6 +201,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let module AbsInt = AbstractInterpreter(FinalDomain)(R)(Rt)(Vt)(E) in
 
      (* set up initial solution *)
+     let start = Analysis_profiling.record_start_time () in
      let () = printf "Setting up initial solution \n%!" in
      let empty = E.empty in
      let stack_addr = 0x7fff_fff0 in
@@ -206,7 +217,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let env_with_df_set = E.set "DF" FinalDomain.b0 with_canary_set in
      let env_with_rsp_set = match E.set_rsp stack_addr env_with_df_set with
          | Ok env' -> env'
-         | Error e -> failwith @@ Error.to_string_hum e in
+         | Error e -> failwith @@ Error.to_string_hum e
+     in
      let env_with_img_set = E.set_img env_with_rsp_set img in
      (* e.g., filter out bap's 'mem' var and the result var
         commonly used in prog analysis *)
@@ -225,7 +237,11 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      in
      let with_args = G.Node.Map.set G.Node.Map.empty ~key:first_node ~data:final_env in
      let init_sol = Solution.create with_args empty in
+     let stop = Analysis_profiling.record_stop_time start in
+     let () = Analysis_profiling.record_duration_for subname InitEnvSetup stop in
      let () = printf "Running abstract interpreter\n%!" in
+
+     let start = Analysis_profiling.record_start_time () in
      let analysis_results = Graphlib.fixpoint
                               (module G)
                               cfg
@@ -248,6 +264,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                 AbsInt.denote_elt elt)
      in
      let () = printf "Done running abstract interpreter\n%!" in
+     let stop = Analysis_profiling.record_stop_time start in
+     let () = Analysis_profiling.record_duration_for subname AbsInt stop in
 
      let no_symex = Extension.Configuration.get ctxt Common.no_symex_param in
      let use_symex = not no_symex in
@@ -293,6 +311,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
            let res = analyze_edge (module Chkr) edge in
            combine_res acc res)
      in
+     let start = Analysis_profiling.record_start_time () in
      let comp_simp_res =
        if do_cs_checks
        then
@@ -310,6 +329,10 @@ let run_analyses sub img proj ~(is_toplevel : bool)
          end
        else { warns = Alert.Set.empty; stats = EvalStats.init }
      in
+     let stop = Analysis_profiling.record_stop_time start in
+     let () = Analysis_profiling.record_duration_for subname CsChecking stop in
+
+     let start = Analysis_profiling.record_start_time () in
      let silent_store_res =
        if do_ss_checks
        then
@@ -326,26 +349,47 @@ let run_analyses sub img proj ~(is_toplevel : bool)
          end
        else { warns = Alert.Set.empty; stats = EvalStats.init }
      in
+     let stop = Analysis_profiling.record_stop_time start in
+     let () = Analysis_profiling.record_duration_for subname SsChecking stop in
+     
      let all_alerts = Alert.Set.union comp_simp_res.warns silent_store_res.warns in
      let all_alerts = Alert.Set.map all_alerts
                               ~f:(fun alert ->
                                 { alert with sub_name = Some (Sub.name sub) })
      in
+     
+     let start = Analysis_profiling.record_start_time () in
      let all_alerts = Alert.InsnIdxFiller.set_for_alert_set idx_st all_alerts in
+     let stop = Analysis_profiling.record_stop_time start in
+     let () = Analysis_profiling.record_duration_for subname AlertIdxFilling stop in
+     
      (* this is really dependency analysis info, not liveness info *)
+     let start = Analysis_profiling.record_start_time () in
      let all_alerts = Alert.LivenessFiller.set_for_alert_set all_alerts liveness in
+     let stop = Analysis_profiling.record_stop_time start in
+     let () = Analysis_profiling.record_duration_for subname AlertDependencyFilling stop in
+     
      (* here, liveness means classical dataflow liveness *)
+     let start = Analysis_profiling.record_start_time () in
      let dataflow_liveness = Liveness.run_on_cfg (module G) cfg tidmap liveness in
+     let stop = Analysis_profiling.record_stop_time start in
+     let () = Analysis_profiling.record_duration_for subname ClassicLiveness stop in
+
+     let start = Analysis_profiling.record_start_time () in
      let all_alerts = Alert.DataflowLivenessFiller.set_for_alert_set all_alerts dataflow_liveness
      in
-     
-     let module GetCallees = Callees.Getter(FinalDomain) in
+     let stop = Analysis_profiling.record_stop_time start in
+     let () = Analysis_profiling.record_duration_for subname AlertLivenessFilling stop in
 
+     let start = Analysis_profiling.record_start_time () in
+     let module GetCallees = Callees.Getter(FinalDomain) in
      let callee_analysis_results = GetCallees.get sub proj analysis_results in
      let callees = List.filter callee_analysis_results ~f:Or_error.is_ok
                    |> List.map ~f:Or_error.ok_exn
                    |> CalleeRel.Set.of_list
      in
+     let stop = Analysis_profiling.record_stop_time start in
+     let () = Analysis_profiling.record_duration_for subname CalleeAnalysis stop in
      { alerts = all_alerts;
        callees = callees;
        csevalstats = comp_simp_res.stats;
@@ -393,14 +437,6 @@ let check_config config img ctxt proj : unit =
   let () = ReturnInsnsGetter.compute_all_returns () in
   let () = printf "Done.\n%!" in
 
-  (* let () = printf "Building the set of all SBB R11, _ tids\n%!" in *)
-  (* let () = Remove_non_indexed_insns.build_all_idx_insn_tids_set () in *)
-  (* let () = printf "done\n%!" in *)
-
-  (* let () = printf "All the sbb r11, _ tids are:\n%!" in *)
-  (* let sbb_tids = Remove_non_indexed_insns.get_set () in *)
-  (* let () = Set.iter sbb_tids ~f:(printf "%a\n%!" Tid.ppo) in *)
-  
   let do_ss_checks = Extension.Configuration.get ctxt Common.do_ss_checks_param in
   let do_cs_checks = Extension.Configuration.get ctxt Common.do_cs_checks_param in
   let rec loop ~(worklist : SubSet.t)
@@ -488,7 +524,8 @@ let check_config config img ctxt proj : unit =
   let () = printf "ss stats:\n%s%!" @@ EvalStats.to_json_string ss_stats in
   let csv_out_file_name = Extension.Configuration.get ctxt Common.output_csv_file_param in
   let () = printf "writing checker alerts to file: %s\n%!" csv_out_file_name in
-  Alert.save_alerts_to_csv_file ~filename:csv_out_file_name all_alerts
+  Alert.save_alerts_to_csv_file ~filename:csv_out_file_name all_alerts;
+  Analysis_profiling.print_all_times ()
 
 (*
   Driver:

@@ -48,7 +48,7 @@ module UarchCheckerExtension = struct
     let config_path = Extension.Configuration.get ctxt Common.config_file_path_param in
     let config = Config.Parser.parse_config_file ~path:config_path in
     let () = printf "Config is:\n%!"; Config.pp config in
-    
+
     Driver.check_config config img ctxt proj
     
   let register_pass ctxt =
