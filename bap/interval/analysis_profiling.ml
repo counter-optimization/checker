@@ -60,39 +60,29 @@ let event_slot = KB.Class.property
                    "eventtype"
                    event_dom
 
-let funcname_dom = KB.Domain.flat
-                     ~empty:""
-                     ~equal:String.equal
-                     "funcname_dom"
-
 let funcname_slot = KB.Class.property
                       ~package:Common.package
                       cls
                       "funcname"
-                      funcname_dom
-
-let time_dom = KB.Domain.total
-                 ~empty:(-1)
-                 ~order:Int.compare
-                 "time-ns-int-domain"
+                      Common.funcname_dom
 
 let start_slot = KB.Class.property
                    ~package:Common.package
                    cls
                    "starttime_ns"
-                   time_dom
+                   Common.int_total_order_dom
 
 let stop_slot = KB.Class.property
                    ~package:Common.package
                    cls
                    "stoptime_ns"
-                   time_dom
+                   Common.int_total_order_dom
 
 let duration_slot = KB.Class.property
                    ~package:Common.package
                    cls
                    "duration_ns"
-                   time_dom
+                   Common.int_total_order_dom
 
 let record_start_time () : t =
   let start = Time_ns.now () |> Time_ns.to_int_ns_since_epoch in

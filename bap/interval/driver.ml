@@ -39,11 +39,53 @@ type analysis_result = {
     alerts : checker_alerts;
     csevalstats : EvalStats.t;
     ssevalstats : EvalStats.t
-}
+  }
+
+type t
 
 module SubSet = struct
   include Set.Make_binable_using_comparator(Sub)
 end
+
+let subs_analyzed_cls : (t, unit) KB.Class.t = KB.Class.declare
+                                                 "subs-analyzed"
+                                                 ()
+                                                 ~package:Common.package
+
+let analyzed_sub_tid_slot = KB.Class.property
+                              ~package:Common.package
+                              subs_analyzed_cls
+                              "analyzed-sub-tid"
+                              Common.tid_opt_domain
+
+let analyzed_sub_name_slot = KB.Class.property
+                               ~package:Common.package
+                               subs_analyzed_cls
+                               "analyzed-sub-name-tid"
+                               Common.string_flat_dom
+
+let get_analyzed_subnames () : Set.M(String).t =
+  let open KB.Monad_infix in
+  let subnames = ref (Set.empty (module String)) in
+  let () = Toplevel.exec begin
+               KB.objects subs_analyzed_cls >>= fun analyzed ->
+               KB.Seq.iter analyzed ~f:(fun v ->
+                   KB.collect analyzed_sub_name_slot v >>= fun name ->
+                   subnames := Set.add !subnames name;
+                   KB.return ())
+             end
+  in
+  !subnames
+
+let record_analyzed_sub subname subtid : unit =
+  let open KB.Monad_infix in
+  Toplevel.exec begin
+      KB.Object.create subs_analyzed_cls >>= fun obj ->
+      KB.all_unit [
+          KB.provide analyzed_sub_name_slot obj subname;
+          KB.provide analyzed_sub_tid_slot obj (Some subtid)
+        ]
+    end
 
 let print_iml iml : unit =
   Format.printf
@@ -168,7 +210,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                  ~(do_cs_checks : bool)
                  ctxt : check_sub_result =
   let subname = Sub.name sub in
+  let subtid = Term.tid sub in
   let () = printf "Running analysis on sub %s\n%!" subname in
+  let () = record_analyzed_sub subname subtid in
   let prog = Project.program proj in
   let idx_st = Idx_calculator.build sub in
   let start = Analysis_profiling.record_start_time () in

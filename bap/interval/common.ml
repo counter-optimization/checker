@@ -116,10 +116,29 @@ end
 
 module ABI = AMD64SystemVABI
 
+let string_flat_dom = KB.Domain.flat
+                        ~empty:""
+                        ~equal:String.equal
+"string-flat-dom"
+
 let string_powset_dom = KB.Domain.powerset
                           (module String)
                           ~inspect:String.sexp_of_t
                           "string-powerset-domain"
+
+let funcname_dom = KB.Domain.flat
+                     ~empty:""
+                     ~equal:String.equal
+                     "funcname_dom"
+
+let int_total_order_dom = KB.Domain.total
+                 ~empty:(-1)
+                 ~order:Int.compare
+                 "time-ns-int-domain"
+
+let tid_opt_domain = KB.Domain.optional
+                       ~equal:Tid.equal
+                       "tid_opt_domain"
 
 module SymExChecker = struct
   type t = {
