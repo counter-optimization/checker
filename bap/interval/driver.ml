@@ -361,6 +361,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                   let open KB.Monad_infix in
                   let cls = KB.Class.refine Alert.cls subname in
                   KB.objects cls >>= fun objs ->
+                  let () = printf "CS checker: %d alerts for sub %s\n%!"
+                             (Seq.length objs) subname
+                  in
                   KB.Seq.iter objs ~f:(fun alert ->
                       let alert = Alert.reify alert in
                       alerts := Alert.Set.add !alerts alert;

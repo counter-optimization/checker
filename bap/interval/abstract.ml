@@ -431,7 +431,7 @@ module AbstractInterpreter(N: NumericDomain)
     | Bil.NEG -> N.neg
     | Bil.NOT -> N.lnot
 
-  let rec denote_exp ?(do_checks : bool = false) (subname : string) (tid : tid) (e : Bil.exp) : N.t ST.t =
+  let rec denote_exp ?(do_checks : bool = true) (subname : string) (tid : tid) (e : Bil.exp) : N.t ST.t =
     (* let () = printf "denoting exp: %a\n%!" Exp.ppo e interval_analysis.ml *)
     (* ST.get () >>= fun st -> *)
     try
