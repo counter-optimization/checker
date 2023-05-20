@@ -6,12 +6,15 @@ open Common
 module Theory = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 
-type reason = CompSimp | SilentStores
+open KB.Monad_infix
+
+type reason = CompSimp | SilentStores | None
                            [@@deriving sexp, bin_io, compare, equal]
 
 let string_of_reason = function
   | CompSimp -> "comp-simp"
   | SilentStores -> "silent-stores"
+  | None -> failwith "reason should be filled out"
 
 module T = struct
   (* flags_live: not computed or computed and true or false *)
@@ -21,7 +24,7 @@ module T = struct
       opcode : string option;
       addr : word option;
       rpo_idx : int option;
-      tid : Tid.t;
+      tid : Tid.t option;
       flags_live : SS.t;
       is_live : bool option;
       problematic_operands : int list option;
@@ -31,6 +34,120 @@ module T = struct
       desc : string;
       flags_live_in : SS.t
     } [@@deriving sexp, bin_io, compare]
+
+  let reason_dom = KB.Domain.flat
+                     ~empty:None
+                     ~equal:equal_reason
+                     "alert-reason-dom"
+
+  let cls : (t, unit) KB.Class.t = KB.Class.declare
+                                     ~package:Common.package
+                                     "alert"
+                                     ()
+
+  let sub_name_slot = KB.Class.property
+                        ~package:Common.package
+                        cls
+                        "sub-name"
+                        Common.string_opt_domain
+
+  let opcode_slot = KB.Class.property
+                        ~package:Common.package
+                        cls
+                        "mir-opcode"
+                        Common.string_opt_domain
+
+  let addr_slot = KB.Class.property
+                        ~package:Common.package
+                        cls
+                        "vaddr"
+                        Common.word_opt_domain
+
+  let rpo_idx_slot = KB.Class.property
+                        ~package:Common.package
+                        cls
+                        "rpo-idx"
+                        Common.int_total_order_dom
+
+  let tid_slot = KB.Class.property
+                   ~package:Common.package
+                   cls
+                   "tid"
+                   Common.tid_opt_domain
+
+  let flags_live_slot = KB.Class.property
+                   ~package:Common.package
+                   cls
+                   "flags-live-out"
+                   Common.string_powset_dom
+
+  let is_live_slot = KB.Class.property
+                   ~package:Common.package
+                   cls
+                   "is-live"
+                   Common.bool_opt_domain
+
+  let problematic_operands_slot = KB.Class.property
+                   ~package:Common.package
+                   cls
+                   "problematic-operands"
+                   Common.int_list_opt_domain
+
+  let left_val_slot = KB.Class.property
+                   ~package:Common.package
+                   cls
+                   "left-val"
+                   Common.string_opt_domain
+
+  let right_val_slot = KB.Class.property
+                   ~package:Common.package
+                   cls
+                   "right-val"
+                   Common.string_opt_domain
+
+  let reason_slot = KB.Class.property
+                   ~package:Common.package
+                   cls
+                   "reason"
+                   reason_dom
+
+  let desc_slot = KB.Class.property
+                   ~package:Common.package
+                   cls
+                   "desc"
+                   Common.string_flat_dom
+
+  let flags_live_in_slot = KB.Class.property
+                   ~package:Common.package
+                   cls
+                   "flags-live-in"
+                   Common.string_powset_dom
+
+  (* as filled as a checker can fill it while
+     observing the analysis, hence base *)
+  let create_base_alert
+        ~(tid : tid)
+        ~(subname : string)
+        ~(desc : string)
+        ~(left_val : string)
+        ~(right_val : string)
+        ~(problematic_operands : int list) : unit =
+    let sub_cls = KB.Class.declare
+                ~package:Common.package
+                "alert"
+                subname
+    in
+    Toplevel.exec begin
+        KB.Object.create sub_cls >>= fun obj ->
+        KB.all_unit [
+            KB.provide tid_slot obj (Some tid);
+            KB.provide sub_name_slot obj (Some subname);
+            KB.provide desc_slot obj desc;
+            KB.provide left_val_slot obj (Some left_val);
+            KB.provide right_val_slot obj (Some right_val);
+            KB.provide problematic_operands_slot obj (Some problematic_operands)
+          ]
+      end
 end
 
 module Cmp = struct
@@ -169,7 +286,7 @@ module OpcodeAndAddrFiller : Pass = struct
     (addr_lut, opcode_lut)
 
   let set_addr_for_alert (alert : T.t) (addr_lut : addrmap) : T.t =
-    let alert_tid = alert.tid in
+    let alert_tid = Option.value_exn alert.tid in
     match Map.find addr_lut alert_tid with
     | Some addr_str -> 
        { alert with addr = Some addr_str }
@@ -177,7 +294,7 @@ module OpcodeAndAddrFiller : Pass = struct
        failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut, set_addr_for_alert, couldn't get addr for alert on tid: %a" Tid.pps alert_tid
 
   let set_opcode_for_alert (alert : T.t) (opcode_lut : tidmap) : T.t =
-    let alert_tid = alert.tid in
+    let alert_tid = Option.value_exn alert.tid in
     match Map.find opcode_lut alert_tid with
     | Some opcode_str -> 
        { alert with opcode = Some opcode_str }
@@ -265,13 +382,14 @@ end
 
 module InsnIdxFiller = struct
   let set_for_alert (idx_map : Idx_calculator.t) (alert : T.t) : T.t =
-    if Idx_calculator.contains_tid alert.tid idx_map
+    let tid = Option.value_exn alert.tid in
+    if Idx_calculator.contains_tid tid idx_map
     then
-      match Idx_calculator.get_idx alert.tid idx_map with
+      match Idx_calculator.get_idx tid idx_map with
       | Some canonical_insn_idx ->
          { alert with rpo_idx = Some canonical_insn_idx }
       | None ->
-         let err_msg = sprintf "Couldn't get canonical R11 idx for insn w/ tid: %a in InsnIdxFiller.set_for_alert" Tid.pps alert.tid in
+         let err_msg = sprintf "Couldn't get canonical R11 idx for insn w/ tid: %a in InsnIdxFiller.set_for_alert" Tid.pps tid in
          failwith err_msg
     else
       alert
@@ -294,7 +412,7 @@ module LivenessFiller = struct
   type liveness = Live_variables.t
 
   let set_for_alert liveness alert : t =
-    let warn_tid = alert.tid in
+    let warn_tid = Option.value_exn alert.tid in
     let live_flags =
       Live_variables.get_live_flags_of_prev_def_tid liveness ~prev_def_tid:warn_tid in
     let is_live_flagless = Live_variables.is_live_flagless liveness ~tid:warn_tid in
@@ -307,7 +425,8 @@ end
 
 module DataflowLivenessFiller = struct
   let set_for_alert (liveness : Liveness.t) alert : t =
-    let live_vars : SS.t = Liveness.live_at_tid alert.tid liveness in
+    let tid = Option.value_exn alert.tid in
+    let live_vars : SS.t = Liveness.live_at_tid tid liveness in
     let flags_live_in = SS.inter live_vars AMD64SystemVABI.flag_names in
     { alert with flags_live_in = flags_live_in }
 
@@ -320,7 +439,7 @@ let t_of_reason_and_tid (reason : reason) (tid : Tid.t) : t =
     opcode = None;
     addr = None;
     rpo_idx = None;
-    tid;
+    tid = Some tid;
     reason;
     flags_live = SS.empty;
     is_live = None;
@@ -352,7 +471,9 @@ let to_string (x : t) : string =
         is_live;
         reason;
         desc;
-        flags_live_in } = x in
+        flags_live_in } = x
+  in
+  let tid = Option.value_exn tid in
   let sub_name_str = match sub_name with
     | Some sub_name -> sub_name
     | None ->
@@ -412,9 +533,10 @@ let save_alerts_to_csv_file ~(filename : string) (alerts : Set.t) : unit =
 
 module RemoveAndWarnEmptyInsnIdxAlerts : Pass = struct
   let warn_on_no_insn_idx alert : unit =
+    let tid = Option.value_exn alert.tid in
     let csv_row = to_csv_row alert in 
     printf "Alert for tid (%a) has empty insn idx. Full alert csv row is: %s\n%!"
-      Tid.ppo alert.tid csv_row
+      Tid.ppo tid csv_row
   
   let has_insn_idx alert : bool =
     match alert.rpo_idx with

@@ -7,6 +7,8 @@ open Monads.Std
 module T = Bap_core_theory.Theory
 module KB = Bap_knowledge.Knowledge
 
+open Abstract
+
 (* gets callees one-level deep.
    in the call graph, each node of the graph is a term id (Tid).
    the call graph only includes direct calls.
@@ -76,7 +78,7 @@ module Getter(N : NumericDomain) = struct
     let () = printf "in get_callee_of_indirect\n%!" in
     let fromtid = Term.tid jmp_from in
     let fromcc = Calling_context.of_tid fromtid in
-    let exp_evaller = AI.denote_exp exp in
+    let exp_evaller = AI.denote_exp ~do_checks:false (Sub.name sub) fromtid exp in
     let eval_in_env = Solution.get sol fromcc in
     let (callee, _new_env) = AI.ST.run exp_evaller eval_in_env in
     let callee_as_intvl = get_intvl callee in

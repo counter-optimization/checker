@@ -4,6 +4,8 @@ open Common
 
 module ABI = Common.ABI
 
+open Abstract
+
 (* This is an implementation based on the paper 'Field-Sensitive Value *)
 (* Analysis of Embedded C Programs with Union Types and Pointer *)
 (* Arithmetics'. *)

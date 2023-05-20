@@ -6,6 +6,7 @@ module T = Bap_core_theory.Theory
 module KB = Bap_knowledge.Knowledge
 
 open Common
+open Abstract
 open Abstract_memory
 
 module Cfg = Bap.Std.Graphs.Cfg
@@ -304,7 +305,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                          Tid.pps tid
 
                                 in
-                                AbsInt.denote_elt elt)
+                                AbsInt.denote_elt subname elt)
      in
      let () = printf "Done running abstract interpreter\n%!" in
      let stop = Analysis_profiling.record_stop_time start in
@@ -355,43 +356,57 @@ let run_analyses sub img proj ~(is_toplevel : bool)
            combine_res acc res)
      in
      let start = Analysis_profiling.record_start_time () in
-     let comp_simp_res =
-       if do_cs_checks
-       then
-         begin
-           let module CSChecker : Checker.S
-                      with type env = E.t = struct
-               include Comp_simp.Checker(FinalDomain)
-               type env = E.t
-             end
-           in
-           let () = printf "Starting comp simp checker...\n%!" in
-           let res = run_checker (module CSChecker) edges in
-           let () = printf "Done running comp simp checker.\n%!" in
-           res
-         end
-       else { warns = Alert.Set.empty; stats = EvalStats.init }
+     let alerts = ref Alert.Set.empty in
+     let () = Toplevel.exec begin
+                  let open KB.Monad_infix in
+                  let cls = KB.Class.refine Alert.cls subname in
+                  KB.objects cls >>= fun objs ->
+                  KB.Seq.iter objs ~f:(fun alert ->
+                      alerts := Alert.Set.add !alerts alert;
+                      KB.return ()
+                    )
+                end
+
+       { warns = Alert.Set.empty; stats = EvalStats.init }
      in
+     (*   if do_cs_checks *)
+     (*   then *)
+     (*     begin *)
+     (*       let module CSChecker : Checker.S *)
+     (*                  with type env = E.t = struct *)
+     (*           include Comp_simp.Checker(FinalDomain) *)
+     (*           type env = E.t *)
+     (*         end *)
+     (*       in *)
+     (*       let () = printf "Starting comp simp checker...\n%!" in *)
+     (*       let res = run_checker (module CSChecker) edges in *)
+     (*       let () = printf "Done running comp simp checker.\n%!" in *)
+     (*       res *)
+     (*     end *)
+     (*   else { warns = Alert.Set.empty; stats = EvalStats.init } *)
+     (* in *)
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname CsChecking stop in
 
      let start = Analysis_profiling.record_start_time () in
      let silent_store_res =
-       if do_ss_checks
-       then
-         begin
-           let module SSChecker : Checker.S with type env = E.t = struct
-               include Silent_stores.Checker(FinalDomain)
-               type env = E.t
-             end
-           in
-           let () = printf "Starting silent stores checker...\n%!" in
-           let res = run_checker (module SSChecker) edges in
-           let () = printf "Done running silent stores checker.\n%!" in
-           res
-         end
-       else { warns = Alert.Set.empty; stats = EvalStats.init }
+       { warns = Alert.Set.empty; stats = EvalStats.init }
      in
+       (* if do_ss_checks *)
+     (*   then *)
+     (*     begin *)
+     (*       let module SSChecker : Checker.S with type env = E.t = struct *)
+     (*           include Silent_stores.Checker(FinalDomain) *)
+     (*           type env = E.t *)
+     (*         end *)
+     (*       in *)
+     (*       let () = printf "Starting silent stores checker...\n%!" in *)
+     (*       let res = run_checker (module SSChecker) edges in *)
+     (*       let () = printf "Done running silent stores checker.\n%!" in *)
+     (*       res *)
+     (*     end *)
+     (*   else { warns = Alert.Set.empty; stats = EvalStats.init } *)
+     (* in *)
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname SsChecking stop in
      
