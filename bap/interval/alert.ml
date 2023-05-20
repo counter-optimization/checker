@@ -67,7 +67,7 @@ module T = struct
                         ~package:Common.package
                         cls
                         "rpo-idx"
-                        Common.int_total_order_dom
+                        Common.int_opt_dom
 
   let tid_slot = KB.Class.property
                    ~package:Common.package
@@ -148,6 +148,55 @@ module T = struct
             KB.provide problematic_operands_slot obj (Some problematic_operands)
           ]
       end
+
+  let reify kbalert : t =
+    let alert : t ref = ref { sub_name = None;
+                              opcode = None;
+                              addr = None;
+                              rpo_idx = None;
+                              tid = None;
+                              flags_live = SS.empty;
+                              is_live = None;
+                              problematic_operands = None;
+                              left_val = None;
+                              right_val = None;
+                              reason = None;
+                              desc = "";
+                                       flags_live_in = SS.empty }
+    in
+    let () = Toplevel.exec begin
+        KB.collect tid_slot kbalert >>= fun tid ->
+        KB.collect sub_name_slot kbalert >>= fun sub_name ->
+        KB.collect opcode_slot kbalert >>= fun opcode ->
+        KB.collect addr_slot kbalert >>= fun addr ->
+        KB.collect rpo_idx_slot kbalert >>= fun rpo_idx ->
+        KB.collect flags_live_slot kbalert >>= fun flags_live ->
+        KB.collect is_live_slot kbalert >>= fun is_live ->
+        KB.collect problematic_operands_slot kbalert >>= fun problematic_operands ->
+        KB.collect left_val_slot kbalert >>= fun left_val ->
+        KB.collect right_val_slot kbalert >>= fun right_val ->
+        KB.collect reason_slot kbalert >>= fun reason ->
+        KB.collect desc_slot kbalert >>= fun desc ->
+        KB.collect flags_live_in_slot kbalert >>= fun flags_live_in ->
+        alert := {
+            tid;
+            sub_name;
+            opcode;
+            addr;
+            rpo_idx;
+            flags_live;
+            is_live;
+            problematic_operands;
+            left_val;
+            right_val;
+            reason;
+            desc;
+            flags_live_in
+          };
+        KB.return ()
+               end
+    in
+    !alert
 end
 
 module Cmp = struct
