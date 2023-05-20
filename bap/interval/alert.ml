@@ -132,11 +132,7 @@ module T = struct
         ~(left_val : string)
         ~(right_val : string)
         ~(problematic_operands : int list) : unit =
-    let sub_cls = KB.Class.declare
-                ~package:Common.package
-                "alert"
-                subname
-    in
+    let sub_cls = KB.Class.refine cls subname in
     Toplevel.exec begin
         KB.Object.create sub_cls >>= fun obj ->
         KB.all_unit [
