@@ -140,6 +140,10 @@ let int_total_order_dom = KB.Domain.total
                  ~order:Int.compare
                  "time-ns-int-domain"
 
+let int_opt_dom = KB.Domain.optional
+                    ~equal:Int.equal
+                    "int_opt_domain"
+
 let tid_opt_domain = KB.Domain.optional
                        ~equal:Tid.equal
                        "tid_opt_domain"

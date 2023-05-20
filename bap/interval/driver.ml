@@ -362,13 +362,13 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                   let cls = KB.Class.refine Alert.cls subname in
                   KB.objects cls >>= fun objs ->
                   KB.Seq.iter objs ~f:(fun alert ->
+                      let alert = Alert.reify alert in
                       alerts := Alert.Set.add !alerts alert;
                       KB.return ()
                     )
                 end
-
-       { warns = Alert.Set.empty; stats = EvalStats.init }
      in
+     let comp_simp_res = { warns = !alerts; stats = EvalStats.init } in
      (*   if do_cs_checks *)
      (*   then *)
      (*     begin *)
