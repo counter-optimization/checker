@@ -32,10 +32,10 @@ let phi_values_to_vars vals =
 let denote_elt (datadeps : Live_variables.t) (elt : Blk.elt) (prev_env : env) =
   match elt with
   | `Def d ->
-     let killed_def_var = SS.singleton @@ Var.name @@ Def.lhs d in
-     let def_tid = Term.tid d in
-     let killed_flags = Live_variables.get_live_flags_of_prev_def_tid datadeps ~prev_def_tid:def_tid in
-     let kill = SS.union killed_flags killed_def_var in
+     let kill = SS.singleton @@ Var.name @@ Def.lhs d in
+     (* let def_tid = Term.tid d in *)
+     (* let killed_flags = Live_variables.get_live_flags_of_prev_def_tid datadeps ~prev_def_tid:def_tid in *)
+     (* let kill = SS.union killed_flags killed_def_var in *)
      let gen = Var_name_collector.run @@ Def.rhs d in
      SS.diff prev_env kill
      |> SS.union gen
@@ -43,10 +43,10 @@ let denote_elt (datadeps : Live_variables.t) (elt : Blk.elt) (prev_env : env) =
      let gen = Var_name_collector.run @@ Jmp.cond j in
      SS.union prev_env gen
   | `Phi p ->
-     let killed_def_var = SS.singleton @@ Var.name @@ Phi.lhs p in
-     let phi_tid = Term.tid p in
-     let killed_flags = Live_variables.get_live_flags_of_prev_def_tid datadeps ~prev_def_tid:phi_tid in
-     let kill = SS.union killed_flags killed_def_var in
+     let kill = SS.singleton @@ Var.name @@ Phi.lhs p in
+     (* let phi_tid = Term.tid p in *)
+     (* let killed_flags = Live_variables.get_live_flags_of_prev_def_tid datadeps ~prev_def_tid:phi_tid in *)
+     (* let kill = SS.union killed_flags killed_def_var in *)
      let gen = Phi.values p |> phi_values_to_vars in
      SS.diff prev_env kill
      |> SS.union gen
