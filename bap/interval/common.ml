@@ -609,7 +609,7 @@ let jmp_is_return (j : jmp term) : bool =
   | Call c -> Option.is_none @@ Call.return c
   | _ -> false
 
-let ai_widen_threshold = 2
+let ai_widen_threshold = 3
 
 module type CheckerInterp = sig
   type t
