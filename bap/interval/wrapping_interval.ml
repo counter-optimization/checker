@@ -609,7 +609,7 @@ let is_const intvl : bool =
   | Some sz -> Z.equal Z.zero sz
 
 (** Setting up domain keys for usage in InteractableNumDom *)
-module Key = Common.DomainKey
+module Key = Domain_key.DomainKey
 
 (* key is a module:
    struct

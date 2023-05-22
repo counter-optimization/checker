@@ -1,550 +1,268 @@
 open Core
 open Bap.Std
 open Graphlib.Std
-open Common
+(* open Common *)
 open Bap_primus.Std
 open Monads.Std
 
 module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
-module ABI = Common.ABI
-
+(* module ABI = Common.ABI *)
 module WI = Wrapping_interval
+module ABI = Common.AMD64SystemVABI
+module SS = Common.SS
+module Stats = Common.EvalStats
 
-module Checker = struct
-  let should_check_elt (elt : Blk.elt) : bool =
-    match elt with
-    | `Def d ->
-       let defining = Def.lhs d |> Var.name in
-       let is_def_of_flag = ABI.var_name_is_flag defining in
-       not is_def_of_flag
-    | _ -> false
+module Checker(N : Abstract.NumericDomain)
+         (Interp : Common.CheckerInterp with type t := N.t) = struct
+  type st = {
+      tid : tid;
+      subname : string;
+      alerts : Alert.Set.t;
+      eval_stats : Stats.t;
+    }
 
-  let check_binop (subname : string)
-        (tid : tid)
-        (binop : Bil.binop)
-        (l : WI.t) (r : WI.t) : unit =
-    let left_zero = WI.of_int ~width:(WI.bitwidth l) 0 in
-    let right_zero = WI.of_int ~width:(WI.bitwidth r) 0 in
-    let left_one = WI.of_int ~width:(WI.bitwidth l) 1 in
-    let right_one = WI.of_int ~width:(WI.bitwidth r) 1 in
+  let emp = Alert.Set.empty
+
+  let init_st subname tid = {
+      tid;
+      subname;
+      alerts = emp;
+      eval_stats = Stats.init;
+    }
+
+  let merge_st st1 st2 = {
+      st1 with
+      alerts = Alert.Set.union st1.alerts st2.alerts;
+      eval_stats = Stats.combine st1.eval_stats st2.eval_stats
+    }
+
+  let estats_incr_total_considered st =
+    { st with
+      eval_stats = Stats.incr_total_considered st.eval_stats }
+
+  let estats_incr_taint_pruned st =
+    { st with
+      eval_stats = Stats.incr_taint_pruned st.eval_stats }
+
+  let estats_incr_interval_pruned st =
+    { st with
+      eval_stats = Stats.incr_interval_pruned st.eval_stats }
+
+  let get_intvl : N.t -> Wrapping_interval.t =
+      match N.get Wrapping_interval.key with
+      | Some f -> f
+      | None -> failwith "Couldn't extract interval information out of product domain, in module Comp_simp.Checker"
+
+  let get_taint : N.t -> Checker_taint.Analysis.t =
+    match N.get Checker_taint.Analysis.key with
+    | Some f -> f
+    | None -> failwith "Couldn't extract taint information out of product domain, in module Comp_simp.Checker"
+
+  let check_binop (binop : Bil.binop) (l : N.t) (r : N.t) (st : st) : st =
+    let wl = get_intvl l in
+    let wr = get_intvl r in
+    let tl = Checker_taint.Analysis.is_tainted @@ get_taint l in
+    let tr = Checker_taint.Analysis.is_tainted @@ get_taint r in
+    let left_zero = WI.of_int ~width:(WI.bitwidth wl) 0 in
+    let right_zero = WI.of_int ~width:(WI.bitwidth wr) 0 in
+    let left_one = WI.of_int ~width:(WI.bitwidth wl) 1 in
+    let right_one = WI.of_int ~width:(WI.bitwidth wr) 1 in
     let left_all_ones = begin
-        let bw = WI.bitwidth l in
+        let bw = WI.bitwidth wl in
         let ones = Word.ones bw in
         WI.of_word ones
       end
     in
     let right_all_ones = begin
-        let bw = WI.bitwidth r in
+        let bw = WI.bitwidth wr in
         let ones = Word.ones bw in
         WI.of_word ones
       end
     in
     let left_bad = ref false in
     let right_bad = ref false in
-    let () = match binop with
-    | Bil.PLUS ->
-       left_bad := WI.contains left_zero l;
-       right_bad := WI.contains right_zero r
-    | Bil.MINUS ->
-       right_bad := WI.contains right_zero r
-    | Bil.TIMES -> 
-       left_bad := WI.contains left_zero l || WI.contains left_one l;
-       right_bad := WI.contains right_zero r || WI.contains right_one r
-    | Bil.DIVIDE ->
-       left_bad := WI.contains left_zero l;
-       right_bad := WI.contains right_one r
-    | Bil.SDIVIDE ->
-       left_bad := WI.contains left_zero l;
-       right_bad := WI.contains right_one r
-    | Bil.LSHIFT ->
-       left_bad := WI.contains left_zero l;
-       right_bad := WI.contains right_zero r
-    | Bil.RSHIFT -> 
-       left_bad := WI.contains left_zero l;
-       right_bad := WI.contains right_zero r
-    | Bil.ARSHIFT ->
-       left_bad := WI.contains left_zero l;
-       right_bad := WI.contains right_zero r
-    | Bil.AND ->
-       left_bad := WI.contains left_zero l || WI.contains left_all_ones l;
-       right_bad := WI.contains right_zero r || WI.contains right_all_ones r
-    | Bil.OR ->
-       left_bad := WI.contains left_zero l || WI.contains left_all_ones l;
-       right_bad := WI.contains right_zero r || WI.contains right_all_ones r
-    | Bil.XOR ->
-       left_bad := WI.contains left_zero l || WI.contains left_all_ones l;
-       right_bad := WI.contains right_zero r || WI.contains right_all_ones r
-    | Bil.EQ -> ()
-    | Bil.NEQ -> ()
-    | Bil.LT -> ()
-    | Bil.LE -> ()
-    | Bil.SLT -> ()
-    | Bil.SLE -> ()
-    | Bil.MOD -> ()
-    | Bil.SMOD -> ()
+    (* 
+       U N U N -> taint pruned
+       U N U B -> taint pruned
+       U N T N -> interval pruned
+       U N T B -> flagged
+
+       U B U N -> taint pruned
+       U B U B -> taint pruned
+       U B T N -> interval pruned
+       U B T B -> flagged
+
+       T N U N -> interval pruned
+       T N U B -> interval pruned
+       T N T N -> interval pruned
+       T N T B -> flagged
+
+       T B U N -> flagged
+       T B U B -> flagged
+       T B T N -> flagged
+       T B T B -> flagged
+       
+       warn if left tainted && left bad
+       warn if right tainted && right bad
+       incr taint pruned if (left not tainted && right not tainted)
+       left tainted && left not bad && right not tainted && right bad
+     *)
+    let binop_is_sub = match binop with
+      | Bil.MINUS -> true
+      | _ -> false
     in
-    if !left_bad || !right_bad
+    let untainted = (not tl && not tr) || (binop_is_sub&& not tr) in
+    let st = if untainted
+    then
+      estats_incr_taint_pruned st
+    else
+      let () = match binop with
+        | Bil.PLUS ->
+           left_bad := WI.contains left_zero wl;
+           right_bad := WI.contains right_zero wr
+        | Bil.MINUS ->
+           right_bad := WI.contains right_zero wr
+        | Bil.TIMES -> 
+           left_bad := WI.contains left_zero wl || WI.contains left_one wl;
+           right_bad := WI.contains right_zero wr || WI.contains right_one wr
+        | Bil.DIVIDE ->
+           left_bad := WI.contains left_zero wl;
+           right_bad := WI.contains right_one wr
+        | Bil.SDIVIDE ->
+           left_bad := WI.contains left_zero wl;
+           right_bad := WI.contains right_one wr
+        | Bil.LSHIFT ->
+           left_bad := WI.contains left_zero wl;
+           right_bad := WI.contains right_zero wr
+        | Bil.RSHIFT -> 
+           left_bad := WI.contains left_zero wl;
+           right_bad := WI.contains right_zero wr
+        | Bil.ARSHIFT ->
+           left_bad := WI.contains left_zero wl;
+           right_bad := WI.contains right_zero wr
+        | Bil.AND ->
+           left_bad := WI.contains left_zero wl || WI.contains left_all_ones wl;
+           right_bad := WI.contains right_zero wr || WI.contains right_all_ones wr
+        | Bil.OR ->
+           left_bad := WI.contains left_zero wl || WI.contains left_all_ones wl;
+           right_bad := WI.contains right_zero wr || WI.contains right_all_ones wr
+        | Bil.XOR ->
+           left_bad := WI.contains left_zero wl || WI.contains left_all_ones wl;
+           right_bad := WI.contains right_zero wr || WI.contains right_all_ones wr
+        | Bil.EQ -> ()
+        | Bil.NEQ -> ()
+        | Bil.LT -> ()
+        | Bil.LE -> ()
+        | Bil.SLT -> ()
+        | Bil.SLE -> ()
+        | Bil.MOD -> ()
+        | Bil.SMOD -> ()
+      in
+      if (binop_is_sub && not !right_bad) ||
+           (not binop_is_sub && (not !left_bad && not !right_bad))
+      then
+        estats_incr_interval_pruned st
+      else
+        st
+    in
+    (* increment total considered *)
+    let st = match binop with
+      | Bil.EQ | Bil.NEQ | Bil.LT | Bil.LE | Bil.SLT
+        | Bil.SLE | Bil.MOD | Bil.SMOD -> st
+      | _ -> estats_incr_total_considered st
+    in
+    (* flag if necessary *)
+    if (binop_is_sub && !right_bad) ||
+         (not binop_is_sub && (!left_bad || !right_bad))
     then
       let problematic_operands = [] in
       let problematic_operands = List.append (if !left_bad then [0] else []) problematic_operands in
-      let problematic_operands = List.append (if !right_bad then [1] else []) problematic_operands in
-      let desc = binop_to_string binop in
-      let left_val = WI.to_string l in
-      let right_val = WI.to_string r in
-      Alert.create_base_alert ~tid ~subname ~desc ~left_val ~right_val ~problematic_operands 
+      let problematic_operands = Some (List.append (if !right_bad then [1] else []) problematic_operands) in
+      let desc = Bil.string_of_binop binop in
+      let left_val = Some (WI.to_string wl) in
+      let right_val = Some (WI.to_string wr) in
+      let alert : Alert.t = {
+          tid = Some st.tid;
+          desc;
+          left_val;
+          right_val;
+          reason = Alert.CompSimp;
+          sub_name = Some st.subname;
+          problematic_operands;
+          
+          opcode = None;
+          addr = None;
+          rpo_idx = None;
+          flags_live = SS.empty;
+          flags_live_in = SS.empty;
+          is_live = None;
+        }
+      in
+      { st with alerts = Alert.Set.add st.alerts alert }
     else
-      ()
+      st
+
+  let rec check_exp (expr : Bil.exp) (st : st) : N.t * st =
+    match expr with
+    | Bil.Load (_, idx, _, _) ->
+       (Interp.denote_exp st.tid expr, snd @@ check_exp idx st)
+    | Bil.Store (_, idx, data, _, _) ->
+       (N.bot, merge_st (snd @@ check_exp idx st) (snd @@ check_exp data st))
+    | Bil.BinOp (op, l, r) ->
+       let l, st = check_exp l st in
+       let r, st = check_exp r st in
+       (Interp.denote_exp st.tid expr, check_binop op l r st)
+    | Bil.UnOp (_, subexp) ->
+       (Interp.denote_exp st.tid expr, snd @@ check_exp subexp st)
+    | Bil.Var _ ->
+       (Interp.denote_exp st.tid expr, st)
+    | Bil.Int _ ->
+       (Interp.denote_exp st.tid expr, st)
+    | Bil.Cast (_, _, subexp) ->
+       (Interp.denote_exp st.tid expr, snd @@ check_exp subexp st)
+    | Bil.Let (_, e, body) ->
+       (Interp.denote_exp st.tid expr, merge_st
+                                         (snd @@ check_exp e st)
+                                         (snd @@ check_exp body st))
+    | Bil.Unknown (_, _) ->
+       (Interp.denote_exp st.tid expr, st)
+    | Bil.Ite (i, t, e) ->
+       let st = merge_st (snd @@ check_exp i st) (snd @@ check_exp t st)
+                |> merge_st (snd @@ check_exp e st)
+       in
+       (Interp.denote_exp st.tid expr, st)
+    | Bil.Extract (_, _, subexp) ->
+       (Interp.denote_exp st.tid expr, snd @@ check_exp subexp st)
+    | Bil.Concat (l, r) ->
+       (Interp.denote_exp st.tid expr, merge_st
+                                         (snd @@ check_exp l st)
+                                         (snd @@ check_exp r st))
+
+  let check_elt (subname : string) (tid : tid) (elt : Blk.elt)
+      : Alert.Set.t Common.checker_res =
+    let st = init_st subname tid in
+    let empty_stats = Common.EvalStats.init in
+    match elt with
+    | `Def d ->
+       let defining = Def.lhs d |> Var.name in
+       let is_def_of_flag = ABI.var_name_is_flag defining in
+       let should_check = not is_def_of_flag in
+       if should_check
+       then
+         let rhs = Def.rhs d in
+         let _, st = check_exp rhs st in
+         { warns = st.alerts;
+           cs_stats = st.eval_stats;
+           ss_stats = empty_stats
+         }
+       else
+         { warns = emp;
+           cs_stats = st.eval_stats;
+           ss_stats = empty_stats
+         }
+    | _ -> { warns = emp;
+             cs_stats = st.eval_stats;
+             ss_stats = empty_stats
+           }
 end
-
-(* module Checker(N : NumericDomain) = struct *)
-(*     module E = struct *)
-(*     type region = Common.Region.t *)
-(*     type regions = Common.Region.Set.t *)
-(*     type valtypes = Common.cell_t *)
-(*     include Abstract_memory.Make(N) *)
-(*   end *)
-  
-(*   module AI = AbstractInterpreter(N)(Common.Region)(Common.Region.Set)(struct type t = Common.cell_t end)(E) *)
-  
-(*   module I = Wrapping_interval *)
-  
-(*   module SS = Common.SS *)
-
-(*   type warns = Alert.Set.t *)
-  
-(*   type t = warns *)
-
-(*   let name = "comp-simp" *)
-
-(*   module State = struct *)
-(*     type t = { *)
-(*         warns: warns; *)
-(*         env: E.t; *)
-(*         tid : Tid.t; *)
-(*         liveness : Live_variables.t; *)
-(*         symex_state : SymExChecker.state; *)
-(*         profiling_data_path : string; *)
-(*         sub : sub term; *)
-(*         idx_st : Idx_calculator.t; *)
-(*         do_symex : bool; *)
-(*         proj : Project.t; *)
-(*         estats : EvalStats.t; *)
-(*       }  *)
-
-(*     let init in_state tid liveness sub dep_bound do_symex idx_st proj profiling_data_path : t = *)
-(*       { warns = Alert.Set.empty; *)
-(*         env = in_state; *)
-(*         tid = tid; *)
-(*         profiling_data_path; *)
-(*         liveness = liveness; *)
-(*         idx_st; *)
-(*         symex_state = { SymExChecker.default_state *)
-(*                         with dep_bound }; *)
-(*         proj; *)
-(*         do_symex = do_symex; *)
-(*         estats = EvalStats.init; *)
-(*         sub } *)
-(*   end *)
-
-(*   module ST = struct *)
-(*     include Monad.State.T1(State)(Monad.Ident) *)
-(*     include Monad.State.Make(State)(Monad.Ident)  *)
-(*   end *)
-(*   open ST.Syntax *)
-
-(*   type state = State.t *)
-
-(*   let update_eval_stats updater : unit ST.t = *)
-(*     ST.update @@ fun st -> *)
-(*     { st with estats = updater st.estats } *)
-
-(*   (\* todo, make an optional CL arg *\) *)
-(*   let dep_bound = 25 *)
-
-(*   let get_intvl : N.t -> Wrapping_interval.t = *)
-(*     match N.get Wrapping_interval.key with *)
-(*     | Some f -> f *)
-(*     | None -> failwith "Couldn't extract interval information out of product domain in comp simp checker" *)
-
-(*   let get_taint : N.t -> Checker_taint.Analysis.t = *)
-(*     match N.get Checker_taint.Analysis.key with *)
-(*     | Some f -> f *)
-(*     | None -> failwith "Couldn't extract taint information out of product domain in comp simp checker" *)
-
-(*   let dont_care_vars = ABI.flag_names (\* don't comp simp check flag calculations *\) *)
-  
-(*   let empty : warns = Alert.Set.empty *)
-  
-(*   let join : warns -> warns -> warns = Alert.Set.union *)
-
-(*   let could_be_special (special_for_bw : I.t -> I.t) (to_check : I.t) : bool = *)
-(*     if I.equal I.bot to_check *)
-(*     then false *)
-(*     else *)
-(*       let special = special_for_bw to_check in *)
-(*       I.contains special to_check *)
-
-(*   (\* if the list of def terms found in the non-ssa sub term  *)
-(*      differs from the list from the liveness analysis's ssa sub term, *)
-(*      then the difference most likely comes from an interproc call *)
-(*      or a phi node. for now, the simple symex checker doesn't handle *)
-(*      these things, only straight line assignments, so return None  *)
-(*      and only use the interval analysis results for reporting here. *\) *)
-(*   let tids_to_def_terms tids (s : state) : def term list option = *)
-(*     let blks = Term.enum blk_t s.sub in *)
-(*     let defs = Seq.map blks ~f:(Term.enum def_t) *)
-(*                |> Seq.join in *)
-(*     let select_set = Set.of_list (module Tid) tids in *)
-(*     let selected_defs = Seq.filter defs *)
-(*                           ~f:(fun dt -> Set.mem select_set @@ Term.tid dt) in *)
-(*     let selected_defs = Seq.to_list selected_defs in *)
-(*     if List.length selected_defs = List.length tids *)
-(*     then Some selected_defs *)
-(*     else None *)
-
-(*   let print_dep_defs tid dts = *)
-(*     List.iter dts *)
-(*       ~f:(fun dt -> *)
-(*         printf "dep def of tid %a :: %a -- %a\n%!" *)
-(*           Tid.ppo tid *)
-(*           Tid.ppo (Term.tid dt) *)
-(*           Def.ppo dt) *)
-
-(*   let get_dependent_defs : def term list option ST.t = *)
-(*     ST.gets @@ fun s -> *)
-(*     let dependents = Live_variables.dependents_up_to_bound s.tid s.symex_state.dep_bound s.liveness in *)
-(*     let dep_defs = tids_to_def_terms dependents s in *)
-(*     Option.(>>|) dep_defs @@ fun dep_defs -> *)
-(*     (\* check that the potentially leaky def is in the dependent defs list and last *\) *)
-(*     let () = match List.findi dep_defs ~f:(fun _ dt -> Tid.equal (Term.tid dt) s.tid) with *)
-(*       | Some (pos, dt) -> if pos <> (List.length dep_defs - 1) *)
-(*                           then *)
-(*                             let () = print_dep_defs s.tid dep_defs in *)
-(*                             failwith @@ sprintf "in computing dependent defs, target tid %a not last in dep defs: %s" *)
-(*                                           Tid.pps s.tid (List.to_string ~f:(Def.to_string) dep_defs) *)
-(*                           else () *)
-(*       | None -> *)
-(*          let () = print_dep_defs s.tid dep_defs in *)
-(*          failwith @@ sprintf "in computing dependent defs, target tid %a not in dep defs: %s" *)
-(*                        Tid.pps s.tid (List.to_string ~f:(Def.to_string) dep_defs) *)
-(*     in *)
-(*     dep_defs *)
-
-(*   let build_mock_sub_for_mx (defs : def term list) : sub term ST.t = *)
-(*     let blk = Blk.create ~defs () in *)
-(*     let free_vars = Blk.free_vars blk in *)
-(*     ST.update @@ (fun st -> *)
-(*       { st with symex_state = { st.symex_state with mock_free_vars = free_vars } }) *)
-(*     >>= fun () -> *)
-(*     ST.gets @@ fun st -> *)
-(*                Sub.create ~blks:[blk] ~name:st.symex_state.mock_sub_name () *)
-
-(*   let get_frees_of_mock_sub msub : Set.M(Var).t ST.t = *)
-(*     ST.return @@ Sub.free_vars msub *)
-
-(*   let get_widths_of_free_vars msub : (string * int) list ST.t = *)
-(*     get_frees_of_mock_sub msub >>= fun freevars -> *)
-(*     ST.gets @@ fun st -> *)
-(*     Set.to_list freevars *)
-(*     |> List.filter ~f:(fun fv -> not @@ String.equal "mem" @@ Var.name fv)  *)
-(*     |> List.map ~f:(fun fv -> *)
-(*            let fvname = Var.name fv in *)
-(*            let width = E.lookup fvname st.env *)
-(*                        |> get_intvl *)
-(*                        |> Wrapping_interval.get_width in *)
-(*            match width with *)
-(*            | Some width -> *)
-(*               (\* let () = printf "in comp simp, free var %s has width %d\n%!" *\) *)
-(*               (\*       fvname width in *\) *)
-(*               (fvname, width) *)
-(*            | None -> failwith @@ *)
-(*                        sprintf "Couldn't get width for freevar: %s" fvname) *)
-    
-(*   let check_binop_operands (specials : (I.t -> I.t) list * (I.t -> I.t) list) *)
-(*                            (op : binop) ~(check_left : bool) ~(check_right : bool) *)
-(*                            (left : N.t) (right : N.t) : unit ST.t = *)
-(*     let left_specials = fst specials in *)
-(*     let right_specials = snd specials in *)
-(*     let left = get_intvl left in *)
-(*     let right = get_intvl right in *)
-(*     let fold_checker ~is_left = *)
-(*       let operand = if is_left then left else right in *)
-(*       let problematic_operand_indice = if is_left then 0 else 1 in *)
-(*       let check_operand result_acc special_for_bw = *)
-(*         if could_be_special special_for_bw operand *)
-(*         then *)
-(*           (\* let () = printf "[compsimp] Could be special value\n%!" in *\) *)
-(*           result_acc >>= fun () -> *)
-(*           ST.get () >>= fun st -> *)
-(*           (\* get_dependent_defs >>= fun deps -> *\) *)
-(*           let can_do_last_symex_check = false in(\* st.do_symex && Option.is_some deps in *\) *)
-(*           if can_do_last_symex_check *)
-(*           then *)
-(*             ST.return () *)
-(*             (\* let deps = Option.value_exn deps in *\) *)
-(*             (\* build_mock_sub_for_mx deps >>= fun mocksub -> *\) *)
-(*             (\* (\\* get_widths_of_free_vars mocksub >>= fun freevarwidths -> *\\) *\) *)
-(*             (\* let all_defs_of_sub = Common.defs_of_sub st.sub in *\) *)
-(*             (\* let type_info = Type_determination.run all_defs_of_sub AMD64SystemVABI.size_of_var_name in *\) *)
-(*             (\* let dependent_vars = Var_name_collector.run_on_defs deps in *\) *)
-(*             (\* let type_info = Type_determination.narrow_to_vars dependent_vars type_info in *\) *)
-(*             (\* let () = printf "Type state info for comp simp deps:\n%!"; *\) *)
-(*             (\*          List.iter deps ~f:(printf "%a\n%!" Def.ppo); *\) *)
-(*             (\*          printf "is:\n%!"; *\) *)
-(*             (\*          Type_determination.print type_info *\) *)
-(*             (\* in *\) *)
-(*             (\* let do_check = Symbolic.Executor.eval_def_list deps in *\) *)
-(*             (\* let init_st = Symbolic.Executor.init ~do_cs:true deps st.tid type_info st.profiling_data_path in *\) *)
-(*             (\* let (), fini_st = Symbolic.Executor.run do_check init_st in *\) *)
-(*             (\* let failed_cs_left = fini_st.failed_cs_left in *\) *)
-(*             (\* let failed_cs_right = fini_st.failed_cs_right in *\) *)
-(*             (\* let should_fail = (is_left && failed_cs_left) || *\) *)
-(*             (\*                     (not is_left && failed_cs_right) *\) *)
-(*             (\* in *\) *)
-(*             (\* if should_fail *\) *)
-(*             (\* then  *\) *)
-(*             (\*   let binop_str = Common.binop_to_string op in *\) *)
-(*             (\*   let left_str = if is_left *\) *)
-(*             (\*                  then Some (I.to_string operand) *\) *)
-(*             (\*                  else None *\) *)
-(*             (\*   in *\) *)
-(*             (\*   let right_str = if not is_left *\) *)
-(*             (\*                   then Some (I.to_string operand) *\) *)
-(*             (\*                   else None *\) *)
-(*             (\*   in *\) *)
-(*             (\*   let alert : Alert.t = { tid = st.tid; *\) *)
-(*             (\*                           opcode = None; *\) *)
-(*             (\*                           addr = None; *\) *)
-(*             (\*                           rpo_idx = None; *\) *)
-(*             (\*                           sub_name = None; *\) *)
-(*             (\*                           flags_live = SS.empty; *\) *)
-(*             (\*                           flags_live_in = SS.empty; *\) *)
-(*             (\*                           is_live = None; *\) *)
-(*             (\*                           reason = Alert.CompSimp; *\) *)
-(*             (\*                           desc = binop_str; *\) *)
-(*             (\*                           left_val = left_str; *\) *)
-(*             (\*                           right_val = right_str; *\) *)
-(*             (\*                           problematic_operands = Some [problematic_operand_indice] } *\) *)
-(*             (\*   in *\) *)
-(*             (\*   ST.update @@ fun old_st -> *\) *)
-(*             (\*                { old_st with warns = Alert.Set.add old_st.warns alert } *\) *)
-(*             (\* else *\) *)
-(*             (\*   let () = printf "[CompSimp] Symex pruned:\n%!"; *\) *)
-(*             (\*            List.iter deps ~f:(printf "%a\n%!" Def.ppo) *\) *)
-(*             (\*   in *\) *)
-(*             (\*   update_eval_stats EvalStats.incr_symex_pruned >>= fun () -> *\) *)
-(*             (\*   ST.return () *\) *)
-(*           else *)
-(*             let binop_str = Common.binop_to_string op in *)
-(*             let left_str = if is_left *)
-(*                            then Some (I.to_string operand) *)
-(*                            else None *)
-(*             in *)
-(*             let right_str = if not is_left *)
-(*                             then Some (I.to_string operand) *)
-(*                             else None *)
-(*             in *)
-(*             let alert : Alert.t = { tid = Some st.tid; *)
-(*                                     opcode = None; *)
-(*                                     addr = None; *)
-(*                                     rpo_idx = None; *)
-(*                                     sub_name = None; *)
-(*                                     flags_live = SS.empty; *)
-(*                                     flags_live_in = SS.empty; *)
-(*                                     is_live = None; *)
-(*                                     reason = Alert.CompSimp; *)
-(*                                     desc = binop_str; *)
-(*                                     left_val = left_str; *)
-(*                                     right_val = right_str; *)
-(*                                     problematic_operands = Some [problematic_operand_indice] } *)
-(*             in *)
-(*             ST.update @@ fun old_st -> *)
-(*                          { old_st with warns = Alert.Set.add old_st.warns alert } *)
-(*         else *)
-(*           update_eval_stats EvalStats.incr_interval_pruned >>= fun () -> *)
-(*           result_acc *)
-(*       in *)
-(*       check_operand *)
-(*     in *)
-(*     (if check_left *)
-(*     then List.fold left_specials *)
-(*            ~init:(ST.return ()) *)
-(*            ~f:(fold_checker ~is_left:true) *)
-(*      else ST.return ()) *)
-(*     >>= fun () -> *)
-(*     (if check_right *)
-(*     then List.fold right_specials *)
-(*            ~init:(ST.return ()) *)
-(*            ~f:(fold_checker ~is_left:false) *)
-(*      else ST.return ()) >>= fun () -> *)
-(*     (\* compute eval stats after the check *\) *)
-(*     let was_sub_binop = match op with *)
-(*       | Bil.PLUS -> false (\* todo: handle the case where bap lifts sub to plus of a negative *\) *)
-(*       | Bil.MINUS -> true *)
-(*       | _ -> false *)
-(*     in *)
-(*     let was_taint_pruned = (not check_right && not check_left) || *)
-(*                              (not check_right && was_sub_binop) *)
-(*     in *)
-(*     let updater = if was_taint_pruned *)
-(*                   then EvalStats.incr_taint_pruned *)
-(*                   else fun x -> x *)
-(*     in *)
-(*     update_eval_stats updater *)
-
-(*   let specials_of_binop (op : binop) : (I.t -> I.t) list * (I.t -> I.t) list = *)
-(*     let one i = I.of_int ~width:(I.bitwidth i) 1 in *)
-(*     let zero i = I.of_int ~width:(I.bitwidth i) 0 in *)
-(*     let all_ones i = *)
-(*       let bw = I.bitwidth i in *)
-(*       let ones = Word.ones bw in *)
-(*       Wrapping_interval.of_word ones in *)
-(*     let onel = [one] in *)
-(*     let zerol = [zero] in *)
-(*     let zeroallonesl = [zero; all_ones] in *)
-(*     let onezerol = [one; zero] in *)
-(*     match op with *)
-(*     | Bil.PLUS -> zerol, zerol *)
-(*     | Bil.MINUS -> [], zerol *)
-(*     | Bil.TIMES -> onezerol, onezerol *)
-(*     | Bil.DIVIDE | Bil.SDIVIDE -> zerol, onel *)
-(*     | Bil.LSHIFT | Bil.RSHIFT -> zerol, zerol *)
-(*     | Bil.ARSHIFT -> zeroallonesl, zerol *)
-(*     | Bil.AND -> zeroallonesl, zeroallonesl *)
-(*     | Bil.OR -> zeroallonesl, zeroallonesl *)
-(*     | Bil.XOR -> zerol, zerol *)
-(*     | Bil.MOD -> [], [] *)
-(*     | Bil.SMOD -> [], [] *)
-(*     | Bil.EQ -> [], [] *)
-(*     | Bil.NEQ -> [], [] *)
-(*     | Bil.LT -> [], [] *)
-(*     | Bil.LE -> [], [] *)
-(*     | Bil.SLT -> [], [] *)
-(*     | Bil.SLE -> [], [] *)
-
-(*   let check_binop (op : binop) ~(check_left : bool) ~(check_right : bool) *)
-(*       : N.t -> N.t -> unit ST.t = *)
-(*     let specials = specials_of_binop op in *)
-(*     let checker = check_binop_operands specials op ~check_left ~check_right in *)
-(*     checker *)
-
-(*   let is_tainted (exp : N.t) : bool = *)
-(*     match get_taint exp with *)
-(*     | Taint -> true *)
-(*     | Notaint -> false *)
-
-(*   let rec is_const (exp : Bil.exp) : bool = *)
-(*     match exp with *)
-(*      | Bil.Load (_, _, _, _) -> false *)
-(*      | Bil.Store (_, _, _, _, _) -> false *)
-(*      | Bil.BinOp (_, left, right) -> is_const left && is_const right *)
-(*      | Bil.UnOp (_, subexp) -> is_const subexp *)
-(*      | Bil.Var _ -> false *)
-(*      | Bil.Int _ -> true *)
-(*      | Bil.Cast (_, _, subexp) -> is_const subexp *)
-(*      | Bil.Let (_, _, body) -> is_const body *)
-(*      | Bil.Unknown (_, _) -> false *)
-(*      | Bil.Ite (_, then', else') -> is_const then' && is_const else' *)
-(*      | Bil.Extract (_, _, subexp) -> is_const subexp *)
-(*      | Bil.Concat (left, right) -> is_const left && is_const right *)
-
-(*   let rec check_exp (e : Bil.exp) : N.t ST.t = *)
-(*     let eval_in_ai (e : Bil.exp) (st : State.t) : N.t ST.t = *)
-(*       let exp_evaler = AI.denote_exp (Sub.name st.sub) e in *)
-(*       let (res, _) = AI.ST.run exp_evaler st.env in *)
-(*       ST.return res *)
-(*     in *)
-(*     match e with *)
-(*     | Bil.Load (_mem, idx, _endian, size) -> *)
-(*        check_exp idx >>= fun offs -> *)
-(*        ST.gets @@ fun st -> *)
-(*                   (match E.load_of_bil_exp e offs size st.env with *)
-(*                   | Ok (v, _) -> v *)
-(*                   | Error e -> failwith @@ Error.to_string_hum e) *)
-(*     | Bil.Store (_mem, idx, v, _endian, size) -> *)
-(*        check_exp idx >>= fun offs -> *)
-(*        check_exp v  *)
-(*     | Bil.Var _ *)
-(*       | Bil.Int _ *)
-(*       | Bil.Unknown _-> *)
-(*        ST.get () >>= fun st -> *)
-(*        eval_in_ai e st *)
-(*     | Bil.BinOp (op, x, y) -> *)
-(*        check_exp x >>= fun x' -> *)
-(*        check_exp y >>= fun y' -> *)
-(*        let should_check_left = is_tainted x' in *)
-(*        let should_check_right = is_tainted y' in *)
-(*        update_eval_stats EvalStats.incr_total_considered >>= fun () -> *)
-(*        let checker = check_binop op *)
-(*                                  ~check_left:should_check_left *)
-(*                                  ~check_right:should_check_right *)
-(*        in *)
-(*        checker x' y' >>= fun () -> *)
-(*        let binop = AI.denote_binop op in *)
-(*        let expr_res = binop x' y' in *)
-(*        ST.return expr_res *)
-(*     | Bil.UnOp (op, x) -> *)
-(*        check_exp x >>= fun x' -> *)
-(*        ST.return @@ AI.denote_unop op x' *)
-(*     | Bil.Cast (cast, n, exp) -> *)
-(*        check_exp exp >>= fun exp' -> *)
-(*        ST.return @@ AI.denote_cast cast n exp' *)
-(*     | Bil.Ite (cond, ifthen, ifelse) -> *)
-(*        check_exp cond >>= fun cond' -> *)
-(*        let truthy = N.could_be_true cond' in *)
-(*        let falsy = N.could_be_false cond' in *)
-(*        if truthy && not falsy *)
-(*        then check_exp ifthen *)
-(*        else *)
-(*          if not truthy && falsy *)
-(*          then check_exp ifelse *)
-(*          else *)
-(*            check_exp ifthen >>= fun then' -> *)
-(*            check_exp ifelse >>= fun else' -> *)
-(*            ST.return @@ N.join then' else' *)
-(*     | Bil.Let (v, e, b) -> *)
-(*        check_exp e >>= fun e' -> *)
-(*        let name = Var.name v in *)
-(*        ST.get () >>= fun st -> *)
-(*        let env' = E.set name e' st.env in *)
-(*        ST.put { st with env = env' } >>= fun _ -> *)
-(*        check_exp b >>= fun body_res -> *)
-(*        ST.put st >>= fun _ -> *)
-(*        ST.return body_res *)
-(*     | Bil.Extract (hi, lo, e) -> *)
-(*        check_exp e >>= fun e' -> *)
-(*        ST.return @@ N.extract e' hi lo *)
-(*     | Bil.Concat (x, y) -> *)
-(*        check_exp x >>= fun x' -> *)
-(*        check_exp y >>= fun y' -> *)
-(*        ST.return @@ N.concat x' y' *)
-
-(*   (\* early bail outs: *)
-(*        don't comp simp check the lifted flag calculations, and *)
-(*        don't comp simp check if the def is not tainted--all members of the rhs *)
-(*          expression tree are untainted then *\) *)
-(*   let check_def (d : def term) (live : Live_variables.t) (env : E.t) (sub : sub term) do_symex idx_st proj profiling_data_path : warns Common.checker_res = *)
-(*     let tid = Term.tid d in *)
-(*     let lhs = Def.lhs d in *)
-(*     let lhs_var_name = Var.name lhs in *)
-(*     if ABI.var_name_is_flag lhs_var_name *)
-(*     then { warns = empty; stats = EvalStats.init } *)
-(*     else *)
-(*       let init_state = State.init env tid live sub dep_bound do_symex idx_st proj profiling_data_path in *)
-(*       let rhs = Def.rhs d in *)
-(*       let _, final_state = ST.run (check_exp rhs) init_state in *)
-(*       { warns = final_state.warns; stats = final_state.estats } *)
-(*       (\* let is_tainted = is_tainted @@ E.lookup lhs_var_name env in *\) *)
-(*       (\* if not is_tainted *\) *)
-(*       (\* then *\) *)
-(*       (\*   let stats = EvalStats.(init |> incr_taint_pruned) in *\) *)
-(*       (\*   { warns = empty; stats } *\) *)
-(*       (\* else *\) *)
-  
-(*   let check_elt (e : Blk.elt) (live : Live_variables.t) (env : E.t) (sub : sub term) idx_st proj do_symex profiling_data_path : warns Common.checker_res = *)
-(*     match e with *)
-(*     | `Def d -> check_def d live env sub do_symex idx_st proj profiling_data_path *)
-(*     | _ -> { warns = empty; stats = EvalStats.init } *)
-(* end *)
-

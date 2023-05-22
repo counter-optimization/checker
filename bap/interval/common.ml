@@ -156,36 +156,6 @@ let int_list_opt_domain = KB.Domain.optional
                             ~equal:(List.equal Int.equal)
                             "int_list_opt_domain"
 
-
-
-module SymExChecker = struct
-  type t = {
-      dep_bound : int;
-      mock_sub_name : string;
-      mock_free_vars : Set.M(Var).t;
-      mock_target_vars : Var.t list
-    }
-
-  type state = t
-
-  let default_mock_sub_name = "mock-sub-for-mx"
-
-  let default_dep_bound = 10
-
-  let default_state = {
-      dep_bound = default_dep_bound;
-      mock_sub_name = default_mock_sub_name;
-      mock_free_vars = Set.empty (module Var);
-      mock_target_vars = []
-    }
-end
-
-let defs_of_sub s =
-  Term.enum blk_t s
-  |> Seq.map ~f:(Term.enum def_t)
-  |> Seq.join
-  |> Seq.to_list
-
 module EvalStats = struct
     type t = {
         total_considered : int;
@@ -275,11 +245,17 @@ module EvalStats = struct
         interval_verified = st.interval_verified + 1 }
 end
 
-type 'a checker_res = { warns : 'a; stats : EvalStats.t }
+type 'a checker_res = {
+    warns : 'a;
+    cs_stats : EvalStats.t;
+    ss_stats : EvalStats.t
+  }
 
 let combine_checker_res x y f =
   { warns = f x.warns y.warns;
-    stats = EvalStats.combine x.stats y.stats }
+    cs_stats = EvalStats.combine x.cs_stats y.cs_stats;
+    ss_stats = EvalStats.combine x.ss_stats y.ss_stats;
+  }
 
 module CalleeRel = struct
   module T = struct
@@ -505,50 +481,6 @@ end
 
 type cell_t = CellType.t
 
-type (_, _) eq =
-  | Eq : ('a, 'a) eq
-  | Neq
-
-module type KeyT = sig
-  type 'a k
-  val create : string -> 'a k
-  val eq_type : 'a k -> 'b k -> ('a, 'b) eq
-  val name : 'a k -> string
-end
-
-(* This is the naive external domain key from *)
-(* EVA in the Frama-C framework. *)
-module DomainKey : KeyT = struct
-  type _ key = ..
-
-  module type K = sig
-    type t
-    type _ key += Key : t key
-    val name : string
-  end
-
-  type 'a k = (module K with type t = 'a)
-
-  let name (type a) (elt : a k) : string =
-    let module A = (val elt : K with type t = a) in
-    A.name
-
-  let create (type a) (n : string) : a k =
-    let module M = struct
-        type t = a
-        type _ key += Key : t key
-        let name = n
-      end in
-    (module M : K with type t = a)
-
-  let eq_type (type a) (type b) (x : a k) (y : b k) : (a, b) eq =
-    let module A = (val x : K with type t = a) in
-    let module B = (val y : K with type t = b) in
-    match A.Key with
-    | B.Key -> Eq
-    | _ -> Neq
-end
-
 let binop_to_string ?(smtlib2compat : bool = false)
       (b : Bil.binop) : string =
   match b with
@@ -678,3 +610,8 @@ let jmp_is_return (j : jmp term) : bool =
   | _ -> false
 
 let ai_widen_threshold = 10
+
+module type CheckerInterp = sig
+  type t
+  val denote_exp : tid -> Bil.exp -> t
+end
