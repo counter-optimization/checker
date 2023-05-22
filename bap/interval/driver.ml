@@ -313,7 +313,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
 
      let no_symex = Extension.Configuration.get ctxt Common.no_symex_param in
      let use_symex = not no_symex in
-
      let symex_profiling_out_file = Extension.Configuration.get ctxt Common.symex_profiling_output_file_path_param in
 
      let module CheckerOracle : Common.CheckerInterp with type t := FinalDomain.t =
@@ -330,10 +329,11 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      
      let combine_res x y = Common.combine_checker_res x y Alert.Set.union in
 
-     let emp = { warns = Alert.Set.empty;
-                 cs_stats = Common.EvalStats.init;
-                 ss_stats = Common.EvalStats.init
-               }
+     let emp = {
+         warns = Alert.Set.empty;
+         cs_stats = Common.EvalStats.init;
+         ss_stats = Common.EvalStats.init
+       }
      in
 
      let elt_of_tid tid = match Tid_map.find tidmap tid with
@@ -343,6 +343,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                         subname Tid.pps tid
      in
 
+     let start = Analysis_profiling.record_start_time () in
      let all_results = List.fold edges ~init:emp ~f:(fun all_results (_, to_cc, _) ->
                            let to_tid = Calling_context.to_insn_tid to_cc in
                            let elt = elt_of_tid to_tid in
@@ -351,6 +352,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                            combine_res all_results cs_chkr_res
                          )
      in
+     let stop = Analysis_profiling.record_stop_time start in
+     let () = Analysis_profiling.record_duration_for subname CsChecking stop in 
 
      let all_alerts = all_results.warns in
      
@@ -523,23 +526,3 @@ let check_config config img ctxt proj : unit =
   let () = printf "writing checker alerts to file: %s\n%!" csv_out_file_name in
   Alert.save_alerts_to_csv_file ~filename:csv_out_file_name all_alerts;
   Analysis_profiling.print_all_times ()
-
-(*
-  Driver:
-  - Before any analyses, set the global simple expression stores (find 
-    indirect branch targets that are constants)
-
-  for each function in the config file:
-  1. Dependency analysis
-  2. Liveness analysis
-  3. Set up initial environment for abs int
-  4. Run abs int
-  5. Get all callees
-  6. Fix up alerts with extra information
-  7. Add all callees to list of functions to analyze
-     
-  which of these depend on each other?:
-  dependency and liveness are independent of everything else
-  interproc call graph matters a lot for setting up initial environment
-  callees depend on abs interp, but only simple expressions can be handled
- *)

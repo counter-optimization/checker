@@ -59,6 +59,57 @@ module Checker(N : Abstract.NumericDomain)
     | Some f -> f
     | None -> failwith "Couldn't extract taint information out of product domain, in module Comp_simp.Checker"
 
+  (* increment total considered *)
+  let incr_total_considered binop st : st =
+    match binop with
+      | Bil.EQ | Bil.NEQ | Bil.LT | Bil.LE | Bil.SLT
+        | Bil.SLE | Bil.MOD | Bil.SMOD -> st
+      | _ -> estats_incr_total_considered st
+
+  (* 
+     U N U N -> taint pruned
+     U N U B -> taint pruned
+     U N T N -> interval pruned
+     U N T B -> flagged
+
+     U B U N -> taint pruned
+     U B U B -> taint pruned
+     U B T N -> interval pruned
+     U B T B -> flagged
+
+     T N U N -> interval pruned
+     T N U B -> interval pruned
+     T N T N -> interval pruned
+     T N T B -> flagged
+
+     T B U N -> flagged
+     T B U B -> flagged
+     T B T N -> flagged
+     T B T B -> flagged
+
+     flagged if (tl && !left_bad) || (tr && !right_bad)
+     taint pruned if (not tl && not tr)
+     interval pruned if (tl && not !left_bad) || (tr && not !right_bad)
+
+     sub case:
+     flagged if (tr && !right_bad)
+     taint_pruned if (not tr)
+     interval pruned if (tr && not !right_bad)
+
+     total:
+     flagged if (is_sub && tr && !right_bad) || 
+                (not is_sub && ((tl && !left_bad) || (tr && !right_bad)))
+     taint pruned if (is_sub && not tr) &&
+                     (not is_sub && not tl && not tr)
+     interval pruned if (is_sub && tr && not !right_bad) ||
+                        (not is_sub && ((tl && not !left_bad) || 
+                                        (tr && not !right_bad)))
+     
+     warn if left tainted && left bad
+     warn if right tainted && right bad
+     incr taint pruned if (left not tainted && right not tainted)
+     left tainted && left not bad && right not tainted && right bad
+   *)
   let check_binop (binop : Bil.binop) (l : N.t) (r : N.t) (st : st) : st =
     let wl = get_intvl l in
     let wr = get_intvl r in
@@ -82,38 +133,15 @@ module Checker(N : Abstract.NumericDomain)
     in
     let left_bad = ref false in
     let right_bad = ref false in
-    (* 
-       U N U N -> taint pruned
-       U N U B -> taint pruned
-       U N T N -> interval pruned
-       U N T B -> flagged
-
-       U B U N -> taint pruned
-       U B U B -> taint pruned
-       U B T N -> interval pruned
-       U B T B -> flagged
-
-       T N U N -> interval pruned
-       T N U B -> interval pruned
-       T N T N -> interval pruned
-       T N T B -> flagged
-
-       T B U N -> flagged
-       T B U B -> flagged
-       T B T N -> flagged
-       T B T B -> flagged
-       
-       warn if left tainted && left bad
-       warn if right tainted && right bad
-       incr taint pruned if (left not tainted && right not tainted)
-       left tainted && left not bad && right not tainted && right bad
-     *)
     let binop_is_sub = match binop with
       | Bil.MINUS -> true
       | _ -> false
     in
-    let untainted = (not tl && not tr) || (binop_is_sub&& not tr) in
-    let st = if untainted
+    let st = incr_total_considered binop st in
+    let untainted = (not binop_is_sub && not tl && not tr) ||
+                      (binop_is_sub && not tr)
+    in
+    if untainted
     then
       estats_incr_taint_pruned st
     else
@@ -159,49 +187,38 @@ module Checker(N : Abstract.NumericDomain)
         | Bil.MOD -> ()
         | Bil.SMOD -> ()
       in
-      if (binop_is_sub && not !right_bad) ||
-           (not binop_is_sub && (not !left_bad && not !right_bad))
+      let interval_pruned = (binop_is_sub && tr && not !right_bad) ||
+                              (not binop_is_sub && ((tl && not !left_bad) || 
+                                                      (tr && not !right_bad)))
+      in
+      if interval_pruned
       then
         estats_incr_interval_pruned st
       else
-        st
-    in
-    (* increment total considered *)
-    let st = match binop with
-      | Bil.EQ | Bil.NEQ | Bil.LT | Bil.LE | Bil.SLT
-        | Bil.SLE | Bil.MOD | Bil.SMOD -> st
-      | _ -> estats_incr_total_considered st
-    in
-    (* flag if necessary *)
-    if (binop_is_sub && !right_bad) ||
-         (not binop_is_sub && (!left_bad || !right_bad))
-    then
-      let problematic_operands = [] in
-      let problematic_operands = List.append (if !left_bad then [0] else []) problematic_operands in
-      let problematic_operands = Some (List.append (if !right_bad then [1] else []) problematic_operands) in
-      let desc = Bil.string_of_binop binop in
-      let left_val = Some (WI.to_string wl) in
-      let right_val = Some (WI.to_string wr) in
-      let alert : Alert.t = {
-          tid = Some st.tid;
-          desc;
-          left_val;
-          right_val;
-          reason = Alert.CompSimp;
-          sub_name = Some st.subname;
-          problematic_operands;
-          
-          opcode = None;
-          addr = None;
-          rpo_idx = None;
-          flags_live = SS.empty;
-          flags_live_in = SS.empty;
-          is_live = None;
-        }
-      in
-      { st with alerts = Alert.Set.add st.alerts alert }
-    else
-      st
+        let problematic_operands = [] in
+        let problematic_operands = List.append (if !left_bad then [0] else []) problematic_operands in
+        let problematic_operands = Some (List.append (if !right_bad then [1] else []) problematic_operands) in
+        let desc = Bil.string_of_binop binop in
+        let left_val = Some (WI.to_string wl) in
+        let right_val = Some (WI.to_string wr) in
+        let alert : Alert.t = {
+            tid = Some st.tid;
+            desc;
+            left_val;
+            right_val;
+            reason = Alert.CompSimp;
+            sub_name = Some st.subname;
+            problematic_operands;
+            
+            opcode = None;
+            addr = None;
+            rpo_idx = None;
+            flags_live = SS.empty;
+            flags_live_in = SS.empty;
+            is_live = None;
+          }
+        in
+        { st with alerts = Alert.Set.add st.alerts alert }
 
   let rec check_exp (expr : Bil.exp) (st : st) : N.t * st =
     match expr with
