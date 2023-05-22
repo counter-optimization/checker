@@ -6,7 +6,7 @@ module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 
 (** Setting up domain keys for usage in InteractableNumDom *)
-module Key = Common.DomainKey
+module Key = Domain_key.DomainKey
 
 type t = CellType.t
 let p = CellType.Ptr

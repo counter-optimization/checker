@@ -5,7 +5,7 @@ open Common
 
 module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
-module Key = Common.DomainKey
+module Key = Domain_key.DomainKey
 
 module Analysis = struct
   type t = Notaint | Taint [@@deriving bin_io, sexp]

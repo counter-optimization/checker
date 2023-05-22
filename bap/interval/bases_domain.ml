@@ -9,7 +9,7 @@ module Bases = Region.Set
 
 type t = Region.Set.t
 
-module Key = Common.DomainKey
+module Key = Domain_key.DomainKey
 
 let key : t Key.k = Key.create "bases_domain"
 

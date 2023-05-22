@@ -316,108 +316,43 @@ let run_analyses sub img proj ~(is_toplevel : bool)
 
      let symex_profiling_out_file = Extension.Configuration.get ctxt Common.symex_profiling_output_file_path_param in
 
-     (* Build up checker infra and run the checkers
-      * This next part is an abomination of Ocaml code
-      * todo: refactor this using this SO answer:
-      * https://stackoverflow.com/questions/67823455/having-a-module-and-an-instance-of-it-as-parameters-to-an-ocaml-function
-      *)
-     (* the env to run the checker in is stored in the insn to be checked
-          here, the solution envs are stored/keyed by calling context,
-          the instructions are still just by tid though. *)
-     let combine_res x y = Common.combine_checker_res x y Alert.Set.union in
-     let analyze_edge (module Chkr : Checker.S with type env = E.t) (e : 'a Calling_context.Edge.t) : Alert.Set.t Common.checker_res =
-       let from_cc = Calling_context.Edge.from_ e in
-       let to_cc = Calling_context.Edge.to_ e in
-       let to_tid = Calling_context.to_insn_tid to_cc in
-       let in_state = Solution.get analysis_results to_cc in
-       if E.equal in_state E.empty
-       then
-         failwith @@
-           sprintf "in analyzing edge (%s, %s), with checker %s, elt tid to examine %a, in state env is empty."
-                   (Calling_context.to_string from_cc)
-                   (Calling_context.to_string to_cc)
-                   Chkr.name
-                   Tid.pps to_tid
-       else
-           let insn = match Tid_map.find tidmap to_tid with
-             | Some elt -> elt
-             | None ->
-                failwith @@
-                  sprintf
-                    "In running checker %s, couldn't find tid %a"
-                    Chkr.name Tid.pps to_tid in
-           Chkr.check_elt insn liveness in_state sub idx_st proj use_symex symex_profiling_out_file
+     let module CheckerOracle : Common.CheckerInterp with type t := FinalDomain.t =
+       struct
+         let denote_exp (tid : tid) (exp : Bil.exp) : FinalDomain.t =
+           let cc = Calling_context.of_tid tid in
+           let in_state = Solution.get analysis_results cc in
+           let res, _ = AbsInt.denote_exp exp in_state in
+           res
+       end
      in
-     let run_checker (module Chkr : Checker.S with type env = E.t) (es : 'a Calling_context.edges) : Alert.Set.t Common.checker_res =
-       List.fold edges
-         ~init:{ warns = Alert.Set.empty; stats = EvalStats.init }
-         ~f:(fun acc edge ->
-           let res = analyze_edge (module Chkr) edge in
-           combine_res acc res)
-     in
-     let start = Analysis_profiling.record_start_time () in
-     let alerts = ref Alert.Set.empty in
-     let () = Toplevel.exec begin
-                  let open KB.Monad_infix in
-                  let cls = KB.Class.refine Alert.cls subname in
-                  KB.objects cls >>= fun objs ->
-                  let () = printf "CS checker: %d alerts for sub %s\n%!"
-                             (Seq.length objs) subname
-                  in
-                  KB.Seq.iter objs ~f:(fun alert ->
-                      let alert = Alert.reify alert in
-                      alerts := Alert.Set.add !alerts alert;
-                      KB.return ()
-                    )
-                end
-     in
-     let comp_simp_res = { warns = !alerts; stats = EvalStats.init } in
-     (*   if do_cs_checks *)
-     (*   then *)
-     (*     begin *)
-     (*       let module CSChecker : Checker.S *)
-     (*                  with type env = E.t = struct *)
-     (*           include Comp_simp.Checker(FinalDomain) *)
-     (*           type env = E.t *)
-     (*         end *)
-     (*       in *)
-     (*       let () = printf "Starting comp simp checker...\n%!" in *)
-     (*       let res = run_checker (module CSChecker) edges in *)
-     (*       let () = printf "Done running comp simp checker.\n%!" in *)
-     (*       res *)
-     (*     end *)
-     (*   else { warns = Alert.Set.empty; stats = EvalStats.init } *)
-     (* in *)
-     let stop = Analysis_profiling.record_stop_time start in
-     let () = Analysis_profiling.record_duration_for subname CsChecking stop in
 
-     let start = Analysis_profiling.record_start_time () in
-     let silent_store_res =
-       { warns = Alert.Set.empty; stats = EvalStats.init }
-     in
-       (* if do_ss_checks *)
-     (*   then *)
-     (*     begin *)
-     (*       let module SSChecker : Checker.S with type env = E.t = struct *)
-     (*           include Silent_stores.Checker(FinalDomain) *)
-     (*           type env = E.t *)
-     (*         end *)
-     (*       in *)
-     (*       let () = printf "Starting silent stores checker...\n%!" in *)
-     (*       let res = run_checker (module SSChecker) edges in *)
-     (*       let () = printf "Done running silent stores checker.\n%!" in *)
-     (*       res *)
-     (*     end *)
-     (*   else { warns = Alert.Set.empty; stats = EvalStats.init } *)
-     (* in *)
-     let stop = Analysis_profiling.record_stop_time start in
-     let () = Analysis_profiling.record_duration_for subname SsChecking stop in
+     let module CompSimpChecker = Comp_simp.Checker(FinalDomain)(CheckerOracle) in
      
-     let all_alerts = Alert.Set.union comp_simp_res.warns silent_store_res.warns in
-     let all_alerts = Alert.Set.map all_alerts
-                              ~f:(fun alert ->
-                                { alert with sub_name = Some (Sub.name sub) })
+     let combine_res x y = Common.combine_checker_res x y Alert.Set.union in
+
+     let emp = { warns = Alert.Set.empty;
+                 cs_stats = Common.EvalStats.init;
+                 ss_stats = Common.EvalStats.init
+               }
      in
+
+     let elt_of_tid tid = match Tid_map.find tidmap tid with
+       | Some elt -> elt
+       | None ->
+          failwith @@ sprintf "In running checker on sub %s, couldn't find tid %a"
+                        subname Tid.pps tid
+     in
+
+     let all_results = List.fold edges ~init:emp ~f:(fun all_results (_, to_cc, _) ->
+                           let to_tid = Calling_context.to_insn_tid to_cc in
+                           let elt = elt_of_tid to_tid in
+                           let cs_chkr_res = CompSimpChecker.check_elt subname to_tid elt in
+                           (* let ss_chkr_res = ... in *)
+                           combine_res all_results cs_chkr_res
+                         )
+     in
+
+     let all_alerts = all_results.warns in
      
      let start = Analysis_profiling.record_start_time () in
      let all_alerts = Alert.InsnIdxFiller.set_for_alert_set idx_st all_alerts in
@@ -450,11 +385,12 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                    |> CalleeRel.Set.of_list
      in
      let stop = Analysis_profiling.record_stop_time start in
+     
      let () = Analysis_profiling.record_duration_for subname CalleeAnalysis stop in
      { alerts = all_alerts;
        callees = callees;
-       csevalstats = comp_simp_res.stats;
-       ssevalstats = silent_store_res.stats;
+       csevalstats = all_results.cs_stats;
+       ssevalstats = all_results.ss_stats;
        liveness_info = liveness }
 
 let iter_insns sub : unit =
