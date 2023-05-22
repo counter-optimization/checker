@@ -174,6 +174,18 @@
    (mov-r/m32-r32 ecx ecx) ; zero top 32 bits of ecx
    (mov-r/m64-r64 rax r11))) ; restore rax
   
+(define attempt-add32-imm8-cf
+  (list
+   (mov-r/m32-r32 ecx ecx) ; zero top 32 bits of rcx
+   (sub-r/m64-imm32 rcx (bv (expt 2 31) 32)) ; mask upper bits
+   (sub-r/m64-imm32 rcx (bv (expt 2 31) 32))
+   (sub-r/m64-imm32 rcx (bv (expt 2 31) 32))
+   (sub-r/m64-imm32 rcx (bv (expt 2 31) 32))
+   (add-r/m64-imm8 rcx (bv 25 8)) ; perform add
+   (bt-r/m64-imm8 rcx (bv 32 8)) ; set CF
+   (mov-r/m32-r32 ecx ecx) ; zero top 32 bits of ecx
+ )) ; restore rax
+  
 ; Sets CF correctly
 (define attempt-add32-cf
   (list
@@ -210,6 +222,10 @@
 (define spec-add32
   (list
    (add-r/m32-r32 ecx eax)))
+
+(define spec-add32-imm8
+  (list
+   (add-r/m32-imm8 ecx (bv 25 8))))
   
 ; Sets CF correctly
 (define attempt-add64
