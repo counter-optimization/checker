@@ -376,7 +376,7 @@ let sub_of_tid_for_prog (p : Program.t) (t : Tid.t) : sub term Or_error.t =
        Format.sprintf "Couldn't find callee sub for tid %a" Tid.pps t
 
 module AnalysisBlackList = struct
-  let blacklisted_func_names : string list = ["interrupt"; "plt"]
+  let blacklisted_func_names : string list = ["interrupt"; "plt"; "sodium_init"; "get_cpu_features"]
 
   let contains_blacklisted_func_name (subname : string) : bool =
     List.fold blacklisted_func_names ~init:false ~f:(fun any_bld blname ->
@@ -609,7 +609,7 @@ let jmp_is_return (j : jmp term) : bool =
   | Call c -> Option.is_none @@ Call.return c
   | _ -> false
 
-let ai_widen_threshold = 10
+let ai_widen_threshold = 2
 
 module type CheckerInterp = sig
   type t

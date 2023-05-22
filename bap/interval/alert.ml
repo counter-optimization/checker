@@ -413,9 +413,6 @@ module SubNameResolverFiller = struct
     let named_symbols = Toplevel.eval seq get_named_symbols in
     let queryable_named_symbols = Seq.map named_symbols ~f:(fun (addr, name) ->
                                       Word.to_string addr, name) in
-    (* let () = printf "queryable named symbols are:\n%!"; *)
-    (*          Seq.iter queryable_named_symbols ~f:(fun (addrs, name) -> *)
-    (*              printf "(%s, %s)\n%!" addrs name) in *)
     Set.map alerts ~f:(fun alert ->
         if needs_resolving alert
         then 
