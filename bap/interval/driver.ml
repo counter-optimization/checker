@@ -88,18 +88,6 @@ let record_analyzed_sub subname subtid : unit =
         ]
     end
 
-let print_iml iml : unit =
-  Format.printf
-        "%a\n%!"
-        Sexp.pp
-        (Map_lattice.Interval.M.sexp_of_t Wrapping_interval.sexp_of_t iml)
-
-let print_sol sol : unit =
-  Solution.enum sol |>
-    Sequence.iter ~f:(fun (n, iml) ->
-        Format.printf "Node (%a): \n%!" Graphs.Ir.Node.pp n;
-        print_iml iml)
-
 let insns_of_node n = Blk.elts @@ Graphs.Ir.Node.label n
 let first_insn_of_blk b =
   let insns = Blk.elts b in
@@ -228,13 +216,13 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                 sub_name in
      res
   | None ->
+     let () = Preanalysis_iter.print_conds_of_sub sub in
      (* run the liveness analysis *)
      let () = printf "Running liveness analysis\n%!" in
      let start = Analysis_profiling.record_start_time () in
      let liveness = Live_variables.Analysis.run sub in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname DependencyAnalysis stop in
-     (* let () = Live_variables.IsUsedPass.print_rels liveness in *)
 
      (* CFG *)
      let start = Analysis_profiling.record_start_time () in
@@ -436,6 +424,16 @@ let check_config config img ctxt proj : unit =
   let () = printf "Computing all return insns:\n%!" in
   let () = ReturnInsnsGetter.compute_all_returns () in
   let () = printf "Done.\n%!" in
+
+  let () = printf "Computing flag ownership:\n%!" in
+  let flagownership = Flag_ownership.run () in
+  let () = printf "Done.\n%!" in
+
+  let () = Tid_map.iteri flagownership ~f:(fun ~key ~data ->
+               let flags = Set.to_list data in
+               let flags_str = List.to_string ~f:(Tid.to_string) flags in
+               printf "def %a has flags: %s\n%!" Tid.ppo key flags_str)
+  in
 
   let do_ss_checks = Extension.Configuration.get ctxt Common.do_ss_checks_param in
   let do_cs_checks = Extension.Configuration.get ctxt Common.do_cs_checks_param in
