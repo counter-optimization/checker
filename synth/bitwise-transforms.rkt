@@ -223,13 +223,26 @@
    (mov-r64-imm64 r11 (bv (expt 2 33) 64))
    (sub-r/m64-r64 rax r11)
    (sub-r/m64-r64 rcx r11)
-   (xor-r/m64-r64 rcx rax) ; perform and
+   (xor-r/m64-r64 rcx rax) ; perform xor
    (mov-r/m32-r32 ecx ecx) ; zero top 32 bits of ecx
    (mov-r/m64-r64 rax r10))) ; restore rax
 
 (define spec-xor32
   (list
    (xor-r/m32-r32 ecx eax)))
+
+(define attempt-xor32-imm8
+  (list
+   (mov-r/m32-r32 ecx ecx) ; zero top 32 bits of ecx
+   (mov-r64-imm64 r11 (bv (expt 2 33) 64))
+   (sub-r/m64-r64 rcx r11)
+   (xor-r/m64-imm8 rcx (bv 25 8)) ; perform xor
+   (mov-r/m32-r32 ecx ecx) ; zero top 32 bits of ecx
+  ))
+
+(define spec-xor32-imm8
+  (list
+   (xor-r/m32-imm8 ecx (bv 25 8))))
 
 (define attempt-xor64
   (list
