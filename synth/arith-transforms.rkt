@@ -288,6 +288,33 @@
    (add-r/m64-r64 rcx rax)))
 
 ; Sets CF, ZF
+(define attempt-add64-imm8
+  (list
+   (mov-r/m64-r64 r11 rcx) ; copy operand to scratch reg
+   (mov-r/m32-r32 ecx ecx) ; mask upper bits of operand
+   (mov-r64-imm64 r12 (bv (expt 2 63) 64))
+   (sub-r/m64-r64 rcx r12)
+   (mov-r/m16-imm16 r11w (bv 1 16)) ; mask lower bits of scratch
+   (ror-r/m64-imm8 r11 (bv 16 8))
+   (mov-r/m16-imm16 r11w (bv 0 16))
+   (rol-r/m64-imm8 r11 (bv 16 8))
+   (add-r/m64-imm8 rcx (bv (expt 2 7) 8)) ; add immediate
+   (sub-r/m64-r64 rcx r12) ; remove upper bit mask
+   (mov-r/m8-r8 r12b cl) ; save and mask out lowest 8 bits of sum
+   (mov-r/m8-imm8 cl (bv 1 8))
+   (add-r/m64-r64 rcx r11) ; add upper bits from scratch
+   (mov-r/m8-r8 cl r12b) ; restore lowest 8 bits of sum
+   (setc r11b) ; set flags
+   (cmp-r/m64-imm8 rcx (bv 0 8))
+   (bt-r/m64-imm8 r11 (bv 0 8))
+  ))
+
+(define spec-add64-imm8
+  (list
+   (add-r/m64-imm8 rcx (bv (expt 2 7) 8))))
+
+
+; Sets CF, ZF
 (define attempt-add64-imm32
   (list
    (mov-r/m64-r64 r11 rcx) ; copy operand to scratch reg
@@ -298,7 +325,7 @@
    (ror-r/m64-imm8 r11 (bv 16 8))
    (mov-r/m16-imm16 r11w (bv 0 16))
    (rol-r/m64-imm8 r11 (bv 16 8))
-   (add-r/m64-imm32 rcx (bv 25 32)) ; add immediate
+   (add-r/m64-imm32 rcx (bv (expt 2 7) 32)) ; add immediate
    (sub-r/m64-r64 rcx r12) ; remove upper bit mask
    (mov-r/m8-r8 r12b cl) ; save and mask out lowest 8 bits of sum
    (mov-r/m8-imm8 cl (bv 1 8))
@@ -311,4 +338,5 @@
 
 (define spec-add64-imm32
   (list
-   (add-r/m64-imm32 rcx (bv 25 32))))
+   (add-r/m64-imm32 rcx (bv (expt 2 7) 32))))
+  
