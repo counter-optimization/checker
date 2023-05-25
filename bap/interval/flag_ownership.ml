@@ -6,7 +6,11 @@ module T = Bap_core_theory.Theory
 module KB = Bap_knowledge.Knowledge
 module ABI = Common.AMD64SystemVABI
 
+module TidSet = Set.Make_binable_using_comparator(Tid)
+
 open KB.Monad_infix
+
+type t = Set.M(Tid).t Tid_map.t
 
 let is_def_of_flag defterm =
   let lhs = Var.name @@ Def.lhs defterm in
@@ -16,33 +20,15 @@ let is_def_not_of_flag defterm =
   let lhs = Var.name @@ Def.lhs defterm in
   not @@ ABI.var_name_is_flag lhs
 
-(* let get_flag_own_tids defterm = *)
-(*   if is_def_of_flag defterm *)
-(*   then *)
-(*     [] *)
-(*   else *)
-(*     let tid = Term.tid defterm in *)
-(*     let all_flag_tids = ref [] in *)
-(*     let () = Toplevel.exec begin *)
-(*       KB.collect T.Semantics.slot tid >>= fun insn -> *)
-(*       let terms = KB.Value.get Term.slot insn in *)
-(*       KB.return @@ List.iter terms ~f:(fun blk -> *)
-(*       Seq.iter (Blk.elts blk) ~f:(function *)
-(*         | `Def innerterm -> *)
-(*            printf "tid has term: %a\n%!" Def.ppo innerterm; *)
-(*            if is_def_of_flag innerterm *)
-(*            then *)
-(*              let flagdeftid = Term.tid innerterm in *)
-(*              printf "flag tid: %a\n%!" Tid.ppo flagdeftid; *)
-(*              all_flag_tids := flagdeftid :: !all_flag_tids *)
-(*            else *)
-(*              () *)
-(*         | _ -> ())) *)
-(*                end *)
-(*     in *)
-(*     !all_flag_tids *)
+let has_flags flagmap tid_of_def =
+  match Tid_map.find flagmap tid_of_def with
+  | Some flagset -> not @@ Set.is_empty flagset
+  | None -> false
 
-module TidSet = Set.Make_binable_using_comparator(Tid)
+let get_flags_of_def_tid flagmap tid_of_def =
+  match Tid_map.find flagmap tid_of_def with
+  | Some flagset -> flagset
+  | None -> Set.empty (module Tid)
 
 let run () =
   let flagmap = ref (Tid_map.empty) in
