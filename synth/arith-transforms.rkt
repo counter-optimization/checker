@@ -174,18 +174,6 @@
    (mov-r/m32-r32 ecx ecx) ; zero top 32 bits of ecx
    (mov-r/m64-r64 rax r11))) ; restore rax
   
-(define attempt-add32-imm8-cf
-  (list
-   (mov-r/m32-r32 ecx ecx) ; zero top 32 bits of rcx
-   (sub-r/m64-imm32 rcx (bv (expt 2 31) 32)) ; mask upper bits
-   (sub-r/m64-imm32 rcx (bv (expt 2 31) 32))
-   (sub-r/m64-imm32 rcx (bv (expt 2 31) 32))
-   (sub-r/m64-imm32 rcx (bv (expt 2 31) 32))
-   (add-r/m64-imm8 rcx (bv 25 8)) ; perform add
-   (bt-r/m64-imm8 rcx (bv 32 8)) ; set CF
-   (mov-r/m32-r32 ecx ecx) ; zero top 32 bits of ecx
- )) ; restore rax
-  
 ; Sets CF correctly
 (define attempt-add32-cf
   (list
@@ -222,38 +210,44 @@
 (define spec-add32
   (list
    (add-r/m32-r32 ecx eax)))
+  
+(define attempt-add32-imm8-cf
+  (list
+   (mov-r/m32-r32 ecx ecx) ; zero top 32 bits of rcx
+   (mov-r64-imm64 r11 (bv (expt 2 33) 64)) ; mask upper bits
+   (sub-r/m64-r64 rcx r11)
+   (mov-r/m64-imm32 r11 (bv 0 32)) ; move immediate to register
+   (add-r/m32-imm8 r11d (bv (expt 2 7) 8))
+   (add-r/m64-r64 rcx r11) ; perform add
+   (bt-r/m64-imm8 rcx (bv 32 8)) ; set CF
+   (mov-r/m32-r32 ecx ecx) ; zero top 32 bits of ecx
+ ))
 
 (define spec-add32-imm8
   (list
-   (add-r/m32-imm8 ecx (bv 25 8))))
+   (add-r/m32-imm8 ecx (bv (expt 2 7) 8))))
   
 ; Sets CF correctly
 (define attempt-add64
   (list
-   ; split operands 48/16
-   (mov-r64-imm64 r10 (bv (expt 2 48) 64))
+   (mov-r64-imm64 r10 (bv (expt 2 48) 64)) ; split operands 48/16
    (mov-r/m16-r16 r10w cx) ; split lower 16 bits of rcx into r10
    (mov-r/m16-imm16 cx (bv 1 16))  ; mask out lower 16 bits of rcx
    (mov-r64-imm64 r11 (bv (expt 2 48) 64))
    (mov-r/m16-r16 r11w ax) ; split lower 16 bits of rax into r11
    (mov-r/m16-imm16 ax (bv 1 16))  ; mask out lower 16 bits of rax
-   ; rotate into position
-   (rol-r/m64-imm8 r10 (bv 16 8))
+   (rol-r/m64-imm8 r10 (bv 16 8)) ; rotate into position
    (rol-r/m64-imm8 r11 (bv 16 8))
    (ror-r/m64-imm8 rcx (bv 16 8))
    (ror-r/m64-imm8 rax (bv 16 8))
-   ; add parts
-   (add-r/m32-r32 r10d r11d)
+   (add-r/m32-r32 r10d r11d) ; add parts
    (adc-r/m64-r64 rcx rax)
-   ; rotate back
-   (ror-r/m64-imm8 r11 (bv 16 8))
+   (ror-r/m64-imm8 r11 (bv 16 8)) ; rotate back
    (rol-r/m64-imm8 rax (bv 16 8))
    (ror-r/m64-imm8 r10 (bv 16 8))
    (rcl-r/m64-imm8 rcx (bv 16 8))
-   ; recombine
-   (mov-r/m16-r16 cx r10w)
-   ; restore rax
-   (mov-r/m16-r16 ax r11w)
+   (mov-r/m16-r16 cx r10w) ; recombine
+   (mov-r/m16-r16 ax r11w) ; restore rax
   ))
   
 ; Sets CF and ZF correctly
@@ -296,30 +290,21 @@
 ; Sets CF, ZF
 (define attempt-add64-imm32
   (list
-   ; copy operand to scratch reg
-   (mov-r/m64-r64 r11 rcx)
-   ; mask upper bits of operand
-   (mov-r/m32-r32 ecx ecx)
+   (mov-r/m64-r64 r11 rcx) ; copy operand to scratch reg
+   (mov-r/m32-r32 ecx ecx) ; mask upper bits of operand
    (mov-r64-imm64 r12 (bv (expt 2 63) 64))
    (sub-r/m64-r64 rcx r12)
-   ; mask lower bits of scratch
-   (mov-r/m16-imm16 r11w (bv 1 16))
+   (mov-r/m16-imm16 r11w (bv 1 16)) ; mask lower bits of scratch
    (ror-r/m64-imm8 r11 (bv 16 8))
    (mov-r/m16-imm16 r11w (bv 0 16))
    (rol-r/m64-imm8 r11 (bv 16 8))
-   ; add immediate
-   (add-r/m64-imm32 rcx (bv 25 32))
-   ; remove upper bit mask
-   (sub-r/m64-r64 rcx r12)
-   ; save and mask out lowest 8 bits of sum
-   (mov-r/m8-r8 r12b cl)
+   (add-r/m64-imm32 rcx (bv 25 32)) ; add immediate
+   (sub-r/m64-r64 rcx r12) ; remove upper bit mask
+   (mov-r/m8-r8 r12b cl) ; save and mask out lowest 8 bits of sum
    (mov-r/m8-imm8 cl (bv 1 8))
-   ; add upper bits from scratch
-   (add-r/m64-r64 rcx r11)
-   ; restore lowest 8 bits of sum
-   (mov-r/m8-r8 cl r12b)
-   ; set flags
-   (setc r11b)
+   (add-r/m64-r64 rcx r11) ; add upper bits from scratch
+   (mov-r/m8-r8 cl r12b) ; restore lowest 8 bits of sum
+   (setc r11b) ; set flags
    (cmp-r/m64-imm8 rcx (bv 0 8))
    (bt-r/m64-imm8 r11 (bv 0 8))
   ))
