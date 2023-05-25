@@ -63,10 +63,6 @@ type state = {
 type t = state
 
 let rec is_idx_insn ?(in_sub : bool = false) ?(in_plus : bool = false) exp =
-  (* let () = printf "exp is: %s\n%!" (match exp with *)
-  (*                                   | Bil.BinOp (op, _, _) -> *)
-  (*                                      Common.binop_to_string op *)
-  (*                                   | _ -> "") in *)
   match exp with
   | Bil.BinOp (Bil.MINUS, left, right) ->
      (match left with
@@ -91,6 +87,16 @@ let rec is_idx_insn ?(in_sub : bool = false) ?(in_plus : bool = false) exp =
      (match subexp with
       | Bil.Var v -> String.Caseless.equal "cf" @@ Var.name v
       | _ -> false)
+  | _ -> false
+
+let elt_is_idx_insn = function
+  | `Def d ->
+     let varname = Var.name @@ Def.lhs d in
+     if String.Caseless.equal varname "r11"
+     then
+       is_idx_insn @@ Def.rhs d 
+     else
+       false
   | _ -> false
 
 let get_idx_from_idx_insn_rhs exp (env : word Env.t) tid : int =
