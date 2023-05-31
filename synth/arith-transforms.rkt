@@ -8,6 +8,14 @@
 
 (provide (all-defined-out))
 
+(define (imm8)
+  (define-symbolic var8 (bitvector 8))
+  var8)
+
+(define (imm32)
+  (define-symbolic var32 (bitvector 32))
+  var32)
+
 ; ---------------- SUB ----------------
 
 ; Dest rcx, src rax
@@ -217,7 +225,7 @@
    (mov-r64-imm64 r11 (bv (expt 2 33) 64)) ; mask upper bits
    (sub-r/m64-r64 rcx r11)
    (mov-r/m64-imm32 r11 (bv 0 32)) ; move immediate to register
-   (add-r/m32-imm8 r11d (bv (expt 2 7) 8))
+   (add-r/m32-imm8 r11d (imm8))
    (add-r/m64-r64 rcx r11) ; perform add
    (bt-r/m64-imm8 rcx (bv 32 8)) ; set CF
    (mov-r/m32-r32 ecx ecx) ; zero top 32 bits of ecx
@@ -225,7 +233,7 @@
 
 (define spec-add32-imm8
   (list
-   (add-r/m32-imm8 ecx (bv (expt 2 7) 8))))
+   (add-r/m32-imm8 ecx (imm8))))
   
 ; Sets CF correctly
 (define attempt-add64
@@ -298,10 +306,11 @@
    (ror-r/m64-imm8 r11 (bv 16 8))
    (mov-r/m16-imm16 r11w (bv 0 16))
    (rol-r/m64-imm8 r11 (bv 16 8))
-   (add-r/m64-imm8 rcx (bv (expt 2 7) 8)) ; add immediate
+   (add-r/m64-imm8 rcx (imm8)) ; add immediate
    (sub-r/m64-r64 rcx r12) ; remove upper bit mask
    (mov-r/m8-r8 r12b cl) ; save and mask out lowest 8 bits of sum
    (mov-r/m8-imm8 cl (bv 1 8))
+   (clc) ; clear carry flag
    (add-r/m64-r64 rcx r11) ; add upper bits from scratch
    (mov-r/m8-r8 cl r12b) ; restore lowest 8 bits of sum
    (setc r11b) ; set flags
@@ -311,7 +320,7 @@
 
 (define spec-add64-imm8
   (list
-   (add-r/m64-imm8 rcx (bv (expt 2 7) 8))))
+   (add-r/m64-imm8 rcx (imm8))))
 
 
 ; Sets CF, ZF
@@ -325,7 +334,7 @@
    (ror-r/m64-imm8 r11 (bv 16 8))
    (mov-r/m16-imm16 r11w (bv 0 16))
    (rol-r/m64-imm8 r11 (bv 16 8))
-   (add-r/m64-imm32 rcx (bv (expt 2 7) 32)) ; add immediate
+   (add-r/m64-imm32 rcx (imm32)) ; add immediate
    (sub-r/m64-r64 rcx r12) ; remove upper bit mask
    (mov-r/m8-r8 r12b cl) ; save and mask out lowest 8 bits of sum
    (mov-r/m8-imm8 cl (bv 1 8))
@@ -338,5 +347,5 @@
 
 (define spec-add64-imm32
   (list
-   (add-r/m64-imm32 rcx (bv (expt 2 7) 32))))
+   (add-r/m64-imm32 rcx (imm32))))
   
