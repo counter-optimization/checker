@@ -41,6 +41,9 @@ if __name__ == '__main__':
     opcodes_to_addrs_live_out = dict()
     opcodes_to_addrs_live_in = dict()
     subs = set()
+
+    num_cs_warns = 0
+    num_ss_warns = 0
     
     for csv_file_name in sys.argv[1:]:
         # calculate mir_opcodes -> live flags for all alerts
@@ -63,9 +66,11 @@ if __name__ == '__main__':
                     logger.debug(f"Row ({row}) has live flags out: {row['live_flags']}, live flags in: {row['flags_live_in']}")
 
                 if is_comp_simp_warn(row):
+                    num_cs_warns += 1
                     cs_opcodes.add(opcode)
 
                 if is_silent_store_warn(row):
+                    num_ss_warns += 1
                     ss_opcodes.add(opcode)
 
                 if has_flags_live_in(row):
@@ -123,3 +128,4 @@ if __name__ == '__main__':
         print(opcode)
 
     print(f"total transforms needed: {len(cs_opcodes) + len(ss_opcodes)}")
+    print(f"CS warns: {num_cs_warns}, SS warns: {num_ss_warns}")
