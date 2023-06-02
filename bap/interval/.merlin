@@ -34,6 +34,8 @@ S test_wrapping_interval.ml
 S test_abstract_memory.ml
 S abstract.ml
 S domain_key.ml
+S preanalysis_iter.ml
+S flag_ownership.ml
 
 B _build
 
