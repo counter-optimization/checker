@@ -26,6 +26,7 @@ type event = Edgebuilding
            | AlertLivenessFilling
            | CalleeAnalysis
            | ClassicLiveness
+           | NewDependenceAnalysis
            | None
 [@@deriving equal]
 
@@ -42,6 +43,7 @@ let string_of_event = function
   | AlertLivenessFilling -> "AlertLivenessFilling"
   | CalleeAnalysis -> "CalleeAnalysis"
   | ClassicLiveness -> "ClassicLiveness"
+  | NewDependenceAnalysis -> "NewDependenceAnalysis"
   | None -> "None"
 
 let cls : (t, unit) KB.Class.t = KB.Class.declare

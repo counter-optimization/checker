@@ -197,6 +197,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                  ~(config : Config.t)
                  ~(do_ss_checks : bool)
                  ~(do_cs_checks : bool)
+                 ~(flagownership : Flag_ownership.t)
                  ctxt : check_sub_result =
   let subname = Sub.name sub in
   let subtid = Term.tid sub in
@@ -263,9 +264,14 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                  E.init_arg ~name:argname config sub mem)
      in
      let rpo_traversal = Graphlib.reverse_postorder_traverse (module G) cfg in
+     let po_traversal = Graphlib.postorder_traverse (module G) cfg in
      let first_node = match Seq.hd rpo_traversal with
        | Some n -> n
        | None -> failwith "in driver, cfg building init sol, couldn't get first node"
+     in
+     let last_node = match Seq.hd po_traversal with
+       | Some n -> n
+       | None -> failwith "in driver, cfg building init sol, couldn't get last node"
      in
      let with_args = G.Node.Map.set G.Node.Map.empty ~key:first_node ~data:final_env in
      let init_sol = Solution.create with_args empty in
@@ -298,6 +304,40 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let () = printf "Done running abstract interpreter\n%!" in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname AbsInt stop in
+
+     let start = Analysis_profiling.record_start_time () in
+     let init_mapping = G.Node.Map.empty in
+     let init_sol_dep_analysis = Solution.create
+                                   init_mapping
+                                   Dependency_analysis.empty
+     in
+     let dep_analysis_results = Graphlib.fixpoint
+                                  (module G)
+                                  cfg
+                                  ~step:Dependency_analysis.step
+                                  ~init:init_sol_dep_analysis
+                                  ~equal:Dependency_analysis.equal
+                                  ~merge:Dependency_analysis.merge
+                                  ~f:(fun cc ->
+                                    let tid = Calling_context.to_insn_tid cc in
+                                    let elt = match Tid_map.find tidmap tid with
+                                  | Some elt -> elt
+                                  | None ->
+                                     failwith @@
+                                       sprintf
+                                         "in calculating dep_analysis_results, couldn't find tid %a in tidmap"
+                                         Tid.pps tid
+
+                                    in
+                                    Dependency_analysis.denote_elt elt)
+     in
+     let final_dep_analysis_res = Solution.get dep_analysis_results last_node in
+     let stop = Analysis_profiling.record_stop_time start in
+     let () = Analysis_profiling.record_duration_for
+                subname
+                NewDependenceAnalysis
+                stop
+     in
 
      let no_symex = Extension.Configuration.get ctxt Common.no_symex_param in
      let use_symex = not no_symex in
@@ -352,7 +392,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      
      (* this is really dependency analysis info, not liveness info *)
      let start = Analysis_profiling.record_start_time () in
-     let all_alerts = Alert.LivenessFiller.set_for_alert_set all_alerts liveness in
+     (* let all_alerts = Alert.LivenessFiller.set_for_alert_set all_alerts liveness in
+      *)
+     let all_alerts = Alert.FlagsLiveOutFiller.set_for_alert_set tidmap flagownership final_dep_analysis_res all_alerts in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname AlertDependencyFilling stop in
      
@@ -429,12 +471,6 @@ let check_config config img ctxt proj : unit =
   let flagownership = Flag_ownership.run () in
   let () = printf "Done.\n%!" in
 
-  let () = Tid_map.iteri flagownership ~f:(fun ~key ~data ->
-               let flags = Set.to_list data in
-               let flags_str = List.to_string ~f:(Tid.to_string) flags in
-               printf "def %a has flags: %s\n%!" Tid.ppo key flags_str)
-  in
-
   let do_ss_checks = Extension.Configuration.get ctxt Common.do_ss_checks_param in
   let do_cs_checks = Extension.Configuration.get ctxt Common.do_cs_checks_param in
   let rec loop ~(worklist : SubSet.t)
@@ -476,6 +512,7 @@ let check_config config img ctxt proj : unit =
                                        ~do_cs_checks
                                        ~do_ss_checks
                                        ~config
+                                       ~flagownership
         in
         let callee_subs = CRS.to_list current_res.callees
                           |> List.map ~f:(fun (r : CR.t) -> sub_of_tid_exn r.callee proj)

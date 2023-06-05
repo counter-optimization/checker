@@ -445,6 +445,40 @@ module RemoveAllEmptySubName : Pass = struct
     Set.filter alerts ~f:(fun alert -> Option.is_some alert.sub_name)
 end
 
+module FlagsLiveOutFiller = struct
+  let flag_of_flagdeftid tidmap tid : string =
+    match Tid_map.find tidmap tid with
+    | Some (`Def d) -> Var.name @@ Def.lhs d
+    | _ ->
+       failwith @@
+         sprintf "Couldnt find flag def tid %a in tidmap" Tid.pps tid
+  
+  let set_for_alert tidmap flagownership depanalysis alert : T.t =
+    let tid = Option.value_exn alert.tid in
+    let flags = match Tid_map.find tidmap tid with
+      | None ->
+         failwith @@ sprintf "couldn't find tid %a in tidmap" Tid.pps tid
+      | Some elt ->
+         Tid_map.find flagownership tid
+    in
+    let flags_live = match flags with
+    | None -> SS.empty
+    | Some flags ->
+       Core.Set.fold flags ~init:SS.empty ~f:(fun liveflags flagdeftid ->
+           let all_users = Dependency_analysis.users_transitive_closure
+                             flagdeftid
+                             depanalysis
+           in
+           if Core.Set.is_empty all_users
+           then liveflags
+           else SS.add liveflags @@ flag_of_flagdeftid tidmap flagdeftid)
+    in
+    { alert with flags_live }
+
+  let set_for_alert_set tidmap flagownership depanalysis alerts : Set.t =
+    Set.map alerts ~f:(set_for_alert tidmap flagownership depanalysis)
+end
+
 (** this is really more data dependency analysis like for backward slicing. 
     it was originally used for some liveness analysis, like: are any flags
     of a leaky instruction used?

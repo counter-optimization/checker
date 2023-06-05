@@ -20,6 +20,10 @@ let is_def_not_of_flag defterm =
   let lhs = Var.name @@ Def.lhs defterm in
   not @@ ABI.var_name_is_flag lhs
 
+let is_elt_def_flag = function
+  | `Def d -> is_def_of_flag d
+  | _ -> false
+
 let has_flags flagmap tid_of_def =
   match Tid_map.find flagmap tid_of_def with
   | Some flagset -> not @@ Set.is_empty flagset
@@ -30,6 +34,8 @@ let get_flags_of_def_tid flagmap tid_of_def =
   | Some flagset -> flagset
   | None -> Set.empty (module Tid)
 
+(* a tid is a key of returned member of type t 
+   iff it is not a flag definition *)
 let run () =
   let flagmap = ref (Tid_map.empty) in
   let () = Toplevel.exec begin

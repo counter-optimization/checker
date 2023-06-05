@@ -20,6 +20,7 @@ type event = Edgebuilding
            | AlertLivenessFilling
            | CalleeAnalysis
            | ClassicLiveness
+           | NewDependenceAnalysis
            | None
 [@@deriving equal]
 

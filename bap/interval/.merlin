@@ -36,6 +36,7 @@ S abstract.ml
 S domain_key.ml
 S preanalysis_iter.ml
 S flag_ownership.ml
+S dependency_analysis.ml
 
 B _build
 
