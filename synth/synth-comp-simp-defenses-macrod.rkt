@@ -56,10 +56,10 @@
   (define-symbolic var8 (bitvector 8))
   var8)
 
-; nonzero 8-bit immediate
-(define (imm8-nz)
+; nonzero in the lowest 6 bits
+(define (imm8-nz6)
   (define-symbolic var8 (bitvector 8))
-  (assume (not (eq? var8 (bv 0 8))))
+  (assume (not (bvzero? (extract 5 0 var8))))
   var8)
 
 (define (imm32)

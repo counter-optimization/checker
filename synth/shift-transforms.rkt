@@ -214,10 +214,10 @@
     (mov-r/m16-r16 r11w ax) ; r11 contains lower 16 bits
     (mov-r/m16-imm16 ax (bv 1 16)) ; rax contains upper 48 bits
     ; perform shifts
-    (shl-r/m64-imm8 r11 (comp-simp:imm8-nz))
-    (shl-r/m64-imm8 rax (comp-simp:imm8-nz))
+    (shl-r/m64-imm8 r11 (comp-simp:imm8-nz6))
+    (shl-r/m64-imm8 rax (comp-simp:imm8-nz6))
     ; mutate r11 to make adding safe
-    (rol-r/m64-imm8 r10 (comp-simp:imm8-nz))
+    (rol-r/m64-imm8 r10 (comp-simp:imm8-nz6))
     (sub-r/m64-r64 r11 r10)
     ; recombine
     (add-r/m64-r64 rax r11)
@@ -233,11 +233,11 @@
     (mov-r/m16-r16 r11w ax) ; r11 contains lower 16 bits
     (mov-r/m16-imm16 ax (bv 1 16)) ; rax contains upper 48 bits
     ; perform shifts
-    (shl-r/m64-imm8 r11 (comp-simp:imm8-nz))
-    (shl-r/m64-imm8 rax (comp-simp:imm8-nz))
+    (shl-r/m64-imm8 r11 (comp-simp:imm8-nz6))
+    (shl-r/m64-imm8 rax (comp-simp:imm8-nz6))
     (setc r12b) ; save CF into arbitrary scratch reg
     ; mutate r11 to make adding safe
-    (rol-r/m64-imm8 r10 (comp-simp:imm8-nz))
+    (rol-r/m64-imm8 r10 (comp-simp:imm8-nz6))
     (sub-r/m64-r64 r11 r10)
     ; recombine
     (add-r/m64-r64 rax r11)
@@ -247,7 +247,7 @@
 
 (define spec-shl64-imm
   (list
-   (shl-r/m64-imm8 rax (comp-simp:imm8-nz))))
+   (shl-r/m64-imm8 rax (comp-simp:imm8-nz6))))
 
 ; ---------- Bitwise SHR ----------
 
@@ -424,6 +424,7 @@
    (shr-r/m64-cl rax)))
 
 ; CF- and ZF-correct
+; Does not apply when imm = 0
 (define attempt-shr64-imm-cf
   (list
     ; split up rax
@@ -432,11 +433,18 @@
     (mov-r/m16-r16 r11w ax) ; r11 contains lower 16 bits
     (mov-r/m16-imm16 ax (bv 1 16)) ; rax contains upper 48 bits
     ; perform shifts
-    (shr-r/m64-imm8 r11 (comp-simp:imm8-nz))
-    (shr-r/m64-imm8 rax (comp-simp:imm8-nz))
+    (if (bvule (extract 5 0 (comp-simp:imm8-nz6)) (bv 16 6))
+      (shr-r/m64-imm8 rax (comp-simp:imm8-nz6))
+      (shr-r/m64-imm8 r11 (comp-simp:imm8-nz6))
+    )
+    (if (bvule (extract 5 0 (comp-simp:imm8-nz6)) (bv 16 6))
+      (shr-r/m64-imm8 r11 (comp-simp:imm8-nz6))
+      (shr-r/m64-imm8 rax (comp-simp:imm8-nz6))
+    )
     (setc r12b) ; save CF into arbitrary scratch reg
-    ; mutate rax to make adding safe
-    (shr-r/m64-imm8 r10 (comp-simp:imm8-nz))
+    ; mutate r11 and rax to make adding safe
+    (shr-r/m64-imm8 r10 (comp-simp:imm8-nz6))
+    ; (add-r/m64-r64 r11 r10)
     (shl-r/m64-1 r10)
     (sub-r/m64-r64 rax r10)
     ; recombine
@@ -448,7 +456,7 @@
 
 (define spec-shr64-imm
   (list
-   (shr-r/m64-imm8 rax (comp-simp:imm8-nz))))
+   (shr-r/m64-imm8 rax (comp-simp:imm8-nz6))))
 
 ; ---------- Bitwise SAR ----------
 
