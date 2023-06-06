@@ -51,6 +51,15 @@
         [b2 bvs2])
     (assume (bveq b1 b2))))
 
+; Symbolic bitvectors for verifying with immediate operands
+(define (imm8)
+  (define-symbolic var8 (bitvector 8))
+  var8)
+
+(define (imm32)
+  (define-symbolic var32 (bitvector 32))
+  var32)
+
 ; (E)FLAG comparison functions
 (define flag-symbols '(CF PF AF ZF SF OF))
 ; (displayln (format "flag-symbols: ~a" flag-symbols))
