@@ -233,8 +233,14 @@
     (mov-r/m16-r16 r11w ax) ; r11 contains lower 16 bits
     (mov-r/m16-imm16 ax (bv 1 16)) ; rax contains upper 48 bits
     ; perform shifts
-    (shl-r/m64-imm8 r11 (comp-simp:imm8-nz6))
-    (shl-r/m64-imm8 rax (comp-simp:imm8-nz6))
+    (if (bvule (extract 5 0 (comp-simp:imm8-nz6)) (bv 48 6))
+      (shl-r/m64-imm8 r11 (comp-simp:imm8-nz6))
+      (shl-r/m64-imm8 rax (comp-simp:imm8-nz6))
+    )
+    (if (bvule (extract 5 0 (comp-simp:imm8-nz6)) (bv 48 6))
+      (shl-r/m64-imm8 rax (comp-simp:imm8-nz6))
+      (shl-r/m64-imm8 r11 (comp-simp:imm8-nz6))
+    )
     (setc r12b) ; save CF into arbitrary scratch reg
     ; mutate r11 to make adding safe
     (rol-r/m64-imm8 r10 (comp-simp:imm8-nz6))
