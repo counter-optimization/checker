@@ -146,6 +146,22 @@
   (list
    (add-r/m8-r8 cl al)))
 
+; Sets CF
+(define attempt-add8-imm8
+  (list
+   (mov-r/m64-imm32 r11 (bv 0 32))
+   (mov-r/m8-imm8 r11b (comp-simp:imm8)) ; move immediate into register
+   (mov-r/m64-imm32 r10 (bv (expt 2 31) 32))
+   (mov-r/m8-r8 r10b cl) ; split lower 8 bits of rcx into r10
+   (add-r/m64-r64 r10 r11) ; perform addition
+   (bt-r/m64-imm8 r10 (bv 8 8))
+   (mov-r/m8-r8 cl r10b) ; recombine result
+  ))
+
+(define spec-add8-imm8
+  (list
+   (add-r/m8-imm8 cl (comp-simp:imm8))))
+
 (define attempt-add16
   (list
    (mov-r/m64-imm32 r10 (bv (expt 2 31) 32))

@@ -8,6 +8,7 @@
   add-rax-imm32
   add-r/m32-imm32
   add-r/m64-imm32
+  add-r/m8-imm8
   add-r/m32-imm8
   add-r/m64-imm8
   add-r/m8-r8
@@ -58,6 +59,16 @@
   #:encode (list (rex.w/r dst) (byte #x81) (/0 dst) (encode-imm imm32))
   (lambda (cpu dst imm32)
     (interpret-add cpu dst (sign-extend imm32 (bitvector 64)))))
+
+; 80 /0 ib
+(define-insn add-r/m8-imm8 (dst imm8)
+  #:decode [((byte #x80) (/0 r/m) i0)
+            (list (gpr8-no-rex r/m) i0)]
+           [((rex/r b) (byte #x80) (/0 r/m) i0)
+            (list (gpr8 b r/m) i0)]
+  #:encode (list (rex/r dst) (byte #x80) (/0 dst) (encode-imm imm8))
+  (lambda (cpu dst imm8)
+    (interpret-add cpu dst imm8)))
 
 ; 83 /0 ib
 (define-insn add-r/m32-imm8 (dst imm8)
