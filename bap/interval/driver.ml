@@ -332,6 +332,11 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                     Dependency_analysis.denote_elt elt)
      in
      let final_dep_analysis_res = Solution.get dep_analysis_results last_node in
+     let final_dep_analysis_res = Dependency_analysis.add_flag_ownership_dependencies
+                                    flagownership
+                                    rpo_traversal
+                                    final_dep_analysis_res
+     in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for
                 subname
@@ -354,6 +359,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      in
 
      let module CompSimpChecker = Comp_simp.Checker(FinalDomain)(CheckerOracle) in
+     let module SSChecker = Silent_stores.Checker(FinalDomain)(CheckerOracle) in
      
      let combine_res x y = Common.combine_checker_res x y Alert.Set.union in
 
@@ -371,13 +377,28 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                         subname Tid.pps tid
      in
 
+     let defs = ref None in
+
      let start = Analysis_profiling.record_start_time () in
      let all_results = List.fold edges ~init:emp ~f:(fun all_results (_, to_cc, _) ->
                            let to_tid = Calling_context.to_insn_tid to_cc in
                            let elt = elt_of_tid to_tid in
-                           let cs_chkr_res = CompSimpChecker.check_elt subname to_tid elt in
-                           (* let ss_chkr_res = ... in *)
-                           combine_res all_results cs_chkr_res
+                           let cs_chkr_res = CompSimpChecker.check_elt
+                                               subname
+                                               to_tid
+                                               elt
+                           in
+                           let ss_chkr_res = SSChecker.check_elt
+                                               use_symex
+                                               sub
+                                               to_tid
+                                               idx_st
+                                               defs
+                                               symex_profiling_out_file
+                                               elt
+                           in
+                           combine_res all_results @@
+                             combine_res ss_chkr_res cs_chkr_res
                          )
      in
      let stop = Analysis_profiling.record_stop_time start in
