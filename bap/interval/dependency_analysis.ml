@@ -18,12 +18,36 @@ module T = struct
       tid_users = Tid_map.empty;
     }
 
-  let rec users_transitive_closure tid st : tidset =
-    match Tid_map.find st.tid_users tid with
-    | None -> Set.empty (module Tid)
-    | Some tidset ->
-       Set.fold tidset ~init:tidset ~f:(fun alltids nexttid ->
-           Set.union alltids @@ users_transitive_closure nexttid st)
+  let users_transitive_closure tid st =
+    (* this overflows stack if not tail recursive *)
+    let default = Set.empty (module Tid) in
+    let rec users_transitive_closure_loop
+              ?(users : tidset = default)
+              ~(worklist : tidset)
+              st : tidset =
+      if Set.is_empty worklist
+      then
+        users
+      else
+        let first = Seq.hd_exn @@ Set.to_sequence worklist in
+        let () = printf "processing tid: %a\n%!" Tid.ppo first in
+        if Set.mem users first
+        then
+          let worklist = Set.remove worklist first in
+          users_transitive_closure_loop ~worklist ~users st
+        else
+          let users = Set.add users first in
+          match Tid_map.find st.tid_users first with
+          | None ->
+             let worklist = Set.remove worklist first in
+             users_transitive_closure_loop ~worklist ~users st
+          | Some tids_to_process ->
+             let worklist = Set.union worklist tids_to_process in
+             let worklist = Set.remove worklist first in
+             users_transitive_closure_loop ~worklist ~users st
+    in
+    let target_tidset = Set.singleton (module Tid) tid in
+    users_transitive_closure_loop ~worklist:target_tidset st
 
   let equal x y =
     let tidset_equal = Set.equal in
@@ -41,6 +65,30 @@ module T = struct
     in
     Tid_map.set users ~key:used ~data:users'
 
+  let add_to_uses ~user ~used uses : tidset Tid_map.t =
+    let uses' = match Tid_map.find uses user with
+      | Some prev_used ->
+         Set.add prev_used used
+      | None ->
+         Set.singleton (module Tid) used
+    in
+    Tid_map.set uses ~key:user ~data:uses'
+
+  let simultaneous_add ~user ~used st =
+    { st with
+      tid_uses = add_to_uses ~user ~used st.tid_uses;
+      tid_users = add_to_users ~user ~used st.tid_users }
+
+  let add_flag_ownership_dependencies flagownership
+        (ccs : Calling_context.t Seq.t)
+        st : t =
+    Seq.fold ccs ~init:st ~f:(fun st cc ->
+        let tid = Calling_context.to_insn_tid cc in
+        match Tid_map.find flagownership tid with
+        | None -> st
+        | Some flagtids ->
+           Set.fold flagtids ~init:st ~f:(fun st flagtid ->
+               simultaneous_add ~user:flagtid ~used:tid st))
   let merge x y =
     let last_defd_env = Varmap.merge_skewed
                           x.last_defd_env

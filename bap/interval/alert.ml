@@ -338,8 +338,29 @@ module OpcodeAndAddrFiller : Pass = struct
     | None ->
        failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut, set_addr_for_alert, couldn't get addr for alert on tid: %a" Tid.pps alert_tid
 
-  let set_opcode_for_alert (alert : T.t) (opcode_lut : tidmap) : T.t =
+  let set_opcode_for_alert proj (alert : T.t) (opcode_lut : tidmap) : T.t =
     let alert_tid = Option.value_exn alert.tid in
+    let opcode_name = ref "" in
+    let addr_str = ref "" in
+    let target = Project.target proj in
+    let () =
+      Toplevel.exec begin
+          KB.collect Theory.Semantics.slot alert_tid >>= fun sema ->
+          KB.collect Theory.Label.addr alert_tid >>= fun maybe_addr ->
+          let maybe_addr_bitvector =
+            Option.bind maybe_addr ~f:(fun bitv ->
+                Option.return @@ Bitvector.code_addr target bitv)
+          in
+          addr_str := Word.to_string @@
+                        Option.value maybe_addr_bitvector ~default:(Word.one 64);
+          opcode_name := Insn.name sema;
+          KB.return ()
+        end
+    in
+    let () = printf "!! alert for tid %a has opcode name: %s, addr: %s\n%!"
+               Tid.ppo alert_tid !opcode_name !addr_str
+    in
+             
     match Map.find opcode_lut alert_tid with
     | Some opcode_str -> 
        { alert with opcode = Some opcode_str }
@@ -349,8 +370,9 @@ module OpcodeAndAddrFiller : Pass = struct
   let set_for_alert_set (alerts : Set.t) (proj : Project.t) : Set.t =
     let lut : lut = build_lut proj in
     let (addr_lut, opcode_lut) = lut in
-    Set.map alerts ~f:(fun alert -> set_addr_for_alert alert addr_lut)
-    |> Set.map ~f:(fun alert -> set_opcode_for_alert alert opcode_lut)
+    Set.map alerts ~f:(fun alert ->
+        let alert = set_addr_for_alert alert addr_lut in
+        set_opcode_for_alert proj alert opcode_lut)
 end
 
 module SubNameResolverFiller = struct
@@ -455,17 +477,22 @@ module FlagsLiveOutFiller = struct
   
   let set_for_alert tidmap flagownership depanalysis alert : T.t =
     let tid = Option.value_exn alert.tid in
+    let () = printf "setting flags live out for alert w/ tid: %a\n%!"
+               Tid.ppo tid
+    in
+    let () = printf "getting flags...\n%!" in
     let flags = match Tid_map.find tidmap tid with
       | None ->
          failwith @@ sprintf "couldn't find tid %a in tidmap" Tid.pps tid
       | Some elt ->
          Tid_map.find flagownership tid
     in
+    let () = printf "getting live flags...\n%!" in
     let flags_live = match flags with
     | None -> SS.empty
     | Some flags ->
        Core.Set.fold flags ~init:SS.empty ~f:(fun liveflags flagdeftid ->
-           let all_users = Dependency_analysis.users_transitive_closure
+           let all_users = Dependency_analysis.users_transitive_closure 
                              flagdeftid
                              depanalysis
            in
