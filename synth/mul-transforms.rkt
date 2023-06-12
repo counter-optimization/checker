@@ -8,6 +8,39 @@
 
 (provide (all-defined-out))
 
+; --------------- IMUL ----------------
+
+(define spec-imul32
+  (list (imul-r/m32 ecx)))
+
+(define spec-imul32-rr
+  (list (imul-r32-r/m32 eax ecx)))
+
+(define spec-imul64
+  (list (imul-r/m64 rcx)))
+
+(define spec-imul64-rr
+  (list (imul-r64-r/m64 rax rcx)))
+
+(define attempt-imul64-rri8
+  (list
+    (mov-r64-imm64 rax (bv 0 64))
+    (add-r/m64-imm8 rax (comp-simp:imm8))
+    (imul-r64-r/m64 rax rcx)))
+
+(define spec-imul64-rri8
+  (list (imul-r64-r/m64-imm8 rax rcx (comp-simp:imm8))))
+
+(define attempt-imul64-rri32
+  (list
+    (mov-r64-imm64 rax (bv 0 64))
+    (add-r/m64-imm32 rax (comp-simp:imm32))
+    (imul-r64-r/m64 rax rcx)))
+
+(define spec-imul64-rri32
+  (list (imul-r64-r/m64-imm32 rax rcx (comp-simp:imm32))))
+
+
 ; ---------------- MUL ----------------
 
 ; Dest rdx:rax, src rcx
