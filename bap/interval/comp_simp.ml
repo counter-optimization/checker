@@ -1,13 +1,11 @@
 open Core
 open Bap.Std
 open Graphlib.Std
-(* open Common *)
 open Bap_primus.Std
 open Monads.Std
 
 module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
-(* module ABI = Common.ABI *)
 module WI = Wrapping_interval
 module ABI = Common.AMD64SystemVABI
 module SS = Common.SS
@@ -187,26 +185,12 @@ module Checker(N : Abstract.NumericDomain)
         | Bil.MOD -> ()
         | Bil.SMOD -> ()
       in
-      (* let interval_pruned = (binop_is_sub && tr && not !right_bad) || *)
-      (*                         (not binop_is_sub && ((tl && not !left_bad) ||  *)
-      (*                                                 (tr && not !right_bad))) *)
-      (* in *)
       let interval_pruned = (binop_is_sub && tr && not !right_bad) ||
                               (not binop_is_sub &&
                                  (tl || tr) &&
                                    (not tl || not !left_bad) &&
                                      (not tr || not !right_bad))
                                  
-      in
-      let () = printf "[CompSimp] untainted: %B, interval_pruned: %B\n%!"
-                 untainted
-                 interval_pruned
-      in
-      let () = printf "[CompSimp] tl: %B, left_bad: %B, tr: %B, right_bad: %B\n%!"
-                 tl
-                 tr
-                 !left_bad
-                 !right_bad
       in
       if interval_pruned
       then
@@ -238,7 +222,6 @@ module Checker(N : Abstract.NumericDomain)
         { st with alerts = Alert.Set.add st.alerts alert }
 
   let rec check_exp (expr : Bil.exp) (st : st) : N.t * st =
-    let () = printf "[CompSimp] checking exp: %a\n%!" Exp.ppo expr in
     match expr with
     | Bil.Load (_, idx, _, _) ->
        (Interp.denote_exp st.tid expr, snd @@ check_exp idx st)
@@ -285,7 +268,6 @@ module Checker(N : Abstract.NumericDomain)
        let should_check = not is_def_of_flag in
        if should_check
        then
-         let () = printf "[CompSimp] checking tid: %a\n%!" Tid.ppo tid in
          let rhs = Def.rhs d in
          let _, st = check_exp rhs st in
          { warns = st.alerts;

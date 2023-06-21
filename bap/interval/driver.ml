@@ -447,25 +447,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
        ssevalstats = all_results.ss_stats;
        liveness_info = liveness }
 
-let iter_insns sub : unit =
-  let irg = Sub.to_cfg sub in
-  let free_vars = Sub.free_vars sub in
-  let () = Var.Set.iter free_vars ~f:(fun v -> Format.printf "Free var: %s\n%!" (Var.name v)) in
-  
-  let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
-  
-  let print_sub_defs graphnode =
-    let bb = Graphs.Ir.Node.label graphnode in
-    let insns = Blk.elts bb in
-    let print_insn = function
-      | `Def d -> Format.printf "iter_insns--Def: %s\n%!" @@ Def.to_string d
-      | `Phi p -> Format.printf "iter_insns--Phi: %s\n%!" @@ Phi.to_string p
-      | `Jmp j -> Format.printf "iter_insns--Jmp: %s\n%!" @@ Jmp.to_string j in
-    Seq.iter insns ~f:print_insn in
-  
-  let () = Format.printf "nodes are:\n%!" in 
-  Seq.iter nodes ~f:print_sub_defs
-
 (* this fn needs to have return type unit b/c BAP passes
    should have type (Project.t -> unit). here, this function
    gets curried until it has this type.

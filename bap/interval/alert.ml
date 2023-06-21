@@ -489,16 +489,24 @@ module FlagsLiveOutFiller = struct
     in
     let () = printf "getting live flags...\n%!" in
     let flags_live = match flags with
-    | None -> SS.empty
-    | Some flags ->
-       Core.Set.fold flags ~init:SS.empty ~f:(fun liveflags flagdeftid ->
-           let all_users = Dependency_analysis.users_transitive_closure 
-                             flagdeftid
-                             depanalysis
-           in
-           if Core.Set.is_empty all_users
-           then liveflags
-           else SS.add liveflags @@ flag_of_flagdeftid tidmap flagdeftid)
+      | None ->
+         let () = printf "No live flags\n%!" in
+         SS.empty
+      | Some flags ->
+         let () = printf "live flags are: %s\n%!"
+                    (Core.Set.to_list flags |> List.to_string ~f:Tid.to_string)
+         in
+         Core.Set.fold flags ~init:SS.empty ~f:(fun liveflags flagdeftid ->
+             let all_users = Dependency_analysis.users_transitive_closure 
+                               flagdeftid
+                               depanalysis
+             in
+             let () = printf "all transitive users are: %s\n%!"
+                        (Core.Set.to_list all_users |> List.to_string ~f:Tid.to_string)
+             in
+             if Core.Set.is_empty all_users
+             then liveflags
+             else SS.add liveflags @@ flag_of_flagdeftid tidmap flagdeftid)
     in
     { alert with flags_live }
 
