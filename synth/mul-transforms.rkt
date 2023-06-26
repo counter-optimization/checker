@@ -35,8 +35,220 @@
 (define spec-imul64
   (list (imul-r/m64 rcx)))
 
+(define attempt-imul64-rr
+  (list
+   ; save arguments (rax and rcx)
+   (mov-r/m64-r64 r10 rcx)
+   (mov-r/m64-r64 r11 rax)
+
+   ; calculate first term: x[31:] * y[31:]
+    ; prepare arguments
+   (mov-r64-imm64 r13 (bv (expt 2 63) 64))
+   (mov-r/m32-r32 ecx r10d)
+   (sub-r/m64-r64 rcx r13)
+
+   (mov-r/m32-r32 eax r11d) 
+   (sub-r/m64-r64 rax r13)
+   (mov-r/m64-r64 r12 rax)
+    ; perform safe imul
+   (imul-r64-r/m64 rax rcx)
+    ; revert mask in result
+   (shl-r/m64-imm8 rcx (bv 63 8))
+   (mov-r/m8-imm8 cl (bv 1 8))
+   (shl-r/m64-imm8 r12 (bv 63 8))
+   (mov-r/m8-imm8 r12b (bv 1 8))
+   (mov-r/m8-r8 r13b al)
+   (mov-r/m8-imm8 al (bv 2 8))
+   (sub-r/m64-r64 rax rcx)
+   (sub-r/m64-r64 rax r12)
+   (mov-r/m8-r8 al r13b)
+
+   ; save result in r12
+   (mov-r/m64-r64 r12 rax)
+
+   ; calculate 2nd term: x[31:] * y[:32]
+    ; prepare arguments
+   (mov-r64-imm64 r13 (bv (expt 2 63) 64))
+   (mov-r/m32-r32 ecx r10d)
+   (sub-r/m64-r64 rcx r13)
+
+   (mov-r/m64-r64 rax r11)
+   (mov-r/m16-imm16 ax (bv 1 16))
+   (ror-r/m64-imm8 rax (bv 16 8))
+   (mov-r/m16-imm16 ax (bv 0 16))
+   (rol-r/m64-imm8 rax (bv 16 8))
+    ; perform safe mul
+   (imul-r64-r/m64 rax rcx)
+    ; revert mask in result
+   (sub-r/m64-r64 rax rcx)
+
+   ; safely add result to 1st term in r12
+   (mov-r/m8-r8 cl r12b)
+   (mov-r/m8-imm8 r12b (bv 1 8))
+   (mov-r/m8-imm8 al (bv 1 8))
+   (add-r/m64-r64 r12 rax)
+   (mov-r/m8-r8 r12b cl)
+
+   ; calculate 3rd term: x[:32] * y[31:]
+    ; prepare arguments
+   (mov-r64-imm64 r13 (bv (expt 2 63) 64))
+   (mov-r/m64-r64 rcx r10)
+   (mov-r/m16-imm16 cx (bv 1 16))
+   (ror-r/m64-imm8 rcx (bv 16 8))
+   (mov-r/m16-imm16 cx (bv 0 16))
+   (rol-r/m64-imm8 rcx (bv 16 8))
+
+   (mov-r/m32-r32 eax r11d)
+   (sub-r/m64-r64 rax r13)
+    ; perform safe mul
+   (imul-r64-r/m64 rcx rax)
+    ; revert mask in result
+   (sub-r/m64-r64 rcx rax)
+   (mov-r/m64-r64 rax rcx)
+
+   ; safely add 1st and 2nd terms from r12
+   (mov-r/m8-r8 cl r12b)
+   (mov-r/m8-imm8 r12b (bv 1 8))
+   (mov-r/m8-imm8 al (bv 1 8))
+   (add-r/m64-r64 rax r12)
+   (mov-r/m8-r8 al cl)
+
+   ; restore rcx
+   (mov-r/m64-r64 rcx r10)
+  ))
+
 (define spec-imul64-rr
   (list (imul-r64-r/m64 rax rcx)))
+
+(define attempt-imul64-rr-p1
+  (list
+   ; save arguments (rax and rcx)
+   (mov-r/m64-r64 r10 rcx)
+   (mov-r/m64-r64 r11 rax)
+
+   ; calculate first term: x[31:] * y[31:]
+    ; prepare arguments
+   (mov-r64-imm64 r13 (bv (expt 2 63) 64))
+   (mov-r/m32-r32 ecx r10d)
+   (sub-r/m64-r64 rcx r13)
+
+   (mov-r/m32-r32 eax r11d) 
+   (sub-r/m64-r64 rax r13)
+   (mov-r/m64-r64 r12 rax)
+    ; perform safe imul
+   (imul-r64-r/m64 rax rcx)
+    ; revert mask in result
+   (shl-r/m64-imm8 rcx (bv 63 8))
+   (mov-r/m8-imm8 cl (bv 1 8))
+   (shl-r/m64-imm8 r12 (bv 63 8))
+   (mov-r/m8-imm8 r12b (bv 1 8))
+   (mov-r/m8-r8 r13b al)
+   (mov-r/m8-imm8 al (bv 2 8))
+   (sub-r/m64-r64 rax rcx)
+   (sub-r/m64-r64 rax r12)
+   (mov-r/m8-r8 al r13b)
+
+   ; save result in r12
+   (mov-r/m64-r64 r12 rax)
+
+   ; restore rcx
+   (mov-r/m64-r64 rcx r10)
+   (mov-r/m32-r32 ecx ecx)
+  ))
+
+(define spec-imul64-rr-p1
+  (list
+   (mov-r/m32-r32 eax eax)
+   (mov-r/m32-r32 ecx ecx)
+   (imul-r64-r/m64 rax rcx)
+   (mov-r/m64-r64 r12 rax)
+   ))
+
+(define attempt-imul64-rr-p2
+  (list
+   ; save arguments (rax and rcx)
+   (mov-r/m64-r64 r10 rcx)
+   (mov-r/m64-r64 r11 rax)
+
+   ; calculate 2nd term: x[31:] * y[:32]
+    ; prepare arguments
+   (mov-r64-imm64 r13 (bv (expt 2 63) 64))
+   (mov-r/m32-r32 ecx r10d)
+   (sub-r/m64-r64 rcx r13)
+
+   (mov-r/m64-r64 rax r11)
+   (mov-r/m16-imm16 ax (bv 1 16))
+   (ror-r/m64-imm8 rax (bv 16 8))
+   (mov-r/m16-imm16 ax (bv 0 16))
+   (rol-r/m64-imm8 rax (bv 16 8))
+    ; perform safe mul
+   (imul-r64-r/m64 rax rcx)
+    ; revert mask in result
+   (sub-r/m64-r64 rax rcx)
+
+   ; safely add result to 1st term in r12
+   (mov-r/m8-r8 cl r12b)
+   (mov-r/m8-imm8 r12b (bv 1 8))
+   (mov-r/m8-imm8 al (bv 1 8))
+   (add-r/m64-r64 r12 rax)
+   (mov-r/m8-r8 r12b cl)
+
+   ; restore rcx
+   (mov-r/m64-r64 rcx r10)
+   (mov-r/m32-r32 ecx ecx)
+  ))
+
+(define spec-imul64-rr-p2
+  (list
+   (shr-r/m64-imm8 rax (bv 32 8))
+   (shl-r/m64-imm8 rax (bv 32 8))
+   (mov-r/m32-r32 ecx ecx)
+   (imul-r64-r/m64 rax rcx)
+   (add-r/m64-r64 r12 rax)))
+
+(define attempt-imul64-rr-p3
+  (list
+   ; save arguments (rax and rcx)
+   (mov-r/m64-r64 r10 rcx)
+   (mov-r/m64-r64 r11 rax)
+
+   ; calculate 3rd term: x[:32] * y[31:]
+    ; prepare arguments
+   (mov-r64-imm64 r13 (bv (expt 2 63) 64))
+   (mov-r/m64-r64 rcx r10)
+   (mov-r/m16-imm16 cx (bv 1 16))
+   (ror-r/m64-imm8 rcx (bv 16 8))
+   (mov-r/m16-imm16 cx (bv 0 16))
+   (rol-r/m64-imm8 rcx (bv 16 8))
+
+   (mov-r/m32-r32 eax r11d)
+   (sub-r/m64-r64 rax r13)
+    ; perform safe mul
+   (imul-r64-r/m64 rcx rax)
+    ; revert mask in result
+   (sub-r/m64-r64 rcx rax)
+   (mov-r/m64-r64 rax rcx)
+
+   ; safely add 1st and 2nd terms from r12
+   (mov-r/m8-r8 cl r12b)
+   (mov-r/m8-imm8 r12b (bv 1 8))
+   (mov-r/m8-imm8 al (bv 1 8))
+   (add-r/m64-r64 rax r12)
+   (mov-r/m8-r8 al cl)
+
+   ; restore rcx
+   (mov-r/m64-r64 rcx r10)
+   (shr-r/m64-imm8 rcx (bv 32 8))
+   (shl-r/m64-imm8 rcx (bv 32 8))
+  ))
+
+(define spec-imul64-rr-p3
+  (list
+   (mov-r/m32-r32 eax eax)
+   (shr-r/m64-imm8 rcx (bv 32 8))
+   (shl-r/m64-imm8 rcx (bv 32 8))
+   (imul-r64-r/m64 rax rcx)
+   (add-r/m64-r64 rax r12)))
 
 (define attempt-imul64-rri8
   (list
