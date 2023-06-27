@@ -227,7 +227,7 @@
   (list
    (add-r/m32-r32 ecx eax)))
   
-(define attempt-add32-imm8-cf
+(define attempt-add32-imm8-cf-zf
   (list
    (mov-r/m32-r32 ecx ecx) ; zero top 32 bits of rcx
    (mov-r64-imm64 r11 (bv (expt 2 33) 64)) ; mask upper bits
@@ -235,6 +235,7 @@
    (mov-r/m64-imm32 r11 (bv 0 32)) ; move immediate to register
    (add-r/m32-imm8 r11d (comp-simp:imm8))
    (add-r/m64-r64 rcx r11) ; perform add
+   (cmp-r/m32-imm8 ecx (bv 0 8)) ; set ZF
    (bt-r/m64-imm8 rcx (bv 32 8)) ; set CF
    (mov-r/m32-r32 ecx ecx) ; zero top 32 bits of ecx
  ))
