@@ -10,7 +10,7 @@
   ror-r/m16-cl ror-r/m32-cl ror-r/m64-cl
   rol-r/m16-imm8 rol-r/m32-imm8 rol-r/m64-imm8
   ror-r/m16-imm8 ror-r/m32-imm8 ror-r/m64-imm8
-  rcl-r/m64-imm8)
+  rcl-r/m64-imm8 rcl-r/m64-1)
 
 
 (define (interpret-rol cpu dst count)
@@ -182,3 +182,7 @@
 ; C1 /2 ib
 ; REX.W C1 /2 ib
 (define-rotate-imm8 rcl #xC1 /2)
+
+; D1 /2
+; REX.W D1 /2
+(define-rotate-1 rcl #xD1 /2)
