@@ -203,7 +203,7 @@
            (shr-r/m32-imm8 (reg32) (imm8))
            (shr-r/m64-imm8 (reg64) (imm8)))]
   [bin-op-special (choose*
-                   (movsxd-r/m32-r64 (reg32) (reg64))
+                   (movsxd-r64-r/m32 (reg64) (reg32))
                    (movzx-r32-r/m16 (reg32) (reg16))
                    (movzx-r64-r/m16 (reg32) (reg16))
                    (sbb-r/m32-imm8 (reg32) (imm8))

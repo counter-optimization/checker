@@ -29,6 +29,35 @@
    (mov-r/m32-r32 eax eax)
   ))
 
+(define attempt-imul32-rr-cf
+  (list
+   (mov-r64-imm64 r11 (bv (expt 2 63) 64))
+   ; set r10 = ecx + 2^63, rax = eax + 2^63 (equivalent to ecx/eax - 2^63)
+   (movsxd-r64-r/m32 r10 ecx)
+   (sub-r/m64-r64 r10 r11)
+   (movsxd-r64-r/m32 rax eax)
+   (sub-r/m64-r64 rax r11)
+   ; save modified rax
+   (mov-r/m64-r64 r11 rax)
+   ; perform 64-bit mul of modified operands
+   (imul-r64-r/m64 rax r10)
+   ; remove mask
+   (shl-r/m64-imm8 r10 (bv 63 8))
+   (shl-r/m64-imm8 r11 (bv 63 8))
+   (sub-r/m64-r64 rax r10)
+   (sub-r/m64-r64 rax r11)
+   ; compare full product against lower product for CF
+   (mov-r/m8-r8 r10b al)
+   (mov-r/m8-imm8 al (bv 1 8))
+   (movsxd-r64-r/m32 r11 eax) ; r11 contains sign-extended lower product
+   (cmp-r/m64-r64 r11 rax)
+   (set-ne-r8 r11b)
+   (bt-r/m64-imm8 r11 (bv 0 8))
+   ; restore lowest byte of product
+   (mov-r/m8-r8 al r10b)
+   (mov-r/m32-r32 eax eax)
+  ))
+
 (define spec-imul32-rr
   (list (imul-r32-r/m32 eax ecx)))
 

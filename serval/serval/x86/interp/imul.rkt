@@ -15,7 +15,7 @@
   (define v1 (trunc n (cpu-gpr-ref cpu rax)))
   (define v2 (cpu-gpr-ref cpu src))
   (define lower ((core:bvmul-proc) v1 v2))
-  (define upper ((core:bvmulhsu-proc) v1 v2))
+  (define upper ((core:bvmulh-proc) v1 v2))
   (define upper-bit 
     (if (bveq (sign-extend lower (bitvector (* 2 n))) (concat upper lower))
         (bv #b0 1)
@@ -32,7 +32,7 @@
   (define v1 (cpu-gpr-ref cpu dst))
   (define v2 (cpu-gpr-ref cpu src))
   (define lower ((core:bvmul-proc) v1 v2))
-  (define upper ((core:bvmulhsu-proc) v1 v2))
+  (define upper ((core:bvmulh-proc) v1 v2))
   (define upper-bit 
     (if (bveq (sign-extend lower (bitvector (* 2 n))) 
               (concat upper lower))
@@ -49,7 +49,7 @@
   (define v1 (cpu-gpr-ref cpu src))
   (define v2 imm)
   (define lower ((core:bvmul-proc) v1 v2))
-  (define upper ((core:bvmulhsu-proc) v1 v2))
+  (define upper ((core:bvmulh-proc) v1 v2))
   (define upper-bit 
     (if (bveq (sign-extend lower (bitvector (* 2 n))) 
               (concat upper lower))
