@@ -477,32 +477,20 @@ module FlagsLiveOutFiller = struct
   
   let set_for_alert tidmap flagownership depanalysis alert : T.t =
     let tid = Option.value_exn alert.tid in
-    let () = printf "setting flags live out for alert w/ tid: %a\n%!"
-               Tid.ppo tid
-    in
-    let () = printf "getting flags...\n%!" in
     let flags = match Tid_map.find tidmap tid with
       | None ->
          failwith @@ sprintf "couldn't find tid %a in tidmap" Tid.pps tid
       | Some elt ->
          Tid_map.find flagownership tid
     in
-    let () = printf "getting live flags...\n%!" in
     let flags_live = match flags with
       | None ->
-         let () = printf "No live flags\n%!" in
          SS.empty
       | Some flags ->
-         let () = printf "live flags are: %s\n%!"
-                    (Core.Set.to_list flags |> List.to_string ~f:Tid.to_string)
-         in
          Core.Set.fold flags ~init:SS.empty ~f:(fun liveflags flagdeftid ->
              let all_users = Dependency_analysis.users_transitive_closure 
                                flagdeftid
                                depanalysis
-             in
-             let () = printf "all transitive users are: %s\n%!"
-                        (Core.Set.to_list all_users |> List.to_string ~f:Tid.to_string)
              in
              if Core.Set.is_empty all_users
              then liveflags
