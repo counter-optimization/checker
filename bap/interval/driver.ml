@@ -305,6 +305,18 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname AbsInt stop in
 
+     let () = if String.equal subname "x86silentstorestest_MOV8mr_transformed"
+              then
+                let soliter = Solution.enum analysis_results in
+                let () = printf "%a\n%!" Sub.ppo sub in
+                Seq.iter soliter ~f:(fun (cc, mem) ->
+                    let tid = Calling_context.to_insn_tid cc in
+                    printf "Tid is %a:\n%!" Tid.ppo tid;
+                    E.pp mem)
+              else ()
+     in
+
+     let () = printf "Running dependency analysis\n%!" in
      let start = Analysis_profiling.record_start_time () in
      let init_mapping = G.Node.Map.empty in
      let init_sol_dep_analysis = Solution.create
@@ -343,6 +355,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                 NewDependenceAnalysis
                 stop
      in
+     let () = printf "Done running dependency analysis\n%!" in
 
      let no_symex = Extension.Configuration.get ctxt Common.no_symex_param in
      let use_symex = not no_symex in
@@ -379,6 +392,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
 
      let defs = ref None in
 
+     let () = printf "Running checkers\n%!" in
      let start = Analysis_profiling.record_start_time () in
      let all_results = List.fold edges ~init:emp ~f:(fun all_results (_, to_cc, _) ->
                            let to_tid = Calling_context.to_insn_tid to_cc in
@@ -402,35 +416,45 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                          )
      in
      let stop = Analysis_profiling.record_stop_time start in
-     let () = Analysis_profiling.record_duration_for subname CsChecking stop in 
+     let () = Analysis_profiling.record_duration_for subname CsChecking stop in
+     let () = printf "Done running checkers\n%!" in
 
      let all_alerts = all_results.warns in
-     
+
+     let () = printf "Running insn idx filler\n%!" in
      let start = Analysis_profiling.record_start_time () in
      let all_alerts = Alert.InsnIdxFiller.set_for_alert_set idx_st all_alerts in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname AlertIdxFilling stop in
+     let () = printf "Done running insn idx filler\n%!" in
      
      (* this is really dependency analysis info, not liveness info *)
+     let () = printf "Running flags live out filler\n%!" in
      let start = Analysis_profiling.record_start_time () in
      (* let all_alerts = Alert.LivenessFiller.set_for_alert_set all_alerts liveness in
       *)
      let all_alerts = Alert.FlagsLiveOutFiller.set_for_alert_set tidmap flagownership final_dep_analysis_res all_alerts in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname AlertDependencyFilling stop in
+     let () = printf "Done running flags live out filler\n%!" in
      
      (* here, liveness means classical dataflow liveness *)
+     let () = printf "Running classical dataflow liveness\n%!" in
      let start = Analysis_profiling.record_start_time () in
      let dataflow_liveness = Liveness.run_on_cfg (module G) cfg tidmap liveness in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname ClassicLiveness stop in
+     let () = printf "Done running classical dataflow liveness\n%!" in
 
+     let () = printf "Setting dataflow liveness in alerts\n%!" in
      let start = Analysis_profiling.record_start_time () in
      let all_alerts = Alert.DataflowLivenessFiller.set_for_alert_set all_alerts dataflow_liveness
      in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname AlertLivenessFilling stop in
+     let () = printf "Done setting dataflow liveness in alerts\n%!" in
 
+     let () = printf "Getting callees for analysis\n%!" in
      let start = Analysis_profiling.record_start_time () in
      let module GetCallees = Callees.Getter(FinalDomain) in
      let callee_analysis_results = GetCallees.get sub proj analysis_results in
@@ -441,6 +465,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let stop = Analysis_profiling.record_stop_time start in
      
      let () = Analysis_profiling.record_duration_for subname CalleeAnalysis stop in
+     let () = printf "Done getting callees for analysis\n%!" in
      { alerts = all_alerts;
        callees = callees;
        csevalstats = all_results.cs_stats;
