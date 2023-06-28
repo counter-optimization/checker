@@ -582,7 +582,11 @@ module Make(N : NumericDomain)
         Ok (data, mem)
       else
         let overlap = get_overlapping_cells cell mem in
-        let cell_as_overlap = Overlap.of_cell cell N.top mem in
+        let numbits = bap_size_to_int size in
+        let signed = false in
+        let top = N.make_top numbits signed in
+        let () = printf "in abstract_memory.load, top has %d bits\n%!" numbits in
+        let cell_as_overlap = Overlap.of_cell cell top mem in
         if Set.length overlap >= 1
         then
           let final = Set.fold overlap ~init:cell_as_overlap ~f:(fun current_data other_cell ->
@@ -590,7 +594,7 @@ module Make(N : NumericDomain)
                           Overlap.merge ~this:current_data ~other:other_overlapper) in
           Ok (final.data, mem)
         else
-          Ok (N.top, mem)
+          Ok (top, mem)
   
 (* on first load of global, load from the image into the abstract
      memory environment, then do the load a usual. this is unsound force
@@ -617,7 +621,9 @@ module Make(N : NumericDomain)
        let max_ptd_to_elts = Z.of_int 64 in
        (if Z.gt offs_size max_ptd_to_elts
         then
-          Ok (N.top, m)
+          let numbits = bap_size_to_int size in
+          let signed = false in
+          Ok (N.make_top numbits signed, m)
         else
           let is_scalar_ptr = offs_is_scalar && Set.is_empty regions in
           let regions = if is_scalar_ptr

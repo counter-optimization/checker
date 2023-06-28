@@ -416,9 +416,13 @@ module AbstractInterpreter(N: NumericDomain)
   let rec denote_exp (e : Bil.exp) (st : E.t) : N.t * E.t =
     try
       begin
+        let () = printf "AbsInt denoting exp: %s\n%!" @@
+                   Common.exp_to_string e
+        in
+        let res = 
         match e with
         | Bil.Load (_mem, idx, _endian, size) ->
-           let (offs, st) = denote_exp  idx st in
+           let (offs, st) = denote_exp idx st in
            begin
              match E.load_of_bil_exp e offs size st with
              | Ok res -> res
@@ -500,6 +504,11 @@ module AbstractInterpreter(N: NumericDomain)
            let (x', st) = denote_exp  x st in
            let (y', st) = denote_exp  y st in
            (N.concat x' y', st)
+        in
+        let () = printf "Result is %s\n%!" @@
+                   N.to_string @@ fst res
+        in
+        res
       end
     with
     | Z.Overflow ->
