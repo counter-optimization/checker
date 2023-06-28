@@ -311,7 +311,42 @@ let logor = binop Z.logor
 let logxor = binop Z.logxor
 
 let neg = unop Z.neg
-let lnot = unop Z.lognot
+
+let lnot = function
+  | Interval {lo; hi; width; signed} ->
+     if width <= 64 && Z.fits_int64 lo && Z.fits_int64 hi
+     then
+       let lo64 = Z.to_int64 lo in
+       let hi64 = Z.to_int64 hi in
+       let lo_w = Word.of_int64 ~width lo64 in
+       let hi_w = Word.of_int64 ~width hi64 in
+       let lo_lnot = Word.lnot lo_w in
+       let hi_lnot = Word.lnot hi_w in
+       let max = Word.max lo_lnot hi_lnot in
+       let min = Word.min lo_lnot hi_lnot in
+       let max_int64 = match Word.to_int64 max with
+         | Ok x -> x
+         | Error e -> failwith @@ Error.to_string_hum e
+       in
+       let min_int64 = match Word.to_int64 min with
+         | Ok x -> x
+         | Error e -> failwith @@ Error.to_string_hum e
+       in
+       let lo = Z.of_int64 min_int64 in
+       let hi = Z.of_int64 max_int64 in
+       Interval {lo; hi; width; signed}
+     else
+       unop Z.lognot (Interval {lo; hi; width; signed})
+  | Bot -> Bot
+(* let lnot x = *)
+(*   let () = match x with *)
+(*     | Interval {lo; hi; width; signed } -> *)
+(*        printf "lnot of interval: %s\n%!" @@ to_string x; *)
+(*        printf "lnot of var with bits: lo %d hi %d\n%!" *)
+(*          (Z.numbits lo) (Z.numbits hi) *)
+(*     | Bot -> () *)
+(*   in *)
+(*   unop Z.lognot x *)
 
 let extract exp h l =
   match exp with 
