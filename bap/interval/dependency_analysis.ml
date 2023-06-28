@@ -30,7 +30,6 @@ module T = struct
         users
       else
         let first = Seq.hd_exn @@ Set.to_sequence worklist in
-        let () = printf "processing tid: %a\n%!" Tid.ppo first in
         if Set.mem users first
         then
           let worklist = Set.remove worklist first in
@@ -91,9 +90,6 @@ module T = struct
         | None -> st
         | Some flagtids ->
            Set.fold flagtids ~init:st ~f:(fun st flagtid ->
-               let () = printf "Tid %a owns flag %a\n%!"
-                          Tid.ppo tid Tid.ppo flagtid
-               in
                simultaneous_add ~user:flagtid ~used:tid st))
   
   let merge x y =
@@ -188,10 +184,6 @@ let denote_def (d : def term) (st : t) : t =
   let outer_tidset = Set.singleton (module Tid) outer_tid in
   let defd_var = Var.name @@ Def.lhs d in
   let uses = uses_of_exp (Def.rhs d) st in
-  let () = printf "Def tid %a used tid %s\n%!"
-             Tid.ppo outer_tid
-             (Set.to_list uses |> List.to_string ~f:Tid.to_string)
-  in
   let users = Set.fold uses ~init:st.tid_users ~f:(fun users used ->
                   add_to_users ~used ~user:outer_tid users)
   in
