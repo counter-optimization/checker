@@ -239,6 +239,12 @@
    (bt-r/m64-imm8 rcx (bv 32 8)) ; set CF
    (mov-r/m32-r32 ecx ecx) ; zero top 32 bits of ecx
  ))
+  
+; Doesn't set CF
+(define attempt-add32-imm8-zf
+  (list
+   (sub-r/m32-imm32 ecx (bvneg (sign-extend (comp-simp:imm8) (bitvector 32))))
+ )) 
 
 (define spec-add32-imm8
   (list
