@@ -593,10 +593,7 @@ let bitwidth x =
   match get_width x with
   | Some w -> w
   | None ->
-     let err_msg = Format.sprintf
-                     "Couldn't get bitwidth for bottom value %s"
-                     (to_string x) in
-     failwith err_msg
+     failwith "Couldn't get bitwidth for bottom value in wrapping intervals"
 
 let size intvl : Z.t option =
   match intvl with
