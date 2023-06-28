@@ -663,7 +663,7 @@ module RemoveAlertsForCallInsns : Pass = struct
     Set.filter alerts ~f:is_not_call_alert
 end
 
-module RemoveSpuriousCompSimpAlerts : Pass = struct
+module RemoveSpuriousCompSimpAlerts = struct
   let is_comp_simp_warn alert =
     match alert.reason with
     | CompSimp -> true
@@ -684,6 +684,19 @@ module RemoveSpuriousCompSimpAlerts : Pass = struct
                                    |> Option.is_some
        in
        is_sub && warns_on_left_operand
+
+  (* rotate is a (x << amount) | (x >> amount') operation. as long
+     as the shifts are safe, then the rotate is safe. it shouldn't be 
+     expected that the OR to combine the two is CS safe. *)
+  let is_false_rotate_warn alert =
+    let rol_opcode_prefix = "rol" in
+    let ror_opcode_prefix = "ror" in
+    match alert.opcode with
+    | Some mir_opcode ->
+       (String.Caseless.is_prefix mir_opcode ~prefix:ror_opcode_prefix ||
+          String.Caseless.is_prefix mir_opcode ~prefix:rol_opcode_prefix) &&
+         String.equal "|" alert.desc
+    | _ -> false
 
   let is_bad_mov_warn alert =
     (** this also prunes any cmov instructions *)
@@ -727,12 +740,13 @@ module RemoveSpuriousCompSimpAlerts : Pass = struct
   let is_spurious alert =
     do_check_with_log "SpuriousSUB" is_bad_subtract_warn alert ||
     do_check_with_log "SpuriousMOVorCMOVorSTOS" is_bad_mov_warn alert ||
-    do_check_with_log "SpuriousStackOperation" is_bad_stack_op alert
+      do_check_with_log "SpuriousStackOperation" is_bad_stack_op alert ||
+        do_check_with_log "SpuriousROLorRORbinaryORwwarn" is_false_rotate_warn alert
 
   (** accept all alerts that:
       1) are not comp simp alerts OR
       2) are comp simp alerts that are not spurious *)
-  let set_for_alert_set alerts proj =
+  let set_for_alert_set alerts proj : Set.t =
     let filter_condition alert =
       (is_comp_simp_warn alert && not (is_spurious alert)) ||
         not (is_comp_simp_warn alert)
