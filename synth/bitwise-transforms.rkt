@@ -75,6 +75,21 @@
   (list
    (and-r/m32-r32 ecx eax)))
 
+(define attempt-and32-imm8-cf-zf
+  (list
+   (mov-r/m32-r32 ecx ecx) ; zero top 32 bits of ecx
+   (mov-r64-imm64 r11 (bv (expt 2 33) 64))
+   (sub-r/m64-r64 rcx r11)
+   (and-r/m64-imm8 rcx (comp-simp:imm8)) ; perform and
+   (mov-r/m32-r32 ecx ecx) ; zero top 32 bits of ecx
+   (cmp-r/m32-imm8 ecx (bv 0 8)) ; set ZF
+   (clc) ; clear CF
+ ))
+
+(define spec-and32-imm8
+  (list
+   (and-r/m32-imm8 ecx (comp-simp:imm8))))
+
 (define attempt-and64
   (list
     (mov-r/m64-imm32 r10 (bv (expt 2 16) 32))
