@@ -109,22 +109,26 @@ module Checker(N : Abstract.NumericDomain)
      left tainted && left not bad && right not tainted && right bad
    *)
   let check_binop (binop : Bil.binop) (l : N.t) (r : N.t) (st : st) : st =
+    let safe_bitwidth : WI.t -> int = function
+      | Bot -> 1
+      | intvl -> WI.bitwidth intvl
+    in
     let wl = get_intvl l in
     let wr = get_intvl r in
     let tl = Checker_taint.Analysis.is_tainted @@ get_taint l in
     let tr = Checker_taint.Analysis.is_tainted @@ get_taint r in
-    let left_zero = WI.of_int ~width:(WI.bitwidth wl) 0 in
-    let right_zero = WI.of_int ~width:(WI.bitwidth wr) 0 in
-    let left_one = WI.of_int ~width:(WI.bitwidth wl) 1 in
-    let right_one = WI.of_int ~width:(WI.bitwidth wr) 1 in
+    let left_zero = WI.of_int ~width:(safe_bitwidth wl) 0 in
+    let right_zero = WI.of_int ~width:(safe_bitwidth wr) 0 in
+    let left_one = WI.of_int ~width:(safe_bitwidth wl) 1 in
+    let right_one = WI.of_int ~width:(safe_bitwidth wr) 1 in
     let left_all_ones = begin
-        let bw = WI.bitwidth wl in
+        let bw = safe_bitwidth wl in
         let ones = Word.ones bw in
         WI.of_word ones
       end
     in
     let right_all_ones = begin
-        let bw = WI.bitwidth wr in
+        let bw = safe_bitwidth wr in
         let ones = Word.ones bw in
         WI.of_word ones
       end
