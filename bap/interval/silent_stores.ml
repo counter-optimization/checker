@@ -8,6 +8,10 @@ open Abstract
 
 module Stats = Common.EvalStats
 
+module DefTermSet = struct
+  include Set.Make_binable_using_comparator(Def)
+end
+
 module Checker(N : Abstract.NumericDomain)
          (Interp : Common.CheckerInterp with type t := N.t) = struct
   type st = {
@@ -19,7 +23,7 @@ module Checker(N : Abstract.NumericDomain)
 
   let emp = Alert.Set.empty
 
-  let dep_bound = 25
+  let dep_bound = 40
 
   let init_st subname tid = {
       tid;
@@ -90,64 +94,105 @@ module Checker(N : Abstract.NumericDomain)
     |> Seq.join
     |> Seq.to_list
 
-  let history_should_include_insn def idx_st : bool =
-    let rhs_exp = Def.rhs def in
-    let sym_compilable = Symbolic.Executor.supports_exp rhs_exp in
-    sym_compilable &&
-      (not @@ Idx_calculator.is_part_of_idx_insn idx_st @@ Term.tid def)
-
-  let get_prev_n_insns n sub idx_st tid : def term list =
-    let rec record_n_insns_after
-              ?(recorded : def term list = [])
-              ?(target_found : bool = false)
-              ?(n : int = n)
-              idx_st
-              target_tid
-              all_insns : def term list =
-      if Seq.is_empty all_insns || n = 0
-      then recorded
-      else
-        let cur_def = Seq.hd_exn all_insns in
-        let all_insns = match Seq.tl all_insns with
-          | Some all_insns -> all_insns
-          | None -> failwith "Shouldn't happen in get_prev_n_insns"
-        in
-        if target_found
-        then
-          let recorded = if history_should_include_insn cur_def idx_st
-                         then cur_def :: recorded
-                         else recorded in
-          record_n_insns_after
-            ~recorded
-            ~target_found
-            ~n:(n - 1)
-            idx_st
-            target_tid
-            all_insns
-        else
-          let cur_tid = Term.tid cur_def in
-          let target_found = Tid.equal target_tid cur_tid in
-          let recorded = if target_found then cur_def :: recorded else recorded in
-          record_n_insns_after
-            ~recorded
-            ~target_found
-            ~n
-            idx_st
-            target_tid
-            all_insns
+  let get_up_to_n_dependent_insns ~(n: int) ~(sub: sub term) ~(for_ : tid)
+        ~(deps : Dependency_analysis.t) ~(tidmap : Blk.elt Tid_map.t)
+      : def term list =
+    let dt_compare left right =
+      let lefttid = Term.tid left in
+      let righttid = Term.tid right in
+      Tid.compare lefttid righttid
     in
-    let cfg = Sub.to_cfg sub in
-    let nodes = Graphlib.postorder_traverse (module Graphs.Ir) cfg in
-    let blks = Seq.map nodes ~f:Graphs.Ir.Node.label in
-    let insns = Seq.map blks ~f:(Term.enum def_t) in
-    let all_insns : def term Seq.t = Seq.join insns |> Seq.to_list |> List.rev |> Seq.of_list in
-    let n_insns_before = record_n_insns_after idx_st tid all_insns in
-    n_insns_before
+    let dt_only_lookup ~(tidmap : Blk.elt Tid_map.t) ~(tid: tid) : def term option =
+      match Tid_map.find tidmap tid with
+      | None -> None
+      | Some elt -> (match elt with
+                     | `Def d -> Some d
+                     | _ -> None)
+    in
+    let rec take_n ~(n : int) ~(to_ : DefTermSet.t) from_ =
+      if n = 0
+      then
+        to_
+      else
+        match from_ with
+        | [] -> to_
+        | dt :: from_' ->
+           if DefTermSet.mem to_ dt
+           then
+             take_n ~n ~to_ from_'
+           else
+             let to_ = DefTermSet.add to_ dt in
+             let from_ = from_' in
+             let n = n - 1 in
+             take_n ~n ~to_ from_
+  
+    in
+    let rec loop ~(old: DefTermSet.t)
+              ~(added: DefTermSet.t) : DefTermSet.t =
+      if DefTermSet.is_empty added
+      then
+        old
+      else
+        let old_sz = DefTermSet.length old in
+        let added_sz = DefTermSet.length added in
+        if old_sz + added_sz >= n
+        then
+          let difference = n - old_sz + 1 in
+          let () = printf "combined sizes: %d\n%!" (old_sz + added_sz) in
+          let () = printf "difference: %d\n%!" difference in
+          let top_off_elts = DefTermSet.to_list added
+                             |> take_n ~n ~to_:old
+          in
+          let final = DefTermSet.union old top_off_elts in
+          let final_sz = DefTermSet.length final in
+          let () = if final_sz <> n
+                   then
+                     printf "couldn't get all (%d < bound %d) deps for tid: %a\n%!"
+                       final_sz dep_bound Tid.ppo for_
+                   else
+                     ()
+          in
+          final
+        else
+          let old' = DefTermSet.union old added in
+          let emp_tidset = Set.empty (module Tid) in
+          let added_deps = DefTermSet.fold added
+                             ~init:emp_tidset
+                             ~f:(fun alldeps dt ->
+                               let curtid = Term.tid dt in
+                               match Tid_map.find deps.tid_uses curtid with
+                               | None -> emp_tidset
+                               | Some tidset ->
+                                  let () = printf "Tid %a depends on tids:\n%!"
+                                             Tid.ppo curtid;
+                                           Set.iter tidset ~f:(fun t ->
+                                               printf "\t%a\n%!" Tid.ppo t)
+                                  in
+                                  Set.union alldeps tidset)
+          in
+          let added' : DefTermSet.t =
+            Set.map (module Def) added_deps ~f:(fun deptid ->
+                match dt_only_lookup ~tidmap ~tid:deptid with
+                | None -> failwith "Couldn't find tid for SS dep comp"
+                | Some defterm -> defterm)
+          in
+          loop ~old:old' ~added:added'
+    in
+    let emp = DefTermSet.empty in
+    let start_term = Option.value_exn (dt_only_lookup ~tidmap ~tid:for_) in
+    let start = DefTermSet.singleton start_term in
+    loop ~old:emp ~added:start
+    |> DefTermSet.to_list
+    |> List.sort ~compare:dt_compare
 
-  let check_elt (do_symex : bool) (sub : sub term) 
-        (tid : tid) (idx_st : Idx_calculator.t)
+  let check_elt (do_symex : bool)
+        (sub : sub term) 
+        (tid : tid)
+        (idx_st : Idx_calculator.t)
         (all_defs_of_sub : def term list option ref)
         (profiling_data_path : string)
+        (deps : Dependency_analysis.t)
+        (tidmap : Blk.elt Tid_map.t)
         (elt : Blk.elt) : Alert.Set.t Common.checker_res =
     let subname = Sub.name sub in
     let st = init_st subname tid in
@@ -179,7 +224,17 @@ module Checker(N : Abstract.NumericDomain)
               then
                 if do_symex
                 then
-                  let deps = get_prev_n_insns dep_bound sub idx_st tid in
+                  let deps = get_up_to_n_dependent_insns
+                                ~n:dep_bound
+                                ~sub
+                                ~for_:tid
+                                ~deps
+                                ~tidmap
+                  in
+                  let () = printf "For tid (%a), deps using dep analysis are:\n%!"
+                             Tid.ppo tid;
+                           List.iter deps ~f:(printf "\t%a\n%!" Def.ppo)
+                  in
                   let all_defs_of_sub = if Option.is_none !all_defs_of_sub
                                         then
                                           let defs = defs_of_sub sub in

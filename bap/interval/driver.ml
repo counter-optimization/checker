@@ -305,7 +305,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname AbsInt stop in
 
-     let () = if String.equal subname "x86silentstorestest_MOV8mr_transformed"
+     let () = if String.equal subname "x86silentstorestest_ADD32mi8_transformed"
               then
                 let soliter = Solution.enum analysis_results in
                 let () = printf "%a\n%!" Sub.ppo sub in
@@ -409,6 +409,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                                idx_st
                                                defs
                                                symex_profiling_out_file
+                                               final_dep_analysis_res
+                                               tidmap
                                                elt
                            in
                            combine_res all_results @@
