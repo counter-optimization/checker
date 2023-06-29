@@ -585,7 +585,6 @@ module Make(N : NumericDomain)
         let numbits = bap_size_to_int size in
         let signed = false in
         let top = N.make_top numbits signed in
-        let () = printf "in abstract_memory.load, top has %d bits\n%!" numbits in
         let cell_as_overlap = Overlap.of_cell cell top mem in
         if Set.length overlap >= 1
         then
