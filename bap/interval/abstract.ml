@@ -437,11 +437,11 @@ module AbstractInterpreter(N: NumericDomain)
              | Error msg -> failwith @@ Error.to_string_hum msg
            end
         | Bil.BinOp (op, x, y) ->
-           let (x', st) = denote_exp  x st in
-           let (y', st) = denote_exp  y st in
+           let (x', st) = denote_exp x st in
+           let (y', st) = denote_exp y st in
            (denote_binop op x' y', st)
         | Bil.UnOp (op, x) ->
-           let (x', st) = denote_exp  x st in
+           let (x', st) = denote_exp x st in
            (denote_unop op x', st)
         | Bil.Var v ->
            let name = Var.name v in
