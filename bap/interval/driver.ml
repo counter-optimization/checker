@@ -24,8 +24,10 @@ module R = Region
 module Rt = Region.Set
 module Vt = struct type t = Common.cell_t end
 module AbsInt = AbstractInterpreter(FinalDomain)(R)(Rt)(Vt)(E)
+
 module TraceAbsInt = Trace.AbsInt.Make(FinalDomain)(E)
 module TraceDir = Trace.Directives(FinalDomain)(E)
+module TraceEnv = Trace.Env(FinalDomain)(E)
 
 type check_sub_result = {
     callees : CRS.t;
@@ -279,33 +281,33 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let init_sol = Solution.create with_args empty in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname InitEnvSetup stop in
-     let () = printf "Running abstract interpreter\n%!" in
+     (* let () = printf "Running abstract interpreter\n%!" in *)
 
-     let start = Analysis_profiling.record_start_time () in
-     let analysis_results = Graphlib.fixpoint
-                              (module G)
-                              cfg
-                              (* ~steps:E.widen_threshold *)
-                              ~step:E.widen_with_step
-                              ~init:init_sol
-                              ~equal:E.equal
-                              ~merge:E.merge
-                              ~f:(fun cc ->
-                                let tid = Calling_context.to_insn_tid cc in
-                                let elt = match Tid_map.find tidmap tid with
-                                  | Some elt -> elt
-                                  | None ->
-                                     failwith @@
-                                       sprintf
-                                         "in calculating analysis_results, couldn't find tid %a in tidmap"
-                                         Tid.pps tid
+     (* let start = Analysis_profiling.record_start_time () in *)
+     (* let analysis_results = Graphlib.fixpoint *)
+     (*                          (module G) *)
+     (*                          cfg *)
+     (*                          (\* ~steps:E.widen_threshold *\) *)
+     (*                          ~step:E.widen_with_step *)
+     (*                          ~init:init_sol *)
+     (*                          ~equal:E.equal *)
+     (*                          ~merge:E.merge *)
+     (*                          ~f:(fun cc -> *)
+     (*                            let tid = Calling_context.to_insn_tid cc in *)
+     (*                            let elt = match Tid_map.find tidmap tid with *)
+     (*                              | Some elt -> elt *)
+     (*                              | None -> *)
+     (*                                 failwith @@ *)
+     (*                                   sprintf *)
+     (*                                     "in calculating analysis_results, couldn't find tid %a in tidmap" *)
+     (*                                     Tid.pps tid *)
 
-                                in
-                                AbsInt.denote_elt subname elt)
-     in
-     let () = printf "Done running abstract interpreter\n%!" in
-     let stop = Analysis_profiling.record_stop_time start in
-     let () = Analysis_profiling.record_duration_for subname AbsInt stop in
+     (*                            in *)
+     (*                            AbsInt.denote_elt subname elt) *)
+     (* in *)
+     (* let () = printf "Done running abstract interpreter\n%!" in *)
+     (* let stop = Analysis_profiling.record_stop_time start in *)
+     (* let () = Analysis_profiling.record_duration_for subname AbsInt stop in *)
 
      let () = printf "Running dependency analysis\n%!" in
      let start = Analysis_profiling.record_start_time () in
@@ -348,68 +350,100 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      in
      let () = printf "Done running dependency analysis\n%!" in
 
+     let cond_scrape_st = Trace.ConditionFinder.init
+                            ~rpo_traversal
+                            ~tidmap
+                            ~dep_analysis:final_dep_analysis_res
+     in
+     let live_flags =
+       Trace.ConditionFinder.FlagScraper.get_live_flags cond_scrape_st
+     in
+     let () = printf "Liveflags by trace cond scraper:\n%!";
+              List.iter live_flags ~f:(fun (tid,flagname) ->
+                  printf "\t%a, %s\n%!" Tid.ppo tid flagname)
+     in
+     let cmov_cnd_flags =
+       List.filter live_flags ~f:(fun lf ->
+           Trace.ConditionFinder.FlagScraper.flag_used_in_cmov lf cond_scrape_st)
+     in
+     let () = printf "Flags maybe used in cmov:\n%!";
+              List.iter cmov_cnd_flags ~f:(fun (tid,flagname) ->
+                  printf "\t%a, %s\n%!" Tid.ppo tid flagname)
+     in 
+     let cond_extractor_st = TraceDir.Extractor.init
+                               tidmap
+                               dep_analysis_results
+                               final_dep_analysis_res
+     in
+     let dirs = List.fold cmov_cnd_flags ~init:[] ~f:(fun dirs lf ->
+                    let split_dir = TraceDir.Extractor.get_conds_for_flag
+                                      lf
+                                      cond_extractor_st
+                    in
+                    let combine_dir = TraceDir.Extractor.get_merge_point_for_flag_dirs
+                                        cond_extractor_st
+                                        lf
+                                        split_dir
+                    in
+                    match combine_dir with
+                    | None -> dirs
+                    | Some combine_dir ->
+                       split_dir :: combine_dir :: dirs)
+     in
+     let directive_map = TraceDir.Extractor.to_directive_map dirs in
+
+     let () = printf "Running trace part abstract interpreter\n%!" in
+
+     let start = Analysis_profiling.record_start_time () in
+
+     let init_mapping : TraceEnv.t G.Node.Map.t = G.Node.Map.empty in
+     let init_sol = Solution.create init_mapping TraceEnv.default in
+     let analysis_results = Graphlib.fixpoint
+                              (module G)
+                              cfg
+                              ~step:TraceEnv.widen_with_step
+                              ~init:init_sol
+                              ~equal:TraceEnv.equal
+                              ~merge:TraceEnv.merge
+                              ~f:(fun cc ->
+                                let tid = Calling_context.to_insn_tid cc in
+                                let elt = match Tid_map.find tidmap tid with
+                                  | Some elt -> elt
+                                  | None ->
+                                     failwith @@
+                                       sprintf
+                                         "in calculating analysis_results, couldn't find tid %a in tidmap"
+                                         Tid.pps tid
+
+                                in
+                                TraceAbsInt.denote_elt subname directive_map elt)
+     in
+
+     let () = printf "Done running trace part abstract interpreter\n%!" in
+     let stop = Analysis_profiling.record_stop_time start in
+     let () = Analysis_profiling.record_duration_for subname AbsInt stop in
+
      (* SHL32rCL, SHL8rCL, SHR64rCL *)
-     let shift_trans_fns = ["x86compsimptest_SHL8rCL_transformed";
-                            "x86compsimptest_SHL32rCL_transformed";
-                            "x86compsimptest_SHR32rCL_transformed"]
-     in
-     let () = if List.mem ~equal:String.equal shift_trans_fns subname
-              then
-                let () = begin
-                    let cond_scrape_st = Trace.ConditionFinder.init
-                                           ~rpo_traversal
-                                           ~tidmap
-                                           ~dep_analysis:final_dep_analysis_res
-                    in
-                    let live_flags = Trace.ConditionFinder.FlagScraper.get_live_flags
-                                       cond_scrape_st
-                    in
-                    let () = printf "Liveflags by trace cond scraper:\n%!";
-                             List.iter live_flags ~f:(fun (tid,flagname) ->
-                                 printf "\t%a, %s\n%!" Tid.ppo tid flagname)
-                    in
-                    let cmov_cnd_flags = List.filter live_flags ~f:(fun lf ->
-                                             Trace.ConditionFinder.FlagScraper.flag_used_in_cmov lf cond_scrape_st)
-                    in
-                    let () = printf "Flags maybe used in cmov:\n%!";
-                             List.iter cmov_cnd_flags ~f:(fun (tid,flagname) ->
-                                 printf "\t%a, %s\n%!" Tid.ppo tid flagname)
-                    in 
-                    let cond_extractor_st = TraceDir.Extractor.init
-                                              tidmap
-                                              dep_analysis_results
-                                              final_dep_analysis_res
-                    in
-                    let dirs = List.fold cmov_cnd_flags ~init:[] ~f:(fun dirs lf ->
-                                   let split_dir = TraceDir.Extractor.get_conds_for_flag
-                                                     lf
-                                                     cond_extractor_st
-                                   in
-                                   let combine_dir = TraceDir.Extractor.get_merge_point_for_flag_dirs
-                                                       cond_extractor_st
-                                                       lf
-                                                       split_dir
-                                   in
-                                   match combine_dir with
-                                   | None -> dirs
-                                   | Some combine_dir ->
-                                      (split_dir, combine_dir) :: dirs)
-                    in
-                    printf "Extracted directives are:\n%!";
-                    List.iter dirs ~f:(fun (split_dir, combine_dir) ->
-                        printf "\tsplit: %s -- combine: %s\n%!"
-                          (TraceDir.to_string split_dir)
-                          (TraceDir.to_string combine_dir))
-                  end
-                in
-                let soliter = Solution.enum analysis_results in
-                let () = printf "%a\n%!" Sub.ppo sub in
-                Seq.iter soliter ~f:(fun (cc, mem) ->
-                    let tid = Calling_context.to_insn_tid cc in
-                    printf "Tid is %a:\n%!" Tid.ppo tid;
-                    E.pp mem)
-              else ()
-     in
+     (* let shift_trans_fns = ["x86compsimptest_SHL8rCL_transformed"; *)
+     (*                        "x86compsimptest_SHL32rCL_transformed"; *)
+     (*                        "x86compsimptest_SHR32rCL_transformed"] *)
+     (* in *)
+     (* let () = if List.mem ~equal:String.equal shift_trans_fns subname *)
+     (*          then *)
+     (*            let () = printf "Directive map:\n%!" in *)
+     (*            let () = Map.iteri directive_map ~f:(fun ~key ~data -> *)
+     (*                         printf "\t%a -> %s\n%!" *)
+     (*                           Tid.ppo key *)
+     (*                           (TraceDir.to_string data)) *)
+     (*            in *)
+     (*            let soliter = Solution.enum analysis_results in *)
+     (*            let () = printf "%a\n%!" Sub.ppo sub in *)
+     (*            Seq.iter soliter ~f:(fun (cc, mem) -> *)
+     (*                let tid = Calling_context.to_insn_tid cc in *)
+     (*                printf "Tid is %a:\n%!" Tid.ppo tid; *)
+     (*                E.pp mem) *)
+     (*          else () *)
+     (* in *)
 
      let no_symex = Extension.Configuration.get ctxt Common.no_symex_param in
      let use_symex = not no_symex in
