@@ -38,6 +38,7 @@ S preanalysis_iter.ml
 S flag_ownership.ml
 S dependency_analysis.ml
 S trace.ml
+S tidset.ml
 
 B _build
 

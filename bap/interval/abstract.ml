@@ -541,11 +541,6 @@ module AbstractInterpreter(N: NumericDomain)
   let denote_jmp (subname : string) (j : jmp term) (st : E.t) : E.t =
     match Jmp.kind j with
     | Call c -> E.havoc_on_call st
-       (* let target_label = Call.target c in *)
-       (* match target_label with *)
-       (* | Direct totid -> _ *)
-       (* | Indirect exp -> *)
-       (*    let jmp_target = denote_exp subname tid in *)
     | Goto _
     | Ret _
     | Int _ -> st

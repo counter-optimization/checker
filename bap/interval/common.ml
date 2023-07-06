@@ -18,11 +18,6 @@ end
 
 let package = "uarch-checker"
 
-(* let target_func_param = Extension.Configuration.parameter *)
-(*                             ~doc:"Which top-level function to check" *)
-(*                             Extension.Type.string *)
-(*                             "target-function" *)
-
 let output_csv_file_param = Extension.Configuration.parameter
                               ~doc:"CSV file where checker results will be stored"
                               Extension.Type.path
