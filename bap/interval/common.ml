@@ -608,5 +608,5 @@ let ai_widen_threshold = 3
 
 module type CheckerInterp = sig
   type t
-  val denote_exp : tid -> Bil.exp -> t
+  val denote_exp : tid -> Bil.exp -> t list
 end

@@ -213,82 +213,84 @@ module Checker(N : Abstract.NumericDomain)
             let load_of_prev_data = Bil.Load (mem, idx, endian, size) in
             let prev_data = Interp.denote_exp st.tid load_of_prev_data in
 
-            if is_tainted prev_data || is_tainted new_data
-            then
-              let new_intvl = get_intvl new_data in
-              let old_intvl = get_intvl prev_data in
-              let interval_could_be_eq =
-                Wrapping_interval.could_be_true @@
-                  Wrapping_interval.booleq old_intvl new_intvl in
-              if interval_could_be_eq
-              then
-                if do_symex
-                then
-                  let deps = get_up_to_n_dependent_insns
-                                ~n:dep_bound
-                                ~sub
-                                ~for_:tid
-                                ~deps
-                                ~tidmap
-                  in
-                  let () = printf "For tid (%a), deps using dep analysis are:\n%!"
-                             Tid.ppo tid;
-                           List.iter deps ~f:(printf "\t%a\n%!" Def.ppo)
-                  in
-                  let all_defs_of_sub = if Option.is_none !all_defs_of_sub
-                                        then
-                                          let defs = defs_of_sub sub in
-                                          all_defs_of_sub := Some defs;
-                                          defs
-                                        else
-                                          Option.value_exn !all_defs_of_sub
-                  in
-                                          
-                  let type_info = Type_determination.run
-                                    all_defs_of_sub
-                                    Common.AMD64SystemVABI.size_of_var_name
-                  in
-                  let dependent_vars = Var_name_collector.run_on_defs deps in
-                  let type_info = Type_determination.narrow_to_vars
-                                    dependent_vars
-                                    type_info
-                  in
-                  let do_check = Symbolic.Executor.eval_def_list deps in
-                  let init_st = Symbolic.Executor.init
-                                  ~do_ss:true
-                                  deps
-                                  tid
-                                  type_info
-                                  profiling_data_path
-                  in
-                  let (), fini_st = Symbolic.Executor.run do_check init_st in
-                  if fini_st.failed_ss
-                  then
-                    empty_res @@ estats_incr_symex_pruned st
-                  else
-                    let alert = build_alert ~tid ~subname
-                                ~left_val:old_intvl
-                                ~right_val:new_intvl
-                                ~desc:"[SilentStores] failed interval and symex check"
-                  in
-                  let alerts = Alert.Set.singleton alert in
-                  { warns = alerts;
-                    cs_stats = empty_stats;
-                    ss_stats = st.eval_stats }
-                else
-                  let alert = build_alert ~tid ~subname
-                                ~left_val:old_intvl
-                                ~right_val:new_intvl
-                                ~desc:"[SilentStores] wrapping interval equality"
-                  in
-                  let alerts = Alert.Set.singleton alert in
-                  { warns = alerts;
-                    cs_stats = empty_stats;
-                    ss_stats = st.eval_stats }
-              else
-                empty_res @@ estats_incr_interval_pruned st
-            else
-              empty_res @@ estats_incr_taint_pruned st
+            List.cartesian_product new_data prev_data
+            |> List.fold ~init:(empty_res st) ~f:(fun res (prev_data, new_data) ->
+                   if is_tainted prev_data || is_tainted new_data
+                   then
+                     let new_intvl = get_intvl new_data in
+                     let old_intvl = get_intvl prev_data in
+                     let interval_could_be_eq =
+                       Wrapping_interval.could_be_true @@
+                         Wrapping_interval.booleq old_intvl new_intvl in
+                     if interval_could_be_eq
+                     then
+                       if do_symex
+                       then
+                         let deps = get_up_to_n_dependent_insns
+                                      ~n:dep_bound
+                                      ~sub
+                                      ~for_:tid
+                                      ~deps
+                                      ~tidmap
+                         in
+                         let () = printf "For tid (%a), deps using dep analysis are:\n%!"
+                                    Tid.ppo tid;
+                                  List.iter deps ~f:(printf "\t%a\n%!" Def.ppo)
+                         in
+                         let all_defs_of_sub = if Option.is_none !all_defs_of_sub
+                                               then
+                                                 let defs = defs_of_sub sub in
+                                                 all_defs_of_sub := Some defs;
+                                                 defs
+                                               else
+                                                 Option.value_exn !all_defs_of_sub
+                         in
+                         
+                         let type_info = Type_determination.run
+                                           all_defs_of_sub
+                                           Common.AMD64SystemVABI.size_of_var_name
+                         in
+                         let dependent_vars = Var_name_collector.run_on_defs deps in
+                         let type_info = Type_determination.narrow_to_vars
+                                           dependent_vars
+                                           type_info
+                         in
+                         let do_check = Symbolic.Executor.eval_def_list deps in
+                         let init_st = Symbolic.Executor.init
+                                         ~do_ss:true
+                                         deps
+                                         tid
+                                         type_info
+                                         profiling_data_path
+                         in
+                         let (), fini_st = Symbolic.Executor.run do_check init_st in
+                         if fini_st.failed_ss
+                         then
+                           empty_res @@ estats_incr_symex_pruned st
+                         else
+                           let alert = build_alert ~tid ~subname
+                                         ~left_val:old_intvl
+                                         ~right_val:new_intvl
+                                         ~desc:"[SilentStores] failed interval and symex check"
+                           in
+                           let alerts = Alert.Set.singleton alert in
+                           { warns = alerts;
+                             cs_stats = empty_stats;
+                             ss_stats = st.eval_stats }
+                       else
+                         let alert = build_alert ~tid ~subname
+                                       ~left_val:old_intvl
+                                       ~right_val:new_intvl
+                                       ~desc:"[SilentStores] wrapping interval equality"
+                         in
+                         let alerts = Alert.Set.singleton alert in
+                         { warns = alerts;
+                           cs_stats = empty_stats;
+                           ss_stats = st.eval_stats }
+                     else
+                       empty_res @@ estats_incr_interval_pruned st
+                   else
+                     empty_res @@ estats_incr_taint_pruned st)
          | _ -> empty_res st
        end
     | _ -> empty_res st

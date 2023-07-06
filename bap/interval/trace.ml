@@ -308,6 +308,12 @@ module Tree(N : Abstract.NumericDomain)
   
   include T
 
+  let rec to_string (tree : t) : string =
+    match tree with
+    | Leaf l -> "(leaf)"
+    | Parent { left; right; _ } ->
+       Format.sprintf "(Parent %s %s)" (to_string left) (to_string right)
+
   let tids_overlap tids1 tids2 =
     not @@ Tidset.is_empty @@ Tidset.inter tids1 tids2
 
@@ -376,6 +382,12 @@ module Tree(N : Abstract.NumericDomain)
        let right = map right ~f in
        Parent { left; directive; right }
 
+  let rec map_list : 'a. (E.t -> 'a) -> t -> 'a list = fun f tree ->
+    match tree with
+    | Leaf n -> [f n]
+    | Parent { left; right; _ } ->
+       List.append (map_list f left) (map_list f right)
+
   let rec left_fold_join ~(f : E.t -> N.t) = function
     | Leaf node -> f node
     | Parent { left; directive; right } ->
@@ -383,19 +395,32 @@ module Tree(N : Abstract.NumericDomain)
        let right = left_fold_join ~f right in
        N.join left right
 
-  let rec merge (left : t) (right : t) : t =
-    match left, right with
-    | Leaf left, Leaf right -> Leaf (E.merge left right)
-    | Parent left, Parent right ->
-       if 0 <> Directives.compare left.directive right.directive
-       then
-         failwith "[Trace] tree merge does not support non-isomorphic trees (tree directives)"
-       else
-         Parent { left = merge left.left right.left;
-                  directive = left.directive;
-                  right = merge left.right right.right }
-    | _ ->
-       failwith "[Trace] tree merge does not support non-isomorphic trees (tree shape)"
+  let merge (left : t) (right : t) : t =
+    let open Or_error.Monad_infix in
+    let rec loop (left : t) (right : t) : t Or_error.t =
+      match left, right with
+      | Leaf left, Leaf right -> Ok (Leaf (E.merge left right))
+      | Parent left, Parent right ->
+         if 0 <> Directives.compare left.directive right.directive
+         then
+           Or_error.error_string "[Trace] tree merge does not support non-isomorphic trees (tree directives)"
+         else
+           loop left.left right.left >>= fun l ->
+           loop left.right right.right >>= fun r ->
+           Ok (Parent { left = l;
+                        right = r;
+                        directive = left.directive })
+      | _ ->
+         Or_error.error_string "[Trace] tree merge does not support non-isomorphic trees (tree shape)"
+    in
+    match loop left right with
+    | Ok res -> res
+    | Error e ->
+       let () = printf "Failed to merge two trees:\n\t1. %s\n\t %s\n%!"
+                  (to_string left)
+                  (to_string right)
+       in
+       failwith @@ Error.to_string_hum e
 
   let rec num_leaves : t -> int = function
     | Leaf _ -> 1
@@ -544,6 +569,10 @@ module AbsInt = struct
     module BaseInt = Abstract.AbstractInterpreter(N)(Common.Region)(Common.Region.Set)(Vt)(E)
 
     type env = TreeEnv.t
+
+    let nondet_denote_exp (exp : Bil.exp) (st : env) : N.t list =
+      let base_denote_exp = fun env -> BaseInt.denote_exp exp env |> fst in
+      Tree.map_list base_denote_exp st.tree
     
     let denote_def (subname : string) (dmap : Directives.directive_map)
           (d : def term) (st : env) : env =
@@ -570,9 +599,16 @@ module AbsInt = struct
 
     let denote_elt (subname : string) (dmap : Directives.directive_map)
           (e : Blk.elt) (st : env) : env =
+      
       match e with
-      | `Def d -> denote_def subname dmap d st
-      | `Jmp j -> denote_jmp subname dmap j st
-      | `Phi p -> denote_phi subname dmap p st
+      | `Def d ->
+         let () = printf "[Trace] denoting elt: %a\n%!" Tid.ppo (Term.tid d) in
+         denote_def subname dmap d st
+      | `Jmp j ->
+         let () = printf "[Trace] denoting elt: %a\n%!" Tid.ppo (Term.tid j) in
+         denote_jmp subname dmap j st
+      | `Phi p ->
+         let () = printf "[Trace] denoting elt: %a\n%!" Tid.ppo (Term.tid p) in
+         denote_phi subname dmap p st
   end
 end

@@ -28,7 +28,6 @@ module Getter(N : NumericDomain) = struct
     include Abstract_memory.Make(N)
   end
   
-  module AI = AbstractInterpreter(N)(Region)(Region.Set)(struct type t = Common.cell_t end)(E)
   module WI = Wrapping_interval
   module SS = Common.SS
   module CG = Graphs.Callgraph
@@ -77,9 +76,16 @@ module Getter(N : NumericDomain) = struct
   let get_callee_of_indirect (exp : exp) (jmp_from : jmp term) (prog : Program.t) (sub : sub term) sol : rel Or_error.t =
     let () = printf "in get_callee_of_indirect\n%!" in
     let fromtid = Term.tid jmp_from in
-    let fromcc = Calling_context.of_tid fromtid in
-    let eval_in_env = Solution.get sol fromcc in
-    let (callee, _st') = AI.denote_exp exp eval_in_env in
+    let callee = sol fromtid exp
+                 |> List.remove_consecutive_duplicates ~equal:N.equal
+    in
+    let callee = if 1 <> List.length callee
+                 then
+                   failwith "[Callees] failed to use tracepartabsint to get callee of indirect"
+                 else
+                   List.hd_exn callee
+    in
+               
     let callee_as_intvl = get_intvl callee in
     let points_to_only_one_addr = Wrapping_interval.is_const callee_as_intvl in
     if not points_to_only_one_addr
