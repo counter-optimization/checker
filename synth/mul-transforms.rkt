@@ -227,9 +227,9 @@
    (sar-r/m64-imm8 r12 (bv 16 8))
    (sar-r/m64-imm8 r12 (bv 48 8))
 
-   (mov-r64-imm64 r11 (bv 0 64))
+   (mov-r64-imm64 r11 (bv (expt 2 63) 64))
    (mov-r/m8-r8 r11b r12b)
-   (mov-r64-imm64 rcx (bv 0 64))
+   (mov-r64-imm64 rcx (bv (expt 2 63) 64))
    (mov-r/m8-r8 cl dl)
    (cmp-r/m64-r64 rcx r11)
    (mov-r/m16-imm16 r11w (bv (expt 2 15) 16))
@@ -485,9 +485,9 @@
    (sar-r/m64-imm8 r12 (bv 16 8))
    (sar-r/m64-imm8 r12 (bv 48 8))
 
-   (mov-r64-imm64 r11 (bv 0 64))
+   (mov-r64-imm64 r11 (bv (expt 2 63) 64))
    (mov-r/m8-r8 r11b r12b)
-   (mov-r64-imm64 rcx (bv 0 64))
+   (mov-r64-imm64 rcx (bv (expt 2 63) 64))
    (mov-r/m8-r8 cl dl)
    (cmp-r/m64-r64 rcx r11)
    (mov-r/m16-imm16 r11w (bv (expt 2 15) 16))
