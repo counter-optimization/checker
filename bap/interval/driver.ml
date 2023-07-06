@@ -392,6 +392,22 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      in
      let directive_map = TraceDir.Extractor.to_directive_map dirs in
 
+     (* SHL32rCL, SHL8rCL, SHR64rCL *)
+     let shift_trans_fns = ["x86compsimptest_SHL8rCL_transformed";
+                            "x86compsimptest_SHL32rCL_transformed";
+                            "x86compsimptest_SHR32rCL_transformed"]
+     in
+     let () = if List.mem ~equal:String.equal shift_trans_fns subname
+              then
+                let () = printf "%a\n%!" Sub.ppo sub in
+                let () = printf "Directive map:\n%!" in
+                Map.iteri directive_map ~f:(fun ~key ~data ->
+                    printf "\t%a -> %s\n%!"
+                      Tid.ppo key
+                      (TraceDir.to_string data))
+              else ()
+     in
+
      let () = printf "Running trace part abstract interpreter\n%!" in
 
      let start = Analysis_profiling.record_start_time () in
@@ -423,44 +439,33 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname AbsInt stop in
 
-     (* SHL32rCL, SHL8rCL, SHR64rCL *)
-     (* let shift_trans_fns = ["x86compsimptest_SHL8rCL_transformed"; *)
-     (*                        "x86compsimptest_SHL32rCL_transformed"; *)
-     (*                        "x86compsimptest_SHR32rCL_transformed"] *)
-     (* in *)
-     (* let () = if List.mem ~equal:String.equal shift_trans_fns subname *)
-     (*          then *)
-     (*            let () = printf "Directive map:\n%!" in *)
-     (*            let () = Map.iteri directive_map ~f:(fun ~key ~data -> *)
-     (*                         printf "\t%a -> %s\n%!" *)
-     (*                           Tid.ppo key *)
-     (*                           (TraceDir.to_string data)) *)
-     (*            in *)
-     (*            let soliter = Solution.enum analysis_results in *)
-     (*            let () = printf "%a\n%!" Sub.ppo sub in *)
-     (*            Seq.iter soliter ~f:(fun (cc, mem) -> *)
-     (*                let tid = Calling_context.to_insn_tid cc in *)
-     (*                printf "Tid is %a:\n%!" Tid.ppo tid; *)
-     (*                E.pp mem) *)
-     (*          else () *)
-     (* in *)
-
      let no_symex = Extension.Configuration.get ctxt Common.no_symex_param in
      let use_symex = not no_symex in
      let symex_profiling_out_file = Extension.Configuration.get ctxt Common.symex_profiling_output_file_path_param in
 
-     let module CheckerOracle : Common.CheckerInterp with type t := FinalDomain.t =
+     (* for non-trace-partitioning abstract interpreter *)
+     (* let module BaseCheckerOracle : Common.CheckerInterp with type t := FinalDomain.t = *)
+     (*   struct *)
+     (*     let denote_exp (tid : tid) (exp : Bil.exp) : FinalDomain.t list = *)
+     (*       let cc = Calling_context.of_tid tid in *)
+     (*       let in_state = Solution.get analysis_results cc in *)
+     (*       let res, _ = AbsInt.denote_exp exp in_state in *)
+     (*       [res] *)
+     (*   end *)
+     (* in *)
+
+     let module TracePartCheckerOracle
+                : Common.CheckerInterp with type t := FinalDomain.t =
        struct
-         let denote_exp (tid : tid) (exp : Bil.exp) : FinalDomain.t =
+         let denote_exp (tid : tid) (exp : Bil.exp) : FinalDomain.t list =
            let cc = Calling_context.of_tid tid in
            let in_state = Solution.get analysis_results cc in
-           let res, _ = AbsInt.denote_exp exp in_state in
-           res
+           TraceAbsInt.nondet_denote_exp exp in_state
        end
      in
 
-     let module CompSimpChecker = Comp_simp.Checker(FinalDomain)(CheckerOracle) in
-     let module SSChecker = Silent_stores.Checker(FinalDomain)(CheckerOracle) in
+     let module CompSimpChecker = Comp_simp.Checker(FinalDomain)(TracePartCheckerOracle) in
+     let module SSChecker = Silent_stores.Checker(FinalDomain)(TracePartCheckerOracle) in
      
      let combine_res x y = Common.combine_checker_res x y Alert.Set.union in
 
@@ -546,8 +551,15 @@ let run_analyses sub img proj ~(is_toplevel : bool)
 
      let () = printf "Getting callees for analysis\n%!" in
      let start = Analysis_profiling.record_start_time () in
+     
      let module GetCallees = Callees.Getter(FinalDomain) in
-     let callee_analysis_results = GetCallees.get sub proj analysis_results in
+     let eval_indirect_exp : tid -> Bil.exp -> FinalDomain.t list = fun tid exp ->
+       let cc = Calling_context.of_tid tid in
+       let env = Solution.get analysis_results cc in
+       TraceAbsInt.nondet_denote_exp exp env
+     in
+     
+     let callee_analysis_results = GetCallees.get sub proj eval_indirect_exp in
      let callees = List.filter callee_analysis_results ~f:Or_error.is_ok
                    |> List.map ~f:Or_error.ok_exn
                    |> CalleeRel.Set.of_list

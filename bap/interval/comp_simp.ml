@@ -225,16 +225,22 @@ module Checker(N : Abstract.NumericDomain)
         in
         { st with alerts = Alert.Set.add st.alerts alert }
 
-  let rec check_exp (expr : Bil.exp) (st : st) : N.t * st =
+  let check_binop_nondet (binop : Bil.binop) (l : N.t list) (r : N.t list)
+        (st : st) : st =
+    let operands = List.cartesian_product l r in
+    List.fold operands ~init:st ~f:(fun st (lrand, rrand) ->
+        check_binop binop lrand rrand st)
+
+  let rec check_exp (expr : Bil.exp) (st : st) : N.t list * st =
     match expr with
     | Bil.Load (_, idx, _, _) ->
        (Interp.denote_exp st.tid expr, snd @@ check_exp idx st)
     | Bil.Store (_, idx, data, _, _) ->
-       (N.bot, merge_st (snd @@ check_exp idx st) (snd @@ check_exp data st))
+       ([N.bot], merge_st (snd @@ check_exp idx st) (snd @@ check_exp data st))
     | Bil.BinOp (op, l, r) ->
        let l, st = check_exp l st in
        let r, st = check_exp r st in
-       (Interp.denote_exp st.tid expr, check_binop op l r st)
+       (Interp.denote_exp st.tid expr, check_binop_nondet op l r st)
     | Bil.UnOp (_, subexp) ->
        (Interp.denote_exp st.tid expr, snd @@ check_exp subexp st)
     | Bil.Var _ ->
