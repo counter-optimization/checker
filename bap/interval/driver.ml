@@ -348,7 +348,12 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      in
      let () = printf "Done running dependency analysis\n%!" in
 
-     let () = if String.equal subname "x86compsimptest_SHL32rCL_transformed"
+     (* SHL32rCL, SHL8rCL, SHR64rCL *)
+     let shift_trans_fns = ["x86compsimptest_SHL8rCL_transformed";
+                            "x86compsimptest_SHL32rCL_transformed";
+                            "x86compsimptest_SHR32rCL_transformed"]
+     in
+     let () = if List.mem ~equal:String.equal shift_trans_fns subname
               then
                 let () = begin
                     let cond_scrape_st = Trace.ConditionFinder.init
@@ -373,13 +378,28 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                     let cond_extractor_st = TraceDir.Extractor.init
                                               tidmap
                                               dep_analysis_results
+                                              final_dep_analysis_res
                     in
-                    let dirs = List.map cmov_cnd_flags ~f:(fun lf ->
-                                   TraceDir.Extractor.get_conds_for_flag lf cond_extractor_st)
+                    let dirs = List.fold cmov_cnd_flags ~init:[] ~f:(fun dirs lf ->
+                                   let split_dir = TraceDir.Extractor.get_conds_for_flag
+                                                     lf
+                                                     cond_extractor_st
+                                   in
+                                   let combine_dir = TraceDir.Extractor.get_merge_point_for_flag_dirs
+                                                       cond_extractor_st
+                                                       lf
+                                                       split_dir
+                                   in
+                                   match combine_dir with
+                                   | None -> dirs
+                                   | Some combine_dir ->
+                                      (split_dir, combine_dir) :: dirs)
                     in
                     printf "Extracted directives are:\n%!";
-                    List.iter dirs ~f:(fun d ->
-                        printf "\t%s\n%!" (TraceDir.to_string d))
+                    List.iter dirs ~f:(fun (split_dir, combine_dir) ->
+                        printf "\tsplit: %s -- combine: %s\n%!"
+                          (TraceDir.to_string split_dir)
+                          (TraceDir.to_string combine_dir))
                   end
                 in
                 let soliter = Solution.enum analysis_results in
