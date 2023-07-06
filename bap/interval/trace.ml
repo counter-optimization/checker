@@ -26,10 +26,64 @@ module Directives(N : Abstract.NumericDomain)
     type tagged_directive = Tidset.t * directive [@@deriving compare, sexp]
 
     type t = tagged_directive [@@deriving compare, sexp]
+
+    let simple_operand_to_string (so : simple_operand) : string =
+      match so with
+      | Var v -> v
+      | Num w -> Format.sprintf "%a" Word.pps w
+
+    let rec directive_cnd_to_string (c : cnd) : string =
+      match c with
+      | Eq (c1, c2) -> Format.sprintf "%s = %s"
+                         (simple_operand_to_string c1)
+                         (simple_operand_to_string c2)
+      | Lt (c1, c2) -> Format.sprintf "%s < %s"
+                         (simple_operand_to_string c1)
+                         (simple_operand_to_string c2)
+      | And (c1, c2) -> Format.sprintf "%s && %s"
+                         (directive_cnd_to_string c1)
+                         (directive_cnd_to_string c2)
+
+    let directive_to_string (d : directive) : string =
+      match d with
+      | Empty -> "empty"
+      | Value c -> Format.sprintf "value_split(%s)"
+                     (directive_cnd_to_string c)
+      | Jmp c -> Format.sprintf "jmp_split(%s)"
+                   (directive_cnd_to_string c)
+      | Combine tids -> Format.sprintf "combine(%s)"
+                          (Set.to_list tids |> List.to_string ~f:Tid.to_string)
+
+    let to_string ((tids, directive) : tagged_directive) : string =
+      let tid_string = Set.to_list tids |> List.to_string ~f:Tid.to_string in
+      Format.sprintf "<%s, %s>" tid_string (directive_to_string directive)
   end
 
   include T
 
+  let directive_and (left : directive) (right : directive) : directive Or_error.t =
+    match left, right with
+    | Empty, Empty -> Ok Empty
+    | Value c1, Value c2 -> Ok (Value (And (c1, c2)))
+    | Jmp c1, Jmp c2 -> Ok (Jmp (And (c1, c2)))
+    | Combine c1, Combine c2 -> Ok (Combine (Tidset.union c1 c2))
+    | _ ->
+       let lefts = directive_to_string left in
+       let rights = directive_to_string right in
+       let err_s = "Can't combine incompatible directives: " ^ lefts ^ " and " ^ rights in
+       Or_error.error_string err_s
+
+  let tagged_directive_and ((tids1, dir1) : tagged_directive)
+        ((tids2, dir2) : tagged_directive) : tagged_directive Or_error.t =
+    Or_error.bind (directive_and dir1 dir2) ~f:(fun dir ->
+        Ok (Tidset.union tids1 tids2, dir))
+
+  let reduce_and_tagged_dirs (base : tagged_directive) (tds : tagged_directive list)
+      : tagged_directive Or_error.t =
+    let open Or_error.Monad_infix in
+    List.fold tds ~init:(Ok base) ~f:(fun total_dir next_dir ->
+        total_dir >>= tagged_directive_and next_dir)
+  
   module Extractor = struct
     module Grammar = struct
       let is_var_or_num : Bil.exp -> bool = function
@@ -46,7 +100,11 @@ module Directives(N : Abstract.NumericDomain)
            is_comparator_binop op &&
              is_var_or_num left &&
                is_var_or_num right
-        | _ -> false      
+        | _ -> false
+
+      let is_var : Bil.exp -> bool = function
+        | Bil.Var _ -> true
+        | _ -> false
     end
 
     module Compiler = struct
@@ -62,17 +120,20 @@ module Directives(N : Abstract.NumericDomain)
           match exp with
           | Bil.BinOp (comparator, Bil.Var v, Bil.Int w)
             | Bil.BinOp (comparator, Bil.Int w, Bil.Var v) ->
-             let dir_var = Var v in
+             let dir_var = Var (Var.name v) in
              let dir_num = Num w in
              (match normalize_comparator comparator with
-              | Some Bil.EQ -> Some (tid, Value (Eq dir_var dir_num))
+              | Some Bil.EQ -> Some (Tidset.singleton tid,
+                                     Value (Eq (dir_var, dir_num)))
               | _ -> None)
           | Bil.BinOp (comparator, Bil.Var v, Bil.Var x) ->
-             let dir_v = Var v in
-             let dir_x = Var x in
+             let dir_v = Var (Var.name v) in
+             let dir_x = Var (Var.name x) in
              (match normalize_comparator comparator with
-              | Some Bil.EQ -> Some (tid, Value (Eq dir_v dir_x))
+              | Some Bil.EQ -> Some (Tidset.singleton tid,
+                                     Value (Eq (dir_v, dir_x)))
               | _ -> None)
+          | _ -> None
     end
 
     type prereq = {
@@ -87,13 +148,85 @@ module Directives(N : Abstract.NumericDomain)
 
     let vars_of_simple_cnd = Var_name_collector.run
 
-    (* Given (flagtid, flagname), produce a directive can be used by the
-       abstract interpreter to narrow the set of reaching states on either
-       side of the branch *)
-    let ok = 4
+    let last_deftid_is_simple_assign (p : prereq) (deftid : tid) : bool =
+      match Tid_map.find p.tidmap deftid with
+      | Some (`Def d) when Grammar.is_var (Def.rhs d) -> true
+      | _ -> false
 
-    (* let get_last_defs (simpl_cnd_vars : string list) (p : prereq) : def term list = *)
-    (*   let  *)
+    let directive_if_simple_assign (p : prereq) (deftid : tid)
+        : tagged_directive option =
+      match Tid_map.find p.tidmap deftid with
+      | Some (`Def d) when Grammar.is_var (Def.rhs d) ->
+         let lhs = T.Var (Def.lhs d |> Var.name) in
+         let rhs = (match Def.rhs d with
+           | Bil.Var v -> T.Var (Var.name v)
+           | _ -> failwith "shouldn't happen in directive_if_simple_assign")
+         in
+         let tidset = Tidset.singleton deftid in
+         Some (tidset, T.Value (T.Eq (lhs, rhs)))
+      | _ -> None
+
+    let get_last_deftid (p : prereq) ~(var : string) ~(attid : tid)
+        : tid option =
+      let cc_attid = Calling_context.of_tid attid in
+      let dep = Solution.get p.dep_analy cc_attid in
+      let last_def_map = dep.last_defd_env in
+      match Dependency_analysis.Varmap.find last_def_map var with
+      | Some tidset when 1 = Tidset.length tidset ->
+         Tidset.to_list tidset |> List.hd
+      | _ -> None
+
+    let try_get_second_level_directives (p : prereq) (flag_tid : tid)
+          (flag_base_exp : Bil.exp) : tagged_directive list =
+      let open Option.Monad_infix in
+      let vars_of_base_exp = vars_of_simple_cnd flag_base_exp
+                             |> SS.to_list
+      in
+      List.fold vars_of_base_exp ~init:[] ~f:(fun dirs used_var ->
+          let maybe_new_dir =
+            get_last_deftid p ~var:used_var ~attid:flag_tid >>=
+              directive_if_simple_assign p
+          in
+          match maybe_new_dir with
+          | Some dir -> dir :: dirs
+          | None -> dirs)
+      
+    let get_conds_for_flag ((tid,flagname) : tid * string) (p : prereq) : t =
+      let flag_tidset = Tidset.singleton tid in
+      let flag_set_dir = flag_tidset, Value (Eq (Var flagname, Num (Word.one 1))) in
+      let flag_exp = match Tid_map.find p.tidmap tid with
+        | Some (`Def d) -> Def.rhs d
+        | _ -> failwith @@
+                 Format.sprintf "Couldn't find def of flag %s (%a)"
+                   flagname
+                   Tid.pps tid
+      in
+      (* if the exp setting the flag is simple, then also add it to the condition *)
+      if Grammar.is_simple_cnd flag_exp
+      then
+        match Compiler.run flag_exp tid with
+        | Some basedir ->
+           (match tagged_directive_and basedir flag_set_dir with
+            | Ok flag_set_dir ->
+               let sec_lvl_dirs = try_get_second_level_directives p tid flag_exp in
+               if List.is_empty sec_lvl_dirs
+               then
+                 flag_set_dir
+               else
+                 (match reduce_and_tagged_dirs flag_set_dir sec_lvl_dirs with
+                  | Ok d -> d
+                  | Error e -> failwith (Error.to_string_hum e))
+            | Error e ->
+               let () = printf "[Trace] Couldn't combine basedir and flag_set_dir of flag %s (%a)\n%!" flagname Tid.ppo tid
+               in
+               flag_set_dir)
+        | None ->
+           let () = printf "[Trace] Couldn't get basedir from def of flag %s (%a)\n%!"
+                      flagname Tid.ppo tid
+           in
+           flag_set_dir
+      else
+        flag_set_dir
   end
 end
 

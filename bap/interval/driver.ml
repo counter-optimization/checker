@@ -25,6 +25,7 @@ module Rt = Region.Set
 module Vt = struct type t = Common.cell_t end
 module AbsInt = AbstractInterpreter(FinalDomain)(R)(Rt)(Vt)(E)
 module TraceAbsInt = Trace.AbsInt.Make(FinalDomain)(E)
+module TraceDir = Trace.Directives(FinalDomain)(E)
 
 type check_sub_result = {
     callees : CRS.t;
@@ -355,7 +356,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                            ~tidmap
                                            ~dep_analysis:final_dep_analysis_res
                     in
-                    let live_flags = Trace.ConditionFinder.get_live_flags
+                    let live_flags = Trace.ConditionFinder.FlagScraper.get_live_flags
                                        cond_scrape_st
                     in
                     let () = printf "Liveflags by trace cond scraper:\n%!";
@@ -363,13 +364,22 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                  printf "\t%a, %s\n%!" Tid.ppo tid flagname)
                     in
                     let cmov_cnd_flags = List.filter live_flags ~f:(fun lf ->
-                                             Trace.ConditionFinder.flag_used_in_cmov lf cond_scrape_st)
+                                             Trace.ConditionFinder.FlagScraper.flag_used_in_cmov lf cond_scrape_st)
                     in
                     let () = printf "Flags maybe used in cmov:\n%!";
                              List.iter cmov_cnd_flags ~f:(fun (tid,flagname) ->
                                  printf "\t%a, %s\n%!" Tid.ppo tid flagname)
+                    in 
+                    let cond_extractor_st = TraceDir.Extractor.init
+                                              tidmap
+                                              dep_analysis_results
                     in
-                    ()
+                    let dirs = List.map cmov_cnd_flags ~f:(fun lf ->
+                                   TraceDir.Extractor.get_conds_for_flag lf cond_extractor_st)
+                    in
+                    printf "Extracted directives are:\n%!";
+                    List.iter dirs ~f:(fun d ->
+                        printf "\t%s\n%!" (TraceDir.to_string d))
                   end
                 in
                 let soliter = Solution.enum analysis_results in
