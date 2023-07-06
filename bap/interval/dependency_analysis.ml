@@ -1,7 +1,7 @@
 open Core
 open Bap.Std
 
-type tidset = Set.M(Tid).t
+type tidset = Tidset.t
 
 module Varmap = Map.Make_binable_using_comparator(String)
 
@@ -20,7 +20,7 @@ module T = struct
 
   let users_transitive_closure tid st =
     (* this overflows stack if not tail recursive *)
-    let default = Set.empty (module Tid) in
+    let default = Tidset.empty in
     let rec users_transitive_closure_loop
               ?(users : tidset = default)
               ~(worklist : tidset)
@@ -48,8 +48,12 @@ module T = struct
              let worklist = Set.remove worklist first in
              users_transitive_closure_loop ~worklist ~users st
     in
-    let target_tidset = Set.singleton (module Tid) tid in
+    let target_tidset = Tidset.singleton tid in
     users_transitive_closure_loop ~worklist:target_tidset st
+
+  let has_user tid st : bool =
+    let users = users_transitive_closure tid st in
+    not @@ Tidset.is_empty users
 
   let equal x y =
     let tidset_equal = Set.equal in
@@ -63,7 +67,7 @@ module T = struct
       | Some prev_users ->
          Set.add prev_users user
       | None ->
-         Set.singleton (module Tid) user
+         Tidset.singleton user
     in
     Tid_map.set users ~key:used ~data:users'
 
@@ -72,7 +76,7 @@ module T = struct
       | Some prev_used ->
          Set.add prev_used used
       | None ->
-         Set.singleton (module Tid) used
+         Tidset.singleton used
     in
     Tid_map.set uses ~key:user ~data:uses'
 
@@ -116,7 +120,7 @@ end
 
 include T
 
-let emp_tidset = Set.empty (module Tid)
+let emp_tidset = Tidset.empty
 
 let rec uses_of_exp (e : Bil.exp) (st : t) : tidset =
   match e with
@@ -181,7 +185,7 @@ let denote_jmp (j : jmp term) (st : t) : t =
     
 let denote_def (d : def term) (st : t) : t =
   let outer_tid = Term.tid d in
-  let outer_tidset = Set.singleton (module Tid) outer_tid in
+  let outer_tidset = Tidset.singleton outer_tid in
   let defd_var = Var.name @@ Def.lhs d in
   let uses = uses_of_exp (Def.rhs d) st in
   let users = Set.fold uses ~init:st.tid_users ~f:(fun users used ->

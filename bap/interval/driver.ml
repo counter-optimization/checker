@@ -24,6 +24,7 @@ module R = Region
 module Rt = Region.Set
 module Vt = struct type t = Common.cell_t end
 module AbsInt = AbstractInterpreter(FinalDomain)(R)(Rt)(Vt)(E)
+module TraceAbsInt = Trace.AbsInt.Make(FinalDomain)(E)
 
 type check_sub_result = {
     callees : CRS.t;
@@ -305,17 +306,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname AbsInt stop in
 
-     let () = if String.equal subname "x86compsimptest_SHL32rCL_transformed"
-              then
-                let soliter = Solution.enum analysis_results in
-                let () = printf "%a\n%!" Sub.ppo sub in
-                Seq.iter soliter ~f:(fun (cc, mem) ->
-                    let tid = Calling_context.to_insn_tid cc in
-                    printf "Tid is %a:\n%!" Tid.ppo tid;
-                    E.pp mem)
-              else ()
-     in
-
      let () = printf "Running dependency analysis\n%!" in
      let start = Analysis_profiling.record_start_time () in
      let init_mapping = G.Node.Map.empty in
@@ -356,6 +346,40 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                 stop
      in
      let () = printf "Done running dependency analysis\n%!" in
+
+     let () = if String.equal subname "x86compsimptest_SHL32rCL_transformed"
+              then
+                let () = begin
+                    let cond_scrape_st = Trace.ConditionFinder.init
+                                           ~rpo_traversal
+                                           ~tidmap
+                                           ~dep_analysis:final_dep_analysis_res
+                    in
+                    let live_flags = Trace.ConditionFinder.get_live_flags
+                                       cond_scrape_st
+                    in
+                    let () = printf "Liveflags by trace cond scraper:\n%!";
+                             List.iter live_flags ~f:(fun (tid,flagname) ->
+                                 printf "\t%a, %s\n%!" Tid.ppo tid flagname)
+                    in
+                    let cmov_cnd_flags = List.filter live_flags ~f:(fun lf ->
+                                             Trace.ConditionFinder.flag_used_in_cmov lf cond_scrape_st)
+                    in
+                    let () = printf "Flags maybe used in cmov:\n%!";
+                             List.iter cmov_cnd_flags ~f:(fun (tid,flagname) ->
+                                 printf "\t%a, %s\n%!" Tid.ppo tid flagname)
+                    in
+                    ()
+                  end
+                in
+                let soliter = Solution.enum analysis_results in
+                let () = printf "%a\n%!" Sub.ppo sub in
+                Seq.iter soliter ~f:(fun (cc, mem) ->
+                    let tid = Calling_context.to_insn_tid cc in
+                    printf "Tid is %a:\n%!" Tid.ppo tid;
+                    E.pp mem)
+              else ()
+     in
 
      let no_symex = Extension.Configuration.get ctxt Common.no_symex_param in
      let use_symex = not no_symex in
