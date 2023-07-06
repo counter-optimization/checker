@@ -61,6 +61,8 @@ module Directives(N : Abstract.NumericDomain)
 
   include T
 
+  type directive_map = t Tid_map.t
+
   let directive_and (left : directive) (right : directive) : directive Or_error.t =
     match left, right with
     | Empty, Empty -> Ok Empty
@@ -82,7 +84,7 @@ module Directives(N : Abstract.NumericDomain)
       : tagged_directive Or_error.t =
     let open Or_error.Monad_infix in
     List.fold tds ~init:(Ok base) ~f:(fun total_dir next_dir ->
-        total_dir >>= tagged_directive_and next_dir)
+        total_dir >>= fun dir -> tagged_directive_and dir next_dir)
   
   module Extractor = struct
     module Grammar = struct
@@ -138,15 +140,24 @@ module Directives(N : Abstract.NumericDomain)
 
     type prereq = {
         tidmap : Blk.elt Tid_map.t;
-        dep_analy : (Calling_context.t, Dependency_analysis.t) Solution.t
+        dep_analy : (Calling_context.t, Dependency_analysis.t) Solution.t;
+        use_analy : Dependency_analysis.t
       }
 
     let init (tidmap : Blk.elt Tid_map.t)
           (dep_analy : (Calling_context.t, Dependency_analysis.t) Solution.t)
+          (use_analy : Dependency_analysis.t)
         : prereq =
-      {tidmap;dep_analy}
+      {tidmap;dep_analy; use_analy}
 
     let vars_of_simple_cnd = Var_name_collector.run
+
+    let to_directive_map (dirs : t list) : directive_map =
+      let emp = Tid_map.empty in
+      List.fold dirs ~init:emp ~f:(fun dmap (tidset,dir) ->
+          Set.to_list tidset
+          |> List.fold ~init:dmap ~f:(fun dmap tid ->
+                 Tid_map.set dmap ~key:tid ~data:dir))
 
     let last_deftid_is_simple_assign (p : prereq) (deftid : tid) : bool =
       match Tid_map.find p.tidmap deftid with
@@ -190,6 +201,36 @@ module Directives(N : Abstract.NumericDomain)
           match maybe_new_dir with
           | Some dir -> dir :: dirs
           | None -> dirs)
+
+    let get_merge_point_for_flag_dirs (p : prereq)
+          ((tid,flagname) : tid * string)
+          (flagdirs : t) : t option =
+      match Tid_map.find p.use_analy.tid_users tid with
+      | Some imm_flag_deps ->
+         let () = printf "Flag %s at %a deps on:\n%!" flagname Tid.ppo tid;
+                  Tidset.to_list imm_flag_deps |> List.iter
+                                                    ~f:(printf "\t%a\n%!"
+                                                          Tid.ppo)
+         in
+         let flag_dep_deps = Tidset.to_list imm_flag_deps in
+         let flag_dep_deps = List.map flag_dep_deps ~f:(fun dep ->
+                                 match Tid_map.find p.use_analy.tid_users dep with
+                                 | Some fnd -> fnd
+                                 | None -> Tidset.empty)
+         in
+         let flag_dep_deps = List.map flag_dep_deps ~f:Tidset.to_list in
+         let flag_dep_deps = List.join flag_dep_deps in
+         let flag_dep_deps = List.sort flag_dep_deps ~compare:Tid.compare
+                             |> List.rev
+         in
+         let () = printf "all flag dep deps are:\n%!";
+                  List.iter flag_dep_deps ~f:(printf "\t%a\n%!" Tid.ppo)
+         in
+         let latest_dep = List.hd_exn flag_dep_deps in
+         let latest_depset = Tidset.singleton latest_dep in
+         let tagged_combine_dir = (latest_depset, Combine (fst flagdirs)) in
+         Some tagged_combine_dir
+      | None -> None
       
     let get_conds_for_flag ((tid,flagname) : tid * string) (p : prereq) : t =
       let flag_tidset = Tidset.singleton tid in
