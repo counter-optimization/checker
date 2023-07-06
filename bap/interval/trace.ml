@@ -27,6 +27,17 @@ module Directives(N : Abstract.NumericDomain)
 
     type t = tagged_directive [@@deriving compare, sexp]
 
+    let is_combine : directive -> bool = function
+      | Combine _ -> true
+      | _ -> false
+
+    let is_tagged_combine (tdir : t) : bool =
+      is_combine @@ snd tdir
+
+    let get_dir : t -> directive = snd
+    let get_tags : t -> Tidset.t = fst
+    let get_tids : t -> Tidset.t = get_tags
+
     let simple_operand_to_string (so : simple_operand) : string =
       match so with
       | Var v -> v
@@ -61,8 +72,14 @@ module Directives(N : Abstract.NumericDomain)
 
   include T
 
-  type directive_map = t Tid_map.t
+  (* directive_map handling *)
+  type directive_map = tagged_directive Tid_map.t
 
+  let tid_has_directive : directive_map -> tid -> bool = Tid_map.mem
+
+  let get_tdirective : directive_map -> tid -> tagged_directive = Tid_map.find_exn
+
+  (* operations on directives *)
   let directive_and (left : directive) (right : directive) : directive Or_error.t =
     match left, right with
     | Empty, Empty -> Ok Empty
@@ -154,17 +171,17 @@ module Directives(N : Abstract.NumericDomain)
 
     let to_directive_map (dirs : t list) : directive_map =
       let emp = Tid_map.empty in
-      List.fold dirs ~init:emp ~f:(fun dmap (tidset,dir) ->
-          Set.to_list tidset
+      List.fold dirs ~init:emp ~f:(fun dmap tdir ->
+          Set.to_list (fst tdir)
           |> List.fold ~init:dmap ~f:(fun dmap tid ->
-                 Tid_map.set dmap ~key:tid ~data:dir))
+                 Tid_map.set dmap ~key:tid ~data:tdir))
 
     let last_deftid_is_simple_assign (p : prereq) (deftid : tid) : bool =
       match Tid_map.find p.tidmap deftid with
       | Some (`Def d) when Grammar.is_var (Def.rhs d) -> true
       | _ -> false
 
-    let directive_if_simple_assign (p : prereq) (deftid : tid)
+    let directive_if_simple_assign (p : prereq) (flagtid : tid) (deftid : tid)
         : tagged_directive option =
       match Tid_map.find p.tidmap deftid with
       | Some (`Def d) when Grammar.is_var (Def.rhs d) ->
@@ -173,7 +190,7 @@ module Directives(N : Abstract.NumericDomain)
            | Bil.Var v -> T.Var (Var.name v)
            | _ -> failwith "shouldn't happen in directive_if_simple_assign")
          in
-         let tidset = Tidset.singleton deftid in
+         let tidset = Tidset.singleton flagtid in
          Some (tidset, T.Value (T.Eq (lhs, rhs)))
       | _ -> None
 
@@ -195,8 +212,8 @@ module Directives(N : Abstract.NumericDomain)
       in
       List.fold vars_of_base_exp ~init:[] ~f:(fun dirs used_var ->
           let maybe_new_dir =
-            get_last_deftid p ~var:used_var ~attid:flag_tid >>=
-              directive_if_simple_assign p
+            get_last_deftid p ~var:used_var ~attid:flag_tid >>= fun t ->
+              directive_if_simple_assign p flag_tid t
           in
           match maybe_new_dir with
           | Some dir -> dir :: dirs
@@ -319,7 +336,30 @@ module Tree(N : Abstract.NumericDomain)
              }
     in
     loop tree
-    
+
+  let rec do_directive_split (tree : t) (tdir : Directives.tagged_directive) : t =
+    match tree with
+    | Leaf n ->
+       Parent {
+           left = Leaf n;
+           right = Leaf n;
+           directive = tdir
+         }
+    | Parent { left; directive; right } ->
+       Parent {
+           left = do_directive_split left tdir;
+           right = do_directive_split right tdir;
+           directive;
+         }
+
+  let apply_directive (tree : t) (tdir : Directives.tagged_directive) : t =
+    if Directives.is_tagged_combine tdir
+    then
+      let () = printf "[Trace] combining: %s\n%!" (Directives.to_string tdir) in
+      combine_partitions tree @@ Directives.get_dir tdir
+    else
+      let () = printf "[Trace] splitting: %s\n%!" (Directives.to_string tdir) in
+      do_directive_split tree tdir
 
   let rec equal (left : t) (right : t) : bool =
     match left, right with
@@ -342,6 +382,25 @@ module Tree(N : Abstract.NumericDomain)
        let left = left_fold_join ~f left in
        let right = left_fold_join ~f right in
        N.join left right
+
+  let rec merge (left : t) (right : t) : t =
+    match left, right with
+    | Leaf left, Leaf right -> Leaf (E.merge left right)
+    | Parent left, Parent right ->
+       if 0 <> Directives.compare left.directive right.directive
+       then
+         failwith "[Trace] tree merge does not support non-isomorphic trees (tree directives)"
+       else
+         Parent { left = merge left.left right.left;
+                  directive = left.directive;
+                  right = merge left.right right.right }
+    | _ ->
+       failwith "[Trace] tree merge does not support non-isomorphic trees (tree shape)"
+
+  let rec num_leaves : t -> int = function
+    | Leaf _ -> 1
+    | Parent { left; right; _ } ->
+       num_leaves left + num_leaves right
 end
 
 module Env(N : Abstract.NumericDomain)
@@ -362,11 +421,23 @@ module Env(N : Abstract.NumericDomain)
 
   include T
 
+  let default : t = { tree = Tree.Leaf E.empty }
+
   let of_mem (m : E.t) : t =
     { tree = Leaf m }
 
   let equal (l : t) (r : t) : bool =
     Tree.equal l.tree r.tree
+
+  let merge (l : t) (r : t) : t =
+    { tree = Tree.merge l.tree r.tree }
+
+  let widen_with_step (n : int) (node : 'a) l r : t =
+    if n > Common.ai_widen_threshold
+    then
+      failwith "[Trace] infinite loop stuck in widen_with_step"
+    else
+      merge l r
 end
 
 module ConditionFinder = struct
@@ -467,28 +538,41 @@ module AbsInt = struct
     
     module Tree = Tree(N)(E)
     module TreeEnv = Env(N)(E)
+    module Directives = Directives(N)(E)
 
     module Vt = struct type t = Common.cell_t end
     module BaseInt = Abstract.AbstractInterpreter(N)(Common.Region)(Common.Region.Set)(Vt)(E)
 
     type env = TreeEnv.t
     
-    let denote_def (subname : string) (d : def term) (st : env) : env =
-      let tree' = Tree.map ~f:(BaseInt.denote_def subname d) st.tree in
-      { tree = tree' }
+    let denote_def (subname : string) (dmap : Directives.directive_map)
+          (d : def term) (st : env) : env =
+      let tid = Term.tid d in
+      let st : env = if Directives.tid_has_directive dmap tid
+                     then
+                       let tdir = Directives.get_tdirective dmap tid in
+                       { tree = Tree.apply_directive st.tree tdir }
+                     else
+                       st
+      in
+      let tree = Tree.map ~f:(BaseInt.denote_def subname d) st.tree in
+      { tree }
 
-    let denote_phi (subname : string) (p : phi term) (st : env) : env =
-      let tree' = Tree.map ~f:(BaseInt.denote_phi subname p) st.tree in
-      { tree = tree' }
+    let denote_phi (subname : string) (dmap : Directives.directive_map)
+          (p : phi term) (st : env) : env =
+      let tree = Tree.map ~f:(BaseInt.denote_phi subname p) st.tree in
+      { tree }
 
-    let denote_jmp (subname : string) (j : jmp term) (st : env) : env =
-      let tree' = Tree.map ~f:(BaseInt.denote_jmp subname j) st.tree in
-      { tree = tree' }
+    let denote_jmp (subname : string) (dmap : Directives.directive_map)
+          (j : jmp term) (st : env) : env =
+      let tree = Tree.map ~f:(BaseInt.denote_jmp subname j) st.tree in
+      { tree }
 
-    let denote_elt (subname : string) (e : Blk.elt) (st : env) : env =
+    let denote_elt (subname : string) (dmap : Directives.directive_map)
+          (e : Blk.elt) (st : env) : env =
       match e with
-      | `Def d -> denote_def subname d st
-      | `Jmp j -> denote_jmp subname j st
-      | `Phi p -> denote_phi subname p st
+      | `Def d -> denote_def subname dmap d st
+      | `Jmp j -> denote_jmp subname dmap j st
+      | `Phi p -> denote_phi subname dmap p st
   end
 end
