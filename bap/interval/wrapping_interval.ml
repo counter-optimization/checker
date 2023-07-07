@@ -710,5 +710,4 @@ let try_remove_interval ~(remove : t) ~(from_ : t) : t =
               OR
               from_.lo < remove.lo && remove.hi < from_.hi *)
            Interval from_
-
        

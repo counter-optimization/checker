@@ -20,7 +20,7 @@ module Directives(N : Abstract.NumericDomain)
   
   module T = struct
     type simple_operand = Var of string | Num of Word.t [@@deriving compare, sexp]
-    
+
     type cnd = Eq of simple_operand * simple_operand
              | Lt of simple_operand * simple_operand
              | And of cnd * cnd
@@ -34,6 +34,10 @@ module Directives(N : Abstract.NumericDomain)
     type tagged_directive = Tidset.t * directive [@@deriving compare, sexp]
 
     type t = tagged_directive [@@deriving compare, sexp]
+
+    let is_var = function
+      | Var _ -> true
+      | _ -> false
 
     let directive_equal : directive -> directive -> bool = fun left right ->
       0 = compare_directive left right
@@ -63,6 +67,40 @@ module Directives(N : Abstract.NumericDomain)
       match so with
       | Var v -> v
       | Num w -> Format.sprintf "%a" Word.pps w
+
+    let rec cnds_as_substs (c : cnd) : (string * string) list =
+      match c with
+      | Eq (Var l, Var r) -> [(l, r)]
+      | Eq (_, _) -> []
+      | Lt (_, _) -> []
+      | And (c1, c2) ->
+         List.append (cnds_as_substs c1) (cnds_as_substs c2)
+
+    let rec subst_cnd (target : cnd) ((replace, with_) : string * string) : cnd =
+      let s = function
+        | Var v -> if String.equal v replace
+                   then Var with_
+                   else Var v
+        | Num n -> Num n
+      in
+      match (target : cnd) with
+      | Eq (l, r) -> Eq (s l, s r)
+      | Lt (l, r) -> Lt (s l, s r)
+      | And (l, r) -> And (subst_cnd l (replace, with_), subst_cnd r (replace, with_))
+
+    let substs_of_tdir ((tags, dir) : tagged_directive) : (string * string) list =
+      match dir with
+      | Value c -> cnds_as_substs c
+      | Jmp c -> cnds_as_substs c
+      | Empty -> []
+      | Combine _ -> []
+
+    let rec subst_tdir ((tags, dir) : t) (subst : string * string) : t =
+      match dir with
+      | Empty -> tags, Empty
+      | Value cnd -> tags, Value (subst_cnd cnd subst)
+      | Jmp cnd -> tags, Jmp (subst_cnd cnd subst)
+      | Combine x -> tags, Combine x
 
     let rec directive_cnd_to_string (c : cnd) : string =
       match c with
@@ -141,8 +179,12 @@ module Directives(N : Abstract.NumericDomain)
            let a_val = E.lookup a env in
            let b_val = E.lookup b env in
            let final_val = N.meet a_val b_val in
-           E.set a final_val env
-           |> E.set b final_val
+           let () = printf "Dir: %s = %s\n%!" a b in
+           let env = E.set a final_val env
+                     |> E.set b final_val
+           in
+           let () = printf "that env is:\n%!"; E.pp env in
+           env
          in
          let neg_applier = fun (env : E.t) ->
            let a_val = E.lookup a env in
@@ -153,8 +195,12 @@ module Directives(N : Abstract.NumericDomain)
            let b_wi' = WI.try_remove_interval ~remove:a_wi ~from_:b_wi in
            let a_val' = set_intvl a_val a_wi' in
            let b_val' = set_intvl b_val b_wi' in
-           E.set a a_val' env 
-           |> E.set b b_val'
+           let () = printf "Dir: %s <> %s\n%!" a b in
+           let env = E.set a a_val' env 
+                     |> E.set b b_val'
+           in
+           let () = printf "that env is:\n%!"; E.pp env in
+           env
          in
          pos_applier, neg_applier
       | Eq (Var v, Num w)
@@ -163,7 +209,10 @@ module Directives(N : Abstract.NumericDomain)
          let pos_applier = fun (env : E.t) ->
            let var_val = E.lookup v env in
            let intersect = N.meet var_val const in
-           E.set v intersect env
+           let () = printf "Dir: %s = %a\n%!" v Word.ppo w in
+           let env = E.set v intersect env in
+           let () = printf "that env is:\n%!"; E.pp env in
+           env
          in
          let neg_applier = fun (env : E.t) ->
            let const = get_intvl const in
@@ -171,7 +220,10 @@ module Directives(N : Abstract.NumericDomain)
            let var_wi = get_intvl var_val in
            let var_wi' = WI.try_remove_interval ~remove:const ~from_:var_wi in
            let var_val' = set_intvl var_val var_wi' in
-           E.set v var_val' env
+           let env = E.set v var_val' env in
+           let () = printf "Dir: %s <> %a\n%!" v Word.ppo w in
+           let () = printf "that env is:\n%!"; E.pp env in
+           env
          in
          pos_applier, neg_applier
       | Lt (Var a, Var b) ->
@@ -352,7 +404,7 @@ module Directives(N : Abstract.NumericDomain)
          let latest_depset = Tidset.singleton latest_dep in
          let tagged_combine_dir = (latest_depset, Combine (fst flagdirs)) in
          Some tagged_combine_dir
-      | None -> None
+      | None -> None             
       
     let get_conds_for_flag ((tid,flagname) : tid * string) (p : prereq) : t =
       let flag_tidset = Tidset.singleton tid in
@@ -376,7 +428,13 @@ module Directives(N : Abstract.NumericDomain)
                then
                  flag_set_dir
                else
-                 (match reduce_and_tagged_dirs flag_set_dir sec_lvl_dirs with
+                 let all_dirs = List.map sec_lvl_dirs ~f:(fun tdir ->
+                                    substs_of_tdir tdir)
+                                |> List.join
+                                |> List.map ~f:(fun snd_lvl_subst ->
+                                       subst_tdir flag_set_dir snd_lvl_subst)
+                 in
+                 (match reduce_and_tagged_dirs flag_set_dir all_dirs with
                   | Ok d -> d
                   | Error e -> failwith (Error.to_string_hum e))
             | Error e ->
@@ -452,9 +510,21 @@ module Tree(N : Abstract.NumericDomain)
     match tree with
     | Leaf n ->
        let true_pruner, false_pruner = Directives.Applier.build tdir in
+       let left_env = true_pruner n in
+       let right_env = false_pruner n in
+       let () = printf "[Trace] doing split: %s\n%!" (Directives.to_string tdir);
+                printf "[Trace] \tPre-env is:\n%!";
+                E.pp n;
+                printf "[Trace] \tleft res env:\n%!";
+                E.pp left_env;
+                printf "[Trace] \tright res env:\n%!";
+                E.pp right_env
+       in
+       let left = Leaf left_env in
+       let right = Leaf right_env in
        Parent {
-           left = Leaf (true_pruner n);
-           right = Leaf (false_pruner n);
+           left;
+           right; 
            directive = tdir
          }
     | Parent { left; directive; right } ->
@@ -659,11 +729,11 @@ module Env(N : Abstract.NumericDomain)
     { tree = Tree.merge l.tree r.tree }
 
   let widen_with_step (n : int) (node : 'a) l r : t =
-    if n > Common.ai_widen_threshold
+    if n <= Common.ai_widen_threshold
     then
-      failwith "[Trace] infinite loop stuck in widen_with_step"
-    else
       merge l r
+    else
+      failwith "[Trace] infinite loop stuck in widen_with_step"
 end
 
 module ConditionFinder = struct
