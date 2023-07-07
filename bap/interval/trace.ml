@@ -9,6 +9,14 @@ module Directives(N : Abstract.NumericDomain)
                                 and type region := Common.Region.t
                                 and type regions := Common.Region.Set.t
                                 and type valtypes := Common.cell_t) = struct
+
+  let get_intvl : N.t -> Wrapping_interval.t =
+    match N.get Wrapping_interval.key with
+    | Some f -> f
+    | None -> failwith "Couldn't extract interval information in directives get_intvl"
+
+  let set_intvl (v : N.t) (wi : Wrapping_interval.t) : N.t =
+    N.set Wrapping_interval.key v wi
   
   module T = struct
     type simple_operand = Var of string | Num of Word.t [@@deriving compare, sexp]
@@ -27,9 +35,22 @@ module Directives(N : Abstract.NumericDomain)
 
     type t = tagged_directive [@@deriving compare, sexp]
 
+    let directive_equal : directive -> directive -> bool = fun left right ->
+      0 = compare_directive left right
+
+    let equal : t -> t -> bool = fun left right ->
+      0 = compare left right
+
     let is_combine : directive -> bool = function
       | Combine _ -> true
       | _ -> false
+
+    let cnd (td : tagged_directive) : cnd option =
+      let (tidset, dir) = td in
+      match dir with
+      | Jmp c
+        | Value c -> Some c
+      | _ -> None
 
     let is_tagged_combine (tdir : t) : bool =
       is_combine @@ snd tdir
@@ -102,6 +123,94 @@ module Directives(N : Abstract.NumericDomain)
     let open Or_error.Monad_infix in
     List.fold tds ~init:(Ok base) ~f:(fun total_dir next_dir ->
         total_dir >>= fun dir -> tagged_directive_and dir next_dir)
+
+  module Applier = struct
+
+    module WI = Wrapping_interval
+    
+    type pos_neg_applier = (E.t -> E.t) * (E.t -> E.t)
+      
+    let rec eval_cnd : cnd -> pos_neg_applier =
+      fun cnd ->
+      match cnd with
+      | Eq (Var a, Var b) ->
+         let pos_applier = fun (env : E.t) ->
+           let a_val = E.lookup a env in
+           let b_val = E.lookup b env in
+           let final_val = N.meet a_val b_val in
+           E.set a final_val env
+           |> E.set b final_val
+         in
+         let neg_applier = fun (env : E.t) ->
+           let a_val = E.lookup a env in
+           let b_val = E.lookup b env in
+           let a_wi = get_intvl a_val in
+           let b_wi = get_intvl b_val in
+           let a_wi' = WI.try_remove_interval ~remove:b_wi ~from_:a_wi in
+           let b_wi' = WI.try_remove_interval ~remove:a_wi ~from:b_wi in
+           let a_val' = set_intvl a_val a_wi' in
+           let b_val' = set_intvl b_val b_wi' in
+           E.set a a_val' env 
+           |> E.set b b_val'
+         in
+         pos_applier, neg_applier
+      | Eq (Var v, Num w)
+        | Eq (Num w, Var v) ->
+         let const = N.of_word w in
+         let pos_applier = fun (env : E.t) ->
+           let var_val = E.lookup v env in
+           let intersect = N.meet var_val const in
+           E.set v intersect env
+         in
+         let neg_applier = fun (env : E.t) ->
+           let var_val = E.lookup v env in
+           let var_wi = get_intvl var_val in
+           let var_wi' = WI.try_remove_interval ~remove:const ~from_:var_wi in
+           let var_val' = set_intvl var_val var_wi' in
+           E.set v var_val' env
+         in
+         pos_applier, neg_applier
+      | Lt (Var a, Var b) ->
+         let pos_applier = fun (env : E.t) ->
+           failwith "LT (VAR A, VAR B) not supported in Directives.Applier.eval_cnd yet"
+           env
+         in
+         let neg_applier = fun (env : E.t) ->
+           failwith "LT (VAR A, VAR B) not supported in Directives.Applier.eval_cnd yet"
+           env
+         in
+         pos_applier, neg_applier
+      | Lt (Var v, Num w)
+        | Lt (Num w, Var v) ->
+         let const = WI.of_word w in
+         let pos_applier = fun (env : E.t) ->
+           failwith "LT (VAR A, NUM B) not supported in Directives.Applier.eval_cnd yet"
+           env
+         in
+         let neg_applier = fun (env : E.t) ->
+           failwith "LT (VAR A, NUM B) not supported in Directives.Applier.eval_cnd yet"
+           env
+         in
+         pos_applier, neg_applier
+      | And (c1, c2) ->
+         let (p1, n1) = eval_cnd c1 in
+         let (p2, n2) = eval_cnd c2 in
+         (fun e -> p2 (p1 e)), (fun e -> n2 (n1 e))
+      | _ ->
+         failwith
+           "Fallthrough case in Directives.Applier.eval_cnd shouldn't happen"
+      
+    let build : tagged_directive -> pos_neg_applier =
+      fun (tids, dir) ->
+      match dir with
+      | Value cnd
+        | Jmp cnd ->
+         begin
+           
+         end
+      | _ -> orig_env
+      
+  end
   
   module Extractor = struct
     module Grammar = struct
@@ -395,6 +504,49 @@ module Tree(N : Abstract.NumericDomain)
        let right = left_fold_join ~f right in
        N.join left right
 
+  (* conditions are the same on both sides of the tree,
+     so just collect along the left side *)
+  let rec conditions (tree : t) : Directives.cnd list =
+    match tree with
+    | Leaf e -> []
+    | Parent p ->
+       (match Directives.cnd p.directive with
+        | Some cnd -> cnd :: conditions p.left
+        | None -> conditions p.left)
+
+  let rec conditions_prefix ~(prefix : Directives.cnd list)
+            ~(of_ : Directives.cnd list) : bool =
+    match prefix, of_ with
+    | [], _ -> true
+    | _, [] -> false
+    | x :: xs, y :: ys ->
+       0 = Directives.compare_cnd x y &&
+         conditions_prefix ~prefix:xs ~of_:ys
+
+  (* directives are the same on both sides of the tree,
+     so just collect along the left side *)
+  let rec directives (tree : t) : Directives.t list =
+    match tree with
+    | Leaf e -> []
+    | Parent p ->
+       p.directive :: directives p.left
+
+  let directives_prefix ~(prefix : Directives.t list)
+        ~(of_ : Directives.t list) : bool =
+    match prefix, of_ with
+    | [], _ -> true
+    | _, [] -> false
+    | x :: prefixes, y :: ofs ->
+       0 = Directives.compare x y &&
+         directives_prefix ~prefix:prefixes ~of_:ofs
+  
+  let rec merge_trees (left : t) (right : t) : t =
+    match left, right with
+    | Leaf l, Leaf r -> Leaf (E.merge l r)
+    | Parent p, Leaf node
+      | Leaf node, Parent p ->
+       
+
   let merge (left : t) (right : t) : t =
     let open Or_error.Monad_infix in
     let rec loop (left : t) (right : t) : t Or_error.t =
@@ -416,7 +568,7 @@ module Tree(N : Abstract.NumericDomain)
     match loop left right with
     | Ok res -> res
     | Error e ->
-       let () = printf "Failed to merge two trees:\n\t1. %s\n\t %s\n%!"
+       let () = printf "Failed to merge two trees:\n\t1. %s\n\t2. %s\n%!"
                   (to_string left)
                   (to_string right)
        in
@@ -599,7 +751,6 @@ module AbsInt = struct
 
     let denote_elt (subname : string) (dmap : Directives.directive_map)
           (e : Blk.elt) (st : env) : env =
-      
       match e with
       | `Def d ->
          let () = printf "[Trace] denoting elt: %a\n%!" Tid.ppo (Term.tid d) in

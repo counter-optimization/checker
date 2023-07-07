@@ -565,18 +565,6 @@ let of_word (w : word) : t =
   let z_val = Word.to_bitvec w |> Bitvec.to_bigint in
   of_z ~width z_val
 
-  (* if width = 64 *)
-  (* then match Word.to_int64 w with *)
-  (*      | Error _ -> failwith "in Wrapping_interval.of_word, couldn't convert word to int64" *)
-  (*      | Ok i -> of_int64 i *)
-  (* else *)
-  (*   if width < 64 *)
-  (*   then match Word.to_int w with *)
-  (*        | Error _ -> failwith "in Wrapping_interval.of_word, couldn't convert word to int64" *)
-  (*        | Ok i -> of_int ~width i *)
-  (*   else *)
-  (*     failwith "can't handle integers > 64 bits in Wrapping_interval.of_word" *)
-
 let of_int_tuple ?(width = 64) (x, y) =
   Interval { lo = Z.of_int x;
              hi = Z.of_int y;
@@ -660,3 +648,67 @@ let set : type a. a Key.k -> t -> a -> t = fun k other replace ->
   match Key.eq_type k key with
   | Eq -> replace
   | Neq -> other
+
+(* guard operator style functions
+   safe removals:
+    from_ :         [                            ]
+    remove:       [   ]
+    remove.lo <= from_.lo && remove.hi >= from_.lo && remove.hi < from_.hi
+    ----> 
+    from_.lo = remove.hi + 1
+    from_.hi = from_.hi
+
+    what if:
+    from_:               [         ]
+    remove:              [         ]
+    we want all states where they could never be equal
+    ---->
+    Bot
+
+    from_ : [                  ]
+    remove:             [        ]
+    remove.hi >= from_.hi && remove.lo <= from_.hi && remove.lo > from_.lo
+    ---->
+    from_.hi = remove.lo - 1
+    from_.lo = from_.lo
+
+    from_:    [                   ]
+    remove:        [   ]
+    ---->
+    from_ = from_
+    can't put holes in interval from_
+
+    from_:       [ ]
+    remove:   [       ]
+    ---->
+    Bot
+    
+    from_ : [       ]
+    remove:                  [      ]
+    ---->
+    from_ = from_
+ *)
+let try_remove_interval ~(remove : t) ~(from_ : t) : t =
+  match remove, from_ with
+  | _, Bot -> Bot
+  | Bot, _ -> from_
+  | Interval remove, Interval from_ ->
+     if Z.leq remove.lo from_.lo && Z.geq remove.hi from_.hi
+     then Bot
+     else
+       if Z.leq remove.lo from_.lo && Z.geq remove.hi from_.lo &&
+            Z.lt remove.hi from_.hi
+       then
+         Interval { from_ with lo = Z.add remove.hi Z.one }
+       else
+         if Z.geq remove.hi from_.hi && Z.leq remove.lo from_.hi &&
+              Z.gt remove.lo from_.lo
+         then
+           Interval { from_ with hi = Z.sub remove.lo Z.one }
+         else
+           (* both cases where there is no overlap
+              OR
+              from_.lo < remove.lo && remove.hi < from_.hi *)
+           Interval from_
+
+       
