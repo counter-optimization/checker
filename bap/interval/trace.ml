@@ -129,6 +129,9 @@ module Directives(N : Abstract.NumericDomain)
     module WI = Wrapping_interval
     
     type pos_neg_applier = (E.t -> E.t) * (E.t -> E.t)
+
+    let id : 'a. 'a -> 'a = fun x -> x
+    let id_applier : pos_neg_applier = id, id
       
     let rec eval_cnd : cnd -> pos_neg_applier =
       fun cnd ->
@@ -147,7 +150,7 @@ module Directives(N : Abstract.NumericDomain)
            let a_wi = get_intvl a_val in
            let b_wi = get_intvl b_val in
            let a_wi' = WI.try_remove_interval ~remove:b_wi ~from_:a_wi in
-           let b_wi' = WI.try_remove_interval ~remove:a_wi ~from:b_wi in
+           let b_wi' = WI.try_remove_interval ~remove:a_wi ~from_:b_wi in
            let a_val' = set_intvl a_val a_wi' in
            let b_val' = set_intvl b_val b_wi' in
            E.set a a_val' env 
@@ -163,6 +166,7 @@ module Directives(N : Abstract.NumericDomain)
            E.set v intersect env
          in
          let neg_applier = fun (env : E.t) ->
+           let const = get_intvl const in
            let var_val = E.lookup v env in
            let var_wi = get_intvl var_val in
            let var_wi' = WI.try_remove_interval ~remove:const ~from_:var_wi in
@@ -173,23 +177,18 @@ module Directives(N : Abstract.NumericDomain)
       | Lt (Var a, Var b) ->
          let pos_applier = fun (env : E.t) ->
            failwith "LT (VAR A, VAR B) not supported in Directives.Applier.eval_cnd yet"
-           env
          in
          let neg_applier = fun (env : E.t) ->
            failwith "LT (VAR A, VAR B) not supported in Directives.Applier.eval_cnd yet"
-           env
          in
          pos_applier, neg_applier
       | Lt (Var v, Num w)
         | Lt (Num w, Var v) ->
-         let const = WI.of_word w in
          let pos_applier = fun (env : E.t) ->
            failwith "LT (VAR A, NUM B) not supported in Directives.Applier.eval_cnd yet"
-           env
          in
          let neg_applier = fun (env : E.t) ->
            failwith "LT (VAR A, NUM B) not supported in Directives.Applier.eval_cnd yet"
-           env
          in
          pos_applier, neg_applier
       | And (c1, c2) ->
@@ -203,12 +202,9 @@ module Directives(N : Abstract.NumericDomain)
     let build : tagged_directive -> pos_neg_applier =
       fun (tids, dir) ->
       match dir with
-      | Value cnd
-        | Jmp cnd ->
-         begin
-           
-         end
-      | _ -> orig_env
+      | Value cnd -> eval_cnd cnd
+      | Jmp cnd -> eval_cnd cnd
+      | _ -> id_applier
       
   end
   
@@ -455,9 +451,10 @@ module Tree(N : Abstract.NumericDomain)
   let rec do_directive_split (tree : t) (tdir : Directives.tagged_directive) : t =
     match tree with
     | Leaf n ->
+       let true_pruner, false_pruner = Directives.Applier.build tdir in
        Parent {
-           left = Leaf n;
-           right = Leaf n;
+           left = Leaf (true_pruner n);
+           right = Leaf (false_pruner n);
            directive = tdir
          }
     | Parent { left; directive; right } ->
@@ -531,7 +528,7 @@ module Tree(N : Abstract.NumericDomain)
     | Parent p ->
        p.directive :: directives p.left
 
-  let directives_prefix ~(prefix : Directives.t list)
+  let rec directives_prefix ~(prefix : Directives.t list)
         ~(of_ : Directives.t list) : bool =
     match prefix, of_ with
     | [], _ -> true
@@ -539,15 +536,18 @@ module Tree(N : Abstract.NumericDomain)
     | x :: prefixes, y :: ofs ->
        0 = Directives.compare x y &&
          directives_prefix ~prefix:prefixes ~of_:ofs
-  
-  let rec merge_trees (left : t) (right : t) : t =
-    match left, right with
-    | Leaf l, Leaf r -> Leaf (E.merge l r)
-    | Parent p, Leaf node
-      | Leaf node, Parent p ->
-       
 
-  let merge (left : t) (right : t) : t =
+  (* precondition: Bool.equal true (directives ~prefix ~of_) *)
+  let rec remove_directives_prefix ~(prefix : Directives.t list)
+        ~(of_ : Directives.t list) : Directives.t list =
+    match prefix, of_ with
+    | [], _ -> of_
+    | x :: prefixes, y :: ofs_ ->
+       remove_directives_prefix ~prefix:prefixes ~of_:ofs_
+    | _ ->
+       failwith "[Trace] remove_directives_prefix, ~prefix not prefix of ~of_"
+
+  let isomorphic_merge (left : t) (right : t) : t =
     let open Or_error.Monad_infix in
     let rec loop (left : t) (right : t) : t Or_error.t =
       match left, right with
@@ -573,6 +573,55 @@ module Tree(N : Abstract.NumericDomain)
                   (to_string right)
        in
        failwith @@ Error.to_string_hum e
+
+  let normalize_prefixed_trees
+        ~(do_merge : bool)
+        ~(suffix : Directives.t list)
+        ~(target : t)
+        ~(other : t) : t =
+    let refined_target = List.fold suffix ~init:target ~f:(fun target tdir ->
+                             do_directive_split target tdir)
+    in
+    if do_merge
+    then
+      isomorphic_merge refined_target other
+    else
+      refined_target
+  
+  let merge (left : t) (right : t) : t =
+    let left_tdirs = directives left in
+    let right_tdirs = directives right in
+    if directives_prefix ~prefix:left_tdirs ~of_:right_tdirs
+    then
+      let remaining_suffix = remove_directives_prefix
+                               ~prefix:left_tdirs
+                               ~of_:right_tdirs
+      in
+      normalize_prefixed_trees
+        ~do_merge:true
+        ~suffix:remaining_suffix
+        ~target:left
+        ~other:right
+    else
+      if directives_prefix ~prefix:right_tdirs ~of_:left_tdirs
+      then
+        let remaining_suffix = remove_directives_prefix
+                               ~prefix:right_tdirs
+                               ~of_:left_tdirs
+        in
+        normalize_prefixed_trees
+          ~do_merge:true
+          ~suffix:remaining_suffix
+          ~target:right
+          ~other:left
+      else
+        (* neither refine each other, so pick (mid : t) s.t. 
+           mid refines both left and right *)
+        normalize_prefixed_trees
+          ~suffix:right_tdirs
+          ~target:left
+          ~other:right
+          ~do_merge:false
 
   let rec num_leaves : t -> int = function
     | Leaf _ -> 1
