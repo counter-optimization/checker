@@ -179,11 +179,11 @@ module Directives(N : Abstract.NumericDomain)
            let a_val = E.lookup a env in
            let b_val = E.lookup b env in
            let final_val = N.meet a_val b_val in
-           let () = printf "Dir: %s = %s\n%!" a b in
+           (* let () = printf "Dir: %s = %s\n%!" a b in *)
            let env = E.set a final_val env
                      |> E.set b final_val
            in
-           let () = printf "that env is:\n%!"; E.pp env in
+           (* let () = printf "that env is:\n%!"; E.pp env in *)
            env
          in
          let neg_applier = fun (env : E.t) ->
@@ -195,37 +195,53 @@ module Directives(N : Abstract.NumericDomain)
            let b_wi' = WI.try_remove_interval ~remove:a_wi ~from_:b_wi in
            let a_val' = set_intvl a_val a_wi' in
            let b_val' = set_intvl b_val b_wi' in
-           let () = printf "Dir: %s <> %s\n%!" a b in
+           (* let () = printf "Dir: %s <> %s\n%!" a b in *)
            let env = E.set a a_val' env 
                      |> E.set b b_val'
            in
-           let () = printf "that env is:\n%!"; E.pp env in
+           (* let () = printf "that env is:\n%!"; E.pp env in *)
            env
          in
          pos_applier, neg_applier
       | Eq (Var v, Num w)
         | Eq (Num w, Var v) ->
          let const = N.of_word w in
-         let pos_applier = fun (env : E.t) ->
-           let var_val = E.lookup v env in
-           let intersect = N.meet var_val const in
-           let () = printf "Dir: %s = %a\n%!" v Word.ppo w in
-           let env = E.set v intersect env in
-           let () = printf "that env is:\n%!"; E.pp env in
-           env
-         in
-         let neg_applier = fun (env : E.t) ->
-           let const = get_intvl const in
-           let var_val = E.lookup v env in
-           let var_wi = get_intvl var_val in
-           let var_wi' = WI.try_remove_interval ~remove:const ~from_:var_wi in
-           let var_val' = set_intvl var_val var_wi' in
-           let env = E.set v var_val' env in
-           let () = printf "Dir: %s <> %a\n%!" v Word.ppo w in
-           let () = printf "that env is:\n%!"; E.pp env in
-           env
-         in
-         pos_applier, neg_applier
+         if Common.AMD64SystemVABI.var_name_is_flag v
+         then
+           let one = Word.one @@ Word.bitwidth w in
+           let zero = Word.zero @@ Word.bitwidth w in
+           let pos_val, neg_val = if Word.equal w one
+                                  then
+                                    (N.of_word one, N.of_word zero)
+                                  else
+                                    (N.of_word zero, N.of_word one)
+           in
+           let pos_applier = E.set v pos_val in
+           let neg_applier = E.set v neg_val in
+           pos_applier, neg_applier
+         else
+           begin
+             let pos_applier = fun (env : E.t) ->
+               let var_val = E.lookup v env in
+               let intersect = N.meet var_val const in
+               (* let () = printf "Dir: %s = %a\n%!" v Word.ppo w in *)
+               let env = E.set v intersect env in
+               (* let () = printf "that env is:\n%!"; E.pp env in *)
+               env
+             in
+             let neg_applier = fun (env : E.t) ->
+               let const = get_intvl const in
+               let var_val = E.lookup v env in
+               let var_wi = get_intvl var_val in
+               let var_wi' = WI.try_remove_interval ~remove:const ~from_:var_wi in
+               let var_val' = set_intvl var_val var_wi' in
+               let env = E.set v var_val' env in
+               (* let () = printf "Dir: %s <> %a\n%!" v Word.ppo w in *)
+               (* let () = printf "that env is:\n%!"; E.pp env in *)
+               env
+             in
+             pos_applier, neg_applier
+           end
       | Lt (Var a, Var b) ->
          let pos_applier = fun (env : E.t) ->
            failwith "LT (VAR A, VAR B) not supported in Directives.Applier.eval_cnd yet"
@@ -706,6 +722,7 @@ module Env(N : Abstract.NumericDomain)
                                 and type valtypes := Common.cell_t) = struct
 
   module Tree = Tree(N)(E)
+  module Directives = Directives(N)(E)
 
   module T = struct
     type env = {
@@ -734,6 +751,27 @@ module Env(N : Abstract.NumericDomain)
       merge l r
     else
       failwith "[Trace] infinite loop stuck in widen_with_step"
+
+  let pp : t -> unit = fun { tree } ->
+    let tdir_list_to_string ~(is_left : bool)
+          (tdirlist : Directives.t list) : string =
+      Format.sprintf "%s(%s)"
+        (if is_left then "" else "~")
+        (List.to_string tdirlist ~f:Directives.to_string)
+    in
+    let rec loop ?(tdirstack : Directives.t list = [])
+              ~(is_left : bool)
+              (tree : Tree.t) : unit =
+      match tree with
+      | Tree.Leaf env ->
+         printf "%s:\n\t\t%!" (tdir_list_to_string ~is_left tdirstack);
+         E.pp env
+      | Tree.Parent p ->
+         let tdirstack = p.directive :: tdirstack in
+         loop ~tdirstack ~is_left:true p.left;
+         loop ~tdirstack ~is_left:false p.right
+    in
+    loop tree ~is_left:true
 end
 
 module ConditionFinder = struct

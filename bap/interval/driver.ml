@@ -392,20 +392,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      in
      let directive_map = TraceDir.Extractor.to_directive_map dirs in
 
-     (* SHL32rCL, SHL8rCL, SHR64rCL *)
-     let shift_trans_fns = ["x86compsimptest_SHL8rCL_transformed";
-                            "x86compsimptest_SHL32rCL_transformed";
-                            "x86compsimptest_SHR32rCL_transformed"]
-     in
-     let () = if List.mem ~equal:String.equal shift_trans_fns subname
-              then
-                let () = printf "%a\n%!" Sub.ppo sub in
-                let () = printf "Directive map:\n%!" in
-                Map.iteri directive_map ~f:(fun ~key ~data ->
-                    printf "\t%a -> %s\n%!"
-                      Tid.ppo key
-                      (TraceDir.to_string data))
-              else ()
+     let () = printf "Directives are:\n%!";
+              List.iter dirs ~f:(fun td -> printf "\t%s\n%!" @@
+                                             TraceDir.to_string td)
      in
 
      let () = printf "Running trace part abstract interpreter\n%!" in
@@ -442,6 +431,27 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let no_symex = Extension.Configuration.get ctxt Common.no_symex_param in
      let use_symex = not no_symex in
      let symex_profiling_out_file = Extension.Configuration.get ctxt Common.symex_profiling_output_file_path_param in
+
+     (* SHL32rCL, SHL8rCL, SHR64rCL *)
+     let shift_trans_fns = ["x86compsimptest_SHL8rCL_transformed";
+                            "x86compsimptest_SHL32rCL_transformed";
+                            "x86compsimptest_SHR32rCL_transformed"]
+     in
+     let () = if List.mem ~equal:String.equal shift_trans_fns subname
+              then
+                let () = printf "%a\n%!" Sub.ppo sub in
+                let () = printf "Directive map:\n%!" in
+                Map.iteri directive_map ~f:(fun ~key ~data ->
+                    printf "\t%a -> %s\n%!"
+                      Tid.ppo key
+                      (TraceDir.to_string data));
+                Solution.enum analysis_results
+                |> Seq.iter ~f:(fun (cc, env) ->
+                       let tid = Calling_context.to_insn_tid cc in
+                       printf "[Trace] tid %a finished with env:\n%!" Tid.ppo tid;
+                       TraceEnv.pp env)
+              else ()
+     in
 
      (* for non-trace-partitioning abstract interpreter *)
      (* let module BaseCheckerOracle : Common.CheckerInterp with type t := FinalDomain.t = *)
@@ -580,38 +590,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
  *)
 let check_config config img ctxt proj : unit =
   let () = Random.self_init () in
-  (* let () = begin *)
-  (*   let zero = Wrapping_interval.b0 in *)
-  (*   let other = Wrapping_interval.Interval { *)
-  (*                   lo = Z.zero; *)
-  (*                   hi = Z.of_int 31; *)
-  (*                   signed = false; *)
-  (*                   width = 64 *)
-  (*                 } *)
-  (*   in *)
-  (*   let expected = Wrapping_interval.Interval { *)
-  (*                   lo = Z.one; *)
-  (*                   hi = Z.of_int 31; *)
-  (*                   signed = false; *)
-  (*                   width = 64 *)
-  (*                 } *)
-  (*   in *)
-  (*   let remove_result = Wrapping_interval.try_remove_interval *)
-  (*                         ~remove:zero *)
-  (*                         ~from_:other *)
-  (*   in *)
-  (*   if 0 = Wrapping_interval.compare expected remove_result *)
-  (*   then *)
-  (*     printf "[WI] remove [0,0] from [0,31] result is: %s\n%!" *)
-  (*       (Wrapping_interval.to_string remove_result) *)
-  (*   else *)
-  (*     let () = printf "remove result is: %s, but expected %s\n%!" *)
-  (*                (Wrapping_interval.to_string remove_result) *)
-  (*                (Wrapping_interval.to_string expected) *)
-  (*     in *)
-  (*     failwith "[WI] try_remove_interval error" *)
-  (*   end *)
-  (* in *) 
   let target_fns = Config.get_target_fns_exn config proj in
   let worklist = SubSet.of_sequence target_fns in
   let processed = SubSet.empty in

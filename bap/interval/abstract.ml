@@ -334,9 +334,21 @@ module DomainProduct(X : NumericDomain)(Y : NumericDomain)
 
   (* If at least one domain says it's true, then it *could* be true *)
   (* TODO: taint could be made more precise here *) 
-  let could_be_true (x, y) = X.could_be_true x || Y.could_be_true y
+  let could_be_true (x, y) =
+    match get Wrapping_interval.key with
+    | Some f ->
+       let wi = f (x, y) in
+       Wrapping_interval.could_be_true wi
+    | None ->
+       X.could_be_true x || Y.could_be_true y
 
-  let could_be_false (x, y) = X.could_be_false x || Y.could_be_false y
+  let could_be_false (x, y) =
+    match get Wrapping_interval.key with
+    | Some f ->
+       let wi = f (x, y) in
+       Wrapping_interval.could_be_false wi
+    | None ->
+       X.could_be_false x || Y.could_be_false y
 
   let cast_or_extract xf yf = fun n (x, y) -> xf n x, yf n y
   let unsigned = cast_or_extract X.unsigned Y.unsigned
@@ -452,17 +464,17 @@ module AbstractInterpreter(N: NumericDomain)
            let (exp', st) = denote_exp  exp st in
            (denote_cast cast n exp', st)
         | Bil.Ite (cond, ifthen, ifelse) ->
-           let (cond', st) = denote_exp  cond st in
+           let (cond', st) = denote_exp cond st in
            let truthy = N.could_be_true cond' in
            let falsy = N.could_be_false cond' in
            if truthy && not falsy
-           then denote_exp  ifthen st
+           then denote_exp ifthen st
            else
              if not truthy && falsy
-             then denote_exp  ifelse st
+             then denote_exp ifelse st
              else
-               let (then', st) = denote_exp  ifthen st in
-               let (else', st) = denote_exp  ifelse st in
+               let (then', st) = denote_exp ifthen st in
+               let (else', st) = denote_exp ifelse st in
                (N.join then' else', st)
         | Bil.Unknown (str, _) ->
            (* This seems to be used for at least:
