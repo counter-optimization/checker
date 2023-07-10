@@ -309,7 +309,8 @@ module Make(N : NumericDomain)
      *)
     let merge ~(this : t) ~(other : t) : t =
       let bytes_to_merge = get_merge_lists ~this ~other in
-      let merged_le_bytes = List.map bytes_to_merge ~f:(fun (tb, ob) -> merge_bytes tb ob) in
+      let merged_le_bytes = List.map bytes_to_merge ~f:(fun (tb, ob) ->
+                                merge_bytes tb ob) in
       let merged_data = data_from_little_endian_bytes merged_le_bytes in
       { this with data = merged_data }
   end

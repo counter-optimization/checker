@@ -247,7 +247,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let freenames = Set.to_list free_vars |> List.map ~f:Var.name in
      
      let args = Term.enum arg_t sub in
-     let argnames = Seq.map args ~f:(fun a -> Arg.var a |> T.Var.name) |> Seq.to_list in
+     let argnames = Seq.map args ~f:(fun a -> Arg.var a |> T.Var.name)
+                    |> Seq.to_list in
 
      let with_canary_set = E.set_stack_canary empty in
 
@@ -392,10 +393,14 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      in
      let directive_map = TraceDir.Extractor.to_directive_map dirs in
 
-     let () = printf "Directives are:\n%!";
+     let () = printf "[Driver] Directives are:\n%!";
               List.iter dirs ~f:(fun td -> printf "\t%s\n%!" @@
-                                             TraceDir.to_string td)
-     in
+                                             TraceDir.to_string td) in
+     let () = printf "[Driver] directive map is:\n%!";
+              Map.iteri directive_map ~f:(fun ~key ~data ->
+                  printf "\t%a -> %s\n%!"
+                    Tid.ppo key
+                    (TraceDir.to_string data)) in
 
      let () = printf "Running trace part abstract interpreter\n%!" in
 
@@ -406,6 +411,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                           G.Node.Map.empty
                           ~key:first_node
                           ~data:init_trace_env in
+     let () = printf "[Driver] init trace env is:\n%!";
+              TraceEnv.pp init_trace_env in
      
      let init_sol = Solution.create init_mapping TraceEnv.empty in
      let analysis_results = Graphlib.fixpoint
@@ -426,8 +433,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                          Tid.pps tid
 
                                 in
-                                TraceAbsInt.denote_elt subname directive_map elt)
-     in
+                                TraceAbsInt.denote_elt subname directive_map elt) in
 
      let () = printf "Done running trace part abstract interpreter\n%!" in
      let stop = Analysis_profiling.record_stop_time start in
@@ -440,8 +446,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      (* SHL32rCL, SHL8rCL, SHR64rCL *)
      let shift_trans_fns = ["x86compsimptest_SHL8rCL_transformed";
                             "x86compsimptest_SHL32rCL_transformed";
-                            "x86compsimptest_SHR32rCL_transformed"]
-     in
+                            "x86compsimptest_SHR32rCL_transformed"] in
      let () = if List.mem ~equal:String.equal shift_trans_fns subname
               then
                 let () = begin
@@ -467,8 +472,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                        let tid = Calling_context.to_insn_tid cc in
                        printf "[Trace] tid %a finished with env:\n%!" Tid.ppo tid;
                        TraceEnv.pp env)
-              else ()
-     in
+              else () in
 
      (* for non-trace-partitioning abstract interpreter *)
      (* let module BaseCheckerOracle : Common.CheckerInterp with type t := FinalDomain.t = *)

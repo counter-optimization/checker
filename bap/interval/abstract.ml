@@ -135,6 +135,11 @@ module NumericEnv(ValueDom : NumericDomain)
                    and type regions := unit
                    and type region := unit
                    and type valtypes := unit) = struct
+
+  let get_intvl : ValueDom.t -> Wrapping_interval.t =
+      match ValueDom.get Wrapping_interval.key with
+      | Some f -> f
+      | None -> failwith "[Abstract] NumericEnv: couldn't extract wrapping interval"
   
   module M = Map.Make_binable_using_comparator(String)
   
@@ -195,15 +200,44 @@ module NumericEnv(ValueDom : NumericDomain)
   
   let equal = M.equal ValueDom.equal
 
+  let pp (env : t) : unit =
+    let env_entry_to_string ~(key : string) ~(data: ValueDom.t)
+        : string =
+      let val_str = ValueDom.to_string data in
+      sprintf "%s --> %s" key val_str
+    in
+    printf "* Env is:\n%!";
+    M.iteri env ~f:(fun ~key ~data ->
+        let entry_str = env_entry_to_string ~key ~data in
+        printf "\t%s\n%!" entry_str)
+
   let merge env1 env2 : t =
-    let merge_helper ~key ~data prev =
-      if M.mem prev key
-      then
-        let last = M.find_exn prev key in
-        let merged = ValueDom.join last data in
-        M.set prev ~key ~data:merged
-      else M.set prev ~key ~data in
-    M.fold env2 ~init:env1 ~f:merge_helper
+    let () = printf "[Abstract] NumericEnv.merge of:\n%!";
+             printf "\tLeft:\n%!";
+             pp env1;
+             printf "\tRight:\n%!";
+             pp env2 in
+    M.merge_skewed env1 env2 ~combine:(fun ~key left right ->
+        let left_wi = get_intvl left in
+        let right_wi = get_intvl right in
+        let s = Wrapping_interval.to_string in
+        let res = ValueDom.join left right in
+        let res_wi = get_intvl res in
+        let () = printf "[Abstract] NumericEnv.merge of %s: %s \\/ %s = %s\n%!"
+                   key
+                   (s left_wi)
+                   (s right_wi)
+                   (s res_wi) in
+        res)
+
+    (* let merge_helper ~key ~data prev = *)
+    (*   if M.mem prev key *)
+    (*   then *)
+    (*     let last = M.find_exn prev key in *)
+    (*     let merged = ValueDom.join last data in *)
+    (*     M.set prev ~key ~data:merged *)
+    (*   else M.set prev ~key ~data in *)
+    (* M.fold env2 ~init:env1 ~f:merge_helper *)
 
   let widen_threshold = Common.ai_widen_threshold
   
@@ -224,17 +258,6 @@ module NumericEnv(ValueDom : NumericDomain)
     in
     let f = if steps < widen_threshold then merge else widen_state in
     f prev_state new_state
-
-  let pp (env : t) : unit =
-    let env_entry_to_string ~(key : string) ~(data: ValueDom.t)
-        : string =
-      let val_str = ValueDom.to_string data in
-      sprintf "%s --> %s" key val_str
-    in
-    printf "* Env is:\n%!";
-    M.iteri env ~f:(fun ~key ~data ->
-        let entry_str = env_entry_to_string ~key ~data in
-        printf "\t%s\n%!" entry_str)
 end
 
 module DomainProduct(X : NumericDomain)(Y : NumericDomain)

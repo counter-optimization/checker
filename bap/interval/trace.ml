@@ -179,7 +179,7 @@ module Directives(N : Abstract.NumericDomain)
            let a_val = E.lookup a env in
            let b_val = E.lookup b env in
            let final_val = N.meet a_val b_val in
-           (* let () = printf "Dir: %s = %s\n%!" a b in *)
+           let () = printf "Dir: %s = %s\n%!" a b in
            let env = E.set a final_val env
                      |> E.set b final_val
            in
@@ -195,7 +195,7 @@ module Directives(N : Abstract.NumericDomain)
            let b_wi' = WI.try_remove_interval ~remove:a_wi ~from_:b_wi in
            let a_val' = set_intvl a_val a_wi' in
            let b_val' = set_intvl b_val b_wi' in
-           (* let () = printf "Dir: %s <> %s\n%!" a b in *)
+           let () = printf "Dir: %s <> %s\n%!" a b in
            let env = E.set a a_val' env 
                      |> E.set b b_val'
            in
@@ -224,7 +224,7 @@ module Directives(N : Abstract.NumericDomain)
              let pos_applier = fun (env : E.t) ->
                let var_val = E.lookup v env in
                let intersect = N.meet var_val const in
-               (* let () = printf "Dir: %s = %a\n%!" v Word.ppo w in *)
+               let () = printf "Dir: %s = %a\n%!" v Word.ppo w in
                let env = E.set v intersect env in
                (* let () = printf "that env is:\n%!"; E.pp env in *)
                env
@@ -236,7 +236,7 @@ module Directives(N : Abstract.NumericDomain)
                let var_wi' = WI.try_remove_interval ~remove:const ~from_:var_wi in
                let var_val' = set_intvl var_val var_wi' in
                let env = E.set v var_val' env in
-               (* let () = printf "Dir: %s <> %a\n%!" v Word.ppo w in *)
+               let () = printf "Dir: %s <> %a\n%!" v Word.ppo w in
                (* let () = printf "that env is:\n%!"; E.pp env in *)
                env
              in
@@ -686,9 +686,13 @@ module Tree(N : Abstract.NumericDomain)
         ~(suffix : Directives.t list)
         ~(target : t)
         ~(other : t) : t =
-    let refined_target = List.fold suffix ~init:target ~f:(fun target tdir ->
-                             do_directive_split target tdir)
-    in
+    let conditionally_split tree tdir =
+      if directive_already_applied tree tdir
+      then tree
+      else do_directive_split tree tdir in
+    let refined_target = List.fold suffix
+                           ~init:target
+                           ~f:conditionally_split in
     if do_merge
     then
       isomorphic_merge refined_target other
@@ -977,6 +981,7 @@ module AbsInt = struct
       let tid = Term.tid d in
       let st : env = if Directives.tid_has_directive dmap tid
                      then
+                       let () = printf "[Trace] absint applying directive at tid %a\n%!" Tid.ppo tid in
                        let tdir = Directives.get_tdirective dmap tid in
                        { tree = Tree.apply_directive st.tree tdir }
                      else
