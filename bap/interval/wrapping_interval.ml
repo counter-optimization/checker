@@ -127,6 +127,9 @@ let join x y : t =
                 signed = false }
 
 let meet x y : t =
+  let () = printf "[WI] meet of %s and %s\n%!"
+             (to_string x)
+             (to_string y) in
   match x, y with
   | Bot, _ -> Bot
   | _, Bot -> Bot
@@ -137,10 +140,10 @@ let meet x y : t =
      if Z.gt lo hi
      then Bot
      else
-       Interval {lo=lo;
-                 hi=hi;
-                 width=Int.max width1 width2;
-                 signed = false}
+       Interval { lo;
+                  hi;
+                  width=Int.max width1 width2;
+                  signed = false}
 
 (* Does i1 fit completely in i2? *)
 (* this is the <= subset relation on two intervals and

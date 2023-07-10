@@ -33,6 +33,18 @@ module T = struct
     Format.fprintf ppf "[";
     loop ppf cc;
     Format.fprintf ppf "]"
+
+  let equal (l : t) (r : t) : bool =
+    let rec loop l r k =
+      match l, r with
+      | [], [] -> true
+      | l :: ls, [] -> false
+      | [], r :: rs -> false
+      | l :: ls, r :: rs ->
+         loop ls rs (fun res ->
+             Tid.equal l r && res)
+    in
+    loop l r (fun x -> x)
 end
 
 module Regular = struct

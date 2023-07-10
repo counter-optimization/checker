@@ -277,8 +277,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
        | Some n -> n
        | None -> failwith "in driver, cfg building init sol, couldn't get last node"
      in
-     let with_args = G.Node.Map.set G.Node.Map.empty ~key:first_node ~data:final_env in
-     let init_sol = Solution.create with_args empty in
+     (* let with_args = G.Node.Map.set G.Node.Map.empty ~key:first_node ~data:final_env in *)
+     (* let init_sol = Solution.create with_args empty in *)
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname InitEnvSetup stop in
      (* let () = printf "Running abstract interpreter\n%!" in *)
@@ -401,8 +401,13 @@ let run_analyses sub img proj ~(is_toplevel : bool)
 
      let start = Analysis_profiling.record_start_time () in
 
-     let init_mapping : TraceEnv.t G.Node.Map.t = G.Node.Map.empty in
-     let init_sol = Solution.create init_mapping TraceEnv.default in
+     let init_trace_env = TraceEnv.default_with_env final_env in
+     let init_mapping = G.Node.Map.set
+                          G.Node.Map.empty
+                          ~key:first_node
+                          ~data:init_trace_env in
+     
+     let init_sol = Solution.create init_mapping TraceEnv.empty in
      let analysis_results = Graphlib.fixpoint
                               (module G)
                               cfg
@@ -439,6 +444,18 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      in
      let () = if List.mem ~equal:String.equal shift_trans_fns subname
               then
+                let () = begin
+                    let filename = Format.sprintf "%s.dot" subname in
+                    Graphlib.to_dot
+                      (module G)
+                      cfg
+                      ~string_of_node:(fun n ->
+                        Calling_context.to_insn_tid n
+                        |> Tid.to_string
+                        |> Stringext.replace_all ~pattern:"%" ~with_:"node")
+                      ~filename
+                  end
+                in
                 let () = printf "%a\n%!" Sub.ppo sub in
                 let () = printf "Directive map:\n%!" in
                 Map.iteri directive_map ~f:(fun ~key ~data ->

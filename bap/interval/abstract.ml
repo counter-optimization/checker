@@ -199,11 +199,9 @@ module NumericEnv(ValueDom : NumericDomain)
     let merge_helper ~key ~data prev =
       if M.mem prev key
       then
-        begin
-          let last = M.find_exn prev key in
-          let merged = ValueDom.join last data in
-          M.set prev ~key ~data:merged
-        end
+        let last = M.find_exn prev key in
+        let merged = ValueDom.join last data in
+        M.set prev ~key ~data:merged
       else M.set prev ~key ~data in
     M.fold env2 ~init:env1 ~f:merge_helper
 
@@ -468,13 +466,18 @@ module AbstractInterpreter(N: NumericDomain)
            let truthy = N.could_be_true cond' in
            let falsy = N.could_be_false cond' in
            if truthy && not falsy
-           then denote_exp ifthen st
+           then
+             let () = printf "[Abstract] Ite: truthy && not falsy\n%!" in
+             denote_exp ifthen st
            else
              if not truthy && falsy
-             then denote_exp ifelse st
+             then
+               let () = printf "[Abstract] Ite: not truthy && falsy\n%!" in
+               denote_exp ifelse st
              else
                let (then', st) = denote_exp ifthen st in
                let (else', st) = denote_exp ifelse st in
+               let () = printf "[Abstract] Ite: truthy && falsy\n%!" in
                (N.join then' else', st)
         | Bil.Unknown (str, _) ->
            (* This seems to be used for at least:

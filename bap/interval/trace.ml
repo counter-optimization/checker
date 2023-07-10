@@ -397,11 +397,11 @@ module Directives(N : Abstract.NumericDomain)
           (flagdirs : t) : t option =
       match Tid_map.find p.use_analy.tid_users tid with
       | Some imm_flag_deps ->
-         let () = printf "Flag %s at %a deps on:\n%!" flagname Tid.ppo tid;
-                  Tidset.to_list imm_flag_deps |> List.iter
-                                                    ~f:(printf "\t%a\n%!"
-                                                          Tid.ppo)
-         in
+         (* let () = printf "Flag %s at %a deps on:\n%!" flagname Tid.ppo tid; *)
+         (*          Tidset.to_list imm_flag_deps |> List.iter *)
+         (*                                            ~f:(printf "\t%a\n%!" *)
+         (*                                                  Tid.ppo) *)
+         (* in *)
          let flag_dep_deps = Tidset.to_list imm_flag_deps in
          let flag_dep_deps = List.map flag_dep_deps ~f:(fun dep ->
                                  match Tid_map.find p.use_analy.tid_users dep with
@@ -413,9 +413,9 @@ module Directives(N : Abstract.NumericDomain)
          let flag_dep_deps = List.sort flag_dep_deps ~compare:Tid.compare
                              |> List.rev
          in
-         let () = printf "all flag dep deps are:\n%!";
-                  List.iter flag_dep_deps ~f:(printf "\t%a\n%!" Tid.ppo)
-         in
+         (* let () = printf "all flag dep deps are:\n%!"; *)
+         (*          List.iter flag_dep_deps ~f:(printf "\t%a\n%!" Tid.ppo) *)
+         (* in *)
          let latest_dep = List.hd_exn flag_dep_deps in
          let latest_depset = Tidset.singleton latest_dep in
          let tagged_combine_dir = (latest_depset, Combine (fst flagdirs)) in
@@ -528,14 +528,14 @@ module Tree(N : Abstract.NumericDomain)
        let true_pruner, false_pruner = Directives.Applier.build tdir in
        let left_env = true_pruner n in
        let right_env = false_pruner n in
-       let () = printf "[Trace] doing split: %s\n%!" (Directives.to_string tdir);
-                printf "[Trace] \tPre-env is:\n%!";
-                E.pp n;
-                printf "[Trace] \tleft res env:\n%!";
-                E.pp left_env;
-                printf "[Trace] \tright res env:\n%!";
-                E.pp right_env
-       in
+       (* let () = printf "[Trace] doing split: %s\n%!" (Directives.to_string tdir); *)
+       (*          printf "[Trace] \tPre-env is:\n%!"; *)
+       (*          E.pp n; *)
+       (*          printf "[Trace] \tleft res env:\n%!"; *)
+       (*          E.pp left_env; *)
+       (*          printf "[Trace] \tright res env:\n%!"; *)
+       (*          E.pp right_env *)
+       (* in *)
        let left = Leaf left_env in
        let right = Leaf right_env in
        Parent {
@@ -550,14 +550,37 @@ module Tree(N : Abstract.NumericDomain)
            directive;
          }
 
+  let rec directive_already_applied (tree : t)
+            (tdir : Directives.tagged_directive) : bool =
+    let rec loop tree k =
+      match tree with
+      | Leaf l -> k false
+      | Parent p ->
+         if Directives.equal p.directive tdir
+         then
+           k true
+         else
+           loop p.left (fun leftres ->
+               if leftres
+               then k true
+               else
+                 loop p.right (fun x -> x))
+    in
+    loop tree (fun x -> x)
+
   let apply_directive (tree : t) (tdir : Directives.tagged_directive) : t =
     if Directives.is_tagged_combine tdir
     then
       let () = printf "[Trace] combining: %s\n%!" (Directives.to_string tdir) in
       combine_partitions tree @@ Directives.get_dir tdir
     else
-      let () = printf "[Trace] splitting: %s\n%!" (Directives.to_string tdir) in
-      do_directive_split tree tdir
+      if directive_already_applied tree tdir
+      then
+        let () = printf "[Trace] directive already applied, skipping application" in
+        tree
+      else
+        let () = printf "[Trace] splitting: %s\n%!" (Directives.to_string tdir) in
+        do_directive_split tree tdir
 
   let rec equal (left : t) (right : t) : bool =
     match left, right with
@@ -635,29 +658,27 @@ module Tree(N : Abstract.NumericDomain)
 
   let isomorphic_merge (left : t) (right : t) : t =
     let open Or_error.Monad_infix in
-    let rec loop (left : t) (right : t) : t Or_error.t =
+    let rec loop (left : t) (right : t) k : t Or_error.t =
       match left, right with
-      | Leaf left, Leaf right -> Ok (Leaf (E.merge left right))
+      | Leaf left, Leaf right -> k (Ok (Leaf (E.merge left right)))
       | Parent left, Parent right ->
          if 0 <> Directives.compare left.directive right.directive
          then
-           Or_error.error_string "[Trace] tree merge does not support non-isomorphic trees (tree directives)"
+           Or_error.error_string "[Trace] isomorphic merge does not support non-isomorphic trees (tree directives)"
          else
-           loop left.left right.left >>= fun l ->
-           loop left.right right.right >>= fun r ->
-           Ok (Parent { left = l;
-                        right = r;
-                        directive = left.directive })
+           let directive = left.directive in
+           loop left.left right.left (Or_error.bind ~f:(fun l ->
+           loop left.right right.right (Or_error.bind ~f:(fun r ->
+           k (Ok (Parent { left=l; right=r; directive }))))))
       | _ ->
          Or_error.error_string "[Trace] tree merge does not support non-isomorphic trees (tree shape)"
     in
-    match loop left right with
+    match loop left right (fun x -> x) with
     | Ok res -> res
     | Error e ->
        let () = printf "Failed to merge two trees:\n\t1. %s\n\t2. %s\n%!"
                   (to_string left)
-                  (to_string right)
-       in
+                  (to_string right) in
        failwith @@ Error.to_string_hum e
 
   let normalize_prefixed_trees
@@ -709,6 +730,28 @@ module Tree(N : Abstract.NumericDomain)
           ~other:right
           ~do_merge:false
 
+  let any_node (tree : t) ~(f : E.t -> bool) : bool =
+    let rec loop tree k =
+      match tree with
+      | Leaf e -> k (f e)
+      | Parent { left; right; _ } ->
+         loop left (fun leftres ->
+             loop right (fun rightres ->
+                 leftres || rightres))
+    in
+    loop tree (fun x -> x)
+
+  let all_node (tree : t) ~(f : E.t -> bool) : bool =
+    let rec loop tree k =
+      match tree with
+      | Leaf e -> k (f e)
+      | Parent { left; right; _ } ->
+         loop left (fun leftres ->
+             loop right (fun rightres ->
+                 leftres && rightres))
+    in
+    loop tree (fun x -> x)
+
   let rec num_leaves : t -> int = function
     | Leaf _ -> 1
     | Parent { left; right; _ } ->
@@ -721,12 +764,17 @@ module Env(N : Abstract.NumericDomain)
                                 and type regions := Common.Region.Set.t
                                 and type valtypes := Common.cell_t) = struct
 
+  let get_intvl : N.t -> Wrapping_interval.t =
+    match N.get Wrapping_interval.key with
+    | Some f -> f
+    | None -> failwith "Couldn't extract interval information in Trace.Env get_intvl"
+
   module Tree = Tree(N)(E)
   module Directives = Directives(N)(E)
 
   module T = struct
     type env = {
-        tree : Tree.t
+        tree : Tree.t;
       }
 
     type t = env
@@ -734,23 +782,12 @@ module Env(N : Abstract.NumericDomain)
 
   include T
 
-  let default : t = { tree = Tree.Leaf E.empty }
+  let empty : t = {
+      tree = Tree.Leaf E.empty;
+    }
 
-  let of_mem (m : E.t) : t =
-    { tree = Leaf m }
-
-  let equal (l : t) (r : t) : bool =
-    Tree.equal l.tree r.tree
-
-  let merge (l : t) (r : t) : t =
-    { tree = Tree.merge l.tree r.tree }
-
-  let widen_with_step (n : int) (node : 'a) l r : t =
-    if n <= Common.ai_widen_threshold
-    then
-      merge l r
-    else
-      failwith "[Trace] infinite loop stuck in widen_with_step"
+  let default_with_env : E.t -> t = fun env ->
+    { tree = Tree.Leaf env }
 
   let pp : t -> unit = fun { tree } ->
     let tdir_list_to_string ~(is_left : bool)
@@ -772,6 +809,58 @@ module Env(N : Abstract.NumericDomain)
          loop ~tdirstack ~is_left:false p.right
     in
     loop tree ~is_left:true
+
+  let of_mem (m : E.t) : t =
+    { tree = Leaf m }
+  
+  let equal (l : t) (r : t) : bool =
+    Tree.equal l.tree r.tree
+
+  let merge (l : t) (r : t) : t =
+    let () = begin
+        printf "[Trace] merging trees:\n%!";
+        printf "\tLeft:\n%!";
+        pp l;
+        printf "\tRight:\n%!";
+        pp r
+      end
+    in
+    let res = { tree = Tree.merge l.tree r.tree } in
+    let () = begin
+        printf "[Trace] finished merging. result tree is:\n%!";
+        pp res;
+        let rcx_is_in_zero_one = fun env ->
+          let rcx_value = E.lookup "RCX" env in
+          let rcx_wi = get_intvl rcx_value in
+          let zero_one_intvl = Wrapping_interval.join
+                                 Wrapping_interval.b0
+                                   Wrapping_interval.b1
+          in
+          Wrapping_interval.equal zero_one_intvl rcx_wi
+        in
+        let started_without_zeroone = fun env ->
+          not (rcx_is_in_zero_one env)
+        in
+        let did_not_start_with_rcx_zero_one =
+          Tree.all_node l.tree ~f:started_without_zeroone &&
+            Tree.all_node r.tree ~f:started_without_zeroone in
+        let ended_with_rcx_zero_one =
+          Tree.any_node res.tree ~f:rcx_is_in_zero_one in
+        if did_not_start_with_rcx_zero_one && ended_with_rcx_zero_one
+        then
+          printf "[Trace] found problematic merge result\n%!"
+        else
+          ()
+      end
+    in
+    res
+
+  let widen_with_step (n : int) (node : 'a) l r : t =
+    if n <= Common.ai_widen_threshold
+    then
+      merge l r
+    else
+      failwith "[Trace] infinite loop stuck in widen_with_step"
 end
 
 module ConditionFinder = struct
@@ -837,9 +926,9 @@ module ConditionFinder = struct
                         prereqs.dep_analysis
                       |> Tidset.to_sequence
       in
-      let () = printf "Users of %a are:\n%!" Tid.ppo tid;
-               Seq.iter all_users ~f:(printf "\t%a\n%!" Tid.ppo)
-      in
+      (* let () = printf "Users of %a are:\n%!" Tid.ppo tid; *)
+      (*          Seq.iter all_users ~f:(printf "\t%a\n%!" Tid.ppo) *)
+      (* in *)
       used_in_cmov_ever all_users
 
     let get_live_flags (prereqs : prereqs) : live_flag list =
@@ -911,12 +1000,12 @@ module AbsInt = struct
       match e with
       | `Def d ->
          let () = printf "[Trace] denoting elt: %a\n%!" Tid.ppo (Term.tid d) in
-         denote_def subname dmap d st
-      | `Jmp j ->
-         let () = printf "[Trace] denoting elt: %a\n%!" Tid.ppo (Term.tid j) in
-         denote_jmp subname dmap j st
-      | `Phi p ->
-         let () = printf "[Trace] denoting elt: %a\n%!" Tid.ppo (Term.tid p) in
-         denote_phi subname dmap p st
+         let res = denote_def subname dmap d st in
+         let () = printf "[Trace] finished env is:\n%!";
+                  TreeEnv.pp res
+         in
+         res
+      | `Jmp j -> denote_jmp subname dmap j st
+      | `Phi p -> denote_phi subname dmap p st
   end
 end
