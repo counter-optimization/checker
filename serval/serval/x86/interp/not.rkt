@@ -7,7 +7,7 @@
   not-r/m8)
 
 (define (interpret-not cpu dst)
-  (define v (cpu-gpr-ref pcu dst))
+  (define v (cpu-gpr-ref cpu dst))
   (define res (bvnot v))
   (cpu-gpr-set! cpu dst res))
 
