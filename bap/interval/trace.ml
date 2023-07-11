@@ -179,12 +179,8 @@ module Directives(N : Abstract.NumericDomain)
            let a_val = E.lookup a env in
            let b_val = E.lookup b env in
            let final_val = N.meet a_val b_val in
-           let () = printf "Dir: %s = %s\n%!" a b in
-           let env = E.set a final_val env
-                     |> E.set b final_val
-           in
-           (* let () = printf "that env is:\n%!"; E.pp env in *)
-           env
+           E.set a final_val env
+           |> E.set b final_val
          in
          let neg_applier = fun (env : E.t) ->
            let a_val = E.lookup a env in
@@ -195,12 +191,8 @@ module Directives(N : Abstract.NumericDomain)
            let b_wi' = WI.try_remove_interval ~remove:a_wi ~from_:b_wi in
            let a_val' = set_intvl a_val a_wi' in
            let b_val' = set_intvl b_val b_wi' in
-           let () = printf "Dir: %s <> %s\n%!" a b in
-           let env = E.set a a_val' env 
-                     |> E.set b b_val'
-           in
-           (* let () = printf "that env is:\n%!"; E.pp env in *)
-           env
+           E.set a a_val' env 
+           |> E.set b b_val'
          in
          pos_applier, neg_applier
       | Eq (Var v, Num w)
@@ -224,10 +216,7 @@ module Directives(N : Abstract.NumericDomain)
              let pos_applier = fun (env : E.t) ->
                let var_val = E.lookup v env in
                let intersect = N.meet var_val const in
-               let () = printf "Dir: %s = %a\n%!" v Word.ppo w in
-               let env = E.set v intersect env in
-               (* let () = printf "that env is:\n%!"; E.pp env in *)
-               env
+               E.set v intersect env
              in
              let neg_applier = fun (env : E.t) ->
                let const = get_intvl const in
@@ -235,10 +224,7 @@ module Directives(N : Abstract.NumericDomain)
                let var_wi = get_intvl var_val in
                let var_wi' = WI.try_remove_interval ~remove:const ~from_:var_wi in
                let var_val' = set_intvl var_val var_wi' in
-               let env = E.set v var_val' env in
-               let () = printf "Dir: %s <> %a\n%!" v Word.ppo w in
-               (* let () = printf "that env is:\n%!"; E.pp env in *)
-               env
+               E.set v var_val' env
              in
              pos_applier, neg_applier
            end
@@ -397,25 +383,15 @@ module Directives(N : Abstract.NumericDomain)
           (flagdirs : t) : t option =
       match Tid_map.find p.use_analy.tid_users tid with
       | Some imm_flag_deps ->
-         (* let () = printf "Flag %s at %a deps on:\n%!" flagname Tid.ppo tid; *)
-         (*          Tidset.to_list imm_flag_deps |> List.iter *)
-         (*                                            ~f:(printf "\t%a\n%!" *)
-         (*                                                  Tid.ppo) *)
-         (* in *)
          let flag_dep_deps = Tidset.to_list imm_flag_deps in
          let flag_dep_deps = List.map flag_dep_deps ~f:(fun dep ->
                                  match Tid_map.find p.use_analy.tid_users dep with
                                  | Some fnd -> fnd
-                                 | None -> Tidset.empty)
-         in
+                                 | None -> Tidset.empty) in
          let flag_dep_deps = List.map flag_dep_deps ~f:Tidset.to_list in
          let flag_dep_deps = List.join flag_dep_deps in
          let flag_dep_deps = List.sort flag_dep_deps ~compare:Tid.compare
-                             |> List.rev
-         in
-         (* let () = printf "all flag dep deps are:\n%!"; *)
-         (*          List.iter flag_dep_deps ~f:(printf "\t%a\n%!" Tid.ppo) *)
-         (* in *)
+                             |> List.rev in
          let latest_dep = List.hd_exn flag_dep_deps in
          let latest_depset = Tidset.singleton latest_dep in
          let tagged_combine_dir = (latest_depset, Combine (fst flagdirs)) in
@@ -533,14 +509,6 @@ module Tree(N : Abstract.NumericDomain)
        let true_pruner, false_pruner = Directives.Applier.build tdir in
        let left_env = true_pruner n in
        let right_env = false_pruner n in
-       (* let () = printf "[Trace] doing split: %s\n%!" (Directives.to_string tdir); *)
-       (*          printf "[Trace] \tPre-env is:\n%!"; *)
-       (*          E.pp n; *)
-       (*          printf "[Trace] \tleft res env:\n%!"; *)
-       (*          E.pp left_env; *)
-       (*          printf "[Trace] \tright res env:\n%!"; *)
-       (*          E.pp right_env *)
-       (* in *)
        let left = Leaf left_env in
        let right = Leaf right_env in
        Parent {
@@ -575,24 +543,18 @@ module Tree(N : Abstract.NumericDomain)
 
   let apply_directive (tree : t) (tdir : Directives.tagged_directive) : t =
     if Directives.is_tagged_combine tdir
-    then
-      let () = printf "[Trace] combining: %s\n%!" (Directives.to_string tdir) in
-      combine_partitions tree @@ Directives.get_dir tdir
-    else
-      if directive_already_applied tree tdir
-      then
-        let () = printf "[Trace] directive already applied, skipping application" in
-        tree
-      else
-        let () = printf "[Trace] splitting: %s\n%!" (Directives.to_string tdir) in
-        do_directive_split tree tdir
+    then combine_partitions tree @@ Directives.get_dir tdir
+    else if directive_already_applied tree tdir
+    then tree
+    else do_directive_split tree tdir
 
   let rec equal (left : t) (right : t) : bool =
     match left, right with
     | Leaf l, Leaf r -> E.equal l r
     | Parent l, Parent r ->
-       let directive_eq = 0 = (Directives.compare l.directive r.directive) in
-       directive_eq && equal l.left r.left && equal l.right r.right
+       Directives.equal l.directive r.directive &&
+         equal l.left r.left &&
+           equal l.right r.right
     | _ -> false
 
   let rec map ~(f : E.t -> E.t) = function
@@ -825,49 +787,11 @@ module Env(N : Abstract.NumericDomain)
   let equal (l : t) (r : t) : bool =
     Tree.equal l.tree r.tree
 
-  let merge (l : t) (r : t) : t =
-    let () = begin
-        printf "[Trace] merging trees:\n%!";
-        printf "\tLeft:\n%!";
-        pp l;
-        printf "\tRight:\n%!";
-        pp r
-      end
-    in
-    let res = { tree = Tree.merge l.tree r.tree } in
-    let () = begin
-        printf "[Trace] finished merging. result tree is:\n%!";
-        pp res;
-        let rcx_is_in_zero_one = fun env ->
-          let rcx_value = E.lookup "RCX" env in
-          let rcx_wi = get_intvl rcx_value in
-          let zero_one_intvl = Wrapping_interval.join
-                                 Wrapping_interval.b0
-                                   Wrapping_interval.b1
-          in
-          Wrapping_interval.equal zero_one_intvl rcx_wi
-        in
-        let started_without_zeroone = fun env ->
-          not (rcx_is_in_zero_one env)
-        in
-        let did_not_start_with_rcx_zero_one =
-          Tree.all_node l.tree ~f:started_without_zeroone &&
-            Tree.all_node r.tree ~f:started_without_zeroone in
-        let ended_with_rcx_zero_one =
-          Tree.any_node res.tree ~f:rcx_is_in_zero_one in
-        if did_not_start_with_rcx_zero_one && ended_with_rcx_zero_one
-        then
-          printf "[Trace] found problematic merge result\n%!"
-        else
-          ()
-      end
-    in
-    res
+  let merge (l : t) (r : t) : t = { tree = Tree.merge l.tree r.tree }
 
   let widen_with_step (n : int) (node : 'a) l r : t =
     if n <= Common.ai_widen_threshold
-    then
-      merge l r
+    then merge l r
     else
       failwith "[Trace] infinite loop stuck in widen_with_step"
 end
@@ -915,8 +839,7 @@ module ConditionFinder = struct
            in
            SS.mem all_names flagname
         | Bil.Extract (_, _, subexp) -> loop subexp
-        | Bil.Concat (l, r) -> loop l || loop r
-      in
+        | Bil.Concat (l, r) -> loop l || loop r in
       let rec used_in_cmov_ever (tids : tid Seq.t) : bool =
         if Seq.is_empty tids
         then false
@@ -928,16 +851,11 @@ module ConditionFinder = struct
              let rhs = Def.rhs d in
              let used_in_cmov = loop rhs in
              used_in_cmov || used_in_cmov_ever tids
-          | _ -> used_in_cmov_ever tids
-      in
+          | _ -> used_in_cmov_ever tids in
       let all_users = Dependency_analysis.users_transitive_closure
                         tid
                         prereqs.dep_analysis
-                      |> Tidset.to_sequence
-      in
-      (* let () = printf "Users of %a are:\n%!" Tid.ppo tid; *)
-      (*          Seq.iter all_users ~f:(printf "\t%a\n%!" Tid.ppo) *)
-      (* in *)
+                      |> Tidset.to_sequence in
       used_in_cmov_ever all_users
 
     let get_live_flags (prereqs : prereqs) : live_flag list =
@@ -948,12 +866,9 @@ module ConditionFinder = struct
            let defines = Var.name @@ Def.lhs d in
            let is_flag = Common.AMD64SystemVABI.var_name_is_flag defines in
            if is_flag && Dependency_analysis.has_user tid prereqs.dep_analysis
-           then
-             Some (tid, defines)
-           else
-             None
-        | _ -> None
-      in
+           then Some (tid, defines)
+           else None
+        | _ -> None in
       Seq.fold prereqs.rpo_traversal ~init:[] ~f:(fun liveflags cc ->
           match get_live_flags cc with
           | Some lfs -> lfs :: liveflags
@@ -986,12 +901,9 @@ module AbsInt = struct
       let tid = Term.tid d in
       let st : env = if Directives.tid_has_directive dmap tid
                      then
-                       let () = printf "[Trace] absint applying directive at tid %a\n%!" Tid.ppo tid in
                        let tdir = Directives.get_tdirective dmap tid in
                        { tree = Tree.apply_directive st.tree tdir }
-                     else
-                       st
-      in
+                     else st in
       let tree = Tree.map ~f:(BaseInt.denote_def subname d) st.tree in
       { tree }
 
@@ -1008,13 +920,7 @@ module AbsInt = struct
     let denote_elt (subname : string) (dmap : Directives.directive_map)
           (e : Blk.elt) (st : env) : env =
       match e with
-      | `Def d ->
-         let () = printf "[Trace] denoting elt: %a\n%!" Tid.ppo (Term.tid d) in
-         let res = denote_def subname dmap d st in
-         let () = printf "[Trace] finished env is:\n%!";
-                  TreeEnv.pp res
-         in
-         res
+      | `Def d -> denote_def subname dmap d st
       | `Jmp j -> denote_jmp subname dmap j st
       | `Phi p -> denote_phi subname dmap p st
   end

@@ -216,32 +216,7 @@ module NumericEnv(ValueDom : NumericDomain)
         printf "\t%s\n%!" entry_str)
 
   let merge env1 env2 : t =
-    let () = printf "[Abstract] NumericEnv.merge of:\n%!";
-             printf "\tLeft:\n%!";
-             pp env1;
-             printf "\tRight:\n%!";
-             pp env2 in
-    M.merge_skewed env1 env2 ~combine:(fun ~key left right ->
-        let left_wi = get_intvl left in
-        let right_wi = get_intvl right in
-        let s = Wrapping_interval.to_string in
-        let res = ValueDom.join left right in
-        let res_wi = get_intvl res in
-        let () = printf "[Abstract] NumericEnv.merge of %s: %s \\/ %s = %s\n%!"
-                   key
-                   (s left_wi)
-                   (s right_wi)
-                   (s res_wi) in
-        res)
-
-    (* let merge_helper ~key ~data prev = *)
-    (*   if M.mem prev key *)
-    (*   then *)
-    (*     let last = M.find_exn prev key in *)
-    (*     let merged = ValueDom.join last data in *)
-    (*     M.set prev ~key ~data:merged *)
-    (*   else M.set prev ~key ~data in *)
-    (* M.fold env2 ~init:env1 ~f:merge_helper *)
+    M.merge_skewed env1 env2 ~combine:(fun ~key -> ValueDom.join)
 
   let widen_threshold = Common.ai_widen_threshold
   
@@ -250,16 +225,12 @@ module NumericEnv(ValueDom : NumericDomain)
       M.fold prev_state ~init:Seq.empty ~f:(fun ~key ~data acc ->
           let next = M.find_exn new_state key in
           if ValueDom.equal data next
-          then
-            acc
-          else
-            Seq.cons key acc)
-    in
+          then acc
+          else Seq.cons key acc) in
     let widen_state prev_state new_state =
       let changed_keys = get_differing_keys prev_state new_state in
       Seq.fold changed_keys ~init:prev_state ~f:(fun prev changed ->
-          set changed ValueDom.top prev)
-    in
+          set changed ValueDom.top prev) in
     let f = if steps < widen_threshold then merge else widen_state in
     f prev_state new_state
 end
@@ -453,10 +424,6 @@ module AbstractInterpreter(N: NumericDomain)
   let rec denote_exp (e : Bil.exp) (st : E.t) : N.t * E.t =
     try
       begin
-        let () = printf "AbsInt denoting exp: %s\n%!" @@
-                   Common.exp_to_string e
-        in
-        let res = 
         match e with
         | Bil.Load (_mem, idx, _endian, size) ->
            let (offs, st) = denote_exp idx st in
@@ -546,11 +513,6 @@ module AbstractInterpreter(N: NumericDomain)
            let (x', st) = denote_exp  x st in
            let (y', st) = denote_exp  y st in
            (N.concat x' y', st)
-        in
-        let () = printf "Result is %s\n%!" @@
-                   N.to_string @@ fst res
-        in
-        res
       end
     with
     | Z.Overflow ->
