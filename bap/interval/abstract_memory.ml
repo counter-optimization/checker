@@ -161,10 +161,11 @@ module Cell(N : NumericDomain) = struct
   include Cmp
   
   module Set = struct
-    (* include Set.Make_binable_using_comparator(Cmp) *)
     type t = (Cmp.t, comparator_witness) Set.t
 
     let empty : t = Set.empty (module Cmp)
+
+    let is_empty : t -> bool = Set.is_empty
     
     let of_list = Set.of_list (module Cmp)
     
@@ -309,7 +310,8 @@ module Make(N : NumericDomain)
      *)
     let merge ~(this : t) ~(other : t) : t =
       let bytes_to_merge = get_merge_lists ~this ~other in
-      let merged_le_bytes = List.map bytes_to_merge ~f:(fun (tb, ob) -> merge_bytes tb ob) in
+      let merged_le_bytes = List.map bytes_to_merge ~f:(fun (tb, ob) ->
+                                merge_bytes tb ob) in
       let merged_data = data_from_little_endian_bytes merged_le_bytes in
       { this with data = merged_data }
   end
@@ -335,6 +337,13 @@ module Make(N : NumericDomain)
                     bases = BaseSetMap.empty;
                     globals_read = C.Set.empty;
                     img = None }
+
+  let is_empty { cells; env; bases; globals_read; img } : bool =
+    Env.is_empty env &&
+      C.Set.is_empty cells &&
+        BaseSetMap.is_empty bases &&
+          C.Set.is_empty globals_read &&
+            Option.is_none img
 
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with

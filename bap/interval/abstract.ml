@@ -86,6 +86,8 @@ module type MemoryT =
     type 'a err = ('a, Error.t) Result.t
 
     val empty : t
+
+    val is_empty : t -> bool
     
     val lookup : string -> t -> v
 
@@ -135,6 +137,11 @@ module NumericEnv(ValueDom : NumericDomain)
                    and type regions := unit
                    and type region := unit
                    and type valtypes := unit) = struct
+
+  let get_intvl : ValueDom.t -> Wrapping_interval.t =
+      match ValueDom.get Wrapping_interval.key with
+      | Some f -> f
+      | None -> failwith "[Abstract] NumericEnv: couldn't extract wrapping interval"
   
   module M = Map.Make_binable_using_comparator(String)
   
@@ -147,6 +154,8 @@ module NumericEnv(ValueDom : NumericDomain)
   type 'a err = ('a, Error.t) Result.t
 
   let empty : t = M.empty
+
+  let is_empty : t -> bool = M.is_empty
   
   let stack_ptr = "RSP"
   
@@ -195,38 +204,6 @@ module NumericEnv(ValueDom : NumericDomain)
   
   let equal = M.equal ValueDom.equal
 
-  let merge env1 env2 : t =
-    let merge_helper ~key ~data prev =
-      if M.mem prev key
-      then
-        begin
-          let last = M.find_exn prev key in
-          let merged = ValueDom.join last data in
-          M.set prev ~key ~data:merged
-        end
-      else M.set prev ~key ~data in
-    M.fold env2 ~init:env1 ~f:merge_helper
-
-  let widen_threshold = Common.ai_widen_threshold
-  
-  let widen_with_step steps n prev_state new_state : t =
-    let get_differing_keys prev_state new_state =
-      M.fold prev_state ~init:Seq.empty ~f:(fun ~key ~data acc ->
-          let next = M.find_exn new_state key in
-          if ValueDom.equal data next
-          then
-            acc
-          else
-            Seq.cons key acc)
-    in
-    let widen_state prev_state new_state =
-      let changed_keys = get_differing_keys prev_state new_state in
-      Seq.fold changed_keys ~init:prev_state ~f:(fun prev changed ->
-          set changed ValueDom.top prev)
-    in
-    let f = if steps < widen_threshold then merge else widen_state in
-    f prev_state new_state
-
   let pp (env : t) : unit =
     let env_entry_to_string ~(key : string) ~(data: ValueDom.t)
         : string =
@@ -237,6 +214,25 @@ module NumericEnv(ValueDom : NumericDomain)
     M.iteri env ~f:(fun ~key ~data ->
         let entry_str = env_entry_to_string ~key ~data in
         printf "\t%s\n%!" entry_str)
+
+  let merge env1 env2 : t =
+    M.merge_skewed env1 env2 ~combine:(fun ~key -> ValueDom.join)
+
+  let widen_threshold = Common.ai_widen_threshold
+  
+  let widen_with_step steps n prev_state new_state : t =
+    let get_differing_keys prev_state new_state =
+      M.fold prev_state ~init:Seq.empty ~f:(fun ~key ~data acc ->
+          let next = M.find_exn new_state key in
+          if ValueDom.equal data next
+          then acc
+          else Seq.cons key acc) in
+    let widen_state prev_state new_state =
+      let changed_keys = get_differing_keys prev_state new_state in
+      Seq.fold changed_keys ~init:prev_state ~f:(fun prev changed ->
+          set changed ValueDom.top prev) in
+    let f = if steps < widen_threshold then merge else widen_state in
+    f prev_state new_state
 end
 
 module DomainProduct(X : NumericDomain)(Y : NumericDomain)
@@ -428,10 +424,6 @@ module AbstractInterpreter(N: NumericDomain)
   let rec denote_exp (e : Bil.exp) (st : E.t) : N.t * E.t =
     try
       begin
-        let () = printf "AbsInt denoting exp: %s\n%!" @@
-                   Common.exp_to_string e
-        in
-        let res = 
         match e with
         | Bil.Load (_mem, idx, _endian, size) ->
            let (offs, st) = denote_exp idx st in
@@ -468,13 +460,18 @@ module AbstractInterpreter(N: NumericDomain)
            let truthy = N.could_be_true cond' in
            let falsy = N.could_be_false cond' in
            if truthy && not falsy
-           then denote_exp ifthen st
+           then
+             let () = printf "[Abstract] Ite: truthy && not falsy\n%!" in
+             denote_exp ifthen st
            else
              if not truthy && falsy
-             then denote_exp ifelse st
+             then
+               let () = printf "[Abstract] Ite: not truthy && falsy\n%!" in
+               denote_exp ifelse st
              else
                let (then', st) = denote_exp ifthen st in
                let (else', st) = denote_exp ifelse st in
+               let () = printf "[Abstract] Ite: truthy && falsy\n%!" in
                (N.join then' else', st)
         | Bil.Unknown (str, _) ->
            (* This seems to be used for at least:
@@ -516,11 +513,6 @@ module AbstractInterpreter(N: NumericDomain)
            let (x', st) = denote_exp  x st in
            let (y', st) = denote_exp  y st in
            (N.concat x' y', st)
-        in
-        let () = printf "Result is %s\n%!" @@
-                   N.to_string @@ fst res
-        in
-        res
       end
     with
     | Z.Overflow ->

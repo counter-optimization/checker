@@ -199,42 +199,26 @@
    (sub-r/m64-r64 rax r12)
    (sbb-r/m64-r64 rdx r13)
 
-   (mov-r64-imm64 r11 (bv (expt 2 63) 64))
-   (mov-r/m8-r8 r11b al)
-   (add-r/m64-imm8 r11 (bv 1 8))
-   (mov-r64-imm64 r13 (bv (expt 2 63) 64))
-   (sub-r/m64-r64 r11 r13)
-   (mov-r/m8-r8 r13b r11b)
-   (mov-r/m8-imm8 r11b (bv 1 8))
-   (mov-r/m8-imm8 al (bv 1 8))
-   (add-r/m64-r64 rax r11)
-   (mov-r/m8-r8 al r13b)
+   (clc)
+   (adc-r/m64-imm8 rax (bv 1 8))
    (adc-r/m64-imm8 rdx (bv 0 8))
 
    ; rdx:rax contain results of 4th term
    ; recombine 3rd term
    (mov-r/m64-r64 r12 r15) ; POP
-   (mov-r/m64-r64 r13 rdi) ; POP
-   (mov-r64-imm64 rax (bv 1 64))
-   (mov-r/m8-imm8 r13b (bv 1 8))
-   (add-r/m64-r64 rax r13)
-   (mov-r/m8-imm8 al (bv 0 8))
+   (mov-r/m64-r64 rax rdi) ; POP
+   (clc)
    (adc-r/m64-r64 rdx r12)
    ; recombine 2nd term
    (mov-r/m64-r64 r12 r14) ; POP
    (mov-r/m64-r64 r13 r9) ; POP
-   (mov-r/m8-imm8 al (bv 1 8))
-   (mov-r/m8-imm8 r13b (bv 1 8))
-   (add-r/m64-r64 rax r13)
-   (mov-r/m8-imm8 al (bv 0 8))
+   (clc)
+   (adc-r/m64-r64 rax r13)
    (adc-r/m64-r64 rdx r12)
    ; recombine 1st term
    (mov-r/m64-r64 r13 r8) ; POP
-   (mov-r/m8-r8 r12b r13b)
-   (mov-r/m8-imm8 r13b (bv 1 8))
-   (mov-r/m8-imm8 al (bv 1 8))
-   (add-r/m64-r64 rax r13)
-   (mov-r/m8-r8 al r12b)
+   (clc)
+   (adc-r/m64-r64 rax r13)
    (adc-r/m64-imm8 rdx (bv 0 8))
 
    ; calculate CF
@@ -457,16 +441,8 @@
    (sub-r/m64-r64 rax r12)
    (sbb-r/m64-r64 rdx r13)
 
-   (mov-r64-imm64 r11 (bv (expt 2 63) 64))
-   (mov-r/m8-r8 r11b al)
-   (add-r/m64-imm8 r11 (bv 1 8))
-   (mov-r64-imm64 r13 (bv (expt 2 63) 64))
-   (sub-r/m64-r64 r11 r13)
-   (mov-r/m8-r8 r13b r11b)
-   (mov-r/m8-imm8 r11b (bv 1 8))
-   (mov-r/m8-imm8 al (bv 1 8))
-   (add-r/m64-r64 rax r11)
-   (mov-r/m8-r8 al r13b)
+   (clc)
+   (adc-r/m64-imm8 rax (bv 1 8))
    (adc-r/m64-imm8 rdx (bv 0 8))
 
    ; restore rcx
@@ -488,31 +464,19 @@
    ; rdx:rax contain results of 4th term
    ; recombine 3rd term
    (mov-r/m64-r64 r12 r15) ; POP
-   (mov-r/m64-r64 r13 rdi) ; POP
-   (shr-r/m64-imm8 r13 (bv 32 8)) ; ignore in impl
-   (shl-r/m64-imm8 r13 (bv 32 8)) ; ignore in impl
-   (mov-r64-imm64 rax (bv 1 64))
-   (mov-r/m8-imm8 r13b (bv 1 8))
-   (add-r/m64-r64 rax r13)
-   (mov-r/m8-imm8 al (bv 0 8))
+   (mov-r/m64-r64 rax rdi) ; POP
+   (clc)
    (adc-r/m64-r64 rdx r12)
    ; recombine 2nd term
    (mov-r/m64-r64 r12 r14) ; POP
    (mov-r/m64-r64 r13 r9) ; POP
-   (shr-r/m64-imm8 r13 (bv 32 8)) ; ignore in impl
-   (shl-r/m64-imm8 r13 (bv 32 8)) ; ignore in impl
-   (mov-r/m8-imm8 al (bv 1 8))
-   (mov-r/m8-imm8 r13b (bv 1 8))
-   (add-r/m64-r64 rax r13)
-   (mov-r/m8-imm8 al (bv 0 8))
+   (clc)
+   (adc-r/m64-r64 rax r13)
    (adc-r/m64-r64 rdx r12)
    ; recombine 1st term
    (mov-r/m64-r64 r13 r8) ; POP
-   (mov-r/m8-r8 r12b r13b)
-   (mov-r/m8-imm8 r13b (bv 1 8))
-   (mov-r/m8-imm8 al (bv 1 8))
-   (add-r/m64-r64 rax r13)
-   (mov-r/m8-r8 al r12b)
+   (clc)
+   (adc-r/m64-r64 rax r13)
    (adc-r/m64-imm8 rdx (bv 0 8))
 
    ; calculate CF
@@ -521,13 +485,13 @@
    (sar-r/m64-imm8 r12 (bv 16 8))
    (sar-r/m64-imm8 r12 (bv 48 8))
 
-   (mov-r64-imm64 r13 (bv (expt 2 63) 64))
-   (mov-r/m8-r8 r13b r12b)
+   (mov-r64-imm64 r11 (bv (expt 2 63) 64))
+   (mov-r/m8-r8 r11b r12b)
    (mov-r64-imm64 rcx (bv (expt 2 63) 64))
    (mov-r/m8-r8 cl dl)
-   (cmp-r/m64-r64 rcx r13)
-   (mov-r/m16-imm16 r13w (bv (expt 2 15) 16))
-   (set-ne-r8 r13b)
+   (cmp-r/m64-r64 rcx r11)
+   (mov-r/m16-imm16 r11w (bv (expt 2 15) 16))
+   (set-ne-r8 r11b)
 
    (mov-r/m8-imm8 r12b (bv 1 8))
    (mov-r/m8-imm8 dl (bv 1 8))
@@ -535,7 +499,7 @@
    (mov-r/m16-imm16 r12w (bv (expt 2 15) 16))
    (set-ne-r8 r12b)
 
-   (or-r/m16-r16 r12w r13w)
+   (or-r/m16-r16 r12w r11w)
    (bt-r/m64-imm8 r12 (bv 0 8))
   ))
 
@@ -543,17 +507,11 @@
   (list
    (mov-r/m64-r64 r12 r15) ; POP
    (mov-r/m64-r64 rax rdi) ; POP
-   (shr-r/m64-imm8 rax (bv 32 8))
-   (shl-r/m64-imm8 rax (bv 32 8))
    (add-r/m64-r64 rdx r12)
-
    (mov-r/m64-r64 r12 r14) ; POP
    (mov-r/m64-r64 r13 r9) ; POP
-   (shr-r/m64-imm8 r13 (bv 32 8))
-   (shl-r/m64-imm8 r13 (bv 32 8))
    (add-r/m64-r64 rax r13)
    (adc-r/m64-r64 rdx r12)
-
    (mov-r/m64-r64 r13 r8) ; POP
    (add-r/m64-r64 rax r13)
    (adc-r/m64-imm8 rdx (bv 0 8))

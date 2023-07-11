@@ -137,10 +137,10 @@ let meet x y : t =
      if Z.gt lo hi
      then Bot
      else
-       Interval {lo=lo;
-                 hi=hi;
-                 width=Int.max width1 width2;
-                 signed = false}
+       Interval { lo;
+                  hi;
+                  width=Int.max width1 width2;
+                  signed = false}
 
 (* Does i1 fit completely in i2? *)
 (* this is the <= subset relation on two intervals and
@@ -242,9 +242,6 @@ let binop op left right : t =
   match left, right with
   | Interval {lo=lo1; hi=hi1; width=width1; signed=signed1},
     Interval {lo=lo2; hi=hi2; width=width2; signed=signed2} ->
-     (* let () = if width1 <> width2 *)
-     (*          then Format.printf "Width mismatch, width1: %d, width2: %d\n%!" width1 width2 *)
-     (*          else () in *)
      let x1 = op lo1 lo2 in
      let x2 = op lo1 hi2 in
      let x3 = op hi1 lo2 in
@@ -254,8 +251,7 @@ let binop op left right : t =
      let res = Interval {lo = new_lo;
                          hi = new_hi;
                          width = width1;
-                         signed = signed1 || signed2}
-     in
+                         signed = signed1 || signed2} in
      let wrapping_range = range ~width:width1 ~signed:signed1 in
      wrap_intvl res wrapping_range
   | _, _ -> Bot
@@ -338,15 +334,6 @@ let lnot = function
      else
        unop Z.lognot (Interval {lo; hi; width; signed})
   | Bot -> Bot
-(* let lnot x = *)
-(*   let () = match x with *)
-(*     | Interval {lo; hi; width; signed } -> *)
-(*        printf "lnot of interval: %s\n%!" @@ to_string x; *)
-(*        printf "lnot of var with bits: lo %d hi %d\n%!" *)
-(*          (Z.numbits lo) (Z.numbits hi) *)
-(*     | Bot -> () *)
-(*   in *)
-(*   unop Z.lognot x *)
 
 let extract exp h l =
   match exp with 
@@ -478,7 +465,6 @@ let high len x =
   | Bot -> Bot
   | Interval {lo; hi; width; signed} ->
      let offs = width - len in
-     (* let () = printf "in wrapping_interval.high, len is %d, width is %d\n%!" len width in *)
      let x1 = Z.extract lo offs len in
      let x2 = Z.extract hi offs len in
      Interval { lo = Z.min x1 x2;
