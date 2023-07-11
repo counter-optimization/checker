@@ -493,6 +493,11 @@ module Tree(N : Abstract.NumericDomain)
     | Parent { left; right; _ } ->
        Format.sprintf "(Parent %s %s)" (to_string left) (to_string right)
 
+  let is_empty (tree : t) : bool =
+    match tree with
+    | Leaf env -> E.is_empty env
+    | _ -> false
+
   let tids_overlap tids1 tids2 =
     not @@ Tidset.is_empty @@ Tidset.inter tids1 tids2
 
@@ -662,7 +667,7 @@ module Tree(N : Abstract.NumericDomain)
       match left, right with
       | Leaf left, Leaf right -> k (Ok (Leaf (E.merge left right)))
       | Parent left, Parent right ->
-         if 0 <> Directives.compare left.directive right.directive
+         if not @@ Directives.equal left.directive right.directive
          then
            Or_error.error_string "[Trace] isomorphic merge does not support non-isomorphic trees (tree directives)"
          else
@@ -681,58 +686,58 @@ module Tree(N : Abstract.NumericDomain)
                   (to_string right) in
        failwith @@ Error.to_string_hum e
 
-  let normalize_prefixed_trees
-        ~(do_merge : bool)
-        ~(suffix : Directives.t list)
-        ~(target : t)
-        ~(other : t) : t =
-    let conditionally_split tree tdir =
-      if directive_already_applied tree tdir
-      then tree
-      else do_directive_split tree tdir in
+  let normalize_prefixed_trees ~(do_merge : bool) ~(suffix : Directives.t list)
+        ~(target : t) ~(other : t) : t =
+    let split tree tdir = if directive_already_applied tree tdir
+                          then tree
+                          else do_directive_split tree tdir in
     let refined_target = List.fold suffix
                            ~init:target
-                           ~f:conditionally_split in
+                           ~f:split in
     if do_merge
-    then
-      isomorphic_merge refined_target other
-    else
-      refined_target
-  
+    then isomorphic_merge refined_target other
+    else refined_target
+
   let merge (left : t) (right : t) : t =
-    let left_tdirs = directives left in
-    let right_tdirs = directives right in
-    if directives_prefix ~prefix:left_tdirs ~of_:right_tdirs
-    then
-      let remaining_suffix = remove_directives_prefix
-                               ~prefix:left_tdirs
-                               ~of_:right_tdirs
-      in
-      normalize_prefixed_trees
-        ~do_merge:true
-        ~suffix:remaining_suffix
-        ~target:left
-        ~other:right
-    else
-      if directives_prefix ~prefix:right_tdirs ~of_:left_tdirs
-      then
-        let remaining_suffix = remove_directives_prefix
-                               ~prefix:right_tdirs
-                               ~of_:left_tdirs
-        in
-        normalize_prefixed_trees
-          ~do_merge:true
-          ~suffix:remaining_suffix
-          ~target:right
-          ~other:left
-      else
-        (* neither refine each other, so pick (mid : t) s.t. 
-           mid refines both left and right *)
-        normalize_prefixed_trees
-          ~suffix:right_tdirs
-          ~target:left
-          ~other:right
-          ~do_merge:false
+    let pick_nonempty = match is_empty left, is_empty right with
+      | true, true -> Some left
+      | true, false -> Some right
+      | false, true -> Some left
+      | false, false -> None in
+    match pick_nonempty with
+    | Some t -> t
+    | None ->
+       let left_tdirs = directives left in
+       let right_tdirs = directives right in
+       if directives_prefix ~prefix:left_tdirs ~of_:right_tdirs
+       then
+         let remaining_suffix = remove_directives_prefix
+                                  ~prefix:left_tdirs
+                                  ~of_:right_tdirs in
+         normalize_prefixed_trees
+           ~do_merge:true
+           ~suffix:remaining_suffix
+           ~target:left
+           ~other:right
+       else
+         if directives_prefix ~prefix:right_tdirs ~of_:left_tdirs
+         then
+           let remaining_suffix = remove_directives_prefix
+                                    ~prefix:right_tdirs
+                                    ~of_:left_tdirs in
+           normalize_prefixed_trees
+             ~do_merge:true
+             ~suffix:remaining_suffix
+             ~target:right
+             ~other:left
+         else
+           (* neither refine each other, so pick (mid : t) s.t. 
+              mid refines both left and right *)
+           normalize_prefixed_trees
+             ~do_merge:false
+             ~suffix:right_tdirs
+             ~target:left
+             ~other:right
 
   let any_node (tree : t) ~(f : E.t -> bool) : bool =
     let rec loop tree k =

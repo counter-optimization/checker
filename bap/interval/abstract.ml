@@ -86,6 +86,8 @@ module type MemoryT =
     type 'a err = ('a, Error.t) Result.t
 
     val empty : t
+
+    val is_empty : t -> bool
     
     val lookup : string -> t -> v
 
@@ -152,6 +154,8 @@ module NumericEnv(ValueDom : NumericDomain)
   type 'a err = ('a, Error.t) Result.t
 
   let empty : t = M.empty
+
+  let is_empty : t -> bool = M.is_empty
   
   let stack_ptr = "RSP"
   
