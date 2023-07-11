@@ -21,6 +21,7 @@
   "interp/movzx.rkt"
   "interp/mul.rkt"
   "interp/neg.rkt"
+  "interp/not.rkt"
   "interp/nop.rkt"
   "interp/or.rkt"
   "interp/pop.rkt"
