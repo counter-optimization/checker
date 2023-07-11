@@ -18,6 +18,6 @@
            [((rex/r b) (byte #xF7) (/3 r/m))
             (list (gpr32 b r/m))]
   #:encode (list (rex/r dst) (byte #xF7) (/3 dst))
-  interpret-neg)
+  interpret-not)
 
 
