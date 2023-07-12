@@ -13,11 +13,19 @@ module Directives(N : Abstract.NumericDomain)
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with
     | Some f -> f
-    | None -> failwith "Couldn't extract interval information in directives get_intvl"
+    | None -> failwith "[TraceDir] Couldn't extract interval information"
 
   let set_intvl (v : N.t) (wi : Wrapping_interval.t) : N.t =
     N.set Wrapping_interval.key v wi
-  
+
+  let get_taint : N.t -> Checker_taint.Analysis.t =
+    match N.get Checker_taint.Analysis.key with
+    | Some f -> f
+    | None -> failwith "[TraceDir] Couldn't extract taint information"
+
+  let set_taint (v : N.t) (t : Checker_taint.Analysis.t) : N.t =
+    N.set Checker_taint.Analysis.key v t
+
   module T = struct
     type simple_operand = Var of string | Num of Word.t [@@deriving compare, sexp]
 
@@ -172,16 +180,24 @@ module Directives(N : Abstract.NumericDomain)
     let id_applier : pos_neg_applier = id, id
       
     let rec eval_cnd : cnd -> pos_neg_applier =
+      let propagate_taint oldleft oldright newval =
+        let lt = get_taint oldleft in
+        let rt = get_taint oldright in
+        let new_wi = get_intvl newval in
+        let final_taint = if WI.equal new_wi WI.bot
+                          then Checker_taint.Analysis.Notaint
+                          else Checker_taint.Analysis.join lt rt in
+        set_taint newval final_taint in
       fun cnd ->
       match cnd with
       | Eq (Var a, Var b) ->
          let pos_applier = fun (env : E.t) ->
            let a_val = E.lookup a env in
            let b_val = E.lookup b env in
-           let final_val = N.meet a_val b_val in
+           let final_val = N.meet a_val b_val
+                           |> propagate_taint a_val b_val in
            E.set a final_val env
-           |> E.set b final_val
-         in
+           |> E.set b final_val in
          let neg_applier = fun (env : E.t) ->
            let a_val = E.lookup a env in
            let b_val = E.lookup b env in
@@ -189,12 +205,13 @@ module Directives(N : Abstract.NumericDomain)
            let b_wi = get_intvl b_val in
            let a_wi' = WI.try_remove_interval ~remove:b_wi ~from_:a_wi in
            let b_wi' = WI.try_remove_interval ~remove:a_wi ~from_:b_wi in
-           let a_val' = set_intvl a_val a_wi' in
-           let b_val' = set_intvl b_val b_wi' in
+           let a_val' = set_intvl a_val a_wi'
+                        |> propagate_taint a_val b_val in
+           let b_val' = set_intvl b_val b_wi'
+                        |> propagate_taint a_val b_val in
            E.set a a_val' env 
-           |> E.set b b_val'
-         in
-         pos_applier, neg_applier
+           |> E.set b b_val' in
+         (pos_applier, neg_applier)
       | Eq (Var v, Num w)
         | Eq (Num w, Var v) ->
          let const = N.of_word w in
@@ -203,31 +220,26 @@ module Directives(N : Abstract.NumericDomain)
            let one = Word.one @@ Word.bitwidth w in
            let zero = Word.zero @@ Word.bitwidth w in
            let pos_val, neg_val = if Word.equal w one
-                                  then
-                                    (N.of_word one, N.of_word zero)
-                                  else
-                                    (N.of_word zero, N.of_word one)
-           in
+                                  then (N.of_word one, N.of_word zero)
+                                  else (N.of_word zero, N.of_word one) in
            let pos_applier = E.set v pos_val in
            let neg_applier = E.set v neg_val in
-           pos_applier, neg_applier
+           (pos_applier, neg_applier)
          else
-           begin
-             let pos_applier = fun (env : E.t) ->
-               let var_val = E.lookup v env in
-               let intersect = N.meet var_val const in
-               E.set v intersect env
-             in
-             let neg_applier = fun (env : E.t) ->
-               let const = get_intvl const in
-               let var_val = E.lookup v env in
-               let var_wi = get_intvl var_val in
-               let var_wi' = WI.try_remove_interval ~remove:const ~from_:var_wi in
-               let var_val' = set_intvl var_val var_wi' in
-               E.set v var_val' env
-             in
-             pos_applier, neg_applier
-           end
+           let pos_applier = fun (env : E.t) ->
+             let var_val = E.lookup v env in
+             let intersect = N.meet var_val const
+                             |> propagate_taint var_val const in
+             E.set v intersect env in
+           let neg_applier = fun (env : E.t) ->
+             let const_wi = get_intvl const in
+             let var_val = E.lookup v env in
+             let var_wi = get_intvl var_val in
+             let var_wi' = WI.try_remove_interval ~remove:const_wi ~from_:var_wi in
+             let var_val' = set_intvl var_val var_wi'
+                            |> propagate_taint var_val const in
+             E.set v var_val' env in
+           (pos_applier, neg_applier)
       | Lt (Var a, Var b) ->
          let pos_applier = fun (env : E.t) ->
            failwith "LT (VAR A, VAR B) not supported in Directives.Applier.eval_cnd yet"
