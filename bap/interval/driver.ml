@@ -221,7 +221,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                 sub_name in
      res
   | None ->
-     let () = Preanalysis_iter.print_conds_of_sub sub in
      (* run the liveness analysis *)
      let () = printf "Running liveness analysis\n%!" in
      let start = Analysis_profiling.record_start_time () in
