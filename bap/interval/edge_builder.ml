@@ -15,6 +15,8 @@ type edges = edge list
 
 type tidmap = Blk.elt Tid_map.t
 
+type jmp_taken = Never | Always | Maybe
+
 module Callees = struct
   module S = Set.Make_binable_using_comparator(Sub)
   include S
@@ -174,89 +176,116 @@ let last_insn_of_sub sub idx_st : Blk.elt =
   let last_node_insns = insns_of_node last_node idx_st in
   let num_insns = Seq.length last_node_insns in
   Seq.nth_exn last_node_insns (num_insns - 1)
-  
+
+let jmp_taken_when (j : jmp term) : jmp_taken =
+  let bil_cnd = Jmp.cond j in
+  match bil_cnd with
+  | Bil.Int w ->
+     let cnd_bw = Word.bitwidth w in
+     let zero = Word.zero cnd_bw in
+     if Word.equal w zero
+     then Never
+     else Always
+  | _ -> Maybe
+
+let is_no_fallthrough_jmp : Blk.elt -> bool = function
+  | `Jmp j -> (match jmp_taken_when j with
+               | Always -> true
+               | _ -> false)
+  | _ -> false
+    
 let edges_of_jump j sub nodes proj idx_st : edges ST.t =
   let fromtid = Term.tid j in
   let ret_insn_tid = get_ret_insn_tid nodes idx_st in
-  match Jmp.kind j with
-  | Goto (Direct totid) ->
-     let first_insn = first_insn_of_blk_tid totid sub in
-     let first_insns_tid = Tid_map.tid_of_elt first_insn in
-     ST.return [(fromtid, first_insns_tid, false)]
-  | Goto _ when Tid.equal fromtid ret_insn_tid ->
-     ST.return []
-  | Goto (Indirect _expr) ->
-     failwith "Indirect jumps not handled in edge building yet (outer goto)"
-  | Call c ->
+  match jmp_taken_when j with
+  | Never -> ST.return []
+  | _ ->
      begin
-       let call_target = Call.target c in
-       match call_target with
-       | Direct totid ->
-          begin
-            let callee = sub_of_tid totid proj in
-            add_callee callee >>= fun () ->
-            let actual_totid = first_insn_tid_of_sub callee in
-            ST.return [(fromtid, actual_totid, true)] >>= fun es ->
-            let last_elt = last_insn_of_sub callee idx_st in
-            let last_elt_tid = Tid_map.tid_of_elt last_elt in
-            let return_tid = match Call.return c with
-              | Some (Direct l) ->
-                 begin
-                   let ret_insn = first_insn_of_blk_tid l sub in
-                   Tid_map.tid_of_elt ret_insn
-                 end
-              | Some (Indirect _exp) -> failwith "in interproc edge building, can't handle indirect label..."
-              | None -> failwith "in interproc edge building, call doesn't return"
-            in
-            ST.return @@ List.cons (last_elt_tid, return_tid, true) es 
-          end
-       | Indirect _expr when Tid.equal fromtid ret_insn_tid ->
+       match Jmp.kind j with
+       | Goto (Direct totid) ->
+          let first_insn = first_insn_of_blk_tid totid sub in
+          let first_insns_tid = Tid_map.tid_of_elt first_insn in
+          ST.return [(fromtid, first_insns_tid, false)]
+       | Goto _ when Tid.equal fromtid ret_insn_tid ->
           ST.return []
-       | Indirect _expr ->
-          failwith "Indirect jumps not handled in edge building yet (call)"
+       | Goto (Indirect _expr) ->
+          failwith "Indirect jumps not handled in edge building yet (outer goto)"
+       | Call c ->
+          begin
+            let call_target = Call.target c in
+            match call_target with
+            | Direct totid ->
+               begin
+                 let callee = sub_of_tid totid proj in
+                 add_callee callee >>= fun () ->
+                 let actual_totid = first_insn_tid_of_sub callee in
+                 ST.return [(fromtid, actual_totid, true)] >>= fun es ->
+                 let last_elt = last_insn_of_sub callee idx_st in
+                 let last_elt_tid = Tid_map.tid_of_elt last_elt in
+                 let return_tid = match Call.return c with
+                   | Some (Direct l) ->
+                      begin
+                        let ret_insn = first_insn_of_blk_tid l sub in
+                        Tid_map.tid_of_elt ret_insn
+                      end
+                   | Some (Indirect _exp) -> failwith "in interproc edge building, can't handle indirect label..."
+                   | None -> failwith "in interproc edge building, call doesn't return"
+                 in
+                 ST.return @@ List.cons (last_elt_tid, return_tid, true) es 
+               end
+            | Indirect _expr when Tid.equal fromtid ret_insn_tid ->
+               ST.return []
+            | Indirect _expr ->
+               failwith "Indirect jumps not handled in edge building yet (call)"
+          end
+       | Int (_, _) -> ST.return []
+       | Ret _ -> ST.return []
      end
-  | Int (_, _) -> ST.return []
-  | Ret _ -> ST.return []
-
+       
 let edges_of_jump_intraproc j sub nodes proj : edges ST.t =
   let fromtid = Term.tid j in
-  match Jmp.kind j with
-  | Goto (Direct totid) ->
-     let first_insn = first_insn_of_blk_tid totid sub in
-     let first_insns_tid = Tid_map.tid_of_elt first_insn in
-     ST.return [(fromtid, first_insns_tid, false)]
-  | Call target ->
-     let retlabel = Call.return target in
-     begin
-       match retlabel with
-       | Some (Direct totid) ->
-          let first_insn_of_ret_blk = first_insn_of_blk_tid totid sub in
-          let first_insns_tid = Tid_map.tid_of_elt first_insn_of_ret_blk in
-          ST.return [(fromtid, first_insns_tid, false)]
-       | _ -> ST.return []
-     end
-  | Goto _ -> ST.return []
-  | Int (_, _) -> ST.return []
-  | Ret _ -> ST.return []
+  match jmp_taken_when j with
+  | Never -> ST.return []
+  | _ ->
+     match Jmp.kind j with
+     | Goto (Direct totid) ->
+        let first_insn = first_insn_of_blk_tid totid sub in
+        let first_insns_tid = Tid_map.tid_of_elt first_insn in
+        ST.return [(fromtid, first_insns_tid, false)]
+     | Call target ->
+        let retlabel = Call.return target in
+        begin
+          match retlabel with
+          | Some (Direct totid) ->
+             let first_insn_of_ret_blk = first_insn_of_blk_tid totid sub in
+             let first_insns_tid = Tid_map.tid_of_elt first_insn_of_ret_blk in
+             ST.return [(fromtid, first_insns_tid, false)]
+          | _ -> ST.return []
+        end
+     | Goto _ -> ST.return []
+     | Int (_, _) -> ST.return []
+     | Ret _ -> ST.return []
 
 let get_jmp_edges insns sub nodes proj =
-  let edges insn =
-    match insn with
-    (* | `Jmp j -> edges_of_jump j sub nodes proj *)
+  let edges insn = match insn with
     | `Jmp j -> edges_of_jump_intraproc j sub nodes proj
-    | _ -> ST.return []
-  in
+    | _ -> ST.return [] in
   Seq.fold insns ~init:(ST.return []) ~f:(fun st insn ->
       st >>= fun e_st ->
       edges insn >>= fun es ->
       ST.return @@ List.append es e_st)
 
 let edges_of_insns insns sub nodes proj : edges ST.t =
-  let tid_list = Seq.map insns ~f:Tid_map.tid_of_elt |> Seq.to_list in
-  let adjacent_tids, _ =
-    List.zip_with_remainder tid_list (List.tl_exn tid_list) in
-  let fallthroughs =
-    List.map adjacent_tids ~f:(fun (from, t) -> (from, t, false)) in
+  let keep_edge no_fallthrough_jmps (from_, to_, _) : bool =
+    not @@ Tidset.mem no_fallthrough_jmps from_ in
+  let tid_list = Seq.map insns ~f:Common.elt_to_tid
+                 |> Seq.to_list in
+  let no_fallthrough_jmps = Seq.filter insns ~f:is_no_fallthrough_jmp
+                            |> Seq.map ~f:Common.elt_to_tid
+                            |> Tidset.of_sequence in
+  let adjacent_tids, _ = List.zip_with_remainder tid_list (List.tl_exn tid_list) in
+  let fallthroughs = List.map adjacent_tids ~f:(fun (from, t) -> (from, t, false)) in
+  let fallthroughs = List.filter fallthroughs ~f:(keep_edge no_fallthrough_jmps) in
   get_jmp_edges insns sub nodes proj >>= fun jmp_edges ->
   ST.return @@ List.append jmp_edges fallthroughs
 
@@ -265,8 +294,7 @@ let get_builder_for_sub sub proj idx_st : edges ST.t =
   let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
   let lead_tidmap = Tid_map.t_of_sub sub in
   let init_state = ST.put (init lead_tidmap) >>= fun () ->
-                   ST.return []
-  in
+                   ST.return [] in
   Seq.fold nodes ~init:init_state
     ~f:(fun st node ->
       st >>= fun prev_edges -> 

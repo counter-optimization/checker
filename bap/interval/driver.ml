@@ -271,43 +271,12 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let po_traversal = Graphlib.postorder_traverse (module G) cfg in
      let first_node = match Seq.hd rpo_traversal with
        | Some n -> n
-       | None -> failwith "in driver, cfg building init sol, couldn't get first node"
-     in
+       | None -> failwith "in driver, cfg building init sol, couldn't get first node" in
      let last_node = match Seq.hd po_traversal with
        | Some n -> n
-       | None -> failwith "in driver, cfg building init sol, couldn't get last node"
-     in
-     (* let with_args = G.Node.Map.set G.Node.Map.empty ~key:first_node ~data:final_env in *)
-     (* let init_sol = Solution.create with_args empty in *)
+       | None -> failwith "in driver, cfg building init sol, couldn't get last node" in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname InitEnvSetup stop in
-     (* let () = printf "Running abstract interpreter\n%!" in *)
-
-     (* let start = Analysis_profiling.record_start_time () in *)
-     (* let analysis_results = Graphlib.fixpoint *)
-     (*                          (module G) *)
-     (*                          cfg *)
-     (*                          (\* ~steps:E.widen_threshold *\) *)
-     (*                          ~step:E.widen_with_step *)
-     (*                          ~init:init_sol *)
-     (*                          ~equal:E.equal *)
-     (*                          ~merge:E.merge *)
-     (*                          ~f:(fun cc -> *)
-     (*                            let tid = Calling_context.to_insn_tid cc in *)
-     (*                            let elt = match Tid_map.find tidmap tid with *)
-     (*                              | Some elt -> elt *)
-     (*                              | None -> *)
-     (*                                 failwith @@ *)
-     (*                                   sprintf *)
-     (*                                     "in calculating analysis_results, couldn't find tid %a in tidmap" *)
-     (*                                     Tid.pps tid *)
-
-     (*                            in *)
-     (*                            AbsInt.denote_elt subname elt) *)
-     (* in *)
-     (* let () = printf "Done running abstract interpreter\n%!" in *)
-     (* let stop = Analysis_profiling.record_stop_time start in *)
-     (* let () = Analysis_profiling.record_duration_for subname AbsInt stop in *)
 
      let () = printf "Running dependency analysis\n%!" in
      let start = Analysis_profiling.record_start_time () in
@@ -377,6 +346,21 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                        split_dir :: combine_dir :: dirs) in
      let directive_map = TraceDir.Extractor.to_directive_map dirs in
 
+     let debug_fns = ["x86compsimptest_SHL32rCL_transformed"] in
+     let () = if List.mem ~equal:String.equal debug_fns subname
+              then
+                (* print the sub *)
+                let () = printf "%a\n%!" Sub.ppo sub in
+                (* let print_sol (cc, env) = *)
+                (*   let tid = Calling_context.to_insn_tid cc in *)
+                (*   printf "[Trace] tid %a finished with env:\n%!" Tid.ppo tid; *)
+                (*   TraceEnv.pp env in *)
+                (* (\* print the trace parted abs int solution *\) *)
+                (* Solution.enum analysis_results *)
+                (* |> Seq.iter ~f:print_sol *)
+                ()
+              else () in
+
      let () = printf "Running trace part abstract interpreter\n%!" in
 
      let start = Analysis_profiling.record_start_time () in
@@ -414,24 +398,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let no_symex = Extension.Configuration.get ctxt Common.no_symex_param in
      let use_symex = not no_symex in
      let symex_profiling_out_file = Extension.Configuration.get ctxt Common.symex_profiling_output_file_path_param in
-
-     let debug_fns = ["x86silentstorestest_ADD32mi8_transformed";
-                      "x86silentstorestest_ADD32mr_transformed";
-                      "x86silentstorestest_ADD64mi8_transformed";
-                      "x86silentstorestest_AND32mr_transformed";
-                      "x86silentstorestest_MOV8mr_NOREX_transformed"] in
-     let () = if List.mem ~equal:String.equal debug_fns subname
-              then
-                (* print the sub *)
-                let () = printf "%a\n%!" Sub.ppo sub in
-                let print_sol (cc, env) =
-                  let tid = Calling_context.to_insn_tid cc in
-                  printf "[Trace] tid %a finished with env:\n%!" Tid.ppo tid;
-                  TraceEnv.pp env in
-                (* print the trace parted abs int solution *)
-                Solution.enum analysis_results
-                |> Seq.iter ~f:print_sol
-              else () in
 
      let module TracePartCheckerOracle
                 : Common.CheckerInterp with type t := FinalDomain.t =

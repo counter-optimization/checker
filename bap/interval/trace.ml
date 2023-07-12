@@ -484,8 +484,7 @@ module Tree(N : Abstract.NumericDomain)
   let combine_partitions (tree : t) (combine_dir : Directives.directive) : t =
     let tids = match combine_dir with
       | Combine tids -> tids
-      | _ -> failwith "Not combine directive in combine_partitions"
-    in
+      | _ -> failwith "Not combine directive in combine_partitions" in
     (* Combine all subtrees into one leaf when found=true *)
     let rec loop ?(found : bool = false) : t -> t = function
       | Leaf n -> Leaf n
@@ -493,18 +492,15 @@ module Tree(N : Abstract.NumericDomain)
          let (tid_tags, dir) = directive in
          let found = found || tids_overlap tids tid_tags in
          if found
-         then
-           match loop ~found left, loop ~found right with
-           | Leaf l, Leaf r -> Leaf (E.merge l r)
-           | _, _ ->
-              failwith "loop in combine_partitions didn't return leaves"
-         else
-           Parent {
-               left = loop ~found left;
-               right = loop ~found right;
-               directive
-             }
-    in
+         then match loop ~found left, loop ~found right with
+              | Leaf l, Leaf r -> Leaf (E.merge l r)
+              | _, _ ->
+                 failwith "loop in combine_partitions didn't return leaves"
+         else Parent {
+                  left = loop ~found left;
+                  right = loop ~found right;
+                  directive
+                } in
     loop tree
 
   let rec do_directive_split (tree : t) (tdir : Directives.tagged_directive) : t =
@@ -532,17 +528,12 @@ module Tree(N : Abstract.NumericDomain)
     let rec loop tree k =
       match tree with
       | Leaf l -> k false
-      | Parent p ->
-         if Directives.equal p.directive tdir
-         then
-           k true
-         else
-           loop p.left (fun leftres ->
-               if leftres
-               then k true
-               else
-                 loop p.right (fun x -> x))
-    in
+      | Parent p -> if Directives.equal p.directive tdir
+                    then k true
+                    else loop p.left (fun leftres ->
+                             if leftres
+                             then k true
+                             else loop p.right (fun x -> x)) in
     loop tree (fun x -> x)
 
   let apply_directive (tree : t) (tdir : Directives.tagged_directive) : t =
@@ -552,21 +543,48 @@ module Tree(N : Abstract.NumericDomain)
     then tree
     else do_directive_split tree tdir
 
-  let rec equal (left : t) (right : t) : bool =
-    match left, right with
-    | Leaf l, Leaf r -> E.equal l r
-    | Parent l, Parent r ->
-       Directives.equal l.directive r.directive &&
-         equal l.left r.left &&
-           equal l.right r.right
-    | _ -> false
+  let equal (left : t) (right : t) : bool =
+    let rec loop l r k =
+      match left, right with
+      | Leaf l, Leaf r -> k @@ E.equal l r
+      | Parent l, Parent r ->
+         Directives.equal l.directive r.directive &&
+           loop l.left r.left (fun leq ->
+               if leq
+               then loop l.right r.right (fun req -> req)
+               else false)
+      | _ -> false in
+    loop left right (fun x -> x)
 
-  let rec map ~(f : E.t -> E.t) = function
-    | Leaf node -> Leaf (f node)
-    | Parent { left; directive; right } ->
-       let left = map left ~f in
-       let right = map right ~f in
-       Parent { left; directive; right }
+  let map t ~(f : E.t -> E.t) : t =
+    let rec loop t k =
+      match t with
+      | Leaf node -> k @@ Leaf (f node)
+      | Parent { left; directive; right } ->
+         loop left (fun left_tree ->
+             loop right (fun right_tree ->
+                 k @@ Parent { left = left_tree;
+                               right = right_tree;
+                               directive })) in
+    loop t (fun x -> x)
+
+  let map2 l r ~(f : E.t -> E.t -> E.t) =
+    let uneq_fail () =
+      failwith "[Trace] Tree.map2 requires directives_equal trees" in
+    let rec loop l r k =
+      match l, r with
+      | Leaf l, Leaf r -> k @@ Leaf (f l r)
+      | Parent l, Parent r ->
+         if not @@ Directives.equal l.directive r.directive
+         then uneq_fail ()
+         else
+           loop l.left r.left (fun lefttree ->
+               loop l.right r.right (fun righttree ->
+                   k @@ Parent { left = lefttree;
+                                 right = righttree;
+                                 directive = l.directive }))
+      | _, _ -> uneq_fail () in
+    loop l r (fun x -> x)
 
   let rec map_list : 'a. (E.t -> 'a) -> t -> 'a list = fun f tree ->
     match tree with
@@ -602,11 +620,14 @@ module Tree(N : Abstract.NumericDomain)
 
   (* directives are the same on both sides of the tree,
      so just collect along the left side *)
-  let rec directives (tree : t) : Directives.t list =
-    match tree with
-    | Leaf e -> []
-    | Parent p ->
-       p.directive :: directives p.left
+  let directives (tree : t) : Directives.t list =
+    let rec loop subtree k =
+      match subtree with
+      | Leaf e -> []
+      | Parent p ->
+         loop p.left (fun dirs ->
+             p.directive :: dirs) in
+    loop tree (fun x -> x)
 
   let rec directives_prefix ~(prefix : Directives.t list)
         ~(of_ : Directives.t list) : bool =
@@ -616,6 +637,11 @@ module Tree(N : Abstract.NumericDomain)
     | x :: prefixes, y :: ofs ->
        0 = Directives.compare x y &&
          directives_prefix ~prefix:prefixes ~of_:ofs
+
+  let directives_equal (left : t) (right : t) : bool =
+    let left = directives left in
+    let right = directives right in
+    List.equal Directives.equal left right
 
   (* precondition: Bool.equal true (directives ~prefix ~of_) *)
   let rec remove_directives_prefix ~(prefix : Directives.t list)
@@ -793,9 +819,21 @@ module Env(N : Abstract.NumericDomain)
 
   let merge (l : t) (r : t) : t = { tree = Tree.merge l.tree r.tree }
 
-  let widen_with_step (n : int) (node : 'a) l r : t =
-    if n <= Common.ai_widen_threshold
+  let widen_with_step (n : int) (node : 'a) (l : t) (r : t) : t =
+    let () = printf "[Trace] widen_with_step (count: %d)\n%!" n;
+             printf "\tleft:\n%!";
+             pp l;
+             printf "\tright:\n%!";
+             pp r in
+    if n < Common.ai_widen_threshold
     then merge l r
+    else if Tree.directives_equal l.tree r.tree
+    then
+      let () = printf "[Trace] widening leaves\n%!" in
+      let tree = Tree.map2 l.tree r.tree ~f:(E.widen_with_step n node) in
+      let () = printf "[Trace] widening result:\n%!";
+               pp ({ tree }) in
+      { tree }
     else
       failwith "[Trace] infinite loop stuck in widen_with_step"
 end
@@ -923,6 +961,8 @@ module AbsInt = struct
 
     let denote_elt (subname : string) (dmap : Directives.directive_map)
           (e : Blk.elt) (st : env) : env =
+      let tid = Common.elt_to_tid e in
+      let () = printf "[Trace] denoting elt %a\n%!" Tid.ppo tid in
       match e with
       | `Def d -> denote_def subname dmap d st
       | `Jmp j -> denote_jmp subname dmap j st

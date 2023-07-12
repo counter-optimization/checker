@@ -460,19 +460,13 @@ module AbstractInterpreter(N: NumericDomain)
            let truthy = N.could_be_true cond' in
            let falsy = N.could_be_false cond' in
            if truthy && not falsy
-           then
-             let () = printf "[Abstract] Ite: truthy && not falsy\n%!" in
-             denote_exp ifthen st
+           then denote_exp ifthen st
+           else if not truthy && falsy
+           then denote_exp ifelse st
            else
-             if not truthy && falsy
-             then
-               let () = printf "[Abstract] Ite: not truthy && falsy\n%!" in
-               denote_exp ifelse st
-             else
-               let (then', st) = denote_exp ifthen st in
-               let (else', st) = denote_exp ifelse st in
-               let () = printf "[Abstract] Ite: truthy && falsy\n%!" in
-               (N.join then' else', st)
+             let (then', st) = denote_exp ifthen st in
+             let (else', st) = denote_exp ifelse st in
+             (N.join then' else', st)
         | Bil.Unknown (str, _) ->
            (* This seems to be used for at least:
               setting undefined flags (like everything
@@ -554,6 +548,4 @@ module AbstractInterpreter(N: NumericDomain)
     | `Def d -> denote_def subname d st
     | `Jmp j -> denote_jmp subname j st
     | `Phi p -> denote_phi subname p st
-    (* let (elt_res, state') = ST.run res st in *)
-    (* state' *)
 end
