@@ -664,6 +664,11 @@ module RemoveAlertsForCallInsns : Pass = struct
 end
 
 module RemoveUnsupportedMirOpcodes = struct
+  type t = {
+      num_removed : int;
+      alerts : Set.t;
+    }
+  
   let unsupported_mir_opcode_prefixes = ["xorpsrr";
                                          "xorpsmr";
                                          "adc";
@@ -687,7 +692,7 @@ module RemoveUnsupportedMirOpcodes = struct
            String.Caseless.is_prefix mir_opcode_str ~prefix)
     | _ -> false
 
-  let set_for_alert_set alerts _proj : Set.t * int =
+  let set_for_alert_set alerts _proj : t =
     let unsupported_count = ref 0 in
     let is_supported = fun alert ->
       let not_supported = is_unsupported alert in
@@ -698,7 +703,8 @@ module RemoveUnsupportedMirOpcodes = struct
                  printf "[AlertFilter] alert (%s) removed since it is for unsupported insn\n%!" alert_s
                else () in
       not not_supported in
-    (Set.filter alerts ~f:is_supported, !unsupported_count)
+    { alerts = Set.filter alerts ~f:is_supported;
+      num_removed = !unsupported_count }
 end
 
 module RemoveSpuriousCompSimpAlerts = struct
