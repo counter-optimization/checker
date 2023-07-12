@@ -651,20 +651,23 @@ let check_config config img ctxt proj : unit =
                            ~csevalstats:EvalStats.init
                            ~ssevalstats:EvalStats.init
                            ~is_toplevel:true
-                           ~config
-  in
-  
+                           ~config in
+  (* post-processing *)
   let all_alerts = analysis_results.alerts in
   let all_alerts = Alert.OpcodeAndAddrFiller.set_for_alert_set all_alerts proj in
   let all_alerts = Alert.RemoveAllEmptySubName.set_for_alert_set all_alerts proj in
   let all_alerts = Alert.RemoveSpuriousCompSimpAlerts.set_for_alert_set all_alerts proj in
   let all_alerts = Alert.RemoveAlertsForCallInsns.set_for_alert_set all_alerts proj in
   let all_alerts = Alert.RemoveAndWarnEmptyInsnIdxAlerts.set_for_alert_set all_alerts proj in
+  let all_alerts, unsupported_count = Alert.RemoveUnsupportedMirOpcodes.set_for_alert_set all_alerts proj in
   let cs_stats = analysis_results.csevalstats in
   let ss_stats = analysis_results.ssevalstats in
   let () = Format.printf "Done processing all functions\n%!" in
   let () = printf "cs stats:\n%s%!" @@ EvalStats.to_json_string cs_stats in
   let () = printf "ss stats:\n%s%!" @@ EvalStats.to_json_string ss_stats in
+  let () = printf "\n%!";
+           printf "num alerts removed due to unsupported MIR opcodes: %d\n%!"
+             unsupported_count in
   let csv_out_file_name = Extension.Configuration.get ctxt Common.output_csv_file_param in
   let () = printf "writing checker alerts to file: %s\n%!" csv_out_file_name in
   Alert.save_alerts_to_csv_file ~filename:csv_out_file_name all_alerts;

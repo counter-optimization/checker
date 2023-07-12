@@ -242,21 +242,17 @@ module Directives(N : Abstract.NumericDomain)
            (pos_applier, neg_applier)
       | Lt (Var a, Var b) ->
          let pos_applier = fun (env : E.t) ->
-           failwith "LT (VAR A, VAR B) not supported in Directives.Applier.eval_cnd yet"
-         in
+           failwith "LT (VAR A, VAR B) not supported in Directives.Applier.eval_cnd yet" in
          let neg_applier = fun (env : E.t) ->
-           failwith "LT (VAR A, VAR B) not supported in Directives.Applier.eval_cnd yet"
-         in
-         pos_applier, neg_applier
+           failwith "LT (VAR A, VAR B) not supported in Directives.Applier.eval_cnd yet" in
+         (pos_applier, neg_applier)
       | Lt (Var v, Num w)
         | Lt (Num w, Var v) ->
          let pos_applier = fun (env : E.t) ->
-           failwith "LT (VAR A, NUM B) not supported in Directives.Applier.eval_cnd yet"
-         in
+           failwith "LT (VAR A, NUM B) not supported in Directives.Applier.eval_cnd yet" in
          let neg_applier = fun (env : E.t) ->
-           failwith "LT (VAR A, NUM B) not supported in Directives.Applier.eval_cnd yet"
-         in
-         pos_applier, neg_applier
+           failwith "LT (VAR A, NUM B) not supported in Directives.Applier.eval_cnd yet" in
+         (pos_applier, neg_applier)
       | And (c1, c2) ->
          let (p1, n1) = eval_cnd c1 in
          let (p2, n2) = eval_cnd c2 in
@@ -271,7 +267,6 @@ module Directives(N : Abstract.NumericDomain)
       | Value cnd -> eval_cnd cnd
       | Jmp cnd -> eval_cnd cnd
       | _ -> id_applier
-      
   end
   
   module Extractor = struct
@@ -359,8 +354,7 @@ module Directives(N : Abstract.NumericDomain)
          let lhs = T.Var (Def.lhs d |> Var.name) in
          let rhs = (match Def.rhs d with
            | Bil.Var v -> T.Var (Var.name v)
-           | _ -> failwith "shouldn't happen in directive_if_simple_assign")
-         in
+           | _ -> failwith "shouldn't happen in directive_if_simple_assign") in
          let tidset = Tidset.singleton flagtid in
          Some (tidset, T.Value (T.Eq (lhs, rhs)))
       | _ -> None
@@ -379,13 +373,11 @@ module Directives(N : Abstract.NumericDomain)
           (flag_base_exp : Bil.exp) : tagged_directive list =
       let open Option.Monad_infix in
       let vars_of_base_exp = vars_of_simple_cnd flag_base_exp
-                             |> SS.to_list
-      in
+                             |> SS.to_list in
       List.fold vars_of_base_exp ~init:[] ~f:(fun dirs used_var ->
           let maybe_new_dir =
             get_last_deftid p ~var:used_var ~attid:flag_tid >>= fun t ->
-              directive_if_simple_assign p flag_tid t
-          in
+              directive_if_simple_assign p flag_tid t in
           match maybe_new_dir with
           | Some dir -> dir :: dirs
           | None -> dirs)
