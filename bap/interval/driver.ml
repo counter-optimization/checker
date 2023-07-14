@@ -346,21 +346,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                        split_dir :: combine_dir :: dirs) in
      let directive_map = TraceDir.Extractor.to_directive_map dirs in
 
-     let debug_fns = ["x86compsimptest_SHL32rCL_transformed"] in
-     let () = if List.mem ~equal:String.equal debug_fns subname
-              then
-                (* print the sub *)
-                let () = printf "%a\n%!" Sub.ppo sub in
-                (* let print_sol (cc, env) = *)
-                (*   let tid = Calling_context.to_insn_tid cc in *)
-                (*   printf "[Trace] tid %a finished with env:\n%!" Tid.ppo tid; *)
-                (*   TraceEnv.pp env in *)
-                (* (\* print the trace parted abs int solution *\) *)
-                (* Solution.enum analysis_results *)
-                (* |> Seq.iter ~f:print_sol *)
-                ()
-              else () in
-
      let () = printf "Running trace part abstract interpreter\n%!" in
 
      let start = Analysis_profiling.record_start_time () in
@@ -436,8 +421,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                            let cs_chkr_res = CompSimpChecker.check_elt
                                                subname
                                                to_tid
-                                               elt
-                           in
+                                               elt in
                            let ss_chkr_res = SSChecker.check_elt
                                                use_symex
                                                sub
@@ -447,12 +431,10 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                                symex_profiling_out_file
                                                final_dep_analysis_res
                                                tidmap
-                                               elt
-                           in
+                                               elt in
                            combine_res all_results @@
                              combine_res ss_chkr_res cs_chkr_res
-                         )
-     in
+                         ) in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname CsChecking stop in
      let () = printf "Done running checkers\n%!" in

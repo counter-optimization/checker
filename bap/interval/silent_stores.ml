@@ -118,6 +118,7 @@ module Checker(N : Abstract.NumericDomain)
         ~(n: int) ~(sub: sub term) ~(for_ : tid)
         ~(deps : Dependency_analysis.t) ~(tidmap : Blk.elt Tid_map.t)
       : def term list =
+    let emp = DefTermSet.empty in
     let dt_compare left right =
       let lefttid = Term.tid left in
       let righttid = Term.tid right in
@@ -141,43 +142,35 @@ module Checker(N : Abstract.NumericDomain)
                             let from_ = from_' in
                             let n = n - 1 in
                             take_n ~n ~to_ from_ in
+    let deps_of_dt (dt : def term) =
+      let tid = Term.tid dt in
+      let uses = Tid_map.find deps.tid_uses tid
+                 |> Option.value ~default:Tidset.empty in
+      Tidset.fold uses ~init:emp ~f:(fun dts use_tid ->
+          match dt_only_lookup ~tidmap ~tid:use_tid with
+          | None -> dts
+          | Some defterm -> DefTermSet.add dts defterm) in
     let rec loop ~(old: DefTermSet.t)
               ~(added: DefTermSet.t) : DefTermSet.t =
-      if DefTermSet.is_empty added
+      let newly_added = DefTermSet.diff added old in
+      let doesnt_need_processing = DefTermSet.is_empty newly_added in
+      if doesnt_need_processing
       then old
       else
         let old_sz = DefTermSet.length old in
-        let added_sz = DefTermSet.length added in
+        let added_sz = DefTermSet.length newly_added in
         if old_sz + added_sz >= n
         then
-          let top_off_elts = DefTermSet.to_list added
+          let top_off_elts = DefTermSet.to_list newly_added
                              |> take_n ~n ~to_:old in
-          let final = DefTermSet.union old top_off_elts in
-          let final_sz = DefTermSet.length final in
-          let () = if final_sz <> n
-                   then
-                     printf "couldn't get all (%d < bound %d) deps for tid: %a\n%!"
-                       final_sz dep_bound Tid.ppo for_
-                   else () in
-          final
+          DefTermSet.union old top_off_elts
         else
-          let old' = DefTermSet.union old added in
-          let emp_tidset = Set.empty (module Tid) in
-          let added_deps = DefTermSet.fold added
-                             ~init:emp_tidset
-                             ~f:(fun alldeps dt ->
-                               let curtid = Term.tid dt in
-                               match Tid_map.find deps.tid_uses curtid with
-                               | None -> emp_tidset
-                               | Some tidset -> Set.union alldeps tidset) in
-          let added' : DefTermSet.t =
-            Set.map (module Def) added_deps ~f:(fun deptid ->
-                match dt_only_lookup ~tidmap ~tid:deptid with
-                | None -> failwith "Couldn't find tid for SS dep comp"
-                | Some defterm -> defterm) in
-          loop ~old:old' ~added:added'
-    in
-    let emp = DefTermSet.empty in
+          let old' = DefTermSet.union old newly_added in
+          let added' = DefTermSet.fold newly_added
+                         ~init:emp
+                         ~f:(fun to_add dt ->
+                           Set.union to_add @@ deps_of_dt dt) in
+          loop ~old:old' ~added:added' in
     let start_term = Option.value_exn (dt_only_lookup ~tidmap ~tid:for_) in
     let start = DefTermSet.singleton start_term in
     let start = match prev_store with
