@@ -386,9 +386,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                      failwith @@
                                        sprintf
                                          "in calculating analysis_results, couldn't find tid %a in tidmap"
-                                         Tid.pps tid
-
-                                in
+                                         Tid.pps tid in
                                 TraceAbsInt.denote_elt subname directive_map elt) in
 
      let () = printf "Done running trace part abstract interpreter\n%!" in

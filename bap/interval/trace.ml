@@ -543,19 +543,19 @@ module Tree(N : Abstract.NumericDomain)
     then tree
     else do_directive_split tree tdir
 
-  let equal (left : t) (right : t) : bool =
+  let rec equal (left : t) (right : t) : bool =
     let rec loop l r k =
-      match left, right with
-      | Leaf l, Leaf r -> k @@ E.equal l r
+      match l, r with
+      | Leaf l, Leaf r -> k (E.equal l r)
       | Parent l, Parent r ->
          Directives.equal l.directive r.directive &&
-           loop l.left r.left (fun leq ->
-               if leq
-               then loop l.right r.right (fun req -> req)
-               else false)
-      | _ -> false in
+           loop l.left r.left (fun left_res ->
+               k @@ 
+                 left_res &&
+                 loop l.right r.right (fun right_res -> right_res))
+      | _, _ -> k false in
     loop left right (fun x -> x)
-
+  
   let map t ~(f : E.t -> E.t) : t =
     let rec loop t k =
       match t with
@@ -817,22 +817,15 @@ module Env(N : Abstract.NumericDomain)
   let equal (l : t) (r : t) : bool =
     Tree.equal l.tree r.tree
 
-  let merge (l : t) (r : t) : t = { tree = Tree.merge l.tree r.tree }
+  let merge (l : t) (r : t) : t =
+    { tree = Tree.merge l.tree r.tree }
 
   let widen_with_step (n : int) (node : 'a) (l : t) (r : t) : t =
-    let () = printf "[Trace] widen_with_step (count: %d)\n%!" n;
-             printf "\tleft:\n%!";
-             pp l;
-             printf "\tright:\n%!";
-             pp r in
     if n < Common.ai_widen_threshold
     then merge l r
     else if Tree.directives_equal l.tree r.tree
     then
-      let () = printf "[Trace] widening leaves\n%!" in
       let tree = Tree.map2 l.tree r.tree ~f:(E.widen_with_step n node) in
-      let () = printf "[Trace] widening result:\n%!";
-               pp ({ tree }) in
       { tree }
     else
       failwith "[Trace] infinite loop stuck in widen_with_step"
@@ -961,8 +954,6 @@ module AbsInt = struct
 
     let denote_elt (subname : string) (dmap : Directives.directive_map)
           (e : Blk.elt) (st : env) : env =
-      let tid = Common.elt_to_tid e in
-      let () = printf "[Trace] denoting elt %a\n%!" Tid.ppo tid in
       match e with
       | `Def d -> denote_def subname dmap d st
       | `Jmp j -> denote_jmp subname dmap j st

@@ -539,8 +539,8 @@ module AbstractInterpreter(N: NumericDomain)
   let denote_jmp (subname : string) (j : jmp term) (st : E.t) : E.t =
     match Jmp.kind j with
     | Call c -> E.havoc_on_call st
-    | Goto _
-    | Ret _
+    | Goto _ -> st
+    | Ret _ -> st
     | Int _ -> st
 
   let denote_elt (subname : string) (e : Blk.elt) (st : E.t) : E.t =
