@@ -392,14 +392,15 @@ module Directives(N : Abstract.NumericDomain)
                                  match Tid_map.find p.use_analy.tid_users dep with
                                  | Some fnd -> fnd
                                  | None -> Tidset.empty) in
-         let flag_dep_deps = List.map flag_dep_deps ~f:Tidset.to_list in
-         let flag_dep_deps = List.join flag_dep_deps in
-         let flag_dep_deps = List.sort flag_dep_deps ~compare:Tid.compare
+         let flag_dep_deps = List.map flag_dep_deps ~f:Tidset.to_list
+                             |> List.join
+                             |> List.sort ~compare:Tid.compare
                              |> List.rev in
-         let latest_dep = List.hd_exn flag_dep_deps in
-         let latest_depset = Tidset.singleton latest_dep in
-         let tagged_combine_dir = (latest_depset, Combine (fst flagdirs)) in
-         Some tagged_combine_dir
+         List.hd flag_dep_deps
+         |> Option.bind ~f:(fun latest_dep ->
+                let latest_depset = Tidset.singleton latest_dep in
+                let tagged_combine_dir = (latest_depset, Combine (fst flagdirs)) in
+                Some tagged_combine_dir)
       | None -> None             
       
     let get_conds_for_flag ((tid,flagname) : tid * string) (p : prereq) : t =

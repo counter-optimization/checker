@@ -171,8 +171,7 @@ let last_insn_of_sub sub idx_st : Blk.elt =
          let sub_name = Sub.name sub in
          let err_s = sprintf "Couldn't get last node of sub %s in last_insns_of_sub" sub_name in
          failwith err_s
-       end
-  in
+       end in
   let last_node_insns = insns_of_node last_node idx_st in
   let num_insns = Seq.length last_node_insns in
   Seq.nth_exn last_node_insns (num_insns - 1)

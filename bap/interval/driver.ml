@@ -134,12 +134,9 @@ let last_insn_of_sub sub : Blk.elt =
   let last_node = match Seq.hd rev_nodes with
     | Some n -> n
     | None ->
-       begin
-         let sub_name = Sub.name sub in
-         let err_s = sprintf "Couldn't get last node of sub %s in last_insns_of_sub" sub_name in
-         failwith err_s
-       end
-  in
+       let sub_name = Sub.name sub in
+       let err_s = sprintf "Couldn't get last node of sub %s in last_insns_of_sub" sub_name in
+       failwith err_s in
   let last_node_insns = insns_of_node last_node in
   let num_insns = Seq.length last_node_insns in
   Seq.nth_exn last_node_insns (num_insns - 1)
@@ -196,14 +193,28 @@ let should_skip_analysis (edges : Edge_builder.edges)
   else
     None
 
-let first_and_last_insn sub =
-  (* let graph = Sub.to_graph sub in *)
-  let bbs = Term.enum blk_t sub in
-  let first_bb = Seq.hd_exn bbs in
-  let first_insn = Edge_builder.first_insn_of_blk first_bb in
-  let () = printf "[Driver] first insn is: %a\n%!" Tid.ppo @@
-             Common.elt_to_tid first_insn in
+let last_insn_ccs sub =
+  let graph = Sub.to_graph sub in
+  let exit_edges = Graphs.Tid.edges graph
+                   |> Seq.filter ~f:(fun edge ->
+                          Graphs.Tid.Edge.label edge
+                          |> Tid.equal Graphs.Tid.exit) in
+  (* let exit_bbs = Seq.map exit_edges ~f:(fun edge -> *)
+  (*                    let from_bb = Graphs.Tid.Edge.src edge in *)
+  let () = printf "[Driver] exit edges are: \n%!";
+           Seq.iter exit_edges ~f:(fun edge ->
+               let from_ = Graphs.Tid.Edge.src edge in
+               let to_ = Graphs.Tid.Edge.dst edge in
+               printf "\t<%a, %a>\n%!" Tid.ppo from_ Tid.ppo to_) in
   ()
+
+let first_insn_cc sub =
+  let bbs = Term.enum blk_t sub in
+  Option.bind (Seq.hd bbs) ~f:(fun first_bb ->
+      let first_elt = Edge_builder.first_insn_of_blk first_bb in
+      let first_tid = Common.elt_to_tid first_elt in
+      let first_cc = Calling_context.of_tid first_tid in
+      Some first_cc)
 
 let run_analyses sub img proj ~(is_toplevel : bool)
                  ~(bss_init_stores : Global_function_pointers.global_const_store list)
@@ -216,7 +227,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
   let subtid = Term.tid sub in
   let () = printf "[Driver] Running analysis on sub %s\n%!" subname in
   let () = record_analyzed_sub subname subtid in
-  let () = first_and_last_insn sub in
+  let () = last_insn_ccs sub in
+  let () = printf "[Driver] edge_builder says last insn is: %a\n%!"
+             Tid.ppo @@ Common.elt_to_tid @@ last_insn_of_sub sub in
   let () = printf "%a\n%!" Sub.ppo sub in
   let prog = Project.program proj in
   let idx_st = Idx_calculator.build sub in
@@ -277,23 +290,17 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                  E.init_arg ~name:argname config sub mem) in
      let rpo_traversal = Graphlib.reverse_postorder_traverse (module G) cfg in
      let po_traversal = Graphlib.postorder_traverse (module G) cfg in
-     let first_node = match Seq.hd rpo_traversal with
+     let first_node = match first_insn_cc sub with
        | Some n -> n
        | None -> failwith "[Driver] cfg building init sol, couldn't get first node" in
      let () = printf "[Driver] first node is: %a\n%!" 
-                Tid.ppo @@ Calling_context.to_insn_tid @@ G.Node.label first_node in
-     let node_name n =
-       let tid = Calling_context.to_insn_tid @@ G.Node.label n in
-       let tid_s = Tid.to_string tid in
-       Stringext.replace_all ~pattern:"%" ~with_:"node" tid_s in
-     let dot_file_name = subname ^ ".dot" in
-     let () = Graphlib.to_dot (module G)
-                ~string_of_node:node_name
-                ~filename:dot_file_name
-                cfg in
+                Tid.ppo @@ Calling_context.to_insn_tid first_node in
+   
      let last_node = match Seq.hd po_traversal with
-       | Some n -> n
+       | Some n -> G.Node.label n
        | None -> failwith "[Driver] cfg building init sol, couldn't get last node" in
+     let () = printf "[Driver] last node is: %a\n%!" 
+                Tid.ppo @@ Calling_context.to_insn_tid last_node in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname InitEnvSetup stop in
 
@@ -321,8 +328,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                          Tid.pps tid
 
                                     in
-                                    Dependency_analysis.denote_elt elt)
-     in
+                                    Dependency_analysis.denote_elt elt) in
      let final_dep_analysis_res = Solution.get dep_analysis_results last_node in
      let final_dep_analysis_res = Dependency_analysis.add_flag_ownership_dependencies
                                     flagownership
@@ -335,6 +341,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                 stop in
      let () = printf "Done running dependency analysis\n%!" in
 
+     let () = printf "[Driver] running trace part pre-analysis\n%!" in
      let cond_scrape_st = Trace.ConditionFinder.init
                             ~rpo_traversal
                             ~tidmap
@@ -344,6 +351,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let cmov_cnd_flags =
        List.filter live_flags ~f:(fun lf ->
            Trace.ConditionFinder.FlagScraper.flag_used_in_cmov lf cond_scrape_st) in
+     let () = printf "[Driver] done with flag used\n%!" in
      let cond_extractor_st = TraceDir.Extractor.init
                                tidmap
                                dep_analysis_results
@@ -357,10 +365,13 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                         lf
                                         split_dir in
                     match combine_dir with
-                    | None -> dirs
+                    | None ->
+                       let () = printf "[Drive] live flag <%a, %s> couldn't get both split and combine directives\n%!" Tid.ppo (fst lf) (snd lf) in
+                       dirs
                     | Some combine_dir ->
                        split_dir :: combine_dir :: dirs) in
      let directive_map = TraceDir.Extractor.to_directive_map dirs in
+     let () = printf "[Driver] Done running trace part pre-analysis\n%!" in
 
      let () = printf "[Driver] Running trace part abstract interpreter\n%!" in
 
