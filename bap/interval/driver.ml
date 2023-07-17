@@ -196,6 +196,15 @@ let should_skip_analysis (edges : Edge_builder.edges)
   else
     None
 
+let first_and_last_insn sub =
+  (* let graph = Sub.to_graph sub in *)
+  let bbs = Term.enum blk_t sub in
+  let first_bb = Seq.hd_exn bbs in
+  let first_insn = Edge_builder.first_insn_of_blk first_bb in
+  let () = printf "[Driver] first insn is: %a\n%!" Tid.ppo @@
+             Common.elt_to_tid first_insn in
+  ()
+
 let run_analyses sub img proj ~(is_toplevel : bool)
                  ~(bss_init_stores : Global_function_pointers.global_const_store list)
                  ~(config : Config.t)
@@ -205,8 +214,10 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                  ctxt : check_sub_result =
   let subname = Sub.name sub in
   let subtid = Term.tid sub in
-  let () = printf "Running analysis on sub %s\n%!" subname in
+  let () = printf "[Driver] Running analysis on sub %s\n%!" subname in
   let () = record_analyzed_sub subname subtid in
+  let () = first_and_last_insn sub in
+  let () = printf "%a\n%!" Sub.ppo sub in
   let prog = Project.program proj in
   let idx_st = Idx_calculator.build sub in
   let start = Analysis_profiling.record_start_time () in
@@ -216,8 +227,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
   match should_skip_analysis edges tidmap sub prog with
   | Some res ->
      let sub_name = Sub.name sub in
-     let () = Format.printf
-                "Skipping analysis of single jmp subroutine %s\n%!"
+     let () = printf
+                "[Driver] Skipping analysis of single jmp subroutine %s\n%!"
                 sub_name in
      res
   | None ->
@@ -238,7 +249,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
 
      (* set up initial solution *)
      let start = Analysis_profiling.record_start_time () in
-     let () = printf "Setting up initial solution \n%!" in
+     let () = printf "[Driver] Setting up initial solution \n%!" in
      let empty = E.empty in
      let stack_addr = 0x7fff_fff0 in
      
@@ -254,27 +265,35 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let env_with_df_set = E.set "DF" FinalDomain.b0 with_canary_set in
      let env_with_rsp_set = match E.set_rsp stack_addr env_with_df_set with
          | Ok env' -> env'
-         | Error e -> failwith @@ Error.to_string_hum e
-     in
+         | Error e -> failwith @@ Error.to_string_hum e in
      let env_with_img_set = E.set_img env_with_rsp_set img in
      (* e.g., filter out bap's 'mem' var and the result var
         commonly used in prog analysis *)
      let true_args = List.append argnames freenames
-                     |> List.filter ~f:ABI.var_name_is_arg
-     in
+                     |> List.filter ~f:ABI.var_name_is_arg in
      let final_env = List.fold true_args
                                ~init:env_with_img_set
                                ~f:(fun mem argname ->
-                                 E.init_arg ~name:argname config sub mem)
-     in
+                                 E.init_arg ~name:argname config sub mem) in
      let rpo_traversal = Graphlib.reverse_postorder_traverse (module G) cfg in
      let po_traversal = Graphlib.postorder_traverse (module G) cfg in
      let first_node = match Seq.hd rpo_traversal with
        | Some n -> n
-       | None -> failwith "in driver, cfg building init sol, couldn't get first node" in
+       | None -> failwith "[Driver] cfg building init sol, couldn't get first node" in
+     let () = printf "[Driver] first node is: %a\n%!" 
+                Tid.ppo @@ Calling_context.to_insn_tid @@ G.Node.label first_node in
+     let node_name n =
+       let tid = Calling_context.to_insn_tid @@ G.Node.label n in
+       let tid_s = Tid.to_string tid in
+       Stringext.replace_all ~pattern:"%" ~with_:"node" tid_s in
+     let dot_file_name = subname ^ ".dot" in
+     let () = Graphlib.to_dot (module G)
+                ~string_of_node:node_name
+                ~filename:dot_file_name
+                cfg in
      let last_node = match Seq.hd po_traversal with
        | Some n -> n
-       | None -> failwith "in driver, cfg building init sol, couldn't get last node" in
+       | None -> failwith "[Driver] cfg building init sol, couldn't get last node" in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname InitEnvSetup stop in
 
@@ -283,8 +302,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let init_mapping = G.Node.Map.empty in
      let init_sol_dep_analysis = Solution.create
                                    init_mapping
-                                   Dependency_analysis.empty
-     in
+                                   Dependency_analysis.empty in
      let dep_analysis_results = Graphlib.fixpoint
                                   (module G)
                                   cfg
@@ -309,14 +327,12 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let final_dep_analysis_res = Dependency_analysis.add_flag_ownership_dependencies
                                     flagownership
                                     rpo_traversal
-                                    final_dep_analysis_res
-     in
+                                    final_dep_analysis_res in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for
                 subname
                 NewDependenceAnalysis
-                stop
-     in
+                stop in
      let () = printf "Done running dependency analysis\n%!" in
 
      let cond_scrape_st = Trace.ConditionFinder.init
@@ -346,11 +362,14 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                        split_dir :: combine_dir :: dirs) in
      let directive_map = TraceDir.Extractor.to_directive_map dirs in
 
-     let () = printf "Running trace part abstract interpreter\n%!" in
+     let () = printf "[Driver] Running trace part abstract interpreter\n%!" in
 
      let start = Analysis_profiling.record_start_time () in
 
      let init_trace_env = TraceEnv.default_with_env final_env in
+     let () = printf "[Driver] setting initial absint env (tid: %a) to:\n%!"
+                Tid.ppo (Calling_context.to_insn_tid first_node);
+              TraceEnv.pp init_trace_env in
      let init_mapping = G.Node.Map.set
                           G.Node.Map.empty
                           ~key:first_node
@@ -374,7 +393,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                          Tid.pps tid in
                                 TraceAbsInt.denote_elt subname directive_map elt) in
 
-     let () = printf "Done running trace part abstract interpreter\n%!" in
+     let () = printf "[Driver] Done running trace part abstract interpreter\n%!" in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname AbsInt stop in
 
@@ -413,7 +432,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
 
      let defs = ref None in
 
-     let () = printf "Running checkers\n%!" in
+     let () = printf "[Driver] Running checkers\n%!" in
      let start = Analysis_profiling.record_start_time () in
      let all_results = List.fold edges ~init:emp ~f:(fun all_results (_, to_cc, _) ->
                            let to_tid = Calling_context.to_insn_tid to_cc in
@@ -437,7 +456,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                          ) in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname CsChecking stop in
-     let () = printf "Done running checkers\n%!" in
+     let () = printf "[Driver] Done running checkers\n%!" in
 
      let all_alerts = all_results.warns in
 
@@ -566,12 +585,10 @@ let check_config config img ctxt proj : unit =
                                        ~do_cs_checks
                                        ~do_ss_checks
                                        ~config
-                                       ~flagownership
-        in
+                                       ~flagownership in
         let callee_subs = CRS.to_list current_res.callees
                           |> List.map ~f:(fun (r : CR.t) -> sub_of_tid_exn r.callee proj)
-                          |> SubSet.of_list
-        in
+                          |> SubSet.of_list in
         let () = SubSet.iter callee_subs ~f:(fun callee ->
             printf "CallOf: (%s, %s)\n%!" (Sub.name sub) (Sub.name callee)) in
         let next_worklist = SubSet.union worklist_wo_procd_wo_sub callee_subs in

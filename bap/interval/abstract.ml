@@ -105,6 +105,8 @@ module type MemoryT =
 
     val set_img : t -> Image.t -> t
 
+    val get_img : t -> Image.t option
+
     val set_stack_canary : t -> t
     
     val holds_ptr : string -> t -> bool
@@ -183,6 +185,8 @@ module NumericEnv(ValueDom : NumericDomain)
   let set_rbp offs env = Ok (set "RBP" (ValueDom.of_int offs) env)
   
   let set_img env img = env
+
+  let get_img _ = None
 
   let setptr ~name ~regions ~offs ~width env = env
 

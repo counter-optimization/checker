@@ -690,6 +690,21 @@ module Tree(N : Abstract.NumericDomain)
     then isomorphic_merge refined_target other
     else refined_target
 
+  let propagate_img (left : t) (right : t) (result : t) : t =
+    let rec try_find_img = function
+      | Leaf l -> E.get_img l
+      | Parent l ->
+         match try_find_img l.left with
+         | Some img -> Some img
+         | None -> try_find_img l.right in
+    let img = match try_find_img left with
+      | Some img -> img
+      | None -> match try_find_img right with
+                | Some img -> img
+                | None -> failwith "[Trace] Couldn't propagate img" in
+    let set_img = fun e -> E.set_img e img in
+    map result ~f:set_img
+
   let merge (left : t) (right : t) : t =
     let pick_nonempty = match is_empty left, is_empty right with
       | true, true -> Some left
@@ -711,6 +726,7 @@ module Tree(N : Abstract.NumericDomain)
            ~suffix:remaining_suffix
            ~target:left
            ~other:right
+         |> propagate_img left right
        else
          if directives_prefix ~prefix:right_tdirs ~of_:left_tdirs
          then
@@ -722,6 +738,7 @@ module Tree(N : Abstract.NumericDomain)
              ~suffix:remaining_suffix
              ~target:right
              ~other:left
+           |> propagate_img left right
          else
            (* neither refine each other, so pick (mid : t) s.t. 
               mid refines both left and right *)
@@ -730,6 +747,7 @@ module Tree(N : Abstract.NumericDomain)
              ~suffix:right_tdirs
              ~target:left
              ~other:right
+           |> propagate_img left right
 
   let any_node (tree : t) ~(f : E.t -> bool) : bool =
     let rec loop tree k =
@@ -936,6 +954,7 @@ module AbsInt = struct
       let tid = Term.tid d in
       let st : env = if Directives.tid_has_directive dmap tid
                      then
+                       let () = printf "[Trace] doing split at %a\n%!" Tid.ppo tid in
                        let tdir = Directives.get_tdirective dmap tid in
                        { tree = Tree.apply_directive st.tree tdir }
                      else st in
@@ -954,6 +973,10 @@ module AbsInt = struct
 
     let denote_elt (subname : string) (dmap : Directives.directive_map)
           (e : Blk.elt) (st : env) : env =
+      let () = printf "[Trace] denoting elt: %a\n%!" Tid.ppo @@
+                 Common.elt_to_tid e;
+               printf "[Trace] in env is:\n%!";
+               TreeEnv.pp st in
       match e with
       | `Def d -> denote_def subname dmap d st
       | `Jmp j -> denote_jmp subname dmap j st

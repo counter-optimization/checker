@@ -197,11 +197,13 @@ module Make(N : NumericDomain)
     
     type env = Env.t
     
-    type t = { cells: cellset;
-               env: env;
-               bases: basemap;
-               img: Image.t option;
-               globals_read : cellset }
+    type t = {
+        cells: cellset;
+        env: env;
+        bases: basemap;
+        img: Image.t option;
+        globals_read : cellset
+      }
 
     type regions = Region.Set.t
     
@@ -320,7 +322,7 @@ module Make(N : NumericDomain)
 
   let is_empty_env m : bool = Env.equal m.env Env.empty
 
-  let pp {cells; env; bases; globals_read}  =
+  let pp {cells; env; bases; globals_read; img}  =
     let print_bases_map ~key ~data =
       let region_set_str = Set.to_list data |> List.to_string ~f:Region.to_string in
       Format.printf "\t%s --> %s\n%!" key region_set_str in
@@ -330,7 +332,8 @@ module Make(N : NumericDomain)
     printf "* Var->Bases map is:\n%!";
     Map.iteri bases ~f:print_bases_map;
     printf "* Loaded globals are:\n%!";
-    Set.iter globals_read ~f:C.pp
+    Set.iter globals_read ~f:C.pp;
+    printf "* Has img loaded?: %B\n%!" @@ Option.is_some img
 
   let empty : t = { cells = C.Set.empty;
                     env = Env.empty;
@@ -379,6 +382,8 @@ module Make(N : NumericDomain)
 
   let set_img (mem : t) (img : Image.t) : t =
     { mem with img = Some img }
+
+  let get_img (mem : t) : Image.t option = mem.img
 
   let bap_size_to_int = function
     | `r8 -> 8
@@ -866,10 +871,9 @@ module Make(N : NumericDomain)
   let merge_images img1 img2 : Image.t option =
     if Option.is_some img1
     then img1
-    else
-      if Option.is_some img2
-      then img2
-      else None
+    else if Option.is_some img2
+    then img2
+    else None
 
   (* TODO: type consistency in cell merging *)
   let merge mem1 mem2 : t =
