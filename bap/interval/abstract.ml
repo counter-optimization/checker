@@ -1,4 +1,4 @@
-open Core
+open Core_kernel
 open Bap.Std
 open Bap_primus.Std
 open Graphlib.Std
@@ -220,7 +220,15 @@ module NumericEnv(ValueDom : NumericDomain)
         printf "\t%s\n%!" entry_str)
 
   let merge env1 env2 : t =
-    M.merge_skewed env1 env2 ~combine:(fun ~key -> ValueDom.join)
+    (* let merge_helper ~key ~data prev = *)
+    (*   if M.mem prev key *)
+    (*   then *)
+    (*     let last = M.find_exn prev key in *)
+    (*     let merged = ValueDom.join last data in *)
+    (*     M.set prev ~key ~data:merged *)
+    (*   else M.set prev ~key ~data in *)
+    (* M.fold env2 ~init:env1 ~f:merge_helper *)
+    Map.merge_skewed env1 env2 ~combine:(fun ~key -> ValueDom.join)
 
   let widen_threshold = Common.ai_widen_threshold
   

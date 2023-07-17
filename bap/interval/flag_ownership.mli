@@ -1,4 +1,4 @@
-open Core
+open Core_kernel
 open Bap.Std
 
 type t = Set.M(Tid).t Tid_map.t

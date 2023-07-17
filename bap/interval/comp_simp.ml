@@ -1,4 +1,4 @@
-open Core
+open Core_kernel
 open Bap.Std
 open Graphlib.Std
 open Bap_primus.Std

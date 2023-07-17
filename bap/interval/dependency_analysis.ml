@@ -1,4 +1,4 @@
-open Core
+open Core_kernel
 open Bap.Std
 
 type tidset = Tidset.t
@@ -97,21 +97,19 @@ module T = struct
                simultaneous_add ~user:flagtid ~used:tid st))
   
   let merge x y =
-    let last_defd_env = Varmap.merge_skewed
+    (* let last_defd_env = Varmap.merge *)
+    let last_defd_env = Map.merge_skewed
                           x.last_defd_env
                           y.last_defd_env
-                          ~combine:(fun ~key -> Set.union)
-    in
-    let tid_uses = Tid_map.merge_skewed
+                          ~combine:(fun ~key -> Set.union) in
+    let tid_uses = Map.merge_skewed
                      x.tid_uses
                      y.tid_uses
-                     ~combine:(fun ~key -> Set.union)
-    in
-    let tid_users = Tid_map.merge_skewed
+                     ~combine:(fun ~key -> Set.union) in
+    let tid_users = Map.merge_skewed
                       x.tid_users
                       y.tid_users
-                      ~combine:(fun ~key -> Set.union)
-    in
+                      ~combine:(fun ~key -> Set.union) in
     { last_defd_env; tid_uses; tid_users }
 
   let step _numrepeats _node data1 data2 =

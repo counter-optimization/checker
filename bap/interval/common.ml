@@ -1,4 +1,4 @@
-open Core
+open Core_kernel
 open Bap_main
 open Bap.Std
 open Bap_primus.Std

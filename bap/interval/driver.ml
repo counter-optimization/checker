@@ -1,4 +1,4 @@
-open Core
+open Core_kernel
 open Bap_main
 open Bap.Std
 open Graphlib.Std
@@ -525,7 +525,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
 let check_config config img ctxt proj : unit =
   let () = Random.self_init () in
   let target_fns = Config.get_target_fns_exn config proj in
-  let worklist = SubSet.of_sequence target_fns in
+  let worklist = SubSet.of_list @@ Sequence.to_list target_fns in
   let processed = SubSet.empty in
   let init_res = Alert.Set.empty in
   let global_store_data = Global_function_pointers.Libsodium.Analysis.get_all_init_fn_ptr_data ctxt proj in

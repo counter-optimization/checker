@@ -1,4 +1,4 @@
-open Core
+open Core_kernel
 open Bap.Std
 open Common
 (* open Interval_tree *)
@@ -487,12 +487,12 @@ module FlagsLiveOutFiller = struct
       | None ->
          SS.empty
       | Some flags ->
-         Core.Set.fold flags ~init:SS.empty ~f:(fun liveflags flagdeftid ->
+         Core_kernel.Set.fold flags ~init:SS.empty ~f:(fun liveflags flagdeftid ->
              let all_users = Dependency_analysis.users_transitive_closure 
                                flagdeftid
                                depanalysis
              in
-             if Core.Set.is_empty all_users
+             if Core_kernel.Set.is_empty all_users
              then liveflags
              else SS.add liveflags @@ flag_of_flagdeftid tidmap flagdeftid)
     in

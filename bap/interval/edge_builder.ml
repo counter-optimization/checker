@@ -1,4 +1,4 @@
-open Core
+open Core_kernel
 open Bap.Std
 open Graphlib.Std
 open Monads.Std
@@ -282,7 +282,8 @@ let edges_of_insns insns sub nodes proj : edges ST.t =
                  |> Seq.to_list in
   let no_fallthrough_jmps = Seq.filter insns ~f:is_no_fallthrough_jmp
                             |> Seq.map ~f:Common.elt_to_tid
-                            |> Tidset.of_sequence in
+                            |> Seq.to_list
+                            |> Tidset.of_list in
   let adjacent_tids, _ = List.zip_with_remainder tid_list (List.tl_exn tid_list) in
   let fallthroughs = List.map adjacent_tids ~f:(fun (from, t) -> (from, t, false)) in
   let fallthroughs = List.filter fallthroughs ~f:(keep_edge no_fallthrough_jmps) in
