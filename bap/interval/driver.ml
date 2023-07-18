@@ -346,12 +346,10 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                             ~rpo_traversal
                             ~tidmap
                             ~dep_analysis:final_dep_analysis_res in
-     let live_flags =
-       Trace.ConditionFinder.FlagScraper.get_live_flags cond_scrape_st in
-     let cmov_cnd_flags =
-       List.filter live_flags ~f:(fun lf ->
-           Trace.ConditionFinder.FlagScraper.flag_used_in_cmov lf cond_scrape_st) in
-     let () = printf "[Driver] done with flag used\n%!" in
+     let live_flags = Trace.ConditionFinder.FlagScraper.get_live_flags
+                        cond_scrape_st in
+     let cmov_cnd_flags = List.filter live_flags ~f:(fun lf ->
+                              Trace.ConditionFinder.FlagScraper.flag_used_in_cmov lf cond_scrape_st) in
      let cond_extractor_st = TraceDir.Extractor.init
                                tidmap
                                dep_analysis_results
@@ -370,6 +368,10 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                        dirs
                     | Some combine_dir ->
                        split_dir :: combine_dir :: dirs) in
+     let () = printf "[Driver] trace part dirs are:\n%!";
+              List.iter dirs ~f:(fun td ->
+                  printf "\t%s\n%!" @@ TraceDir.to_string td) in
+     let dirs = [] in 
      let directive_map = TraceDir.Extractor.to_directive_map dirs in
      let () = printf "[Driver] Done running trace part pre-analysis\n%!" in
 

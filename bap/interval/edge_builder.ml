@@ -188,10 +188,11 @@ let jmp_taken_when (j : jmp term) : jmp_taken =
   | _ -> Maybe
 
 let is_no_fallthrough_jmp : Blk.elt -> bool = function
-  | `Jmp j -> (match jmp_taken_when j with
-               | Always -> true
-               | _ -> false)
   | _ -> false
+  (* | `Jmp j -> (match jmp_taken_when j with *)
+  (*              | Always -> true *)
+  (*              | _ -> false) *)
+  (* | _ -> false *)
     
 let edges_of_jump j sub nodes proj idx_st : edges ST.t =
   let fromtid = Term.tid j in
@@ -244,7 +245,7 @@ let edges_of_jump j sub nodes proj idx_st : edges ST.t =
 let edges_of_jump_intraproc j sub nodes proj : edges ST.t =
   let fromtid = Term.tid j in
   match jmp_taken_when j with
-  | Never -> ST.return []
+  (* | Never -> ST.return [] *)
   | _ ->
      match Jmp.kind j with
      | Goto (Direct totid) ->

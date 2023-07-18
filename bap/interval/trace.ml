@@ -889,8 +889,7 @@ module ConditionFinder = struct
         | Bil.Ite (i, t, e) ->
            let all_names = SS.union SS.empty (Var_name_collector.run i)
                            |> SS.union (Var_name_collector.run t)
-                           |> SS.union (Var_name_collector.run e)
-           in
+                           |> SS.union (Var_name_collector.run e) in
            SS.mem all_names flagname
         | Bil.Extract (_, _, subexp) -> loop subexp
         | Bil.Concat (l, r) -> loop l || loop r in
