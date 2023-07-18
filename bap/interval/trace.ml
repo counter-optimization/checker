@@ -954,7 +954,7 @@ module AbsInt = struct
       let tid = Term.tid d in
       let st : env = if Directives.tid_has_directive dmap tid
                      then
-                       let () = printf "[Trace] doing split at %a\n%!" Tid.ppo tid in
+                       (* let () = printf "[Trace] doing split at %a\n%!" Tid.ppo tid in *)
                        let tdir = Directives.get_tdirective dmap tid in
                        { tree = Tree.apply_directive st.tree tdir }
                      else st in
@@ -973,10 +973,10 @@ module AbsInt = struct
 
     let denote_elt (subname : string) (dmap : Directives.directive_map)
           (e : Blk.elt) (st : env) : env =
-      let () = printf "[Trace] denoting elt: %a\n%!" Tid.ppo @@
-                 Common.elt_to_tid e;
-               printf "[Trace] in env is:\n%!";
-               TreeEnv.pp st in
+      (* let () = printf "[Trace] denoting elt: %a\n%!" Tid.ppo @@ *)
+      (*            Common.elt_to_tid e; *)
+      (*          printf "[Trace] in env is:\n%!"; *)
+      (*          TreeEnv.pp st in *)
       match e with
       | `Def d -> denote_def subname dmap d st
       | `Jmp j -> denote_jmp subname dmap j st

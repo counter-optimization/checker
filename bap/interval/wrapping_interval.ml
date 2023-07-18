@@ -540,10 +540,9 @@ let to_list (intvl : t) : t list Or_error.t =
     then List.cons (of_z hi) res
     else
       let res' = List.cons (of_z hi) res in
-      loop ~hi:(Z.sub hi Z.one) ~lo ~res:res'
-  in
+      loop ~hi:(Z.sub hi Z.one) ~lo ~res:res' in
   match intvl with
-  | Bot -> Or_error.error_string "In WI.to_list, tried to to_list bottom elt"
+  | Bot -> Or_error.error_string "[WI] tried to to_list bottom elt"
   | Interval {lo; hi; width; signed} -> Ok (loop ~hi ~lo ~res:[])
 
 let of_word (w : word) : t =

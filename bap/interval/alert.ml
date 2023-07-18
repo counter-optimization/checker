@@ -668,7 +668,8 @@ module RemoveUnsupportedMirOpcodes = struct
       num_removed : int;
       alerts : Set.t;
     }
-  
+
+  (* prefix is checked case insensitive *)
   let unsupported_mir_opcode_prefixes = ["xorpsrr";
                                          "xorpsmr";
                                          "adc";
@@ -684,6 +685,7 @@ module RemoveUnsupportedMirOpcodes = struct
                                          "pshuf";
                                          "shrd";
                                          "rol";
+                                         "ror";
                                          "div"]
 
   let is_unsupported : T.t -> bool = function
@@ -748,8 +750,8 @@ module RemoveSpuriousCompSimpAlerts = struct
     let store_opcode_substring = "stos" in
     match alert.opcode with
     | None -> false
-    | Some _opcode ->
-       let opcode = String.lowercase _opcode in
+    | Some opcode ->
+       let opcode = String.lowercase opcode in
        let is_mov_or_cmov = String.is_substring opcode ~substring:mov_opcode_substring in
        let is_string_store = String.is_substring opcode ~substring:store_opcode_substring in
        is_mov_or_cmov || is_string_store
@@ -793,7 +795,6 @@ module RemoveSpuriousCompSimpAlerts = struct
   let set_for_alert_set alerts proj : Set.t =
     let filter_condition alert =
       (is_comp_simp_warn alert && not (is_spurious alert)) ||
-        not (is_comp_simp_warn alert)
-    in
+        not (is_comp_simp_warn alert) in
     Set.filter alerts ~f:filter_condition
 end

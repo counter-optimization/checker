@@ -228,9 +228,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
   let () = printf "[Driver] Running analysis on sub %s\n%!" subname in
   let () = record_analyzed_sub subname subtid in
   let () = last_insn_ccs sub in
-  let () = printf "[Driver] edge_builder says last insn is: %a\n%!"
-             Tid.ppo @@ Common.elt_to_tid @@ last_insn_of_sub sub in
-  let () = printf "%a\n%!" Sub.ppo sub in
+  (* let () = printf "[Driver] edge_builder says last insn is: %a\n%!" *)
+  (*            Tid.ppo @@ Common.elt_to_tid @@ last_insn_of_sub sub in *)
+  (* let () = printf "%a\n%!" Sub.ppo sub in *)
   let prog = Project.program proj in
   let idx_st = Idx_calculator.build sub in
   let start = Analysis_profiling.record_start_time () in
@@ -293,14 +293,14 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let first_node = match first_insn_cc sub with
        | Some n -> n
        | None -> failwith "[Driver] cfg building init sol, couldn't get first node" in
-     let () = printf "[Driver] first node is: %a\n%!" 
-                Tid.ppo @@ Calling_context.to_insn_tid first_node in
+     (* let () = printf "[Driver] first node is: %a\n%!"  *)
+     (*            Tid.ppo @@ Calling_context.to_insn_tid first_node in *)
    
      let last_node = match Seq.hd po_traversal with
        | Some n -> G.Node.label n
        | None -> failwith "[Driver] cfg building init sol, couldn't get last node" in
-     let () = printf "[Driver] last node is: %a\n%!" 
-                Tid.ppo @@ Calling_context.to_insn_tid last_node in
+     (* let () = printf "[Driver] last node is: %a\n%!"  *)
+     (*            Tid.ppo @@ Calling_context.to_insn_tid last_node in *)
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname InitEnvSetup stop in
 
@@ -380,9 +380,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let start = Analysis_profiling.record_start_time () in
 
      let init_trace_env = TraceEnv.default_with_env final_env in
-     let () = printf "[Driver] setting initial absint env (tid: %a) to:\n%!"
-                Tid.ppo (Calling_context.to_insn_tid first_node);
-              TraceEnv.pp init_trace_env in
+     (* let () = printf "[Driver] setting initial absint env (tid: %a) to:\n%!" *)
+     (*            Tid.ppo (Calling_context.to_insn_tid first_node); *)
+     (*          TraceEnv.pp init_trace_env in *)
      let init_mapping = G.Node.Map.set
                           G.Node.Map.empty
                           ~key:first_node

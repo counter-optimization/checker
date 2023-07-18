@@ -93,16 +93,13 @@ let elt_is_idx_insn = function
   | `Def d ->
      let varname = Var.name @@ Def.lhs d in
      if String.Caseless.equal varname "r11"
-     then
-       is_idx_insn @@ Def.rhs d 
-     else
-       false
+     then is_idx_insn @@ Def.rhs d 
+     else false
   | _ -> false
 
 let get_idx_from_idx_insn_rhs exp (env : word Env.t) tid : int =
   let fail () =
-    failwith @@ sprintf "In Idx_calculator, get_idx_from_idx_insn_rhs: unknown idx insn format for tid: %a" Tid.pps tid
-  in
+    failwith @@ sprintf "In Idx_calculator, get_idx_from_idx_insn_rhs: unknown idx insn format for tid: %a" Tid.pps tid in
   match exp with
   | Bil.BinOp (Bil.MINUS, left, (Bil.BinOp (Bil.PLUS, idx_holder, _))) ->
      let idx_word = match idx_holder with

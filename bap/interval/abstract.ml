@@ -439,18 +439,16 @@ module AbstractInterpreter(N: NumericDomain)
         match e with
         | Bil.Load (_mem, idx, _endian, size) ->
            let (offs, st) = denote_exp idx st in
-           begin
-             match E.load_of_bil_exp e offs size st with
-             | Ok res -> res
-             | Error msg -> failwith @@ Error.to_string_hum msg
+           begin match E.load_of_bil_exp e offs size st with
+           | Ok res -> res
+           | Error msg -> failwith @@ Error.to_string_hum msg
            end
         | Bil.Store (_mem, idx, v, _endian, size) ->
            let offs, st = denote_exp  idx st in
            let data, st = denote_exp  v st in
-           begin
-             match Env.store_of_bil_exp e ~offs ~data ~size st with
-             | Ok st -> (N.bot, st)
-             | Error msg -> failwith @@ Error.to_string_hum msg
+           begin match Env.store_of_bil_exp e ~offs ~data ~size st with
+           | Ok st -> (N.bot, st)
+           | Error msg -> failwith @@ Error.to_string_hum msg
            end
         | Bil.BinOp (op, x, y) ->
            let (x', st) = denote_exp x st in

@@ -49,8 +49,7 @@ module Cell(N : NumericDomain) = struct
         | Undef, Undef -> true
         | Unknown, _ -> true
         | _ , Unknown -> true
-        | _, _ -> false
-      in
+        | _, _ -> false in
       if reg_eq && offs_eq && width_eq && valtype_eq
       then 0
       else -1
@@ -85,23 +84,6 @@ module Cell(N : NumericDomain) = struct
     let make ~region ~offs ~width ~valtype : t =
       { region; offs; width; valtype }
 
-    (* let ptr_of_t { region; offs; width; valtype } : Pointer.t = *)
-    (*   Pointer.make ~region ~offs ~width *)
-
-    (* let t_of_ptr ?(valtype = CellType.Scalar) p : t = *)
-    (*   let region = Pointer.region p in *)
-    (*   let width = Pointer.width_in_bits p in *)
-    (*   let offs = Pointer.offs p in *)
-    (*   make ~region ~offs ~width ~valtype *)
-
-    (* let equals_ptr cel ptr : bool = *)
-    (*   let reg = Pointer.region ptr in *)
-    (*   let offs = Pointer.offs ptr in *)
-    (*   let width = Pointer.width_in_bits ptr in *)
-    (*   Region.equal cel.region reg && *)
-    (*     Wrapping_interval.could_be_true (Wrapping_interval.booleq cel.offs offs) && *)
-    (*       Wrapping_interval.could_be_true (Wrapping_interval.booleq cel.width width) *)
-
     let name (m : t) : string =
       let reg_str = Region.to_string m.region in
       let off_str = Wrapping_interval.to_string m.offs in
@@ -114,23 +96,6 @@ module Cell(N : NumericDomain) = struct
 
     let pp (m : t) : unit =
       Format.printf "%s\n%!" @@ to_string m
-
-    (* let overlaps_with_ptr cel ptr : bool = *)
-    (*   if not (Region.equal (Pointer.region ptr) cel.region) *)
-    (*   then false *)
-    (*   else *)
-    (*     let open Wrapping_interval in *)
-    (*     let one = of_int 1 in *)
-    (*     let ptr_base = Pointer.offs ptr in *)
-    (*     let ptr_end = add (Pointer.offs ptr) (Pointer.width_in_bytes ptr) in *)
-    (*     let ptr_end = sub ptr_end one in *)
-    (*     let cel_base = cel.offs in *)
-    (*     let cel_end = add cel.offs (width_in_bytes cel) in *)
-    (*     let cel_end = sub cel_end one in *)
-    (*     (could_be_true (boolle ptr_base cel_base) && *)
-    (*        could_be_true (boolle cel_base ptr_end)) || *)
-    (*       (could_be_true (boolle ptr_base cel_end) && *)
-    (*          could_be_true (boolle cel_end ptr_end)) *)
 
     let overlaps cel other : bool =
       if not (Region.equal other.region cel.region)
@@ -217,6 +182,12 @@ module Make(N : NumericDomain)
       
     type t = { cell : C.t ; offsets : offs ; data : N.t }
 
+    let to_string ({ cell; offsets; data } : t) : string =
+      Format.sprintf "%s-%s-%s"
+        (C.to_string cell)
+        (List.to_string ~f:WI.to_string offsets)
+        (N.to_string data)
+
     let of_existing_cell (cell : C.t) (mem : T.t) : t =
       let int_width = match C.width_in_bytes_int cell with
         | Ok i -> i
@@ -264,17 +235,13 @@ module Make(N : NumericDomain)
       N.lshift data count_as_abstract_value
 
     let data_from_little_endian_bytes (le_bytes : N.t list) : N.t =
-      let rec loop (bytes : N.t list) ?(idx : int = 0) (acc : N.t) : N.t =
+      let rec loop (bytes : N.t list) : N.t =
         match bytes with
-        | [] -> acc
-        | byte :: bytes' ->
-           let to_add = shift_byte byte idx in
-           let new_acc = N.logor to_add acc in
-           loop bytes' new_acc ~idx:(idx + 1)
-      in
-      let start = N.of_int 0 in
-      loop le_bytes start ~idx:0
-
+        | [] -> failwith "[AbsMem] unreachable in data_from_little_endian_bytes"
+        | x :: [] -> x
+        | x :: xs -> N.concat x @@ loop xs in
+      loop le_bytes
+    
     let get_merge_lists ~(this : t) ~(other : t) : (N.t * N.t) list =
       let lt x y = WI.could_be_true (WI.boollt x y) in
       let gt x y = WI.could_be_true (WI.boollt y x) in
@@ -541,7 +508,6 @@ module Make(N : NumericDomain)
     { mem with env = Env.set (C.name c) top mem.env }
 
   let remove_cell (c : C.t) (mem : t) : t =
-    let () = printf "in remove_cell, removing cell %s\n%!" (C.name c) in
     let cells' = Set.remove mem.cells c in
     let env' = Env.unset (C.name c) mem.env in
     { mem with cells = cells'; env = env' }
@@ -577,20 +543,20 @@ module Make(N : NumericDomain)
     | None -> false
   
   let load ~(offs : Wrapping_interval.t) ~(width : Wrapping_interval.t)
-           ~(size : size) ~(region : Region.t) ~(mem : t) : (N.t * t) err =
+        ~(size : size) ~(region : Region.t) ~(mem : t) : (N.t * t) err =
     let open Or_error.Monad_infix in
+    let is_global : Region.t -> bool = function
+      | Global -> true
+      | _ -> false in
     let cell = C.make ~offs ~width ~region ~valtype:CellType.Unknown in
-    let is_global = match region with | Global -> true | _ -> false in
-    let global_already_loaded_from_img = global_already_read ~cell ~mem in
-    if is_global && not global_already_loaded_from_img
+    if is_global region && not (global_already_read ~cell ~mem)
     then
       load_global offs size mem >>= fun data ->
       let valtype = CellType.Unknown in
       store ~offs ~region ~width ~data ~valtype mem >>= fun mem' ->
       Ok (data, { mem' with globals_read = Set.add mem'.globals_read cell })
     else
-      let has_existing_value = cell_exists ~cell ~mem in
-      if has_existing_value
+      if cell_exists ~cell ~mem
       then
         let data = lookup (C.name cell) mem in
         Ok (data, mem)
@@ -617,43 +583,38 @@ module Make(N : NumericDomain)
    *)
   let load_of_bil_exp (e : Bil.exp) (idx_res : N.t)
         (size : Size.t) (m : t) : (N.t * t) err =
-    match e with
-    | Bil.Load (_mem, idx, _endian, size) ->
-       let regions : Region.Set.t = get_bases idx_res in
-       let offs = get_intvl idx_res in
-       let offs_type = get_typd idx_res in
-       let offs_is_scalar = CellType.is_scalar offs_type in
-       let width = bap_size_to_absdom size in
-       let offs_size = match Wrapping_interval.size offs with
-         | Some offs_size -> offs_size
-         | None ->
-            failwith @@
-              sprintf "in load_of_bil_exp, couldn't convert offs %s to Z.t"
-                (Wrapping_interval.to_string offs)
-       in
-       let max_ptd_to_elts = Z.of_int 64 in
-       (if Z.gt offs_size max_ptd_to_elts
-        then
-          let numbits = bap_size_to_int size in
-          let signed = false in
-          Ok (N.make_top numbits signed, m)
-        else
-          let is_scalar_ptr = offs_is_scalar && Set.is_empty regions in
-          let regions = if is_scalar_ptr
-                        then Set.add regions Region.Global
-                        else regions
-          in
-          let regions = Set.to_list regions in
-          let open Or_error.Monad_infix in
-          Wrapping_interval.to_list offs >>= fun all_offsets ->
-          let regions_and_offsets = List.cartesian_product regions all_offsets in
-          List.fold regions_and_offsets
-                    ~init:(Ok (N.bot, m))
-                    ~f:(fun state (region, offs) ->
-                      state >>= fun (data_acc, mem) ->
-                      load ~offs ~region ~width ~size ~mem >>= fun (loaded_val, mem') ->
-                      Ok (N.join data_acc loaded_val, mem')))
-    | _ -> Or_error.error_string "load_of_bil_exp: Not a load in load_of_bil_exp"
+    let open Or_error.Monad_infix in
+    let regions : Region.Set.t = get_bases idx_res in
+    let offs = get_intvl idx_res in
+    let offs_type = get_typd idx_res in
+    let offs_is_scalar = CellType.is_scalar offs_type in
+    let width = bap_size_to_absdom size in
+    let offs_size = match Wrapping_interval.size offs with
+      | Some offs_size -> offs_size
+      | None ->
+         failwith @@
+           sprintf "in load_of_bil_exp, couldn't convert offs %s to Z.t"
+             (Wrapping_interval.to_string offs) in
+    let max_ptd_to_elts = Z.of_int 64 in
+    if Z.gt offs_size max_ptd_to_elts
+    then
+      let numbits = bap_size_to_int size in
+      let signed = false in
+      Ok (N.make_top numbits signed, m)
+    else
+      let is_scalar_ptr = offs_is_scalar && Set.is_empty regions in
+      let regions = if is_scalar_ptr
+                    then Set.add regions Region.Global
+                    else regions in
+      let regions = Set.to_list regions in
+      Wrapping_interval.to_list offs >>= fun all_offsets ->
+      let regions_and_offsets = List.cartesian_product regions all_offsets in
+      List.fold regions_and_offsets
+        ~init:(Ok (N.bot, m))
+        ~f:(fun state (region, offs) ->
+          state >>= fun (data_acc, mem) ->
+          load ~offs ~region ~width ~size ~mem >>= fun (loaded_val, mem') ->
+          Ok (N.join data_acc loaded_val, mem'))
 
   (* don't let pointers point to too many locations. right now,
      this will error if the pointer points to more than 8 members
@@ -780,22 +741,7 @@ module Make(N : NumericDomain)
 
           Or_error.bind all_offs ~f:(fun all_offs ->
 
-          (* let () = printf "in store_of_bil_exp, all offsets are:\n%!" in *)
-          (* let () = List.iter all_offs ~f:(fun offswi -> *)
-          (*              printf "%s\n%!"  *)
-          (*                (Wrapping_interval.to_string offswi)) *)
-          (* in *)
 
-          (* let () = printf "in store_of_bil_exp, doing stores\n%!" in *)
-          (* let () = printf "in store_of_bil_exp, store to offs %s\n%!" *)
-          (*            (Wrapping_interval.to_string offs) *)
-          (* in *)
-          (* let () = printf "in store_of_bil_exp, store to bases:\n%!" in *)
-          (* let () = List.iter bases_to_load_from ~f:Region.pp in *)
-
-          (* let () = printf "in store_of_bil_exp, data is %s\n%!" *)
-          (*            (N.to_string data) *)
-          (* in *)
 
           let base_offs_pairs = List.cartesian_product bases_to_load_from all_offs in
 
@@ -918,11 +864,6 @@ module Make(N : NumericDomain)
        bases = widen_bases_map prev next;
        img = merge_images prev.img next.img;
        globals_read = widen_globals_read prev next }in
-    (* let () = printf "in Abstract_memory.widen_with_step, changes are (%d):\n%!" steps in *)
-    (* let () = printf "cell sets stayed the same??: %B\n%!" (Set.equal prev.cells next.cells) in *)
-    (* let () = printf "bases map stayed the same??: %B\n%!" (Map.equal Set.equal prev.bases next.bases) in *)
-    (* let () = printf "envs stayed the same??: %B\n%!" (Env.equal prev.env next.env) in *)
-    (* let () = printf "globals_read stayed the same??: %B\n%!" (Set.equal prev.globals_read next.globals_read) in *)
     let merger = if steps < widen_threshold then merge else (widen steps n) in
     merger prev next
 end
