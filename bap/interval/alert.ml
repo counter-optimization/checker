@@ -415,7 +415,6 @@ module SubNameResolverFiller = struct
        failwith @@ sprintf "In Alert.SubNameResolverFiller.resolve_name, couldn't resolve name for symbol: %s" unresolvedname
 
   let resolve_sub_names alerts proj =
-    let open KB.Monad_infix in
     let filename = Option.value_exn (Project.get proj filename) in
     let get_named_symbols =
       begin
