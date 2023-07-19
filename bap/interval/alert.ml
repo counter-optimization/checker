@@ -708,6 +708,36 @@ module RemoveUnsupportedMirOpcodes = struct
       num_removed = !unsupported_count }
 end
 
+module CombinedTransformFixerUpper : Pass = struct
+  (** this alert transform pass changes CS warns
+      on non-store opcodes whose destination is memory 
+      to SS warns since these combined CS+SS transforms
+      are in the SS pass *)
+  let combined_transforms_opcodes = ["add64mr";
+                                     "xor64mr";
+                                     "add64mi32";
+                                     "add32mi8";
+                                     "add64mi8";
+                                     "add8mr";
+                                     "add32mr";
+                                     "and8mi";
+                                     "and32mr"]
+
+  let is_combined_opcode (mir_opcode : string) : bool =
+    let equal = String.Caseless.equal in
+    List.mem combined_transforms_opcodes mir_opcode ~equal
+
+  let transform_alert alert =
+    match alert.opcode with
+    | Some opcode -> if is_combined_opcode opcode
+                     then { alert with reason = SilentStores }
+                     else alert
+    | None -> alert
+
+  let set_for_alert_set alerts _proj =
+    Set.map alerts ~f:transform_alert
+end
+
 module RemoveSpuriousCompSimpAlerts = struct
   let is_comp_simp_warn alert =
     match alert.reason with

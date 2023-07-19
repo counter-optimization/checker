@@ -635,6 +635,7 @@ let check_config config img ctxt proj : unit =
   let all_alerts = Alert.RemoveSpuriousCompSimpAlerts.set_for_alert_set all_alerts proj in
   let all_alerts = Alert.RemoveAlertsForCallInsns.set_for_alert_set all_alerts proj in
   let all_alerts = Alert.RemoveAndWarnEmptyInsnIdxAlerts.set_for_alert_set all_alerts proj in
+  let all_alerts = Alert.CombinedTransformFixerUpper.set_for_alert_set all_alerts proj in
  
   let res = Alert.RemoveUnsupportedMirOpcodes.set_for_alert_set all_alerts proj in
   let all_alerts = res.alerts in
