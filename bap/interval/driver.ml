@@ -228,9 +228,10 @@ let run_analyses sub img proj ~(is_toplevel : bool)
   let () = printf "[Driver] Running analysis on sub %s\n%!" subname in
   let () = record_analyzed_sub subname subtid in
   let () = last_insn_ccs sub in
-  (* let () = printf "[Driver] edge_builder says last insn is: %a\n%!" *)
-  (*            Tid.ppo @@ Common.elt_to_tid @@ last_insn_of_sub sub in *)
-  (* let () = printf "%a\n%!" Sub.ppo sub in *)
+  let should_dump_bir = Extension.Configuration.get ctxt Common.debug_dump in
+  let () = if should_dump_bir
+           then printf "%a\n%!" Sub.ppo sub
+           else () in
   let prog = Project.program proj in
   let idx_st = Idx_calculator.build sub in
   let start = Analysis_profiling.record_start_time () in
@@ -559,6 +560,13 @@ let check_config config img ctxt proj : unit =
 
   let do_ss_checks = Extension.Configuration.get ctxt Common.do_ss_checks_param in
   let do_cs_checks = Extension.Configuration.get ctxt Common.do_cs_checks_param in
+
+  let should_dump_kb = Extension.Configuration.get ctxt Common.debug_dump in
+  let () = if should_dump_kb
+           then
+             let cur_kb = Toplevel.current () in
+             Format.printf "%a\n%!" KB.pp_state cur_kb
+           else () in
   let rec loop ~(worklist : SubSet.t)
                ~(processed : SubSet.t)
                ~(res : checker_alerts)

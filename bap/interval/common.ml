@@ -54,6 +54,10 @@ let no_symex_param = Extension.Configuration.flag
                        ~doc:"Don't do last ditch symex checks in addition to interval analysis"
                        "no-symex"
 
+let debug_dump = Extension.Configuration.flag
+                   ~doc:"Also print BIR for each sub and global initial Knowledge_base"
+                   "dump-bir-kb"
+
 let int_of_sz = function
   | `r8 -> 8
   | `r16 -> 16
