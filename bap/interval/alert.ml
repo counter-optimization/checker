@@ -669,9 +669,10 @@ module RemoveUnsupportedMirOpcodes = struct
     }
 
   (* prefix is checked case insensitive *)
-  let unsupported_mir_opcode_prefixes = ["xorpsrr";
-                                         "xorpsmr";
+  let unsupported_mir_opcode_prefixes = ["xorps";
                                          "adc";
+                                         "shld";
+                                         "shrd";
                                          "sbb";
                                          "psub";
                                          "psrl";
