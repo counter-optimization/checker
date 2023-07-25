@@ -57,6 +57,8 @@ if __name__ == '__main__':
     cs_warns_2 = set()
     ss_warns_2 = set()
 
+    sub_num_transforms = dict()
+
     # (true, false) -> (false, true) -> (false, false)
     is_warn_set_1 = True
     is_warn_set_2 = False
@@ -77,6 +79,14 @@ if __name__ == '__main__':
                 opcode = row['mir_opcode']
 
                 subs.add(row['subroutine_name'])
+
+                subname = row['subroutine_name']
+                num_transforms = sub_num_transforms.get(subname, dict())
+                opcode = row['mir_opcode']
+                transforms_for_opc = num_transforms.get(opcode, 0)
+                transforms_for_opc += 1
+                num_transforms[opcode] = transforms_for_opc
+                sub_num_transforms[subname] = num_transforms
 
                 if row['rpo_idx'] == "":
                     logger.critical(f"Row ({row}) has no rpo_idx")
@@ -136,55 +146,60 @@ if __name__ == '__main__':
             is_warn_set_1 = False
             is_warn_set_2 = True
 
-    print("Flag live out info:")
-    for opcode, live_flags in opcodes_to_live_flags.items():
-        addrs = opcodes_to_addrs_live_out[opcode]
-        print(f"{opcode} ({len(addrs)}) ({addrs}): {live_flags}")
+    print("Num transform sites:")
+    for subname, num_transforms in sub_num_transforms.items():
+        print(subname)
+        for tx, tx_count in num_transforms.items():
+            print(f"\t{tx}: {tx_count}")
+    # print("Flag live out info:")
+    # for opcode, live_flags in opcodes_to_live_flags.items():
+    #     addrs = opcodes_to_addrs_live_out[opcode]
+    #     print(f"{opcode} ({len(addrs)}) ({addrs}): {live_flags}")
 
-    print("Flag live in info:")
-    for opcode, flags_live_in in opcodes_to_flags_live_in.items():
-        addrs = opcodes_to_addrs_live_in[opcode]
-        print(f"{opcode} ({len(addrs)}) ({addrs}): {flags_live_in}")
+    # print("Flag live in info:")
+    # for opcode, flags_live_in in opcodes_to_flags_live_in.items():
+    #     addrs = opcodes_to_addrs_live_in[opcode]
+    #     print(f"{opcode} ({len(addrs)}) ({addrs}): {flags_live_in}")
 
-    print("Opcodes of leaky instructions whose flags are used:")
-    for opcode, live_flags in opcodes_to_live_flags.items():
-        addrs = opcodes_to_addrs_live_out[opcode]
-        # print(f"{opcode} ({len(addrs)}) ({addrs}): {live_flags}")
-        print(f"{opcode}: {live_flags}")
+    # print("Opcodes of leaky instructions whose flags are used:")
+    # for opcode, live_flags in opcodes_to_live_flags.items():
+    #     addrs = opcodes_to_addrs_live_out[opcode]
+    #     # print(f"{opcode} ({len(addrs)}) ({addrs}): {live_flags}")
+    #     print(f"{opcode}: {live_flags}")
 
-    print("Opcodes of leaky instructions and the flags they must preserve:")
-    for opcode, flags_live_in in opcodes_to_flags_live_in.items():
-        addrs = opcodes_to_addrs_live_in[opcode]
-        # print(f"{opcode} ({len(addrs)}) ({addrs}): {flags_live_in}")
-        print(f"{opcode}: {flags_live_in}")
+    # print("Opcodes of leaky instructions and the flags they must preserve:")
+    # for opcode, flags_live_in in opcodes_to_flags_live_in.items():
+    #     addrs = opcodes_to_addrs_live_in[opcode]
+    #     # print(f"{opcode} ({len(addrs)}) ({addrs}): {flags_live_in}")
+    #     print(f"{opcode}: {flags_live_in}")
 
-    print("Printing all CS opcodes")
-    for opcode in sorted(cs_opcodes):
-        print(opcode)
+    # print("Printing all CS opcodes")
+    # for opcode in sorted(cs_opcodes):
+    #     print(opcode)
 
-    print("Printing all SS opcodes")
-    for opcode in sorted(ss_opcodes):
-        print(opcode)
+    # print("Printing all SS opcodes")
+    # for opcode in sorted(ss_opcodes):
+    #     print(opcode)
 
-    print(f"total transforms needed: {len(cs_opcodes) + len(ss_opcodes)}")
-    print(f"CS warns: {num_cs_warns}, SS warns: {num_ss_warns}")
+    # print(f"total transforms needed: {len(cs_opcodes) + len(ss_opcodes)}")
+    # print(f"CS warns: {num_cs_warns}, SS warns: {num_ss_warns}")
 
-    alert_addrs_now = set()
-    print(f"num alerts in cs_warns_2: {len(cs_warns_2)}")
-    print(f"num alerts in cs_warns_1: {len(cs_warns_1)}")
-    for alert2 in cs_warns_2:
-        alert2 = alist_to_dict(alert2)
-        alert_addrs_now.add(alert2['addr'])
+    # alert_addrs_now = set()
+    # print(f"num alerts in cs_warns_2: {len(cs_warns_2)}")
+    # print(f"num alerts in cs_warns_1: {len(cs_warns_1)}")
+    # for alert2 in cs_warns_2:
+    #     alert2 = alist_to_dict(alert2)
+    #     alert_addrs_now.add(alert2['addr'])
 
-    with open("asymmetric_alert_diff.csv", "w") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        missed_alerts = set()
-        for alert1 in cs_warns_1:
-            alert1_d = alist_to_dict(alert1)
-            if not alert1_d['addr'] in alert_addrs_now:
-                missed_alerts.add(alert1)
+    # with open("asymmetric_alert_diff.csv", "w") as f:
+    #     writer = csv.DictWriter(f, fieldnames=fieldnames)
+    #     writer.writeheader()
+    #     missed_alerts = set()
+    #     for alert1 in cs_warns_1:
+    #         alert1_d = alist_to_dict(alert1)
+    #         if not alert1_d['addr'] in alert_addrs_now:
+    #             missed_alerts.add(alert1)
             
-        for missed_alert in missed_alerts:
-            writer.writerow(alist_to_dict(missed_alert))
+    #     for missed_alert in missed_alerts:
+    #         writer.writerow(alist_to_dict(missed_alert))
             
