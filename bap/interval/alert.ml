@@ -357,10 +357,6 @@ module OpcodeAndAddrFiller : Pass = struct
           KB.return ()
         end
     in
-    let () = printf "!! alert for tid %a has opcode name: %s, addr: %s\n%!"
-               Tid.ppo alert_tid !opcode_name !addr_str
-    in
-             
     match Map.find opcode_lut alert_tid with
     | Some opcode_str -> 
        { alert with opcode = Some opcode_str }
