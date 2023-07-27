@@ -79,7 +79,3 @@ let add_callsite (cs : Tid.t) (ctxt : t) : t = List.cons cs ctxt
 let add_node (n : Tid.t) (ctxt : t) : t = List.cons n ctxt
 
 let of_tid (t : Tid.t) : t = [t]
-
-let of_edge (e : Edge_builder.edge) : bool Edge.t =
-  let (from', to', is_interproc) = e in
-  (of_tid from', of_tid to', is_interproc)

@@ -16,6 +16,8 @@ type funcname = String.t
 
 type event = Edgebuilding
            | DependencyAnalysis
+           | RemoveDeadFlagDefs
+           | ReachingDefs
            | CfgCreation
            | InitEnvSetup
            | AbsInt
@@ -25,7 +27,8 @@ type event = Edgebuilding
            | AlertDependencyFilling
            | AlertLivenessFilling
            | CalleeAnalysis
-           | ClassicLiveness
+           | ClassicLivenessOne
+           | ClassicLivenessTwo
            | NewDependenceAnalysis
            | None
 [@@deriving equal]
@@ -33,6 +36,8 @@ type event = Edgebuilding
 let string_of_event = function
   | Edgebuilding -> "Edgebuilding"
   | DependencyAnalysis -> "DependencyAnalysis"
+  | RemoveDeadFlagDefs -> "RemoveDeadFlagDefs"
+  | ReachingDefs -> "ReachingDefs"
   | CfgCreation -> "CfgCreation"
   | InitEnvSetup -> "InitEnvSetup"
   | AbsInt -> "AbsInt"
@@ -42,7 +47,8 @@ let string_of_event = function
   | AlertDependencyFilling -> "AlertDependencyFilling"
   | AlertLivenessFilling -> "AlertLivenessFilling"
   | CalleeAnalysis -> "CalleeAnalysis"
-  | ClassicLiveness -> "ClassicLiveness"
+  | ClassicLivenessOne -> "ClassicLivenessOne"
+  | ClassicLivenessTwo -> "ClassicLivenessTwo"
   | NewDependenceAnalysis -> "NewDependenceAnalysis"
   | None -> "None"
 

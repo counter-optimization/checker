@@ -7,6 +7,12 @@ type env = SS.t
 
 type t
 
-val run_on_cfg : (module Graph with type t = 'a and type node = Calling_context.t) -> 'a -> Edge_builder.tidmap -> Live_variables.t -> t
+val run_on_cfg : (module Graph with type t = 'a and type node = Calling_context.t) -> 'a -> Edge_builder.tidmap -> t
 
-val live_at_tid : tid -> t -> env
+val liveness_at_tid : t -> tid -> env
+
+val var_live_at_tid : t -> tid -> string -> bool
+
+val enum : t -> (Calling_context.t * SS.t) Seq.t
+
+val get_dead_defs : ?flagsonly:bool -> t -> Edge_builder.tidmap -> Tidset.t

@@ -520,7 +520,7 @@ end
 module DataflowLivenessFiller = struct
   let set_for_alert (liveness : Liveness.t) alert : t =
     let tid = Option.value_exn alert.tid in
-    let live_vars : SS.t = Liveness.live_at_tid tid liveness in
+    let live_vars : SS.t = Liveness.liveness_at_tid liveness tid in
     let flags_live_in = SS.inter live_vars AMD64SystemVABI.flag_names in
     { alert with flags_live_in = flags_live_in }
 

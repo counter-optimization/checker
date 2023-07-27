@@ -39,9 +39,9 @@ S flag_ownership.ml
 S dependency_analysis.ml
 S trace.ml
 S tidset.ml
+S reachingdefs.ml
 
 B _build
-
 
 PKG bap
 PKG core_kernel

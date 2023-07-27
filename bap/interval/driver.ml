@@ -255,11 +255,33 @@ let run_analyses sub img proj ~(is_toplevel : bool)
 
      (* CFG *)
      let start = Analysis_profiling.record_start_time () in
-     let edges = List.map edges ~f:(Calling_context.of_edge) in
+     let edges = List.map edges ~f:(Edge_builder.to_cc_edge) in
      let module G = Graphlib.Make(Calling_context)(Bool) in
      let cfg = Graphlib.create (module G) ~edges () in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname CfgCreation stop in
+
+     (* here, liveness means classical dataflow liveness *)
+     let () = printf "Running classical dataflow liveness 1\n%!" in
+     let start = Analysis_profiling.record_start_time () in
+     let dataflow_liveness = Liveness.run_on_cfg (module G) cfg tidmap in
+     let stop = Analysis_profiling.record_stop_time start in
+     let () = Analysis_profiling.record_duration_for subname ClassicLivenessOne stop in
+     let () = printf "Done running classical dataflow liveness 1\n%!" in
+
+     let start = Analysis_profiling.record_start_time () in
+     let dead_defs = Liveness.get_dead_defs dataflow_liveness tidmap in
+     let edges = Edge_builder.remove_dead_defs edges dead_defs in
+     let cfg = Graphlib.create (module G) ~edges () in
+     let stop = Analysis_profiling.record_stop_time start in
+     let () = Analysis_profiling.record_duration_for subname RemoveDeadFlagDefs stop in
+
+     let () = printf "Running classical dataflow liveness 2\n%!" in
+     let start = Analysis_profiling.record_start_time () in
+     let dataflow_liveness = Liveness.run_on_cfg (module G) cfg tidmap in
+     let stop = Analysis_profiling.record_stop_time start in
+     let () = Analysis_profiling.record_duration_for subname ClassicLivenessTwo stop in
+     let () = printf "Done running classical dataflow liveness 2\n%!" in
 
      (* set up initial solution *)
      let start = Analysis_profiling.record_start_time () in
@@ -300,10 +322,15 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let last_node = match Seq.hd po_traversal with
        | Some n -> G.Node.label n
        | None -> failwith "[Driver] cfg building init sol, couldn't get last node" in
-     (* let () = printf "[Driver] last node is: %a\n%!"  *)
-     (*            Tid.ppo @@ Calling_context.to_insn_tid last_node in *)
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname InitEnvSetup stop in
+
+     let () = printf "[Driver] running reaching defs\n%!" in
+     let start = Analysis_profiling.record_start_time () in
+     let reachingdefs = Reachingdefs.run_on_cfg (module G) cfg sub tidmap first_node in
+     let stop = Analysis_profiling.record_stop_time start in
+     let () = Analysis_profiling.record_duration_for subname ReachingDefs stop in
+     let () = printf "[Driver] done running reaching defs\n%!" in
 
      let () = printf "Running dependency analysis\n%!" in
      let start = Analysis_profiling.record_start_time () in
@@ -490,14 +517,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname AlertDependencyFilling stop in
      let () = printf "Done running flags live out filler\n%!" in
-     
-     (* here, liveness means classical dataflow liveness *)
-     let () = printf "Running classical dataflow liveness\n%!" in
-     let start = Analysis_profiling.record_start_time () in
-     let dataflow_liveness = Liveness.run_on_cfg (module G) cfg tidmap liveness in
-     let stop = Analysis_profiling.record_stop_time start in
-     let () = Analysis_profiling.record_duration_for subname ClassicLiveness stop in
-     let () = printf "Done running classical dataflow liveness\n%!" in
 
      let () = printf "Setting dataflow liveness in alerts\n%!" in
      let start = Analysis_profiling.record_start_time () in

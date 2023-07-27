@@ -10,6 +10,8 @@ type funcname = String.t
 
 type event = Edgebuilding
            | DependencyAnalysis
+           | RemoveDeadFlagDefs
+           | ReachingDefs
            | CfgCreation
            | InitEnvSetup
            | AbsInt
@@ -19,7 +21,8 @@ type event = Edgebuilding
            | AlertDependencyFilling
            | AlertLivenessFilling
            | CalleeAnalysis
-           | ClassicLiveness
+           | ClassicLivenessOne
+           | ClassicLivenessTwo
            | NewDependenceAnalysis
            | None
 [@@deriving equal]

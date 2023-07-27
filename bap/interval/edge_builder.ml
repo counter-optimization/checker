@@ -9,9 +9,15 @@ module KB = Bap_knowledge.Knowledge
 module Cfg = Bap.Std.Graphs.Cfg
 module IrCfg = Bap.Std.Graphs.Ir
 
+module CC = Calling_context
+
 type edge = (Tid.t * Tid.t * bool)
 
 type edges = edge list
+
+type cc_edge = (CC.t * CC.t * bool)
+
+type cc_edges = cc_edge list
 
 type tidmap = Blk.elt Tid_map.t
 
@@ -60,6 +66,10 @@ let iter_insns sub : unit =
   
   let () = Format.printf "nodes are:\n%!" in
   Seq.iter nodes ~f:print_sub_defs
+
+let to_cc_edge ((from', to', is_interproc) : edge) : cc_edge =
+  let c = Calling_context.of_tid in
+  (c from', c to', is_interproc)
 
 let print_edge (from', to', is_interproc) : unit =
   let from_s = Tid.to_string from' in
@@ -189,10 +199,6 @@ let jmp_taken_when (j : jmp term) : jmp_taken =
 
 let is_no_fallthrough_jmp : Blk.elt -> bool = function
   | _ -> false
-  (* | `Jmp j -> (match jmp_taken_when j with *)
-  (*              | Always -> true *)
-  (*              | _ -> false) *)
-  (* | _ -> false *)
     
 let edges_of_jump j sub nodes proj idx_st : edges ST.t =
   let fromtid = Term.tid j in
@@ -289,6 +295,69 @@ let edges_of_insns insns sub nodes proj : edges ST.t =
   let fallthroughs = List.filter fallthroughs ~f:(keep_edge no_fallthrough_jmps) in
   get_jmp_edges insns sub nodes proj >>= fun jmp_edges ->
   ST.return @@ List.append jmp_edges fallthroughs
+
+(** only remove dead defs from the CFG (edges). 
+    defs only have one out edge, but can have
+    multiple in edges like if it is a jump target. 
+    additionally, a def can have 0 in edges and 0 out
+    edges 
+    
+    if both out and ins are present: reroute ins to the out
+    if out pres and no ins, then drop the out
+    if ins pres and no out, then drop the ins
+    shouldn't be the case that no ins and no outs are present
+    
+    to reroute, map the ins to have to_ as out edge to_
+                and remove all ins and outs from the edges
+    
+*)
+let remove_dead_defs (edges : cc_edges) (dead : Tidset.t)
+    : cc_edges =
+  let t = Calling_context.to_insn_tid in
+  let c = Calling_context.of_tid in
+  let id : 'a. 'a -> 'a = fun x -> x in
+  let eq = Tid.equal in
+  let edge_eq (f1, t1, _) (f2, t2, _) = eq f1 f2 && eq t1 t2 in
+  let rec get_out edges d =
+    match edges with
+    | (from_, to_, b) :: edges' when eq from_ d ->
+       [(from_, to_, b)]
+    | e :: edges' -> get_out edges' d
+    | [] -> []
+  in
+  let rec get_ins es d k =
+    match es with
+    | (from_, to_, b) :: es' when eq to_ d ->
+       get_ins es' d (fun res ->
+           (from_, to_, b) :: res)
+    | e :: es' -> get_ins es' d k
+    | [] -> k []
+  in
+  let remove_edges es toremove =
+    List.filter es ~f:(fun edge ->
+        not (List.mem toremove edge ~equal:edge_eq))
+  in
+  let get_new_edges ins out =
+    match ins, out with
+    | [], o :: os -> []
+    | i :: is, [] -> []
+    | [], [] -> failwith "[RemoveDeadEdges] no ins or outs"
+    | _, (_, newto, _) :: os ->
+       List.map ins ~f:(fun (from_, _, b) ->
+           (from_, newto, b))
+  in
+  let cc_to_tid_edge (from_, to_, b) = (t from_, t to_, b) in
+  let tid_edges = List.map edges ~f:cc_to_tid_edge in
+  let deadseq = Tidset.to_sequence dead in
+  Seq.fold deadseq ~init:tid_edges ~f:(fun es d ->
+      let out = get_out es d in
+      let ins = get_ins es d id in
+      let ins_and_outs = List.append out ins in
+      let es = remove_edges es ins_and_outs in
+      let newedges = get_new_edges ins out in
+      List.append newedges es)
+  |> List.map ~f:(fun (from_, to_, b) ->
+         (c from_, c to_, b))
 
 let get_builder_for_sub sub proj idx_st : edges ST.t =
   let irg = Sub.to_cfg sub in
