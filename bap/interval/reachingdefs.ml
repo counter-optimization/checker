@@ -6,6 +6,9 @@ type varname = string [@@deriving compare, sexp]
 
 module Def = struct
   type t = tid option * varname [@@deriving compare, sexp]
+
+  let tid : t -> tid option = fst
+  let var : t -> varname = snd
 end
 
 module Cmp = struct
@@ -20,6 +23,23 @@ type def = Def.t
 type defset = DefSet.t
 
 type sol = (Calling_context.t, defset) Solution.t
+
+(** rd is reaching def analysis result 
+    users_of takes a tid, t, and returns a set of tids identifying
+      terms that use t 
+    term_uses takes a tid, t, and returns a set of tids that t
+      uses *)
+type t = {
+    rd : sol;
+    users_of : Tidset.t ref Tid_map.t;
+    term_uses : Tidset.t ref Tid_map.t;
+  }
+
+let tids_of_defs defset =
+  DefSet.to_list defset
+  |> List.map ~f:Def.tid
+  |> List.filter ~f:Option.is_some
+  |> List.map ~f:(fun x -> Option.value_exn x)
 
 let kill defset var =
   let is_def_of_var (mtid, varname) = String.(varname = var) in
@@ -56,7 +76,68 @@ let init_sol (type g d) (module G : Graph with type t = g and type node = Callin
                      ~data:init_defs in
   Solution.create sol_map default_sol
 
-let run_on_cfg (type g) (module G : Graph with type t = g and type node = Calling_context.t) g sub tidmap cfg_firstnode =
+let get_uses_and_users sol tidmap flagowners : t =
+  let term_uses : Tidset.t ref Tid_map.t ref = ref Tid_map.empty in
+  let users_of : Tidset.t ref Tid_map.t ref = ref Tid_map.empty in
+  let t = Calling_context.to_insn_tid in
+  let add_to_uses_and_users ~attid ~used =
+    let uses = match Tid_map.find !term_uses attid with
+      | Some uses -> uses
+      | None ->
+         let newuses = ref Tidset.empty in
+         let () = term_uses := Tid_map.set !term_uses
+                                 ~key:attid ~data:newuses in
+         newuses in
+    let () = uses := Tidset.add !uses used in
+    let users = match Tid_map.find !users_of used with
+      | Some users -> users
+      | None ->
+         let newusers = ref Tidset.empty in
+         let () = users_of := Tid_map.set !users_of
+                                 ~key:used ~data:newusers in
+         newusers in
+    users := Tidset.add !users attid
+  in
+  let set_flags ~attid =
+    match Tid_map.find flagowners attid with
+    | None -> ()
+    | Some flagtids ->
+       Set.iter flagtids ~f:(fun ft ->
+           (* this feels reversed because we are at the
+              main tid, but the later flag tid uses this tid *)
+           add_to_uses_and_users ~attid:ft ~used:attid)
+  in
+  let rhs tid =
+    match Tid_map.find tidmap tid with
+    | Some elt -> Var_name_collector.run_on_elt ~rhsonly:true elt
+    | None ->
+       Format.sprintf "[Rdefs] couldn't find tid %a in tidmap" Tid.pps tid
+       |> failwith
+  in
+  let select_tids ~defset ~select =
+    DefSet.filter defset ~f:(fun def ->
+        let name = Def.var def in
+        Common.SS.mem select name)
+    |> DefSet.to_list
+    |> List.map ~f:Def.tid
+    |> List.filter ~f:Option.is_some
+    |> List.map ~f:(fun x -> Option.value_exn x)
+  in
+  let process_sol_node (cc, defs) =
+    let tid = t cc in
+    let rhs = rhs tid in
+    let uses_tids = select_tids ~defset:defs ~select:rhs in
+    List.iter uses_tids ~f:(fun used ->
+        add_to_uses_and_users ~attid:tid ~used;
+        set_flags~attid:tid)
+  in
+  let () = Solution.enum sol
+           |> Seq.iter ~f:process_sol_node in
+  { rd = sol;
+    term_uses = !term_uses;
+    users_of = !users_of }
+
+let run_on_cfg (type g) (module G : Graph with type t = g and type node = Calling_context.t) g sub tidmap flagownership cfg_firstnode =
   let interp_node cc =
     let tid = Calling_context.to_insn_tid cc in
     let elt = match Tid_map.find tidmap tid with
@@ -71,11 +152,13 @@ let run_on_cfg (type g) (module G : Graph with type t = g and type node = Callin
   let equal = DefSet.equal in
   let widen_with_step _nvisits _node = DefSet.union in
   let init_sol = init_sol (module G) sub cfg_firstnode in
-  Graphlib.fixpoint
-    (module G)
-    g
-    ~step:widen_with_step
-    ~init:init_sol
-    ~equal
-    ~merge
-    ~f:interp_node  
+  let rd = Graphlib.fixpoint
+             (module G)
+             g
+             ~step:widen_with_step
+             ~init:init_sol
+             ~equal
+             ~merge
+             ~f:interp_node in
+  let full_result = get_uses_and_users rd tidmap flagownership in
+  full_result

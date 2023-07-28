@@ -327,41 +327,11 @@ let run_analyses sub img proj ~(is_toplevel : bool)
 
      let () = printf "[Driver] running reaching defs\n%!" in
      let start = Analysis_profiling.record_start_time () in
-     let reachingdefs = Reachingdefs.run_on_cfg (module G) cfg sub tidmap first_node in
+     let reachingdefs = Reachingdefs.run_on_cfg (module G) cfg sub tidmap flagownership first_node in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname ReachingDefs stop in
      let () = printf "[Driver] done running reaching defs\n%!" in
 
-     let () = printf "Running dependency analysis\n%!" in
-     let start = Analysis_profiling.record_start_time () in
-     let init_mapping = G.Node.Map.empty in
-     let init_sol_dep_analysis = Solution.create
-                                   init_mapping
-                                   Dependency_analysis.empty in
-     let dep_analysis_results = Graphlib.fixpoint
-                                  (module G)
-                                  cfg
-                                  ~step:Dependency_analysis.step
-                                  ~init:init_sol_dep_analysis
-                                  ~equal:Dependency_analysis.equal
-                                  ~merge:Dependency_analysis.merge
-                                  ~f:(fun cc ->
-                                    let tid = Calling_context.to_insn_tid cc in
-                                    let elt = match Tid_map.find tidmap tid with
-                                  | Some elt -> elt
-                                  | None ->
-                                     failwith @@
-                                       sprintf
-                                         "in calculating dep_analysis_results, couldn't find tid %a in tidmap"
-                                         Tid.pps tid
-
-                                    in
-                                    Dependency_analysis.denote_elt elt) in
-     let final_dep_analysis_res = Solution.get dep_analysis_results last_node in
-     let final_dep_analysis_res = Dependency_analysis.add_flag_ownership_dependencies
-                                    flagownership
-                                    rpo_traversal
-                                    final_dep_analysis_res in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for
                 subname
