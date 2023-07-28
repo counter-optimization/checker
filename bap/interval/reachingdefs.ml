@@ -41,6 +41,37 @@ let tids_of_defs defset =
   |> List.filter ~f:Option.is_some
   |> List.map ~f:(fun x -> Option.value_exn x)
 
+(* nonreflexive: a tid doesn't use itself *)
+let users_transitive_closure st fortid =
+  let rec loop
+            ?(processed : Tidset.t = Tidset.empty)
+            toproc =
+    match toproc with
+    | [] -> processed
+    | tid :: rst ->
+       if Tidset.mem processed tid
+       then loop ~processed rst
+       else
+         let processed = Tidset.add processed tid in
+         match Tid_map.find st.users_of tid with
+         | None -> loop ~processed rst
+         | Some users ->
+            let nonproc_users = Tidset.diff !users processed
+                                |> Tidset.to_list in
+            let toproc = List.append toproc nonproc_users in
+            loop ~processed toproc
+  in
+  loop [fortid]
+
+let select_tids ~defset ~select =
+  DefSet.filter defset ~f:(fun def ->
+      let name = Def.var def in
+      Common.SS.mem select name)
+  |> DefSet.to_list
+  |> List.map ~f:Def.tid
+  |> List.filter ~f:Option.is_some
+  |> List.map ~f:(fun x -> Option.value_exn x)
+
 let kill defset var =
   let is_def_of_var (mtid, varname) = String.(varname = var) in
   let keep d = not (is_def_of_var d) in
@@ -114,15 +145,6 @@ let get_uses_and_users sol tidmap flagowners : t =
        Format.sprintf "[Rdefs] couldn't find tid %a in tidmap" Tid.pps tid
        |> failwith
   in
-  let select_tids ~defset ~select =
-    DefSet.filter defset ~f:(fun def ->
-        let name = Def.var def in
-        Common.SS.mem select name)
-    |> DefSet.to_list
-    |> List.map ~f:Def.tid
-    |> List.filter ~f:Option.is_some
-    |> List.map ~f:(fun x -> Option.value_exn x)
-  in
   let process_sol_node (cc, defs) =
     let tid = t cc in
     let rhs = rhs tid in
@@ -162,3 +184,15 @@ let run_on_cfg (type g) (module G : Graph with type t = g and type node = Callin
              ~f:interp_node in
   let full_result = get_uses_and_users rd tidmap flagownership in
   full_result
+
+let get_last_defs st ~attid ~forvar =
+  let atcc = Calling_context.of_tid attid in
+  let reachingdefs = Solution.get st.rd atcc in
+  let forvar_def = select_tids
+                     ~defset:reachingdefs
+                     ~select:(Common.SS.singleton forvar) in
+  Tidset.of_list forvar_def
+
+let has_users st tid =
+  let trans_users = users_transitive_closure st tid in
+  Tidset.length trans_users >= 1

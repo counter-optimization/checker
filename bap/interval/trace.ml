@@ -323,15 +323,11 @@ module Directives(N : Abstract.NumericDomain)
 
     type prereq = {
         tidmap : Blk.elt Tid_map.t;
-        dep_analy : (Calling_context.t, Dependency_analysis.t) Solution.t;
-        use_analy : Dependency_analysis.t
+        rd : Reachingdefs.t;
       }
 
-    let init (tidmap : Blk.elt Tid_map.t)
-          (dep_analy : (Calling_context.t, Dependency_analysis.t) Solution.t)
-          (use_analy : Dependency_analysis.t)
-        : prereq =
-      {tidmap;dep_analy; use_analy}
+    let init tidmap rd : prereq =
+      { tidmap; rd }
 
     let vars_of_simple_cnd = Var_name_collector.run
 
@@ -361,13 +357,10 @@ module Directives(N : Abstract.NumericDomain)
 
     let get_last_deftid (p : prereq) ~(var : string) ~(attid : tid)
         : tid option =
-      let cc_attid = Calling_context.of_tid attid in
-      let dep = Solution.get p.dep_analy cc_attid in
-      let last_def_map = dep.last_defd_env in
-      match Dependency_analysis.Varmap.find last_def_map var with
-      | Some tidset when 1 = Tidset.length tidset ->
-         Tidset.to_list tidset |> List.hd
-      | _ -> None
+      let last_defs = Reachingdefs.get_last_defs p.rd ~attid ~forvar:var in
+      if Tidset.length last_defs = 1
+      then Tidset.to_list last_defs |> List.hd
+      else None
 
     let try_get_second_level_directives (p : prereq) (flag_tid : tid)
           (flag_base_exp : Bil.exp) : tagged_directive list =
