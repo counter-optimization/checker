@@ -463,34 +463,24 @@ module RemoveAllEmptySubName : Pass = struct
 end
 
 module FlagsLiveOutFiller = struct
-  let flag_of_flagdeftid tidmap tid : string =
-    match Tid_map.find tidmap tid with
-    | Some (`Def d) -> Var.name @@ Def.lhs d
-    | _ ->
-       failwith @@
-         sprintf "Couldnt find flag def tid %a in tidmap" Tid.pps tid
-  
-  let set_for_alert tidmap flagownership depanalysis alert : T.t =
-    let tid = Option.value_exn alert.tid in
-    let flags = match Tid_map.find tidmap tid with
-      | None ->
-         failwith @@ sprintf "couldn't find tid %a in tidmap" Tid.pps tid
-      | Some elt ->
-         Tid_map.find flagownership tid
+  let set_for_alert tidmap flagownership rd alert : T.t =
+    let flagname tid =
+      match Tid_map.find tidmap tid with
+      | Some (`Def d) -> Var.name (Def.lhs d)
+      | _ -> failwith "FlagLiveOutFiller set_for_alert error"
     in
+    let tid = Option.value_exn alert.tid in
+    let flags = Tid_map.find flagownership tid in
     let flags_live = match flags with
       | None ->
          SS.empty
       | Some flags ->
          Core_kernel.Set.fold flags ~init:SS.empty ~f:(fun liveflags flagdeftid ->
-             let all_users = Dependency_analysis.users_transitive_closure 
-                               flagdeftid
-                               depanalysis
-             in
-             if Core_kernel.Set.is_empty all_users
-             then liveflags
-             else SS.add liveflags @@ flag_of_flagdeftid tidmap flagdeftid)
-    in
+             if Reachingdefs.has_users rd flagdeftid
+             then
+               let flagname = flagname flagdeftid in
+               SS.add liveflags flagname
+             else liveflags) in
     { alert with flags_live }
 
   let set_for_alert_set tidmap flagownership depanalysis alerts : Set.t =

@@ -316,12 +316,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let first_node = match first_insn_cc sub with
        | Some n -> n
        | None -> failwith "[Driver] cfg building init sol, couldn't get first node" in
-     (* let () = printf "[Driver] first node is: %a\n%!"  *)
-     (*            Tid.ppo @@ Calling_context.to_insn_tid first_node in *)
    
-     let last_node = match Seq.hd po_traversal with
-       | Some n -> G.Node.label n
-       | None -> failwith "[Driver] cfg building init sol, couldn't get last node" in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname InitEnvSetup stop in
 
@@ -343,15 +338,12 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let cond_scrape_st = Trace.ConditionFinder.init
                             ~rpo_traversal
                             ~tidmap
-                            ~dep_analysis:final_dep_analysis_res in
+                            ~reachingdefs in
      let live_flags = Trace.ConditionFinder.FlagScraper.get_live_flags
                         cond_scrape_st in
      let cmov_cnd_flags = List.filter live_flags ~f:(fun lf ->
                               Trace.ConditionFinder.FlagScraper.flag_used_in_cmov lf cond_scrape_st) in
-     let cond_extractor_st = TraceDir.Extractor.init
-                               tidmap
-                               dep_analysis_results
-                               final_dep_analysis_res in
+     let cond_extractor_st = TraceDir.Extractor.init tidmap reachingdefs in
      let dirs = List.fold cmov_cnd_flags ~init:[] ~f:(fun dirs lf ->
                     let split_dir = TraceDir.Extractor.get_conds_for_flag
                                       lf
@@ -459,7 +451,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                                idx_st
                                                defs
                                                symex_profiling_out_file
-                                               final_dep_analysis_res
+                                               reachingdefs
                                                tidmap
                                                elt in
                            combine_res all_results @@
@@ -483,7 +475,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      let start = Analysis_profiling.record_start_time () in
      (* let all_alerts = Alert.LivenessFiller.set_for_alert_set all_alerts liveness in
       *)
-     let all_alerts = Alert.FlagsLiveOutFiller.set_for_alert_set tidmap flagownership final_dep_analysis_res all_alerts in
+     let all_alerts = Alert.FlagsLiveOutFiller.set_for_alert_set tidmap flagownership reachingdefs all_alerts in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname AlertDependencyFilling stop in
      let () = printf "Done running flags live out filler\n%!" in

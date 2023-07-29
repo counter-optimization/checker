@@ -116,7 +116,7 @@ module Checker(N : Abstract.NumericDomain)
 
   let get_up_to_n_dependent_insns ~(prev_store : def term option)
         ~(n: int) ~(sub: sub term) ~(for_ : tid)
-        ~(deps : Dependency_analysis.t) ~(tidmap : Blk.elt Tid_map.t)
+        ~(rd : Reachingdefs.t) ~(tidmap : Blk.elt Tid_map.t)
       : def term list =
     let emp = DefTermSet.empty in
     let dt_compare left right =
@@ -144,8 +144,7 @@ module Checker(N : Abstract.NumericDomain)
                             take_n ~n ~to_ from_ in
     let deps_of_dt (dt : def term) =
       let tid = Term.tid dt in
-      let uses = Tid_map.find deps.tid_uses tid
-                 |> Option.value ~default:Tidset.empty in
+      let uses = Reachingdefs.get_uses rd tid in
       Tidset.fold uses ~init:emp ~f:(fun dts use_tid ->
           match dt_only_lookup ~tidmap ~tid:use_tid with
           | None -> dts
@@ -186,7 +185,7 @@ module Checker(N : Abstract.NumericDomain)
         (idx_st : Idx_calculator.t)
         (all_defs_of_sub : def term list option ref)
         (profiling_data_path : string)
-        (deps : Dependency_analysis.t)
+        (rd : Reachingdefs.t)
         (tidmap : Blk.elt Tid_map.t)
         (elt : Blk.elt) : Alert.Set.t Common.checker_res =
     let subname = Sub.name sub in
@@ -239,7 +238,7 @@ module Checker(N : Abstract.NumericDomain)
                                       ~n:dep_bound
                                       ~sub
                                       ~for_:tid
-                                      ~deps
+                                      ~rd
                                       ~tidmap in
                          let type_info = Type_determination.run
                                            all_defs_of_sub

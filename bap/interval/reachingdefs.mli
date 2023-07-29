@@ -20,3 +20,5 @@ val get_last_defs : t -> attid:tid -> forvar:varname -> Tidset.t
 val has_users : t -> tid -> bool
 
 val get_users : t -> tid -> Tidset.t
+
+val get_uses : t -> tid -> Tidset.t

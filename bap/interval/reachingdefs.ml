@@ -196,3 +196,13 @@ let get_last_defs st ~attid ~forvar =
 let has_users st tid =
   let trans_users = users_transitive_closure st tid in
   Tidset.length trans_users >= 1
+
+let get_users st tid =
+  match Tid_map.find st.users_of tid with
+  | Some tids -> !tids
+  | None -> Tidset.empty
+
+let get_uses st tid =
+  match Tid_map.find st.term_uses tid with
+  | Some tids -> !tids
+  | None -> Tidset.empty

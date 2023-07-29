@@ -378,23 +378,21 @@ module Directives(N : Abstract.NumericDomain)
     let get_merge_point_for_flag_dirs (p : prereq)
           ((tid,flagname) : tid * string)
           (flagdirs : t) : t option =
-      match Tid_map.find p.use_analy.tid_users tid with
-      | Some imm_flag_deps ->
-         let flag_dep_deps = Tidset.to_list imm_flag_deps in
-         let flag_dep_deps = List.map flag_dep_deps ~f:(fun dep ->
-                                 match Tid_map.find p.use_analy.tid_users dep with
-                                 | Some fnd -> fnd
-                                 | None -> Tidset.empty) in
-         let flag_dep_deps = List.map flag_dep_deps ~f:Tidset.to_list
-                             |> List.join
-                             |> List.sort ~compare:Tid.compare
-                             |> List.rev in
-         List.hd flag_dep_deps
-         |> Option.bind ~f:(fun latest_dep ->
-                let latest_depset = Tidset.singleton latest_dep in
-                let tagged_combine_dir = (latest_depset, Combine (fst flagdirs)) in
-                Some tagged_combine_dir)
-      | None -> None             
+      let imm_flag_deps = Reachingdefs.get_users p.rd tid in
+      if Tidset.length imm_flag_deps = 0
+      then None
+      else
+        let flag_dep_deps = Tidset.to_list imm_flag_deps in
+        let flag_dep_deps = List.map flag_dep_deps ~f:(Reachingdefs.get_users p.rd) in
+        let flag_dep_deps = List.map flag_dep_deps ~f:Tidset.to_list
+                            |> List.join
+                            |> List.sort ~compare:Tid.compare
+                            |> List.rev in
+        List.hd flag_dep_deps
+        |> Option.bind ~f:(fun latest_dep ->
+               let latest_depset = Tidset.singleton latest_dep in
+               let tagged_combine_dir = (latest_depset, Combine (fst flagdirs)) in
+               Some tagged_combine_dir)
       
     let get_conds_for_flag ((tid,flagname) : tid * string) (p : prereq) : t =
       let flag_tidset = Tidset.singleton tid in
@@ -853,7 +851,7 @@ module ConditionFinder = struct
   type prereqs = {
       rpo_traversal : rpo_traversal;
       tidmap : tidmap;
-      dep_analysis : dep_analysis
+      rd : Reachingdefs.t;
     }
 
   type flag_name = string
@@ -862,8 +860,8 @@ module ConditionFinder = struct
 
   type t = prereqs
 
-  let init ~rpo_traversal ~tidmap ~dep_analysis : t =
-    { rpo_traversal; tidmap; dep_analysis }
+  let init ~rpo_traversal ~tidmap ~reachingdefs : t =
+    { rpo_traversal; tidmap; rd = reachingdefs }
 
   module FlagScraper = struct
     (* hopefully/probably *)
@@ -898,9 +896,8 @@ module ConditionFinder = struct
              let used_in_cmov = loop rhs in
              used_in_cmov || used_in_cmov_ever tids
           | _ -> used_in_cmov_ever tids in
-      let all_users = Dependency_analysis.users_transitive_closure
-                        tid
-                        prereqs.dep_analysis
+      let all_users = Reachingdefs.users_transitive_closure
+                        prereqs.rd tid
                       |> Tidset.to_sequence in
       used_in_cmov_ever all_users
 
@@ -911,7 +908,7 @@ module ConditionFinder = struct
         | Some (`Def d) ->
            let defines = Var.name @@ Def.lhs d in
            let is_flag = Common.AMD64SystemVABI.var_name_is_flag defines in
-           if is_flag && Dependency_analysis.has_user tid prereqs.dep_analysis
+           if is_flag && Reachingdefs.has_users prereqs.rd tid
            then Some (tid, defines)
            else None
         | _ -> None in
