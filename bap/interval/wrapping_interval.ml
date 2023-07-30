@@ -31,6 +31,10 @@ let make_top width signed : t =
 
 let top : t = make_top 64 false
 
+(** returns (min x y, max x y) with only one comparison *)
+let fastminmax (x : Z.t) (y : Z.t) : Z.t * Z.t =
+  if Z.lt x y then (x, y) else (y, x)
+
 let to_string (intvl : t) : string =
   match intvl with
   | Bot -> "_|_"
@@ -40,42 +44,6 @@ let to_string (intvl : t) : string =
        (Z.to_string hi)
        (Int.to_string width)
        (Bool.to_string signed)
-
-(** Wraparound, integer semantics, etc *)
-let wrap (n : Z.t) (r : range) : Z.t =
-  let {lo; hi; width; signed} = r in
-  if Z.lt n lo
-  then
-    let dist_from_lo = Z.abs (Z.sub n lo) in
-    let unadjusted_wrap_around = Z.sub hi dist_from_lo in
-    Z.add unadjusted_wrap_around Z.one
-  else
-    if Z.gt n hi
-    then
-      let dist_from_hi = Z.abs (Z.sub n hi) in
-      let unadjusted_wrap_around = Z.add lo dist_from_hi in
-      Z.sub unadjusted_wrap_around Z.one
-    else
-      n
-
-let wrap_intvl (intvl : t) (r : range) : t =
-  match intvl with
-  | Bot -> Bot
-  | Interval {lo; hi; width; signed} ->
-     let {lo=lo'; hi=hi'; width=width'; signed=signed'} = r in
-     let lo_inc = Z.succ lo in
-     if Z.leq lo_inc hi' && Z.leq hi' hi
-     then Interval r
-     else
-       if Z.leq lo_inc lo' && Z.leq lo' hi
-       then Interval r
-       else
-         let wrapped_lo = wrap lo r in
-         let wrapped_hi = wrap hi r in
-         Interval { lo = Z.min wrapped_lo wrapped_hi;
-                    hi = Z.max wrapped_lo wrapped_hi;
-                    width = width';
-                    signed = signed' }
 
 (** Ordering *)
 let order x y : KB.Order.partial =
@@ -172,6 +140,107 @@ let uint32_range = range ~width:32 ~signed:false
 let int64_range = range ~width:64 ~signed:true
 let uint64_range = range ~width:64 ~signed:false
 
+module Limits = struct
+  let umin = 0
+
+  let umax1 = Z.one
+  let umax8 = Z.pred @@ Z.of_int 256
+  let umax16 = Z.pred @@ Z.of_int 65536
+  let umax32 = Z.pred @@ Z.of_int 4294967296
+  let umax64 = Z.pred @@ Z.shift_left umax32 32
+  let umax128 = Z.pred @@ Z.shift_left umax64 64
+  let umax256 = Z.pred @@ Z.shift_left umax128 128
+  let umax512 = Z.pred @@ Z.shift_left umax256 256
+
+  let smin8 = Z.of_int (-128)
+  let smin16 = Z.of_int (-32768)
+  let smin32 = Z.of_int (-2147483648)
+  let smin64 = Z.of_string "-9223372036854775808"
+  let smin128 = Z.of_string "-170141183460469231731687303715884105728"
+  let smin256 = Z.of_string "-57896044618658097711785492504343953926634992332820282019728792003956564819968"
+  let smin512 = Z.of_string "-6703903964971298549787012499102923063739682910296196688861780721860882015036773488400937149083451713845015929093243025426876941405973284973216824503042048"
+
+  let smax8 = Z.lognot smin8
+  let smax16 = Z.lognot smin16
+  let smax32 = Z.lognot smin32
+  let smax64 = Z.lognot smin64
+  let smax128 = Z.lognot smin128
+  let smax256 = Z.lognot smin256
+  let smax512 = Z.lognot smin512
+
+  let width_to_umax = function
+    | 1 -> umax1
+    | 8 -> umax8
+    | 16 -> umax16
+    | 32 -> umax32
+    | 64 -> umax64
+    | 128 -> umax128
+    | 256 -> umax256
+    | 512 -> umax512
+    | n -> Z.(pred (pow (of_int 2) n))
+
+  let width_to_smax = function
+    | 1 -> failwith "Can't width_to_smax width 1 bitvector"
+    | 8 -> smax8
+    | 16 -> smax16
+    | 32 -> smax32
+    | 64 -> smax64
+    | 128 -> smax128
+    | 256 -> smax256
+    | 512 -> smax512
+    | n ->
+       let a = n - 1 in
+       Z.(pred (pow (of_int 2) a))
+
+  let width_to_smin = function
+    | 1 -> failwith "Can't width_to_smax width 1 bitvector"
+    | 8 -> smin8
+    | 16 -> smin16
+    | 32 -> smin32
+    | 64 -> smin64
+    | 128 -> smin128
+    | 256 -> smin256
+    | 512 -> smin512
+    | n ->
+       let a = n - 1 in
+       Z.(neg (pow (of_int 2) a))
+
+  let unsigned_truncate num width : Z.t =
+    let umax = width_to_umax width in
+    let umax_plus_one = Z.succ umax in
+    let rec loop n =
+      if Z.lt n Z.zero
+      then loop Z.(n + umax_plus_one)
+      else if Z.gt n umax
+      then Z.(logand n umax)
+      else n
+    in
+    loop num
+
+  let signed_to_unsigned lo hi width : Z.t * Z.t =
+    let lo = unsigned_truncate lo width in
+    let hi = unsigned_truncate hi width in
+    fastminmax lo hi
+
+  let signed_truncate num width : Z.t =
+    let smax = width_to_smax width in
+    let smin = width_to_smin width in
+    let rec loop n =
+      let () = printf "Num is %s\n%!" @@ Z.to_string n in
+      if Z.lt n smin
+      then loop (Z.(smax - ((pred smin) - n))) 
+      else if Z.gt n smax
+      then loop Z.((n - (succ smax)) + smin)
+      else n
+    in
+    loop num
+
+  let unsigned_to_signed lo hi width : Z.t * Z.t =
+    let lo = signed_truncate lo width in
+    let hi = signed_truncate hi width in
+    fastminmax lo hi
+end
+
 let range_of_interval = function
   | Bot -> failwith "Can't get range of _|_ in range_of_interval"
   | Interval { lo; hi; width; signed } ->
@@ -237,23 +306,63 @@ let type_nonshift_binop op left right : range =
 let type_shift_binop op left right : range = range_for_promote left
 
 (** Operators *)
-
-let binop op left right : t =
+(** binop does signed/unsigned casting like how C
+    specifies for an implementation that uses the 
+    natural base2 binary twos complement for 8,16,32,64,128,256,512
+    bit bitvectors.
+    this means no padding bits for unsigned integer types
+    and no padding bits for signed integer types tho one sign
+    bit as the MSB like normal two's complement *)
+let binop ?(signed : bool = false) opname op left right : t =
+  let warn_width_mismatch newwidth =
+    printf "[WI] binop width mismatch (%s), left: %s, right: %s, adjusting to %d\n"
+      opname (to_string left) (to_string right) newwidth
+  in
   match left, right with
   | Interval {lo=lo1; hi=hi1; width=width1; signed=signed1},
     Interval {lo=lo2; hi=hi2; width=width2; signed=signed2} ->
-     let x1 = op lo1 lo2 in
-     let x2 = op lo1 hi2 in
-     let x3 = op hi1 lo2 in
-     let x4 = op hi1 hi2 in
-     let new_lo = min4 x1 x2 x3 x4 in
-     let new_hi = max4 x1 x2 x3 x4 in
-     let res = Interval {lo = new_lo;
-                         hi = new_hi;
-                         width = width1;
-                         signed = signed1 || signed2} in
-     let wrapping_range = range ~width:width1 ~signed:signed1 in
-     wrap_intvl res wrapping_range
+     let target_width, width1, width2 =
+       if width1 = width2
+       then width1, width1, width2
+       else
+         let bigwidth = Int.max width1 width2 in
+         let () = warn_width_mismatch bigwidth in
+         bigwidth, bigwidth, bigwidth in
+     if signed
+     then
+       let lo1, hi1 = if signed1
+                      then lo1, hi1
+                      else Limits.unsigned_to_signed lo1 hi1 target_width in
+       let lo2, hi2 = if signed2
+                      then lo2, hi2
+                      else Limits.unsigned_to_signed lo2 hi2 target_width in
+       let x1 = Limits.signed_truncate (op lo1 lo2) target_width in
+       let x2 = Limits.signed_truncate (op lo1 hi2) target_width in
+       let x3 = Limits.signed_truncate (op hi1 lo2) target_width in
+       let x4 = Limits.signed_truncate (op hi1 hi2) target_width in
+       let new_lo = min4 x1 x2 x3 x4 in
+       let new_hi = max4 x1 x2 x3 x4 in
+       Interval {lo = new_lo;
+                 hi = new_hi;
+                 width = target_width;
+                 signed = true}
+     else (* unsigned *)
+       let lo1, hi1 = if signed1
+                      then Limits.signed_to_unsigned lo1 hi1 target_width
+                      else lo1, hi1 in
+       let lo2, hi2 = if signed2
+                      then Limits.signed_to_unsigned lo2 hi2 target_width
+                      else lo2, hi2 in
+       let x1 = Limits.unsigned_truncate (op lo1 lo2) target_width in
+       let x2 = Limits.unsigned_truncate (op lo1 hi2) target_width in
+       let x3 = Limits.unsigned_truncate (op hi1 lo2) target_width in
+       let x4 = Limits.unsigned_truncate (op hi1 hi2) target_width in
+       let new_lo = min4 x1 x2 x3 x4 in
+       let new_hi = max4 x1 x2 x3 x4 in
+       Interval {lo = new_lo;
+                 hi = new_hi;
+                 width = target_width;
+                 signed = false}
   | _, _ -> Bot
 
 (* we assume that the cryptographic code is correct and safe of
@@ -264,7 +373,7 @@ let binop op left right : t =
    If 0 is not the endpoints of the interval, then a div by zero won't happen
    in *this* code, but we don't change the intervals since we can't put a hole
    in the interval anyways. *)
-let make_rhs_zero_safe binop_fn left right : t =
+let make_rhs_zero_safe ?(signed : bool = false) opname binop_fn left right : t =
   match right with
   | Interval {lo; hi; width; signed} ->
      let zero = Z.zero in
@@ -275,36 +384,37 @@ let make_rhs_zero_safe binop_fn left right : t =
         failwith "in Wrapping_interval.safe_div, div by constant zero"
      | true, false ->
         let new_right = Interval { lo = Z.add lo Z.one; hi; width; signed } in
-        binop binop_fn left new_right
+        binop opname binop_fn left new_right
      | false, true ->
         let new_right = Interval { lo; hi = Z.sub hi Z.one; width; signed } in
-        binop binop_fn left new_right
-     | false, false -> binop binop_fn left right)
+        binop ~signed opname binop_fn left new_right
+     | false, false -> binop ~signed opname binop_fn left right)
   | Bot -> failwith "in Wrapping_interval.safe_div, right is bot"
 
 let unop op intvl =
   match intvl with
   | Interval r ->
-     let x1 = op r.lo in
-     let x2 = op r.hi in
-     Interval { r with lo = Z.min x1 x2; hi = Z.max x1 x2 }
+     let x1 = Limits.unsigned_truncate (op r.lo) r.width in
+     let x2 = Limits.unsigned_truncate (op r.hi) r.width in
+     let lo, hi = fastminmax x1 x2 in
+     Interval { lo; hi; width = r.width; signed = false }
   | Bot -> Bot
 
 let shift_wrapper op x y = op x (Z.to_int y)
 
-let add = binop Z.add
-let sub = binop Z.sub
-let mul = binop Z.mul
-let div = make_rhs_zero_safe Z.div
-let sdiv = make_rhs_zero_safe Z.div
-let umod = make_rhs_zero_safe Z.rem
-let smod = make_rhs_zero_safe Z.rem
-let lshift = binop @@ shift_wrapper Z.shift_left
-let rshift = binop @@ shift_wrapper Z.shift_right
-let arshift = binop @@ shift_wrapper Z.shift_right_trunc
-let logand = binop Z.logand
-let logor = binop Z.logor
-let logxor = binop Z.logxor
+let add = binop "add" Z.add
+let sub = binop "sub" Z.sub
+let mul = binop "mul" Z.mul
+let div = make_rhs_zero_safe "div" Z.div
+let sdiv = make_rhs_zero_safe "sdiv" ~signed:true Z.div
+let umod = make_rhs_zero_safe "umod" Z.rem
+let smod = make_rhs_zero_safe "smod" ~signed:true Z.rem
+let lshift = binop "lshift" @@ shift_wrapper Z.shift_left
+let rshift = binop "rshift" @@ shift_wrapper Z.shift_right
+let arshift = binop "arshift" @@ shift_wrapper Z.shift_right_trunc
+let logand = binop "logand" Z.logand
+let logor = binop "logor" Z.logor
+let logxor = binop "logxor" Z.logxor
 
 let neg = unop Z.neg
 
@@ -339,17 +449,12 @@ let extract exp h l =
   match exp with 
   | Interval r ->
      let width = h - l + 1 in
-     
      let x1 = Z.extract r.lo l width in
      let x2 = Z.extract r.hi l width in
-     
-     let new_intvl = Interval { lo = Z.min x1 x2;
-                                hi = Z.max x1 x2;
-                                width;
-                                signed = r.signed } in
-     let target_range = range ~width ~signed:r.signed in
-     
-     wrap_intvl new_intvl target_range
+     let x1 = Limits.unsigned_truncate x1 width in
+     let x2 = Limits.unsigned_truncate x2 width in
+     let lo, hi = fastminmax x1 x2 in
+     Interval { lo; hi; width; signed = r.signed }
   | Bot -> Bot
 
 let concat x y =
@@ -357,10 +462,8 @@ let concat x y =
   | Interval l, Interval r ->
      let final_width = l.width + r.width in
      let final_signed = l.signed in
-     
      let x' = Interval { l with width = final_width } in
      let y' = Interval { r with width = final_width } in
-
      let shift_by = Interval { lo = Z.of_int r.width;
                                hi = Z.of_int r.width;
                                width = final_width;
@@ -639,7 +742,7 @@ let set : type a. a Key.k -> t -> a -> t = fun k other replace ->
     from_ :         [                            ]
     remove:       [   ]
     remove.lo <= from_.lo && remove.hi >= from_.lo && remove.hi < from_.hi
-    ----> 
+    ---->
     from_.lo = remove.hi + 1
     from_.hi = from_.hi
 
@@ -696,3 +799,4 @@ let try_remove_interval ~(remove : t) ~(from_ : t) : t =
               from_.lo < remove.lo && remove.hi < from_.hi *)
            Interval from_
        
+ 

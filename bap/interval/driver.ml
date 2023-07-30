@@ -312,7 +312,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                ~f:(fun mem argname ->
                                  E.init_arg ~name:argname config sub mem) in
      let rpo_traversal = Graphlib.reverse_postorder_traverse (module G) cfg in
-     let po_traversal = Graphlib.postorder_traverse (module G) cfg in
      let first_node = match first_insn_cc sub with
        | Some n -> n
        | None -> failwith "[Driver] cfg building init sol, couldn't get first node" in
