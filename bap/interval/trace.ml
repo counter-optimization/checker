@@ -763,10 +763,16 @@ module Tree(N : Abstract.NumericDomain)
     in
     loop tree (fun x -> x)
 
-  let rec num_leaves : t -> int = function
-    | Leaf _ -> 1
-    | Parent { left; right; _ } ->
-       num_leaves left + num_leaves right
+  let num_leaves tree : int =
+    let rec loop tree k =
+      match tree with
+      | Leaf _ -> k 1
+      | Parent { left; right; _ } ->
+         loop left (fun leftsz ->
+             loop right (fun rightsz ->
+                 leftsz + rightsz))
+    in
+    loop tree (fun x -> x)
 end
 
 module Env(N : Abstract.NumericDomain)
@@ -829,6 +835,8 @@ module Env(N : Abstract.NumericDomain)
 
   let merge (l : t) (r : t) : t =
     { tree = Tree.merge l.tree r.tree }
+
+  let num_leaves (env : t) : int = Tree.num_leaves env.tree
 
   let widen_with_step (n : int) (node : 'a) (l : t) (r : t) : t =
     if n < Common.ai_widen_threshold
@@ -967,6 +975,17 @@ module AbsInt = struct
       (*            Common.elt_to_tid e; *)
       (*          printf "[Trace] in env is:\n%!"; *)
       (*          TreeEnv.pp st in *)
+      let tid = Common.elt_to_tid e in
+      let () = if 5 <= TreeEnv.num_leaves st
+               then printf "[Trace] env at %a has >=5 splits\n%!"
+                      Tid.ppo tid
+               else () in
+      let () = if String.equal subname "blake2b_compress_ref"
+               then
+                 (printf "[Trace] in sub %s, tid %a\n%!"
+                    subname Tid.ppo tid;
+               TreeEnv.pp st)
+               else () in
       match e with
       | `Def d -> denote_def subname dmap d st
       | `Jmp j -> denote_jmp subname dmap j st
