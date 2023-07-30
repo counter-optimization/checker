@@ -619,10 +619,17 @@ let check_config config img ctxt proj : unit =
   (* post-processing *)
   let all_alerts = analysis_results.alerts in
   let all_alerts = Alert.OpcodeAndAddrFiller.set_for_alert_set all_alerts proj in
+  let all_alerts = Alert.SubNameResolverFiller.set_for_alert_set all_alerts proj in
   let all_alerts = Alert.RemoveAllEmptySubName.set_for_alert_set all_alerts proj in
   let all_alerts = Alert.RemoveSpuriousCompSimpAlerts.set_for_alert_set all_alerts proj in
   let all_alerts = Alert.RemoveAlertsForCallInsns.set_for_alert_set all_alerts proj in
-  let all_alerts = Alert.RemoveAndWarnEmptyInsnIdxAlerts.set_for_alert_set all_alerts proj in
+
+  let is_double_check = Extension.Configuration.get ctxt Common.is_double_check in
+  let all_alerts = if is_double_check
+                   then all_alerts
+                   else
+                     Alert.RemoveAndWarnEmptyInsnIdxAlerts.set_for_alert_set all_alerts proj in
+  
   let all_alerts = Alert.CombinedTransformFixerUpper.set_for_alert_set all_alerts proj in
  
   let res = Alert.RemoveUnsupportedMirOpcodes.set_for_alert_set all_alerts proj in

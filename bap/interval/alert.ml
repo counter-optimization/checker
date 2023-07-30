@@ -371,7 +371,7 @@ module OpcodeAndAddrFiller : Pass = struct
         set_opcode_for_alert proj alert opcode_lut)
 end
 
-module SubNameResolverFiller = struct
+module SubNameResolverFiller : Pass = struct
 
   type cls
 
@@ -392,6 +392,15 @@ module SubNameResolverFiller = struct
               ~package:Common.package
   
   let unresolved_prefix = "sub_"
+
+  let has_unres_prefix =
+    String.Caseless.is_prefix ~prefix:unresolved_prefix
+
+  let get_name_for_resolving alert =
+    Option.bind alert.sub_name ~f:(fun name ->
+        if has_unres_prefix name
+        then Some name
+        else None)
 
   let needs_resolving alert =
     match alert.sub_name with
@@ -437,6 +446,46 @@ module SubNameResolverFiller = struct
           let resolved = resolve_name unresolved queryable_named_symbols in
           { alert with sub_name = Some resolved }
         else alert)
+
+  let set_for_alert_set alerts proj =
+    let open Option.Monad_infix in
+    let set_for_alert aliasmap a =
+      match a.sub_name with
+      | None -> a
+      | Some name ->
+         if not (has_unres_prefix name)
+         then a
+         else
+           let maliases = List.Assoc.find aliasmap name
+                           ~equal:String.equal in
+           match maliases with
+           | Some aliases when 0 = SS.length aliases ->
+              Format.sprintf "[Alert] Couldn't resolve subname for %s" name
+              |> failwith
+           | None ->
+              Format.sprintf "[Alert] Couldn't resolve subname for %s" name
+              |> failwith
+           | Some aliases when SS.length aliases > 0 ->
+              let newname = SS.elements aliases |> List.hd_exn in
+              let () = if SS.length aliases > 1
+                       then begin
+                           printf "[Alert] multiple sub name candidates for sub %s:\n%!" name;
+                           SS.iter aliases ~f:(printf "\t%s\n%!");
+                           printf "[Alert] picking first alias: %s\n%!" newname end
+                       else
+                         printf "[Alert] resolved %s to %s\n%!" name newname in
+              { a with sub_name = Some newname }
+           | _ -> failwith "impossible"
+    in
+    let toresolve = Set.fold alerts ~init:SS.empty
+                             ~f:(fun toresolve a ->
+                               match get_name_for_resolving a with
+                               | Some n -> SS.add toresolve n
+                               | None -> toresolve) in
+    let () = printf "[Alerts] trying to resolve sub names:\n%!";
+             SS.iter toresolve ~f:(printf "\t%s\n%!") in
+    let symbol_aliases = Config.get_all_named_symbols proj toresolve in
+    Set.map alerts ~f:(set_for_alert symbol_aliases)
 end
 
 module InsnIdxFiller = struct
@@ -459,7 +508,16 @@ end
 
 module RemoveAllEmptySubName : Pass = struct
   let set_for_alert_set alerts proj =
-    Set.filter alerts ~f:(fun alert -> Option.is_some alert.sub_name)
+    Set.iter alerts ~f:(fun a ->
+        match a.sub_name with
+        | None ->
+           let tid = Option.value_exn a.tid in
+           Format.sprintf "[Alert] alert for %a had empty subname"
+             Tid.pps tid
+           |> failwith
+        | Some _ -> ());
+    alerts
+    (* Set.filter alerts ~f:(fun alert -> Option.is_some alert.sub_name) *)
 end
 
 module FlagsLiveOutFiller = struct
@@ -619,7 +677,7 @@ module RemoveAndWarnEmptyInsnIdxAlerts : Pass = struct
   let warn_on_no_insn_idx alert : unit =
     let tid = Option.value_exn alert.tid in
     let csv_row = to_csv_row alert in 
-    printf "Alert for tid (%a) has empty insn idx. Full alert csv row is: %s\n%!"
+    printf "[Alert] (%a) has empty insn idx. Full alert csv row is: %s\n%!"
       Tid.ppo tid csv_row
   
   let has_insn_idx alert : bool =

@@ -58,6 +58,10 @@ let debug_dump = Extension.Configuration.flag
                    ~doc:"Also print BIR for each sub and global initial Knowledge_base"
                    "dump-bir-kb"
 
+let is_double_check = Extension.Configuration.flag
+                        ~doc:"Is this a double-checking run?"
+                        "double-check"
+
 let int_of_sz = function
   | `r8 -> 8
   | `r16 -> 16
