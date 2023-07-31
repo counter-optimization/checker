@@ -371,7 +371,7 @@ module OpcodeAndAddrFiller : Pass = struct
         set_opcode_for_alert proj alert opcode_lut)
 end
 
-module SubNameResolverFiller : Pass = struct
+module SubNameResolverFiller = struct
 
   type cls
 
