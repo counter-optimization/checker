@@ -460,11 +460,11 @@ module SubNameResolverFiller : Pass = struct
                            ~equal:String.equal in
            match maliases with
            | Some aliases when 0 = SS.length aliases ->
-              Format.sprintf "[Alert] Couldn't resolve subname for %s" name
-              |> failwith
+              printf "[Alert] Couldn't resolve subname for %s" name;
+              a
            | None ->
-              Format.sprintf "[Alert] Couldn't resolve subname for %s" name
-              |> failwith
+              printf "[Alert] Couldn't resolve subname for %s" name;
+              a
            | Some aliases when SS.length aliases > 0 ->
               let newname = SS.elements aliases |> List.hd_exn in
               let () = if SS.length aliases > 1
@@ -485,6 +485,10 @@ module SubNameResolverFiller : Pass = struct
     let () = printf "[Alerts] trying to resolve sub names:\n%!";
              SS.iter toresolve ~f:(printf "\t%s\n%!") in
     let symbol_aliases = Config.get_all_named_symbols proj toresolve in
+    let () = printf "[Config] resolved is:\n%!";
+             List.iter symbol_aliases ~f:(fun (sym, aliases) ->
+                 printf "\t%s ~~> %s\n%!" sym @@
+                   (SS.to_list aliases |> List.to_string ~f:(fun x -> x))) in
     Set.map alerts ~f:(set_for_alert symbol_aliases)
 end
 
