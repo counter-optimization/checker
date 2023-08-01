@@ -161,17 +161,17 @@ if __name__ == '__main__':
     #     addrs = opcodes_to_addrs_live_in[opcode]
     #     print(f"{opcode} ({len(addrs)}) ({addrs}): {flags_live_in}")
 
-    # print("Opcodes of leaky instructions whose flags are used:")
-    # for opcode, live_flags in opcodes_to_live_flags.items():
-    #     addrs = opcodes_to_addrs_live_out[opcode]
-    #     # print(f"{opcode} ({len(addrs)}) ({addrs}): {live_flags}")
-    #     print(f"{opcode}: {live_flags}")
+    print("Opcodes of leaky instructions whose flags are used:")
+    for opcode, live_flags in opcodes_to_live_flags.items():
+        addrs = opcodes_to_addrs_live_out[opcode]
+        # print(f"{opcode} ({len(addrs)}) ({addrs}): {live_flags}")
+        print(f"{opcode}: {live_flags}")
 
-    # print("Opcodes of leaky instructions and the flags they must preserve:")
-    # for opcode, flags_live_in in opcodes_to_flags_live_in.items():
-    #     addrs = opcodes_to_addrs_live_in[opcode]
-    #     # print(f"{opcode} ({len(addrs)}) ({addrs}): {flags_live_in}")
-    #     print(f"{opcode}: {flags_live_in}")
+    print("Opcodes of leaky instructions and the flags they must preserve:")
+    for opcode, flags_live_in in opcodes_to_flags_live_in.items():
+        addrs = opcodes_to_addrs_live_in[opcode]
+        # print(f"{opcode} ({len(addrs)}) ({addrs}): {flags_live_in}")
+        print(f"{opcode}: {flags_live_in}")
 
     # print("Printing all CS opcodes")
     # for opcode in sorted(cs_opcodes):
