@@ -227,7 +227,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
   let subtid = Term.tid sub in
   let () = printf "[Driver] Running analysis on sub %s\n%!" subname in
   let () = record_analyzed_sub subname subtid in
-  let () = last_insn_ccs sub in
+  (* let () = last_insn_ccs sub in *)
   let should_dump_bir = Extension.Configuration.get ctxt Common.debug_dump in
   let () = if should_dump_bir
            then printf "%a\n%!" Sub.ppo sub

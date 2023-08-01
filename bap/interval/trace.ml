@@ -971,20 +971,9 @@ module AbsInt = struct
 
     let denote_elt (subname : string) (dmap : Directives.directive_map)
           (e : Blk.elt) (st : env) : env =
-      (* let () = printf "[Trace] denoting elt: %a\n%!" Tid.ppo @@ *)
-      (*            Common.elt_to_tid e; *)
-      (*          printf "[Trace] in env is:\n%!"; *)
-      (*          TreeEnv.pp st in *)
-      let tid = Common.elt_to_tid e in
       let () = if 5 <= TreeEnv.num_leaves st
-               then printf "[Trace] env at %a has >=5 splits\n%!"
-                      Tid.ppo tid
-               else () in
-      let () = if String.equal subname "blake2b_compress_ref"
-               then
-                 (printf "[Trace] in sub %s, tid %a\n%!"
-                    subname Tid.ppo tid;
-               TreeEnv.pp st)
+               then printf "[Trace] env at %a of sub %s has >=5 splits\n%!"
+                      Tid.ppo (Common.elt_to_tid e) subname
                else () in
       match e with
       | `Def d -> denote_def subname dmap d st

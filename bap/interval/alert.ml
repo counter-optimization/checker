@@ -534,14 +534,11 @@ module FlagsLiveOutFiller = struct
     let tid = Option.value_exn alert.tid in
     let flags = Tid_map.find flagownership tid in
     let flags_live = match flags with
-      | None ->
-         SS.empty
+      | None -> SS.empty
       | Some flags ->
          Core_kernel.Set.fold flags ~init:SS.empty ~f:(fun liveflags flagdeftid ->
              if Reachingdefs.has_users rd flagdeftid
-             then
-               let flagname = flagname flagdeftid in
-               SS.add liveflags flagname
+             then SS.add liveflags @@ flagname flagdeftid
              else liveflags) in
     { alert with flags_live }
 
@@ -570,13 +567,13 @@ module LivenessFiller = struct
 end
 
 module DataflowLivenessFiller = struct
-  let set_for_alert (liveness : Liveness.t) alert : t =
+  let set_for_alert liveness alert =
     let tid = Option.value_exn alert.tid in
     let live_vars : SS.t = Liveness.liveness_at_tid liveness tid in
     let flags_live_in = SS.inter live_vars AMD64SystemVABI.flag_names in
     { alert with flags_live_in = flags_live_in }
 
-  let set_for_alert_set (alerts : Set.t) liveness : Set.t =
+  let set_for_alert_set alerts liveness =
     Set.map alerts ~f:(set_for_alert liveness)
 end
 

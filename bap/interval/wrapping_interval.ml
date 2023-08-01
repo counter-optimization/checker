@@ -314,10 +314,10 @@ let type_shift_binop op left right : range = range_for_promote left
     and no padding bits for signed integer types tho one sign
     bit as the MSB like normal two's complement *)
 let binop ?(signed : bool = false) opname op left right : t =
-  let warn_width_mismatch newwidth =
-    printf "[WI] binop width mismatch (%s), left: %s, right: %s, adjusting to %d\n"
-      opname (to_string left) (to_string right) newwidth
-  in
+  (* let warn_width_mismatch newwidth = *)
+  (*   printf "[WI] binop width mismatch (%s), left: %s, right: %s, adjusting to %d\n" *)
+  (*     opname (to_string left) (to_string right) newwidth *)
+  (* in *)
   match left, right with
   | Interval {lo=lo1; hi=hi1; width=width1; signed=signed1},
     Interval {lo=lo2; hi=hi2; width=width2; signed=signed2} ->
@@ -326,7 +326,7 @@ let binop ?(signed : bool = false) opname op left right : t =
        then width1, width1, width2
        else
          let bigwidth = Int.max width1 width2 in
-         let () = warn_width_mismatch bigwidth in
+         (* let () = warn_width_mismatch bigwidth in *)
          bigwidth, bigwidth, bigwidth in
      if signed
      then

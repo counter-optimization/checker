@@ -42,10 +42,8 @@ let tids_of_defs defset =
   |> List.map ~f:(fun x -> Option.value_exn x)
 
 (* nonreflexive: a tid doesn't use itself *)
-let users_transitive_closure st fortid =
-  let rec loop
-            ?(processed : Tidset.t = Tidset.empty)
-            toproc =
+let users_transitive_closure st origtid =
+  let rec loop ?(processed : Tidset.t = Tidset.empty) toproc =
     match toproc with
     | [] -> processed
     | tid :: rst ->
@@ -61,7 +59,9 @@ let users_transitive_closure st fortid =
             let toproc = List.append toproc nonproc_users in
             loop ~processed toproc
   in
-  loop [fortid]
+  let users_plus_self = loop [origtid] in
+  let users = Tidset.remove users_plus_self origtid in
+  users
 
 let select_tids ~defset ~select =
   DefSet.filter defset ~f:(fun def ->
