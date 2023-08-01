@@ -472,8 +472,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
      (* this is really dependency analysis info, not liveness info *)
      let () = printf "Running flags live out filler\n%!" in
      let start = Analysis_profiling.record_start_time () in
-     (* let all_alerts = Alert.LivenessFiller.set_for_alert_set all_alerts liveness in
-      *)
      let all_alerts = Alert.FlagsLiveOutFiller.set_for_alert_set tidmap flagownership reachingdefs all_alerts in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname AlertDependencyFilling stop in

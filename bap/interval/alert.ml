@@ -546,26 +546,6 @@ module FlagsLiveOutFiller = struct
     Set.map alerts ~f:(set_for_alert tidmap flagownership depanalysis)
 end
 
-(** this is really more data dependency analysis like for backward slicing. 
-    it was originally used for some liveness analysis, like: are any flags
-    of a leaky instruction used?
-    but since also adding the classical data flow liveness analysis, the
-    name hasn't aged well and needs changing after paper submission *)
-module LivenessFiller = struct
-  type liveness = Live_variables.t
-
-  let set_for_alert liveness alert : t =
-    let warn_tid = Option.value_exn alert.tid in
-    let live_flags =
-      Live_variables.get_live_flags_of_prev_def_tid liveness ~prev_def_tid:warn_tid in
-    let is_live_flagless = Live_variables.is_live_flagless liveness ~tid:warn_tid in
-    let is_live = is_live_flagless || not @@ SS.is_empty live_flags in
-    { alert with flags_live = live_flags; is_live = Some is_live }
-    
-  let set_for_alert_set (alerts : Set.t) (liveness : liveness) : Set.t =
-    Set.map alerts ~f:(set_for_alert liveness)
-end
-
 module DataflowLivenessFiller = struct
   let set_for_alert liveness alert =
     let tid = Option.value_exn alert.tid in
