@@ -48,6 +48,6 @@
 (module+ main
   (displayln "running verification...")
   ; (define cex (verify (comp-simp-verify attempt-mul16-p12 spec-mul16-p12 (list ax cx))))
-  (define cex (verify (comp-simp-verify attempt-imul64-rr-p5 spec-imul64-rr-p5 (list rax) (list 'CF))))
+  (define cex (verify (comp-simp-verify attempt-imul64-rr-p4 spec-imul64-rr-p4 (list rdx))))
   (displayln "done")
   cex)
