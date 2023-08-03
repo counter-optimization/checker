@@ -580,16 +580,19 @@
    ; calculate 2nd term: rcx[:32] * imm8
     ; prepare arguments
    (mov-r/m64-r64 rcx r10)
-   (mov-r/m16-imm16 cx (bv 1 16))
+   (mov-r/m16-imm16 cx (bv 2 16))
    (ror-r/m64-imm8 rcx (bv 16 8))
    (mov-r/m16-imm16 cx (bv 0 16))
    (rol-r/m64-imm8 rcx (bv 16 8))
     ; perform safe mul
    (imul-r64-r/m64-imm8 rax rcx (comp-simp:imm8))
     ; revert mask in result
-   (sub-r/m64-imm8 rax (comp-simp:imm8))
+   (mov-r/m64-imm32 r12 (bv 0 32))
+   (add-r/m64-imm8 r12 (comp-simp:imm8))
+   (shl-r/m64-1 r12)
+   (sub-r/m64-r64 rax r12)
 
-   ; safely add 1st term from r12
+   ; safely add 1st term from r11
    (mov-r/m8-r8 cl r11b)
    (mov-r/m8-imm8 r11b (bv 1 8))
    (mov-r/m8-imm8 al (bv 1 8))
