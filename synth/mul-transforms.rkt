@@ -313,12 +313,10 @@
    (imul-r/m64 rdx) ; result now in rdx:rax
 
     ; revert mask in result
+   (sar-r/m64-imm8 r13 (bv 2 8))
    (shl-r/m64-imm8 r12 (bv 1 8))   
    (sub-r/m64-r64 rax r12)
-   (sbb-r/m64-imm8 rdx (bv 0 8))
-
-   (sar-r/m64-imm8 r13 (bv 2 8))
-   (sub-r/m64-r64 rdx r13)
+   (sbb-r/m64-r64 rdx r13)
   ))
 
 (define spec-imul64-rr-p2
@@ -354,12 +352,10 @@
    (imul-r/m64 rdx) ; result now in rdx:rax
 
     ; revert mask in result
-   (shl-r/m64-imm8 r13 (bv 1 8))   
-   (sub-r/m64-r64 rax r13)
-   (sbb-r/m64-imm8 rdx (bv 0 8))
-
+   (shl-r/m64-imm8 r13 (bv 1 8))
    (sar-r/m64-imm8 r12 (bv 2 8))
-   (sub-r/m64-r64 rdx r12)
+   (sub-r/m64-r64 rax r13)
+   (sbb-r/m64-r64 rdx r12)
   ))
 
 (define spec-imul64-rr-p3
