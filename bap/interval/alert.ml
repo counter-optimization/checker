@@ -415,9 +415,11 @@ module SubNameResolverFiller = struct
     let entry_matches (addrs, name) = String.is_substring addrs
                                         ~substring:queryable_name in
     match Seq.find db ~f:entry_matches with
-    | Some (_addrs, name) -> name
+    | Some (_addrs, name) -> Some name
     | None ->
-       failwith @@ sprintf "In Alert.SubNameResolverFiller.resolve_name, couldn't resolve name for symbol: %s" unresolvedname
+       let () = printf "In Alert.SubNameResolverFiller.resolve_name, couldn't resolve name for symbol: %s" unresolvedname in
+       None
+       (* failwith @@  *)
 
   let resolve_sub_names alerts proj =
     let filename = Option.value_exn (Project.get proj filename) in
@@ -444,7 +446,10 @@ module SubNameResolverFiller = struct
         then 
           let unresolved = Option.value_exn alert.sub_name in
           let resolved = resolve_name unresolved queryable_named_symbols in
-          { alert with sub_name = Some resolved }
+          let resolved = match resolved with
+            | Some name -> Some name
+            | None -> Some unresolved in
+          { alert with sub_name = resolved }
         else alert)
 
   let set_for_alert_set alerts proj =
