@@ -434,25 +434,32 @@ let run_analyses sub img proj ~(is_toplevel : bool)
 
      let defs = ref None in
 
+     let do_cs = Extension.Configuration.get ctxt Common.do_cs_checks_param in
+     let do_ss = Extension.Configuration.get ctxt Common.do_ss_checks_param in
+
      let () = printf "[Driver] Running checkers\n%!" in
      let start = Analysis_profiling.record_start_time () in
      let all_results = List.fold edges ~init:emp ~f:(fun all_results (_, to_cc, _) ->
                            let to_tid = Calling_context.to_insn_tid to_cc in
                            let elt = elt_of_tid to_tid in
-                           let cs_chkr_res = CompSimpChecker.check_elt
-                                               subname
-                                               to_tid
-                                               elt in
-                           let ss_chkr_res = SSChecker.check_elt
-                                               use_symex
-                                               sub
-                                               to_tid
-                                               idx_st
-                                               defs
-                                               symex_profiling_out_file
-                                               reachingdefs
-                                               tidmap
-                                               elt in
+                           let cs_chkr_res = if do_cs
+                                             then CompSimpChecker.check_elt
+                                                    subname
+                                                    to_tid
+                                                    elt
+                                             else emp in
+                           let ss_chkr_res = if do_ss
+                                             then SSChecker.check_elt
+                                                    use_symex
+                                                    sub
+                                                    to_tid
+                                                    idx_st
+                                                    defs
+                                                    symex_profiling_out_file
+                                                    reachingdefs
+                                                    tidmap
+                                                    elt
+                                             else emp in
                            combine_res all_results @@
                              combine_res ss_chkr_res cs_chkr_res
                          ) in
