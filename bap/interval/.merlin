@@ -40,6 +40,7 @@ S dependency_analysis.ml
 S trace.ml
 S tidset.ml
 S reachingdefs.ml
+S dmp.ml
 
 B _build
 

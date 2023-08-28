@@ -8,12 +8,13 @@ module KB = Bap_core_theory.KB
 
 open KB.Monad_infix
 
-type reason = CompSimp | SilentStores | None
+type reason = CompSimp | SilentStores | Dmp | None
                            [@@deriving sexp, bin_io, compare, equal]
 
 let string_of_reason = function
   | CompSimp -> "comp-simp"
   | SilentStores -> "silent-stores"
+  | Dmp -> "dmp"
   | None -> failwith "reason should be filled out"
 
 module T = struct

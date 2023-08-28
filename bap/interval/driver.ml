@@ -415,6 +415,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
 
      let module CompSimpChecker = Comp_simp.Checker(FinalDomain)(TracePartCheckerOracle) in
      let module SSChecker = Silent_stores.Checker(FinalDomain)(TracePartCheckerOracle) in
+     let module DmpChecker = Dmp.Checker(FinalDomain)(TracePartCheckerOracle) in
      
      let combine_res x y = Common.combine_checker_res x y Alert.Set.union in
 
@@ -436,6 +437,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
 
      let do_cs = Extension.Configuration.get ctxt Common.do_cs_checks_param in
      let do_ss = Extension.Configuration.get ctxt Common.do_ss_checks_param in
+     let do_dmp = Extension.Configuration.get ctxt Common.do_dmp_checks_param in
 
      let () = printf "[Driver] Running checkers\n%!" in
      let start = Analysis_profiling.record_start_time () in
@@ -460,8 +462,12 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                                     tidmap
                                                     elt
                                              else emp in
-                           combine_res all_results @@
-                             combine_res ss_chkr_res cs_chkr_res
+                           let dmp_chkr_res = if do_dmp
+                                              then DmpChecker.check_elt sub to_tid elt
+                                              else emp in
+                           combine_res dmp_chkr_res @@ 
+                             combine_res all_results @@
+                               combine_res ss_chkr_res cs_chkr_res
                          ) in
      let stop = Analysis_profiling.record_stop_time start in
      let () = Analysis_profiling.record_duration_for subname CsChecking stop in
