@@ -573,6 +573,24 @@
   (list
    (sar-r/m32-cl eax)))
 
+(define attempt-sar32-imm8
+  (list
+    (mov-r/m32-r32 eax eax)
+    (mov-r64-imm64 r11 (bv (expt 2 63) 64))
+    (sub-r/m64-r64 rax r11)
+    (mov-r64-imm64 rcx (bv 0 64))
+    (mov-r/m8-imm8 cl (comp-simp:imm8))
+    (and-r/m8-imm8 cl (bv (- (expt 2 5) 1) 8))
+    (rol-r/m64-imm8 rax (bv 32 8))
+    (sar-r/m64-cl rax)
+    (ror-r/m64-imm8 rax (bv 32 8))
+    (mov-r/m32-r32 eax eax)
+  ))
+
+(define spec-sar32-imm8
+  (list
+   (sar-r/m32-imm8 eax (comp-simp:imm8))))
+
 (define attempt-sar64
   (list
    ; save rcx
