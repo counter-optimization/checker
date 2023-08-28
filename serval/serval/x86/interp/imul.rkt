@@ -7,6 +7,7 @@
   imul-r/m16 imul-r/m32 imul-r/m64
   imul-r32-r/m32
   imul-r64-r/m64
+  imul-r32-r/m32-imm8
   imul-r64-r/m64-imm8
   imul-r64-r/m64-imm32)
 
@@ -121,6 +122,16 @@
   #:encode (list (rex.w/r dst src) (byte #x0F) (byte #xAF) (/r dst src))
   (lambda (cpu dst src)
     (interpret-imul-2 cpu dst src 64)))
+
+; 6B /r ib
+(define-insn imul-r32-r/m32-imm8 (dst src imm8)
+  #:decode [((byte #x6B) (/r reg r/m) i0)
+            (list (gpr32-no-rex reg) (gpr32-no-rex r/m) (decode-imm i0))]
+           [((rex/r r b) (byte #x6B) (/r reg r/m) i0)
+            (list (gpr32 r reg) (gpr32 b r/m) (decode-imm i0))]
+  #:encode (list (rex/r dst src) (byte #x6B) (/r dst src) (encode-imm imm8))
+  (lambda (cpu dst src imm8)
+    (interpret-imul-3 cpu dst src (sign-extend imm8 (bitvector 32)) 32)))
 
 ; REX.W 6B /r ib
 (define-insn imul-r64-r/m64-imm8 (dst src imm8)

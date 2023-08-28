@@ -61,6 +61,25 @@
 (define spec-imul32-rr
   (list (imul-r32-r/m32 eax ecx)))
 
+(define attempt-imul32-rri8
+  (list
+   (mov-r64-imm64 r11 (bv (expt 2 63) 64))
+   ; set r10 = ecx + 2^63, rax = eax + 2^63 (equivalent to ecx/eax - 2^63)
+   (mov-r/m32-r32 r10d ecx)
+   (sub-r/m64-r64 r10 r11)
+   (mov-r64-imm64 rax (bv 0 64))
+   (add-r/m64-imm8 rax (comp-simp:imm8))
+   ; perform 64-bit mul of modified operands. This gives us
+   ; (eax + 2^63) * (ecx + 2^63)
+   ; = eax * ecx + eax * 2^63 + ecx * 2^63 + 2^126
+   (imul-r64-r/m64 rax r10)
+   ; eax contains correct product. clear upper 32 bits of rax
+   (mov-r/m32-r32 eax eax)
+  ))
+
+(define spec-imul32-rri8
+  (list (imul-r32-r/m32-imm8 eax ecx (comp-simp:imm8))))
+
 (define spec-imul64
   (list (imul-r/m64 rcx)))
 
