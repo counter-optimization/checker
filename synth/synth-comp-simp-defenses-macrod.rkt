@@ -26,12 +26,15 @@
   (define mm (core:make-flat-memmgr #:bitwidth 64))
   (init-cpu mm))
 
-(define (run-x86-64-impl #:insns insns #:cpu cpu)
+(define (run-x86-64-impl #:insns insns #:cpu cpu #:assert-cs [cs false])
   
   (define (run-insn i cpu)
     (match i
       ['noop #f]
-      [_ (instruction-run i cpu)]))
+      [_ 
+       (if cs (comp-simp-asserter #:insn i #:cpu cpu) void)
+       (instruction-run i cpu)
+      ]))
   
   (if (list? insns)
     (for ([i insns])
@@ -346,10 +349,7 @@
 
 (define zero-for-bw (λ (bw) (bv 0 bw)))
 (define one-for-bw (λ (bw) (bv 1 bw)))
-
-(define addident-for-bw zero-for-bw)
-(define mulident-for-bw one-for-bw)
-(define mulzero-for-bw zero-for-bw)
+(define ones-for-bw (λ (bw) (bv (- 0 1) bw)))
 
 ; gets bitwidth of operand as bitvector
 (define (bitwidth-getter operand)
@@ -386,56 +386,454 @@
     [_ (printf "unhandled case in operand-decoder for operand ~a\n" operand)
        (exit 3)]))
 
-(define (assert-operand-is-not-special operand special-for-bw cpu)
-  (define operand-bw (bitwidth-getter operand))
-  (define operand-val (operand-decoder operand cpu))
+(define (assert-operand-is-not-special operand special-for-bw cpu [bw 0])
+  (define operand-bw (if (zero? bw) (bitwidth-getter operand) bw))
+  (define operand-val (trunc operand-bw (operand-decoder operand cpu)))
   (define special (special-for-bw operand-bw))
   (assert (! (bveq special operand-val))))
 
 (define (comp-simp-asserter #:insn insn #:cpu cpu)
+  (define zero-checker
+    (λ (op) (assert-operand-is-not-special op zero-for-bw cpu)))
   
-  (define addident-checker
-    (λ (op) (assert-operand-is-not-special op addident-for-bw cpu)))
+  (define one-checker
+    (λ (op) (assert-operand-is-not-special op one-for-bw cpu)))
   
-  (define mulident-checker
-    (λ (op) (assert-operand-is-not-special op mulident-for-bw cpu)))
-  
-  (define mulzero-checker
-    (λ (op) (assert-operand-is-not-special op mulzero-for-bw cpu)))
+  (define ones-checker
+    (λ (op) (assert-operand-is-not-special op ones-for-bw cpu)))
+
+  (define zero-checker-five-bits
+    (λ (op) (assert-operand-is-not-special op zero-for-bw cpu 5)))
+
+  (define zero-checker-six-bits
+    (λ (op) (assert-operand-is-not-special op zero-for-bw cpu 6)))
 
   (displayln insn)
   (match insn
+   ; ADD
+    [(add-r/m8-r8 op1 op2)
+     (zero-checker op1)
+     (zero-checker op2)]
+    
+    [(add-r/m8-imm8 op1 op2)
+     (zero-checker op1)]
+
+    [(add-r/m16-r16 op1 op2)
+     (zero-checker op1)
+     (zero-checker op2)]
+
     [(add-r/m32-r32 op1 op2)
-     (addident-checker op1)
-     (addident-checker op2)]
+     (zero-checker op1)
+     (zero-checker op2)]
     
     [(add-r/m32-imm32 op1 op2)
-     (addident-checker op1)]
+     (zero-checker op1)]
     
+    [(add-r/m32-imm8 op1 op2)
+     (zero-checker op1)]
+
+    [(add-r/m64-r64 op1 op2)
+     (zero-checker op1)
+     (zero-checker op2)]
+    
+    [(add-r/m64-imm32 op1 op2)
+     (zero-checker op1)]
+    
+    [(add-r/m64-imm8 op1 op2)
+     (zero-checker op1)]
+
+   ; SUB
+    [(sub-r/m8-r8 op1 op2)
+     (zero-checker op2)]
+
+    [(sub-r/m16-r16 op1 op2)
+     (zero-checker op2)]
+
     [(sub-r/m32-r32 op1 op2)
-     (addident-checker op2)]
+     (zero-checker op2)]
     
     [(sub-r/m64-r64 op1 op2)
-     (addident-checker op2)]
+     (zero-checker op2)]
 
+   ; MUL
+    [(mul-r/m16 op1)
+     (one-checker op1)
+     (zero-checker op1)
+     (one-checker 'implicit-ax)
+     (zero-checker 'implicit-ax)]
+    
     [(mul-r/m32 op1)
-     (mulident-checker op1)
-     (mulzero-checker op1)
-     (mulident-checker 'implicit-eax)
-     (mulzero-checker 'implicit-eax)]
+     (one-checker op1)
+     (zero-checker op1)
+     (one-checker 'implicit-eax)
+     (zero-checker 'implicit-eax)]
     
     [(mul-r/m64 op1)
-     (mulident-checker op1)
-     (mulzero-checker op1)
-     (mulident-checker 'implicit-rax)
-     (mulzero-checker 'implicit-rax)]
+     (one-checker op1)
+     (zero-checker op1)
+     (one-checker 'implicit-rax)
+     (zero-checker 'implicit-rax)]
+
+   ; IMUL
+    [(imul-r/m16 op1)
+     (one-checker op1)
+     (zero-checker op1)
+     (one-checker 'implicit-ax)
+     (zero-checker 'implicit-ax)]
     
-    [_ void]))
+    [(imul-r32-r/m32 op1 op2)
+     (one-checker op1)
+     (zero-checker op1)
+     (one-checker op2)
+     (zero-checker op2)]
+    
+    [(imul-r32-r/m32-imm8 op1 op2 op3)
+     (one-checker op2)
+     (zero-checker op2)]
+    
+    [(imul-r/m32 op1)
+     (one-checker op1)
+     (zero-checker op1)
+     (one-checker 'implicit-eax)
+     (zero-checker 'implicit-eax)]
+    
+    [(imul-r64-r/m64 op1 op2)
+     (one-checker op1)
+     (zero-checker op1)
+     (one-checker op2)
+     (zero-checker op2)]
+    
+    [(imul-r64-r/m64-imm32 op1 op2 op3)
+     (one-checker op2)
+     (zero-checker op2)]
+
+    [(imul-r64-r/m64-imm8 op1 op2 op3)
+     (one-checker op2)
+     (zero-checker op2)]
+    
+    [(imul-r/m64 op1)
+     (one-checker op1)
+     (zero-checker op1)
+     (one-checker 'implicit-rax)
+     (zero-checker 'implicit-rax)]
+
+   ; AND
+    [(and-eax-imm32 op1)
+     (zero-checker 'implicit-eax)
+     (ones-checker 'implicit-eax)]
+
+    [(and-rax-imm32 op1)
+     (zero-checker 'implicit-rax)
+     (ones-checker 'implicit-rax)]
+
+    [(and-r/m8-r8 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker op2)
+     (ones-checker op2)]
+
+    [(and-r/m8-imm8 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+    [(and-r/m16-r16 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker op2)
+     (ones-checker op2)]
+
+    [(and-r/m32-r32 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker op2)
+     (ones-checker op2)]
+
+    [(and-r32-r/m32 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker op2)
+     (ones-checker op2)]
+
+    [(and-r/m32-imm32 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+    [(and-r/m32-imm8 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+    [(and-r/m64-r64 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker op2)
+     (ones-checker op2)]
+
+    [(and-r64-r/m64 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker op2)
+     (ones-checker op2)]
+
+    [(and-r/m64-imm32 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+    [(and-r/m64-imm8 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+   ; OR
+    [(or-eax-imm32 op1)
+     (zero-checker 'implicit-eax)
+     (ones-checker 'implicit-eax)]
+
+    [(or-rax-imm32 op1)
+     (zero-checker 'implicit-rax)
+     (ones-checker 'implicit-rax)]
+
+    [(or-r/m8-r8 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker op2)
+     (ones-checker op2)]
+
+    [(or-r/m16-r16 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker op2)
+     (ones-checker op2)]
+
+    [(or-r/m32-r32 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker op2)
+     (ones-checker op2)]
+
+    [(or-r/m32-imm32 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+    [(or-r/m32-imm8 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+    [(or-r/m64-r64 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker op2)
+     (ones-checker op2)]
+
+    [(or-r/m64-imm32 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+    [(or-r/m64-imm8 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+   ; XOR
+    [(xor-eax-imm32 op1)
+     (zero-checker 'implicit-eax)
+     (ones-checker 'implicit-eax)]
+
+    [(xor-rax-imm32 op1)
+     (zero-checker 'implicit-rax)
+     (ones-checker 'implicit-rax)]
+
+    [(xor-r/m8-r8 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker op2)
+     (ones-checker op2)]
+
+    [(xor-r/m16-r16 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker op2)
+     (ones-checker op2)]
+
+    [(xor-r/m32-r32 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker op2)
+     (ones-checker op2)]
+
+    [(xor-r32-r/m32 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker op2)
+     (ones-checker op2)]
+
+    [(xor-r/m32-imm32 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+    [(xor-r/m32-imm8 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+    [(xor-r/m64-r64 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker op2)
+     (ones-checker op2)]
+
+    [(xor-r64-r/m64 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker op2)
+     (ones-checker op2)]
+
+    [(xor-r/m64-imm32 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+    [(xor-r/m64-imm8 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+   ; SHL
+    [(shl-r/m8-1 op1)
+     (zero-checker op1)]
+
+    [(shl-r/m8-imm8 op1 op2)
+     (zero-checker op1)]
+
+    [(shl-r/m8-cl op1)
+     (zero-checker op1)
+     (zero-checker-five-bits 'implicit-cl)]
+
+    [(shl-r/m16-1 op1)
+     (zero-checker op1)]
+
+    [(shl-r/m16-imm8 op1 op2)
+     (zero-checker op1)]
+
+    [(shl-r/m16-cl op1)
+     (zero-checker op1)
+     (zero-checker-five-bits 'implicit-cl)]
+
+    [(shl-r/m32-1 op1)
+     (zero-checker op1)]
+
+    [(shl-r/m32-imm8 op1 op2)
+     (zero-checker op1)]
+
+    [(shl-r/m32-cl op1)
+     (zero-checker op1)
+     (zero-checker-five-bits 'implicit-cl)]
+
+    [(shl-r/m64-1 op1)
+     (zero-checker op1)]
+
+    [(shl-r/m64-imm8 op1 op2)
+     (zero-checker op1)]
+
+    [(shl-r/m64-cl op1)
+     (zero-checker op1)
+     (zero-checker-six-bits 'implicit-cl)]
+
+   ; SHR
+    [(shr-r/m8-1 op1)
+     (zero-checker op1)]
+
+    [(shr-r/m8-imm8 op1 op2)
+     (zero-checker op1)]
+
+    [(shr-r/m8-cl op1)
+     (zero-checker op1)
+     (zero-checker-five-bits 'implicit-cl)]
+
+    [(shr-r/m16-1 op1)
+     (zero-checker op1)]
+
+    [(shr-r/m16-imm8 op1 op2)
+     (zero-checker op1)]
+
+    [(shr-r/m16-cl op1)
+     (zero-checker op1)
+     (zero-checker-five-bits 'implicit-cl)]
+
+    [(shr-r/m32-1 op1)
+     (zero-checker op1)]
+
+    [(shr-r/m32-imm8 op1 op2)
+     (zero-checker op1)]
+
+    [(shr-r/m32-cl op1)
+     (zero-checker op1)
+     (zero-checker-five-bits 'implicit-cl)]
+
+    [(shr-r/m64-1 op1)
+     (zero-checker op1)]
+
+    [(shr-r/m64-imm8 op1 op2)
+     (zero-checker op1)]
+
+    [(shr-r/m64-cl op1)
+     (zero-checker op1)
+     (zero-checker-six-bits 'implicit-cl)]
+    
+   ; SAR
+    [(sar-r/m8-1 op1)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+    [(sar-r/m8-imm8 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+    [(sar-r/m8-cl op1)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker-five-bits 'implicit-cl)]
+
+    [(sar-r/m16-1 op1)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+    [(sar-r/m16-imm8 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+    [(sar-r/m16-cl op1)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker-five-bits 'implicit-cl)]
+
+    [(sar-r/m32-1 op1)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+    [(sar-r/m32-imm8 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+    [(sar-r/m32-cl op1)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker-five-bits 'implicit-cl)]
+
+    [(sar-r/m64-1 op1)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+    [(sar-r/m64-imm8 op1 op2)
+     (zero-checker op1)
+     (ones-checker op1)]
+
+    [(sar-r/m64-cl op1)
+     (zero-checker op1)
+     (ones-checker op1)
+     (zero-checker-six-bits 'implicit-cl)]
+
+   ; No match
+    [_ (displayln "\tNo match in comp-simp-asserter")]))
   
 (define (apply-insn-specific-asserts #:insns insns
                                      #:asserter asserter
                                      #:cpu cpu)
-  (for/all ([i insns #:exhaustive])
+  (for ([i insns])
     (asserter #:insn i #:cpu cpu)))
 
 (define (sub-r/m32-r32-spec #:spec-cpu spec-cpu

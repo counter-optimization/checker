@@ -19,11 +19,7 @@
   (comp-simp:assume-all-regs-equiv spec-cpu attempt-cpu)
   (comp-simp:assume-all-flags-equiv spec-cpu attempt-cpu)
 
-  (comp-simp:apply-insn-specific-asserts #:insns attempt
-                                         #:asserter comp-simp:comp-simp-asserter
-                                         #:cpu attempt-cpu)
-
-  (comp-simp:run-x86-64-impl #:insns attempt #:cpu attempt-cpu)
+  (comp-simp:run-x86-64-impl #:insns attempt #:cpu attempt-cpu #:assert-cs true)
   (comp-simp:run-x86-64-impl #:insns spec #:cpu spec-cpu)
 
   ;; (define spec-reg-state-after (comp-simp:get-all-regs-but-raxes #:cpu spec-cpu))
@@ -48,6 +44,6 @@
 (module+ main
   (displayln "running verification...")
   ; (define cex (verify (comp-simp-verify attempt-mul16-p12 spec-mul16-p12 (list ax cx))))
-  (define cex (verify (comp-simp-verify attempt-imul64-rri8-p2 spec-imul64-rri8-p2 (list rax))))
+  (define cex (verify (comp-simp-verify attempt-and32 spec-and32 (list eax))))
   (displayln "done")
   cex)
