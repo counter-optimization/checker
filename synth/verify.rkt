@@ -4,6 +4,7 @@
   rosette/lib/synthax
   rosette/lib/match
   "../serval/serval/x86.rkt"
+  "transform-list.rkt"
   "arith-transforms.rkt"
   "bitwise-transforms.rkt"
   "shift-transforms.rkt"
@@ -41,9 +42,20 @@
     (assert (bveq spec-flag impl-flag)))
   )
 
-(module+ main
+(define (run-verifier transform)
   (displayln "running verification...")
+  (define cex (verify (comp-simp-verify (cdr transform) (cdr transform) (list eax))))
+  (displayln "finished verification")
+  (displayln cex)
+  (displayln "\n")
+  (if (equal? cex (unsat)) "unsat" "sat"))
+
+(module+ main
   ; (define cex (verify (comp-simp-verify attempt-mul16-p12 spec-mul16-p12 (list ax cx))))
-  (define cex (verify (comp-simp-verify attempt-and32 spec-and32 (list eax))))
+  (define transforms (comp-simp-transform "ADD32rr"))
+  (define result
+    (if (list? transforms)
+      (map run-verifier transforms)
+      "No transform found" ))
   (displayln "done")
-  cex)
+  result)
