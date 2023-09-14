@@ -1,6 +1,7 @@
 #lang rosette
 
 (require 
+  racket/cmdline
   rosette/lib/synthax
   rosette/lib/match
   "../serval/serval/x86.rkt"
@@ -44,7 +45,7 @@
 
 (define (run-verifier transform)
   (displayln "running verification...")
-  (define cex (verify (comp-simp-verify (cdr transform) (cdr transform) (list eax))))
+  (define cex (verify (comp-simp-verify (car transform) (cdr transform) (list eax))))
   (displayln "finished verification")
   (displayln cex)
   (displayln "\n")
@@ -52,10 +53,13 @@
 
 (module+ main
   ; (define cex (verify (comp-simp-verify attempt-mul16-p12 spec-mul16-p12 (list ax cx))))
-  (define transforms (comp-simp-transform "ADD32rr"))
-  (define result
-    (if (list? transforms)
-      (map run-verifier transforms)
-      "No transform found" ))
-  (displayln "done")
-  result)
+  (for/vector ([insn (current-command-line-arguments)])
+    (displayln (format "Attempting to verify ~s" insn))
+    (define transforms (comp-simp-transform insn))
+    (define result
+      (if (list? transforms)
+        (map run-verifier transforms)
+        "No transform found"))
+    (displayln (format "Results for ~s: ~a" insn result))
+    (displayln "\n")
+    result))
