@@ -26,13 +26,13 @@
   (define mm (core:make-flat-memmgr #:bitwidth 64))
   (init-cpu mm))
 
-(define (run-x86-64-impl #:insns insns #:cpu cpu #:assert-cs [cs false])
+(define (run-x86-64-impl #:insns insns #:cpu cpu #:assert-cs [cs false] #:verbose (v #f))
   
   (define (run-insn i cpu)
     (match i
       ['noop #f]
       [_ 
-       (if cs (comp-simp-asserter #:insn i #:cpu cpu) void)
+       (if cs (comp-simp-asserter #:insn i #:cpu cpu #:verbose v) void)
        (instruction-run i cpu)
       ]))
   
@@ -392,7 +392,7 @@
   (define special (special-for-bw operand-bw))
   (assert (! (bveq special operand-val))))
 
-(define (comp-simp-asserter #:insn insn #:cpu cpu)
+(define (comp-simp-asserter #:insn insn #:cpu cpu #:verbose v)
   (define zero-checker
     (λ (op) (assert-operand-is-not-special op zero-for-bw cpu)))
   
@@ -408,7 +408,7 @@
   (define zero-checker-six-bits
     (λ (op) (assert-operand-is-not-special op zero-for-bw cpu 6)))
 
-  (displayln insn)
+  (when v (displayln insn))
   (match insn
    ; ADD
     [(add-r/m8-r8 op1 op2)
@@ -828,7 +828,7 @@
      (zero-checker-six-bits 'implicit-cl)]
 
    ; No match
-    [_ (displayln "\tNo match in comp-simp-asserter")]))
+    [_ (when v (displayln "\tNo match in comp-simp-asserter"))]))
   
 (define (apply-insn-specific-asserts #:insns insns
                                      #:asserter asserter

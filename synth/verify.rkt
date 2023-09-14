@@ -21,7 +21,8 @@
   (comp-simp:assume-all-regs-equiv spec-cpu attempt-cpu)
   (comp-simp:assume-all-flags-equiv spec-cpu attempt-cpu)
 
-  (comp-simp:run-x86-64-impl #:insns attempt #:cpu attempt-cpu #:assert-cs true)
+  (comp-simp:run-x86-64-impl #:insns attempt #:cpu attempt-cpu #:assert-cs true
+                             #:verbose (print-verbose))
   (comp-simp:run-x86-64-impl #:insns spec #:cpu spec-cpu)
 
   ;; (define spec-reg-state-after (comp-simp:get-all-regs-but-raxes #:cpu spec-cpu))
@@ -46,20 +47,36 @@
 (define (run-verifier transform)
   (displayln "running verification...")
   (define cex (verify (comp-simp-verify (car transform) (cdr transform) (list eax))))
-  (displayln "finished verification")
-  (displayln cex)
-  (displayln "\n")
-  (if (equal? cex (unsat)) "unsat" "sat"))
+  (define short-result (if (equal? cex (unsat)) "unsat" "sat"))
+  (displayln (format "finished verification (~s)" short-result))
+  (when (print-verbose)
+    (displayln cex)
+    (displayln ""))
+  short-result)
+
+(define print-verbose (make-parameter #f))
+
+(define insns-to-transform
+  (command-line
+   #:once-each
+   [("-v" "--verbose") "Print verbose verification results instead of simply sat/unsat"
+                       (print-verbose #t)]
+   #:args insns
+   insns))
 
 (module+ main
   ; (define cex (verify (comp-simp-verify attempt-mul16-p12 spec-mul16-p12 (list ax cx))))
-  (for/vector ([insn (current-command-line-arguments)])
-    (displayln (format "Attempting to verify ~s" insn))
-    (define transforms (comp-simp-transform insn))
-    (define result
-      (if (list? transforms)
-        (map run-verifier transforms)
-        "No transform found"))
-    (displayln (format "Results for ~s: ~a" insn result))
-    (displayln "\n")
-    result))
+  (define results
+    (for/list ([insn insns-to-transform])
+      (displayln (format "Attempting to verify ~s" insn))
+      (define transforms (comp-simp-transform insn))
+      (define res
+        (if (list? transforms)
+          (map run-verifier transforms)
+          "N/A"))
+      (when (equal? res "N/A")
+        (displayln (format "Could not find transforms for ~s" insn)))
+      (displayln "")
+      res))
+  (displayln (format "Results for ~a:" insns-to-transform))
+  results)
