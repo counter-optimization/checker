@@ -386,11 +386,17 @@
     [_ (printf "unhandled case in operand-decoder for operand ~a\n" operand)
        (exit 3)]))
 
+(define (value-depends-on-registers val cpu)
+  (define regs-depended-on (filter 
+    (lambda (reg) (vector-member reg (cpu-gprs cpu)))
+    (symbolics val)))
+  (! (empty? regs-depended-on)))
+
 (define (assert-operand-is-not-special operand special-for-bw cpu [bw 0])
   (define operand-bw (if (zero? bw) (bitwidth-getter operand) bw))
   (define operand-val (trunc operand-bw (operand-decoder operand cpu)))
   (define special (special-for-bw operand-bw))
-  (unless (equal-always? #t (bveq special operand-val))
+  (when (value-depends-on-registers operand-val cpu)
     (assert (! (bveq special operand-val)))))
 
 (define (comp-simp-asserter #:insn insn #:cpu cpu #:verbose v)
