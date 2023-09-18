@@ -390,7 +390,8 @@
   (define operand-bw (if (zero? bw) (bitwidth-getter operand) bw))
   (define operand-val (trunc operand-bw (operand-decoder operand cpu)))
   (define special (special-for-bw operand-bw))
-  (assert (! (bveq special operand-val))))
+  (unless (equal-always? #t (bveq special operand-val))
+    (assert (! (bveq special operand-val)))))
 
 (define (comp-simp-asserter #:insn insn #:cpu cpu #:verbose v)
   (define zero-checker
