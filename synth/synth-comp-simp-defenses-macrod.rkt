@@ -86,6 +86,11 @@
                        al cl dl))
 
 ; GPR comparison functions
+(define all-regs-but-scratch (list rax rcx rdx rbx rsp rbp rsi rdi r8 r9 r14 r15
+                                   eax ecx edx ebx esp ebp esi edi r8d r9d r14d r15d
+                                   ax cx dx bx sp bp si di r8w r9w r14w r15w
+                                   al cl dl))
+
 (define all-regs-but-raxes (list rcx ;rdx
                                  rbx
                                  rsp rbp rsi rdi
@@ -132,6 +137,12 @@
 
 (define (assert-all-regs-equiv cpu1 cpu2)
   (for ([reg-name all-regs])
+    (define r1 (cpu-gpr-ref cpu1 reg-name))
+    (define r2 (cpu-gpr-ref cpu2 reg-name))
+    (assert (bveq r1 r2))))
+
+(define (assert-all-regs-but-scratch-equiv cpu1 cpu2)
+  (for ([reg-name all-regs-but-scratch])
     (define r1 (cpu-gpr-ref cpu1 reg-name))
     (define r2 (cpu-gpr-ref cpu2 reg-name))
     (assert (bveq r1 r2))))

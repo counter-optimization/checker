@@ -14,7 +14,7 @@
 
 (provide (all-defined-out))
 
-(define (comp-simp-verify attempt spec regs [flags '()])
+(define (comp-simp-verify attempt spec [flags '()])
   (define spec-cpu (comp-simp:make-x86-64-cpu))
   (define attempt-cpu (comp-simp:make-x86-64-cpu))
 
@@ -27,16 +27,16 @@
 
   ;; (define spec-reg-state-after (comp-simp:get-all-regs-but-raxes #:cpu spec-cpu))
   ;; (define impl-reg-state-after (comp-simp:get-all-regs-but-raxes #:cpu attempt-cpu))
-  ;; (comp-simp:assert-regs-equiv spec-reg-state-after impl-reg-state-after)
+  (comp-simp:assert-all-regs-but-scratch-equiv spec-cpu attempt-cpu)
   
   ;; (define spec-flag-state-after (comp-simp:get-all-flags #:cpu spec-cpu))
   ;; (define impl-flag-state-after (comp-simp:get-all-flags #:cpu attempt-cpu))
   ;; (comp-simp:assert-flags-equiv spec-flag-state-after impl-flag-state-after)
   
-  (for ([reg regs])
-    (define spec-reg (cpu-gpr-ref spec-cpu reg))
-    (define impl-reg (cpu-gpr-ref attempt-cpu reg))
-    (assert (bveq spec-reg impl-reg)))
+  ; (for ([reg regs])
+  ;   (define spec-reg (cpu-gpr-ref spec-cpu reg))
+  ;   (define impl-reg (cpu-gpr-ref attempt-cpu reg))
+  ;   (assert (bveq spec-reg impl-reg)))
 
   (for ([flag flags])
     (define spec-flag (cpu-flag-ref spec-cpu flag))
@@ -46,8 +46,8 @@
 
 (define (run-verifier transform)
   (displayln "running verification...")
-  (define cex (verify (comp-simp-verify (car transform) (cdr transform) (list eax))))
-  (define short-result (if (equal? cex (unsat)) "unsat" "sat"))
+  (define cex (verify (comp-simp-verify (car transform) (cdr transform))))
+  (define short-result (if (unsat? cex) "unsat" "sat"))
   (displayln (format "finished verification (~s)" short-result))
   (when (print-verbose)
     (displayln cex)
