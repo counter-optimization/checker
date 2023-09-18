@@ -450,13 +450,12 @@
     (setc r12b) ; save CF into arbitrary scratch reg
     ; mutate r11 and rax to make adding safe
     (shr-r/m64-imm8 r10 (comp-simp:imm8-nz6))
-    ; (add-r/m64-r64 r11 r10)
-    (shl-r/m64-1 r10)
+    (sub-r/m64-r64 r11 r10)
+    (mov-r64-imm64 r10 (bv (expt 2 63) 64))
     (sub-r/m64-r64 rax r10)
+    (sub-r/m64-r64 r11 r10)
     ; recombine
     (add-r/m64-r64 rax r11)
-    (shr-r/m64-1 r10)
-    (add-r/m64-r64 rax r10)
     (bt-r/m64-imm8 r12 (bv 0 8)) ; restore CF
   ))
 
