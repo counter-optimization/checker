@@ -469,7 +469,7 @@ module Make(N : NumericDomain)
       | Error e ->
         let offs_s = Wrapping_interval.to_string offs in
         let () = printf
-                   "load_global: couldn't convert offs %s to address for image: %s"
+                   "load_global: couldn't convert offs %s to address for image: %s\n%!"
                    offs_s (Error.to_string_hum e) in
         Ok N.top
       | Ok addr ->
