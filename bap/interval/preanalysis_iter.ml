@@ -11,47 +11,47 @@ let outfile = "prog-conds.txt"
 let rec contains_ite (exp : Bil.exp) : bool =
   match exp with
   | Bil.Load (_, idx, _, _) ->
-     contains_ite idx
+    contains_ite idx
   | Bil.Store (_, idx, data, _, _) ->
-     contains_ite idx ||
-       contains_ite data
+    contains_ite idx ||
+    contains_ite data
   | Bil.BinOp (_, left, right) ->
-     contains_ite left ||
-       contains_ite right
+    contains_ite left ||
+    contains_ite right
   | Bil.UnOp (_, subexp) ->
-     contains_ite subexp
+    contains_ite subexp
   | Bil.Var _ -> false
   | Bil.Int _ -> false
   | Bil.Cast (_, _, subexp) ->
-     contains_ite subexp
+    contains_ite subexp
   | Bil.Let (_, bind, body) ->
-     contains_ite bind || contains_ite body
+    contains_ite bind || contains_ite body
   | Bil.Unknown (_, _) -> false
   | Bil.Ite (_, _, _) -> true
   | Bil.Extract (_, _, subexp) ->
-     contains_ite subexp
+    contains_ite subexp
   | Bil.Concat (left, right) ->
-     contains_ite left || contains_ite right
+    contains_ite left || contains_ite right
 
 let print_if_ite out_ch subname : Blk.elt -> unit = function
   | `Def d ->
-     let rhs = Def.rhs d in
-     let rhs_contains_ite = contains_ite rhs in
-     if rhs_contains_ite
-     then
-       let cnd_as_str = Sexp.to_string_hum @@ Bil.sexp_of_exp rhs in
-       Format.sprintf "CONDITIONAL (ITE, %s): %s\n" subname cnd_as_str
-       |> Out_channel.output_string out_ch
-     else
-       ()
+    let rhs = Def.rhs d in
+    let rhs_contains_ite = contains_ite rhs in
+    if rhs_contains_ite
+    then
+      let cnd_as_str = Sexp.to_string_hum @@ Bil.sexp_of_exp rhs in
+      Format.sprintf "CONDITIONAL (ITE, %s): %s\n" subname cnd_as_str
+      |> Out_channel.output_string out_ch
+    else
+      ()
   | _ -> ()
 
 let print_if_jmp_cnd out_ch subname : Blk.elt -> unit = function
   | `Jmp j ->
-     let cnd = Jmp.cond j in
-     let cnd_as_str = Sexp.to_string_hum @@ Bil.sexp_of_exp cnd in
-     Format.sprintf "CONDITIONAL (JMPCC, %s): %s\n" subname cnd_as_str
-     |> Out_channel.output_string out_ch
+    let cnd = Jmp.cond j in
+    let cnd_as_str = Sexp.to_string_hum @@ Bil.sexp_of_exp cnd in
+    Format.sprintf "CONDITIONAL (JMPCC, %s): %s\n" subname cnd_as_str
+    |> Out_channel.output_string out_ch
   | _ -> ()
 
 let print_elt out_ch subname elt =

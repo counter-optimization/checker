@@ -6,58 +6,58 @@ module Cfg = Bap.Std.Graphs.Cfg
 module IrCfg = Bap.Std.Graphs.Ir
 
 (**
-VAR CASE:
-000007ba: #12582866 := 3
-000007be: #12582865 := R11
-000007c4: R11 := #12582865 - #12582866 + pad:64[CF]
+   VAR CASE:
+   000007ba: #12582866 := 3
+   000007be: #12582865 := R11
+   000007c4: R11 := #12582865 - #12582866 + pad:64[CF]
 
-INT CASES:
-ZERO CASE:
-  ((bap:insn ((SBB64ri32 R11 R11 0x0)))
+   INT CASES:
+   ZERO CASE:
+   ((bap:insn ((SBB64ri32 R11 R11 0x0)))
    (bap:mem ("401110: 49 81 db 00 00 00 00"))
    (bap:bil-code
-    "{
-       #12582879 := R11
-       R11 := #12582879 - pad:64[CF]
-       OF := high:1[#12582879 & (#12582879 ^ R11)]
-       CF := #12582879 < pad:64[CF] | pad:64[CF] < 0
-       AF := 0x10 = (0x10 & (R11 ^ #12582879))
-       PF :=
-         ~low:1[let $3 = R11 >> 4 ^ R11 in let $4 = $3 >> 2 ^ $3 in $4 >> 1 ^
-     $4]
-       SF := high:1[R11]
-       ZF := 0 = R11
-     }")
+   "{
+   #12582879 := R11
+   R11 := #12582879 - pad:64[CF]
+   OF := high:1[#12582879 & (#12582879 ^ R11)]
+   CF := #12582879 < pad:64[CF] | pad:64[CF] < 0
+   AF := 0x10 = (0x10 & (R11 ^ #12582879))
+   PF :=
+   ~low:1[let $3 = R11 >> 4 ^ R11 in let $4 = $3 >> 2 ^ $3 in $4 >> 1 ^
+   $4]
+   SF := high:1[R11]
+   ZF := 0 = R11
+   }")
 
-NON-ZERO CASE:
-(0x40111b
-  ((bap:insn ((SBB64ri32 R11 R11 0x1)))
+   NON-ZERO CASE:
+   (0x40111b
+   ((bap:insn ((SBB64ri32 R11 R11 0x1)))
    (bap:mem ("40111b: 49 81 db 01 00 00 00"))
    (bap:bil-code
-    "{
-       #12582875 := R11
-       R11 := #12582875 - 1 + pad:64[CF]
-       OF := high:1[(1 ^ #12582875) & (#12582875 ^ R11)]
-       CF := #12582875 < 1 + pad:64[CF] | 1 + pad:64[CF] < 1
-       AF := 0x10 = (0x10 & (R11 ^ 1 ^ #12582875))
-       PF :=
-         ~low:1[let $3 = R11 >> 4 ^ R11 in let $4 = $3 >> 2 ^ $3 in $4 >> 1 ^
-     $4]
-       SF := high:1[R11]
-       ZF := 0 = R11
-     }")
- *)
+   "{
+   #12582875 := R11
+   R11 := #12582875 - 1 + pad:64[CF]
+   OF := high:1[(1 ^ #12582875) & (#12582875 ^ R11)]
+   CF := #12582875 < 1 + pad:64[CF] | 1 + pad:64[CF] < 1
+   AF := 0x10 = (0x10 & (R11 ^ 1 ^ #12582875))
+   PF :=
+   ~low:1[let $3 = R11 >> 4 ^ R11 in let $4 = $3 >> 2 ^ $3 in $4 >> 1 ^
+   $4]
+   SF := high:1[R11]
+   ZF := 0 = R11
+   }")
+*)
 
 type idx = int
 
 module Env = Map.Make_binable_using_comparator(String)
 
 type state = {
-    subname : string;
-    sub : sub term;
-    blks : blk term Seq.t;
-    idx_map : int Tid_map.t;
-    idx_insn_tids : Set.M(Tid).t
+  subname : string;
+  sub : sub term;
+  blks : blk term Seq.t;
+  idx_map : int Tid_map.t;
+  idx_insn_tids : Set.M(Tid).t
 }
 
 type t = state
@@ -65,36 +65,36 @@ type t = state
 let rec is_idx_insn ?(in_sub : bool = false) ?(in_plus : bool = false) exp =
   match exp with
   | Bil.BinOp (Bil.MINUS, left, right) ->
-     (match left with
-      | Bil.Var _ -> true
-      | _ -> false)
-     &&
-     is_idx_insn ~in_sub:true right
+    (match left with
+     | Bil.Var _ -> true
+     | _ -> false)
+    &&
+    is_idx_insn ~in_sub:true right
   | Bil.BinOp (Bil.PLUS, left, right) ->
-     in_sub
-     &&
-       (match left with
-        | Bil.Int _ -> true
-        | Bil.Var _ -> true
-        | _ -> false)
-     &&
-       is_idx_insn ~in_sub ~in_plus:true right
+    in_sub
+    &&
+    (match left with
+     | Bil.Int _ -> true
+     | Bil.Var _ -> true
+     | _ -> false)
+    &&
+    is_idx_insn ~in_sub ~in_plus:true right
   | Bil.Cast (cast, sz, subexp) ->
-     in_sub
-     &&
-       in_plus
-     &&
-     (match subexp with
-      | Bil.Var v -> String.Caseless.equal "cf" @@ Var.name v
-      | _ -> false)
+    in_sub
+    &&
+    in_plus
+    &&
+    (match subexp with
+     | Bil.Var v -> String.Caseless.equal "cf" @@ Var.name v
+     | _ -> false)
   | _ -> false
 
 let elt_is_idx_insn = function
   | `Def d ->
-     let varname = Var.name @@ Def.lhs d in
-     if String.Caseless.equal varname "r11"
-     then is_idx_insn @@ Def.rhs d 
-     else false
+    let varname = Var.name @@ Def.lhs d in
+    if String.Caseless.equal varname "r11"
+    then is_idx_insn @@ Def.rhs d 
+    else false
   | _ -> false
 
 let get_idx_from_idx_insn_rhs exp (env : word Env.t) tid : int =
@@ -102,26 +102,26 @@ let get_idx_from_idx_insn_rhs exp (env : word Env.t) tid : int =
     failwith @@ sprintf "In Idx_calculator, get_idx_from_idx_insn_rhs: unknown idx insn format for tid: %a" Tid.pps tid in
   match exp with
   | Bil.BinOp (Bil.MINUS, left, (Bil.BinOp (Bil.PLUS, idx_holder, _))) ->
-     let idx_word = match idx_holder with
-       | Bil.Int w -> w
-       | Bil.Var v ->
-          let varname = Var.name v in
-          (match Env.find env varname with
-          | Some w -> w
-          | None -> fail ())
-       | _ -> fail ()
-     in
-     (match Word.to_int idx_word with
-      | Ok i -> i
-         (* let () = printf "in Idx_calculator, int: %d, word: %a\n%!" i Word.ppo idx_word in *)
-      | Error _ -> fail ())
+    let idx_word = match idx_holder with
+      | Bil.Int w -> w
+      | Bil.Var v ->
+        let varname = Var.name v in
+        (match Env.find env varname with
+         | Some w -> w
+         | None -> fail ())
+      | _ -> fail ()
+    in
+    (match Word.to_int idx_word with
+     | Ok i -> i
+     (* let () = printf "in Idx_calculator, int: %d, word: %a\n%!" i Word.ppo idx_word in *)
+     | Error _ -> fail ())
   | _ -> fail ()
 
 let try_assigning_consts (lhs : Var.t) (rhs : Bil.exp) (env : word Env.t) : word Env.t =
   match rhs with
   | Bil.Int w ->
-     let varname = Var.name lhs in
-     Env.set ~key:varname ~data:w env
+    let varname = Var.name lhs in
+    Env.set ~key:varname ~data:w env
   | _ -> env
 
 let build_idx_map_for_blk basic_blk idx_map : (idx Tid_map.t * Set.M(Tid).t) =

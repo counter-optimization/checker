@@ -64,7 +64,7 @@ let contains x y =
   let open KB.Order in
   match order x y with
   | LT
-    | EQ -> true
+  | EQ -> true
   | _ -> false
 
 let add = join
@@ -129,12 +129,12 @@ let to_string (bases : Bases.t) : string =
   let rec loop (remainder : MBase.t list) : string =
     match List.hd remainder with
     | Some base ->
-       let remainder = List.tl_exn remainder in
-       if List.is_empty remainder
-       then
-         sprintf "%s" (MBase.to_string base)
-       else
-         sprintf "%s, %s" (MBase.to_string base) (loop remainder)
+      let remainder = List.tl_exn remainder in
+      if List.is_empty remainder
+      then
+        sprintf "%s" (MBase.to_string base)
+      else
+        sprintf "%s, %s" (MBase.to_string base) (loop remainder)
     | None -> ""
   in
   sprintf "(%s)" @@ loop @@ Bases.to_list bases

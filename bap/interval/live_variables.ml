@@ -11,11 +11,11 @@ let sub_to_ssa_sub : Sub.t -> Sub.t = Sub.ssa
 
 let fold_over_elts (sub : Sub.t) ~(init : 'a) ~(f:'a -> Blk.elt -> 'a) ~(cong : 'a -> 'a -> 'a) : 'a =
   let blks = Term.enum blk_t sub in
-    Seq.fold blks ~init
-      ~f:(fun defs blk ->
-        let elts = Blk.elts blk in
-        let defs' = Seq.fold elts ~init:defs ~f in
-        cong defs defs')
+  Seq.fold blks ~init
+    ~f:(fun defs blk ->
+      let elts = Blk.elts blk in
+      let defs' = Seq.fold elts ~init:defs ~f in
+      cong defs defs')
 
 let get_all_defs (sub : sub term) : def term list =
   let blks = Term.enum blk_t sub |> Seq.to_list in
@@ -34,8 +34,8 @@ let get_all_jmps (sub : sub term) : jmp term list =
 
 module GetDefsPass : sig
   (* create a map from var name to the tid where it is defined. this
-   is the GetDefsPass.t type *)
-  
+     is the GetDefsPass.t type *)
+
   type t
 
   val def_tid_of_var_name : t -> string -> Tid.t option
@@ -48,35 +48,35 @@ end = struct
   let combine ~key which =
     match which with
     | `Both (left, right) ->
-       if Tid.equal left right
-       then Some left
-       else failwith "tids shouldn't be duplicated in GetDefsPass"
+      if Tid.equal left right
+      then Some left
+      else failwith "tids shouldn't be duplicated in GetDefsPass"
     | `Left l -> Some l
     | `Right r -> Some r
 
   let add_def_to_mapping mapping elt =
     match elt with
     | `Def d ->
-       let lhs = Def.lhs d in
-       let name = Var.name lhs in
-       let this_tid = Term.tid d in
-       M.set mapping ~key:name ~data:this_tid
+      let lhs = Def.lhs d in
+      let name = Var.name lhs in
+      let this_tid = Term.tid d in
+      M.set mapping ~key:name ~data:this_tid
     | `Phi p ->
-       let lhs = Phi.lhs p in
-       let name = Var.name lhs in
-       let this_tid = Term.tid p in
-       M.set mapping ~key:name ~data:this_tid
+      let lhs = Phi.lhs p in
+      let name = Var.name lhs in
+      let this_tid = Term.tid p in
+      M.set mapping ~key:name ~data:this_tid
     | _ -> mapping
 
   let def_tid_of_var_name (m : t) (name : string) : Tid.t option =
     M.find m name
-    (* match M.find m name with *)
-    (* | None -> *)
-    (*    let err_s = sprintf "Couldn't find tid of def/phi for var %s in  GetDefsPass.def_tid_of_var_name" name *)
-    (*    in *)
-    (*    failwith err_s *)
-    (* | Some t -> t *)
-  
+  (* match M.find m name with *)
+  (* | None -> *)
+  (*    let err_s = sprintf "Couldn't find tid of def/phi for var %s in  GetDefsPass.def_tid_of_var_name" name *)
+  (*    in *)
+  (*    failwith err_s *)
+  (* | Some t -> t *)
+
   let run (sub : Sub.t) : t =
     fold_over_elts sub
       ~init:M.empty
@@ -85,13 +85,13 @@ end = struct
 end
 
 (*
-  (a, x, y, b)
+   (a, x, y, b)
    where
    a := the var on the rhs being used in this def or phi node's rhs
    x := the TID of the blk elt defining a
    y := the TID of the blk elt at which it is used
    b := the var on the lhs being defined in this def or phi node's lhs
-  *)
+*)
 module IsUsedPass = struct
   module T = struct
     (* used_tid is an option type since subs in SSA still have some free
@@ -100,7 +100,7 @@ module IsUsedPass = struct
                used_defining_tid : tid option;
                user_tid : tid;
                user : string }
-               [@@deriving sexp, compare, bin_io]
+    [@@deriving sexp, compare, bin_io]
 
     let is_user_of_tid tid elt = Tid.equal tid elt.user_tid
 
@@ -117,13 +117,13 @@ module IsUsedPass = struct
     include T
     include Comparator.Make(T)
   end
-  
+
   module UseRel = struct
     include Set.Make_using_comparator(Cmp)
   end
-  
+
   include Cmp
-             
+
   let phi_option_to_uses (_tid, opt_expr) : SS.t = Var_name_collector.run opt_expr
 
   let def_to_uses (d : def term) (defmap : GetDefsPass.t) : t list =
@@ -133,28 +133,28 @@ module IsUsedPass = struct
     let user_tid = Term.tid d in
     Set.to_list used_names
     |> List.map ~f:(fun used ->
-                  let used_defining_tid = GetDefsPass.def_tid_of_var_name defmap used in
-                  { used; user_tid; used_defining_tid; user })
+      let used_defining_tid = GetDefsPass.def_tid_of_var_name defmap used in
+      { used; user_tid; used_defining_tid; user })
 
   let phi_to_uses (p : phi term) (defmap : GetDefsPass.t) : t list =
     let options = Phi.values p in
     let used_names = Seq.fold options ~init:SS.empty
-                              ~f:(fun uses opt ->
-                                phi_option_to_uses opt |> SS.union uses) in
+                       ~f:(fun uses opt ->
+                         phi_option_to_uses opt |> SS.union uses) in
     let user_tid = Term.tid p in
     let user = Phi.lhs p |> Var.name in
     Set.to_list used_names
     |> List.map ~f:(fun used ->
-                  let used_defining_tid = GetDefsPass.def_tid_of_var_name defmap used in
-                  { used; user_tid; used_defining_tid; user })
+      let used_defining_tid = GetDefsPass.def_tid_of_var_name defmap used in
+      { used; user_tid; used_defining_tid; user })
 
   let jmp_to_uses (j : jmp term) (defmap : GetDefsPass.t) : t list =
     let used_names = Var_name_collector.run @@ Jmp.cond j in
     let user_tid = Term.tid j in
     Set.to_list used_names
     |> List.map ~f:(fun used ->
-           let used_defining_tid = GetDefsPass.def_tid_of_var_name defmap used in
-           { used; user_tid; used_defining_tid; user = "" })
+      let used_defining_tid = GetDefsPass.def_tid_of_var_name defmap used in
+      { used; user_tid; used_defining_tid; user = "" })
 
   let to_string (rel : t) : string =
     let user_tid_s = Tid.to_string rel.user_tid in
@@ -165,7 +165,7 @@ module IsUsedPass = struct
       rel.used used_tid_s user_tid_s rel.user
 
   let print_rel (rel : t) : unit = printf "%s\n%!" @@ to_string rel
-  
+
   let print_rels (rels : UseRel.t) : unit =
     printf "Used-By relations are:\n%!";
     UseRel.iter rels ~f:print_rel
@@ -206,9 +206,9 @@ type name_and_tid = string * tid
 let def_is_live analysis_results (def : def term) : bool =
   let deftid = Term.tid def in
   IsUsedPass.UseRel.exists analysis_results ~f:(fun rel ->
-      match rel.used_defining_tid with
-      | Some othertid -> Tid.equal deftid othertid
-      | None -> false)
+    match rel.used_defining_tid with
+    | Some othertid -> Tid.equal deftid othertid
+    | None -> false)
 
 let unssa_var_name (name : string) : string =
   let ssa_suffix_start_char = '.' in
@@ -228,7 +228,7 @@ let get_users_names_and_tids (analysis_results : IsUsedPass.UseRel.t) ~(of_tid :
   filter_results analysis_results ~f:is_use_rel_for_def_tid
   |> Set.to_list
   |> List.map ~f:(fun (use_rel : IsUsedPass.t) ->
-                (unssa_var_name use_rel.user, use_rel.user_tid))
+    (unssa_var_name use_rel.user, use_rel.user_tid))
 
 (* is this def used in some other non-flag-defining def? *)
 let is_live_flagless (analysis_results : IsUsedPass.UseRel.t) ~(tid : tid) : bool =
@@ -240,9 +240,9 @@ let is_live_flagless (analysis_results : IsUsedPass.UseRel.t) ~(tid : tid) : boo
   let non_flag_users : (string * tid) list =
     List.filter users ~f:(fun (name, tid) -> is_not_flag name) in
   not @@ List.is_empty non_flag_users
-  (* if not @@ List.is_empty non_flag_users *)
-  (* then true *)
-  (* else failwith "todo" *)
+(* if not @@ List.is_empty non_flag_users *)
+(* then true *)
+(* else failwith "todo" *)
 
 (* bool option: if the variable has no flags *)
 (* assumption: flags for one instruction are not used
@@ -250,21 +250,21 @@ let is_live_flagless (analysis_results : IsUsedPass.UseRel.t) ~(tid : tid) : boo
 let get_live_flags_of_prev_def_tid (analysis_results : IsUsedPass.UseRel.t) ~(prev_def_tid : tid) : SS.t =
   let all_users : (string * tid) list =
     get_users_names_and_tids analysis_results ~of_tid:prev_def_tid in
-  
+
   let is_flag (var_name : string) : bool = 
     let normalized_name = unssa_var_name var_name in
     ABI.var_name_is_flag normalized_name in
-  
+
   let flag_users : (string * tid) list =
     List.filter all_users ~f:(fun (name, tid) -> is_flag name) in
-  
+
   let live_flag_users : (string * tid) list =
     List.filter flag_users ~f:(fun (name, tid) ->
-        is_live_flagless analysis_results ~tid) in
-  
+      is_live_flagless analysis_results ~tid) in
+
   let live_flag_users_normalized_names : string list =
     List.map live_flag_users ~f:(fun (name, _) -> unssa_var_name name) in
-  
+
   SS.of_list live_flag_users_normalized_names
 
 let dependents_up_to_bound tid bound analysis =
@@ -287,10 +287,10 @@ let dependents_up_to_bound tid bound analysis =
       match List.hd q with
       | None -> res
       | Some ctid ->
-         let new_tids = get_used_tids ctid in
-         let q' = List.append (List.drop q 1) new_tids in
-         let res' = ctid :: res in
-         loop (bound - 1) q' res'
+        let new_tids = get_used_tids ctid in
+        let q' = List.append (List.drop q 1) new_tids in
+        let res' = ctid :: res in
+        loop (bound - 1) q' res'
   in
   let init_q = [tid] in
   let init_res = [] in
@@ -301,13 +301,13 @@ let dependents_up_to_bound tid bound analysis =
    - a non-flag variable is live if it or its flags are used
    - a non-flag variable is not live if it is only used to calculate its flags or if it is not used at all
    - a flag variable is live if it is used
-   
+
    this means that there needs to be a way to determine: given a variable, what is its flags?
    I think for now, we can assume that the flags are set immediately after a var's def.
    so a set of flag defs 'belong' to a var's def if:
    - they are immediately after the var's def
    - the var is used in the flag defs
-   
+
    how can we tell if a def is a flag in SSA?
    in SSA, flags should look like CF.1, CF.2, etc.
    I think for now: get the var name of the lhs, check if it contains CF, PF, AF, ZF, SF, OF
@@ -332,9 +332,9 @@ let dependents_up_to_bound tid bound analysis =
 
    how do we deal with Phi nodes?
    - we can just say a var is live if it is assigned in a phi node. since it is may-be-live, then
-   this is never unsound. this is simple
+     this is never unsound. this is simple
    - we can say a var is live if it or its flags or its phi defs are used. but it may be more complicated.
-   
+
    this is interesting since there is a pattern that could make the more complicated way and the general
    way a bit simpler:
    we run a 'is-used' analysis first.
@@ -350,12 +350,12 @@ let dependents_up_to_bound tid bound analysis =
 
    then after our 'is-used' analysis is ran, a def is live if:
    - there exists an 'is-used' tuple (a, x, y, b) where a is the
-   var def and b is not a flag or a phi def
+     var def and b is not a flag or a phi def
    - in the transitive closure in the relation (from interpreting the 'is-used' tuples
-   as a relation), there exists (a, x, y, b) where a is the var def and b is not a flag or
-   a phi def
-   i think these could be checked in either order, but checking the first condition
-   and then the second condition is for sure safe.
+     as a relation), there exists (a, x, y, b) where a is the var def and b is not a flag or
+     a phi def
+     i think these could be checked in either order, but checking the first condition
+     and then the second condition is for sure safe.
 
    how then do you know if a def is a phi def? i haven't seen any so far because all
    analyses have been done *not* in SSA form.
@@ -364,7 +364,7 @@ let dependents_up_to_bound tid bound analysis =
    rest of the analyses?
    1) for the comp simp transforms, we want to be able to query if any of a def's flags are live
    2) for path sensitivity in comp simp checking, we want to be able to query if a flag is live
-      (same thing as checking if a var is live)
+   (same thing as checking if a var is live)
    3) for optimizing analysis (e.g., if a def is not used, then a sound and efficient
    transfer function for that specific def is the identity function)
    (though this use case is least important and i might not even get around to this since
@@ -409,4 +409,4 @@ let dependents_up_to_bound tid bound analysis =
    callers are going to be running over an inter-procedural analyses, so
    the inter-procedural analyses will have to be modified to have some concept
    of "S is the current sub i'm in" and "S's liveness analyis is in la-state"
- *)
+*)

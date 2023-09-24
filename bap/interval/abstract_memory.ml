@@ -19,16 +19,16 @@ module BaseSetMap = struct
   let bases_of_vars (vars : SS.t) bsm : Region.Set.t =
     SS.fold vars ~init:Region.Set.empty
       ~f:(fun acc v -> match find bsm v with
-                       | Some bases -> Set.union acc bases
-                       | None -> acc)
-  
+        | Some bases -> Set.union acc bases
+        | None -> acc)
+
   let merge x y =
     fold y ~init:x ~f:(fun ~key ~data merged ->
-        let finaldata = match find merged key with
-          | Some baseset -> Base.Set.union baseset data
-          | None -> data
-        in
-        set merged ~key ~data:finaldata)
+      let finaldata = match find merged key with
+        | Some baseset -> Base.Set.union baseset data
+        | None -> data
+      in
+      set merged ~key ~data:finaldata)
 end
 
 (** Cells *)
@@ -56,16 +56,16 @@ module Cell(N : NumericDomain) = struct
 
     let same_address c1 c2 : bool =
       Region.equal c1.region c2.region &&
-        Wrapping_interval.equal c1.offs c2.offs
+      Wrapping_interval.equal c1.offs c2.offs
 
     let same_cell c1 c2 : bool =
       same_address c1 c2 &&
-        Wrapping_interval.equal c1.width c2.width
+      Wrapping_interval.equal c1.width c2.width
 
     let bits_per_byte = Wrapping_interval.of_int 8
-    
+
     let width_in_bits c = c.width
-    
+
     let width_in_bytes c =
       let width = width_in_bits c in
       Wrapping_interval.div width bits_per_byte
@@ -103,19 +103,19 @@ module Cell(N : NumericDomain) = struct
       else
         let open Wrapping_interval in
         let one = of_int 1 in
-        
+
         let other_base = other.offs in
         let other_end = add other_base (width_in_bytes other) in
         let other_end = sub other_end one in
-        
+
         let cel_base = cel.offs in
         let cel_end = add cel.offs (width_in_bytes cel) in
         let cel_end = sub cel_end one in
-        
+
         (could_be_true (boolle other_base cel_base) &&
-           could_be_true (boolle cel_base other_end)) ||
-          (could_be_true (boolle other_base cel_end) &&
-             could_be_true (boolle cel_end other_end))
+         could_be_true (boolle cel_base other_end)) ||
+        (could_be_true (boolle other_base cel_end) &&
+         could_be_true (boolle cel_end other_end))
   end
 
   module Cmp = struct
@@ -124,16 +124,16 @@ module Cell(N : NumericDomain) = struct
   end
 
   include Cmp
-  
+
   module Set = struct
     type t = (Cmp.t, comparator_witness) Set.t
 
     let empty : t = Set.empty (module Cmp)
 
     let is_empty : t -> bool = Set.is_empty
-    
+
     let of_list = Set.of_list (module Cmp)
-    
+
     let singleton = Set.singleton (module Cmp)
   end
 end
@@ -141,14 +141,14 @@ end
 module BaseSet = Region.Set
 
 module Make(N : NumericDomain)
-       : (MemoryT with type v := N.t
-                   and type regions := BaseSet.t
-                   and type region := Region.t
-                   and type valtypes := Common.cell_t) = struct
+  : (MemoryT with type v := N.t
+              and type regions := BaseSet.t
+              and type region := Region.t
+              and type valtypes := Common.cell_t) = struct
   module Env = NumericEnv(N)
-  
+
   module C = Cell(N)
-  
+
   module CellSet = C.Set
 
   module SS = Set.Make_binable_using_comparator(String)
@@ -157,21 +157,21 @@ module Make(N : NumericDomain)
 
   module T = struct
     type basemap = BaseSet.t BaseSetMap.t 
-  
+
     type cellset = CellSet.t 
-    
+
     type env = Env.t
-    
+
     type t = {
-        cells: cellset;
-        env: env;
-        bases: basemap;
-        img: Image.t option;
-        globals_read : cellset
-      }
+      cells: cellset;
+      env: env;
+      bases: basemap;
+      img: Image.t option;
+      globals_read : cellset
+    }
 
     type regions = Region.Set.t
-    
+
     type valtypes = Common.cell_t
 
     type 'a err = ('a, Error.t) Result.t
@@ -179,7 +179,7 @@ module Make(N : NumericDomain)
 
   module Overlap = struct
     type offs = WI.t list
-      
+
     type t = { cell : C.t ; offsets : offs ; data : N.t }
 
     let to_string ({ cell; offsets; data } : t) : string =
@@ -192,16 +192,16 @@ module Make(N : NumericDomain)
       let int_width = match C.width_in_bytes_int cell with
         | Ok i -> i
         | Error e ->
-           failwith @@
-             sprintf "in Overlap.of_cell, Couldn't turn cell width WI into Int: %s" @@
-               Error.to_string_hum e in
+          failwith @@
+          sprintf "in Overlap.of_cell, Couldn't turn cell width WI into Int: %s" @@
+          Error.to_string_hum e in
 
       (* e.g., if a pointer points to offs, X, and points to a value of width u32, then
          generate a list containing [X; X+1; X+2; X+3] *)
       let relative_offsets = List.init int_width ~f:(fun x -> x) in
       let absolute_offsets = List.map relative_offsets ~f:(fun reloffs ->
-                                        let wi_offs = Wrapping_interval.of_int reloffs in
-                                        WI.add cell.offs wi_offs) in
+        let wi_offs = Wrapping_interval.of_int reloffs in
+        WI.add cell.offs wi_offs) in
 
       let cellname = C.name cell in
       let data = Env.lookup cellname mem.env in
@@ -212,15 +212,15 @@ module Make(N : NumericDomain)
       let int_width = match C.width_in_bytes_int cell with
         | Ok i -> i
         | Error e ->
-           failwith @@
-             sprintf "in Overlap.of_cell, Couldn't turn cell width WI into Int: %s" @@
-               Error.to_string_hum e in
+          failwith @@
+          sprintf "in Overlap.of_cell, Couldn't turn cell width WI into Int: %s" @@
+          Error.to_string_hum e in
       (* e.g., if a pointer points to offs, X, and points to a value of width u32, then
          generate a list containing [X; X+1; X+2; X+3] *)
       let relative_offsets = List.init int_width ~f:(fun x -> x) in
       let absolute_offsets = List.map relative_offsets ~f:(fun reloffs ->
-                                        let wi_offs = Wrapping_interval.of_int reloffs in
-                                        WI.add cell.offs wi_offs) in
+        let wi_offs = Wrapping_interval.of_int reloffs in
+        WI.add cell.offs wi_offs) in
       { cell ; offsets = absolute_offsets ; data }
 
     let extract_byte (data : N.t) (byte_offs : int) : N.t =
@@ -241,33 +241,33 @@ module Make(N : NumericDomain)
         | x :: [] -> x
         | x :: xs -> N.concat x @@ loop xs in
       loop le_bytes
-    
+
     let get_merge_lists ~(this : t) ~(other : t) : (N.t * N.t) list =
       let lt x y = WI.could_be_true (WI.boollt x y) in
       let gt x y = WI.could_be_true (WI.boollt y x) in
       let rec loop ?(tidx : int = 0) ?(oidx : int = 0)
-                   ?(rev_acc : (N.t * N.t) list = [])
-                   (toffs : WI.t list) (ooffs : WI.t list) : (N.t * N.t) list =
+                ?(rev_acc : (N.t * N.t) list = [])
+                (toffs : WI.t list) (ooffs : WI.t list) : (N.t * N.t) list =
         match toffs, ooffs with
         | [], [] -> List.rev rev_acc
         | [], _ -> List.rev rev_acc
         | t :: ts, [] ->
-           let this_byte = extract_byte this.data tidx in
-           loop ts ooffs ~tidx:(tidx + 1) ~oidx ~rev_acc:(List.cons (this_byte, this_byte) rev_acc)
+          let this_byte = extract_byte this.data tidx in
+          loop ts ooffs ~tidx:(tidx + 1) ~oidx ~rev_acc:(List.cons (this_byte, this_byte) rev_acc)
         | t :: ts, o :: os ->
-           if lt t o
-           then
-             let this_byte = extract_byte this.data tidx in
-             loop ts ooffs ~tidx:(tidx + 1) ~oidx ~rev_acc:(List.cons (this_byte, this_byte) rev_acc)
-           else
-             if gt t o
-             then
-               loop toffs os ~tidx ~oidx:(oidx + 1) ~rev_acc
-             else
-               let this_byte = extract_byte this.data tidx in
-               let other_byte = extract_byte other.data oidx in
-               loop ts os ~tidx:(tidx + 1) ~oidx:(oidx + 1) ~rev_acc:(List.cons (this_byte, other_byte) rev_acc)
-             
+          if lt t o
+          then
+            let this_byte = extract_byte this.data tidx in
+            loop ts ooffs ~tidx:(tidx + 1) ~oidx ~rev_acc:(List.cons (this_byte, this_byte) rev_acc)
+          else
+          if gt t o
+          then
+            loop toffs os ~tidx ~oidx:(oidx + 1) ~rev_acc
+          else
+            let this_byte = extract_byte this.data tidx in
+            let other_byte = extract_byte other.data oidx in
+            loop ts os ~tidx:(tidx + 1) ~oidx:(oidx + 1) ~rev_acc:(List.cons (this_byte, other_byte) rev_acc)
+
       in
       loop this.offsets other.offsets ~tidx:0 ~oidx:0 ~rev_acc:[]
 
@@ -276,11 +276,11 @@ module Make(N : NumericDomain)
        cell C2 (as ~other) that contains u64, then this will return a value of overlap.t type
        representing the C1's contents with C2 overlain as a value that contains both contents (but
        from the viewpoint of C1).
-     *)
+    *)
     let merge ~(this : t) ~(other : t) : t =
       let bytes_to_merge = get_merge_lists ~this ~other in
       let merged_le_bytes = List.map bytes_to_merge ~f:(fun (tb, ob) ->
-                                merge_bytes tb ob) in
+        merge_bytes tb ob) in
       let merged_data = data_from_little_endian_bytes merged_le_bytes in
       { this with data = merged_data }
   end
@@ -310,10 +310,10 @@ module Make(N : NumericDomain)
 
   let is_empty { cells; env; bases; globals_read; img } : bool =
     Env.is_empty env &&
-      C.Set.is_empty cells &&
-        BaseSetMap.is_empty bases &&
-          C.Set.is_empty globals_read &&
-            Option.is_none img
+    C.Set.is_empty cells &&
+    BaseSetMap.is_empty bases &&
+    C.Set.is_empty globals_read &&
+    Option.is_none img
 
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with
@@ -359,33 +359,33 @@ module Make(N : NumericDomain)
     | `r64 -> 64
     | `r128 -> 128
     | `r256 -> 256
-    
+
   let bap_size_to_absdom (sz : Size.t) : Wrapping_interval.t =
     Wrapping_interval.of_int @@ match sz with
-                                | `r8 -> 8
-                                | `r16 -> 16
-                                | `r32 -> 32
-                                | `r64 -> 64
-                                | `r128 -> 128
-                                | `r256 -> 256
+    | `r8 -> 8
+    | `r16 -> 16
+    | `r32 -> 32
+    | `r64 -> 64
+    | `r128 -> 128
+    | `r256 -> 256
 
   let taint_gpr_arg ~(arg_idx : int) mem : t =
     let arg_name = match List.nth ABI.gpr_arg_names arg_idx with
       | Some name -> name
       | None ->
-         failwith @@
-           sprintf
-             "in taint_gpr_arg of idx %d, arg_idx is either on the stack (not yet handled) or invalid"
-             arg_idx in
+        failwith @@
+        sprintf
+          "in taint_gpr_arg of idx %d, arg_idx is either on the stack (not yet handled) or invalid"
+          arg_idx in
     let tainted_top = N.top in
     { mem with env = Env.set arg_name tainted_top mem.env }
 
   let equal {cells=cells1; env=env1; bases=bases1; globals_read=globals_read1; _}
         {cells=cells2; env=env2; bases=bases2; globals_read=globals_read2; _} =
     Env.equal env1 env2 &&
-      Set.equal cells1 cells2 &&
-        Map.equal (Set.equal) bases1 bases2 &&
-          Set.equal globals_read1 globals_read2
+    Set.equal cells1 cells2 &&
+    Map.equal (Set.equal) bases1 bases2 &&
+    Set.equal globals_read1 globals_read2
 
   let setptr ~(name:string) ~regions ~offs ~width m =
     let env = Env.set name offs m.env in
@@ -429,11 +429,11 @@ module Make(N : NumericDomain)
     else
       let is_vector_arg = ABI.var_name_is_vector_arg name in
       let init_val_width = if is_vector_arg
-                           then ABI.vector_arg_width
-                           else ABI.gpr_arg_width in
+        then ABI.vector_arg_width
+        else ABI.gpr_arg_width in
       let init_bases = if is_vector_arg
-                       then Bases_domain.bot
-                       else Bases_domain.join Bases_domain.heap Bases_domain.stack in
+        then Bases_domain.bot
+        else Bases_domain.join Bases_domain.heap Bases_domain.stack in
       let signed = false in
       let init_val = N.make_top init_val_width signed in
       let init_w_bases_set = set_based init_val init_bases in
@@ -444,12 +444,12 @@ module Make(N : NumericDomain)
           match maybe_arg_indices with
           | None -> false
           | Some indices ->
-             let taint_arg_names = List.map indices ~f:(fun i ->
-                                              List.nth ABI.gpr_arg_names i) in
-             List.fold taint_arg_names ~init:false ~f:(fun should_taint maybe_name ->
-                         match maybe_name with
-                         | Some n -> should_taint || (String.equal n name)
-                         | None -> should_taint)
+            let taint_arg_names = List.map indices ~f:(fun i ->
+              List.nth ABI.gpr_arg_names i) in
+            List.fold taint_arg_names ~init:false ~f:(fun should_taint maybe_name ->
+              match maybe_name with
+              | Some n -> should_taint || (String.equal n name)
+              | None -> should_taint)
         end in
       let tainter = if should_be_tainted then set_taint else set_untaint in
       let init_w_taint_set = tainter init_w_bases_set in
@@ -464,44 +464,44 @@ module Make(N : NumericDomain)
     match m.img with
     | None -> Or_error.error_string "load_global: memory's image should be set before load"
     | Some img ->
-       let segs = Image.segments img in
-       match Wrapping_interval.to_int offs with
-       | Error e ->
-          let offs_s = Wrapping_interval.to_string offs in
-          let () = printf
-                     "load_global: couldn't convert offs %s to address for image: %s"
-                     offs_s (Error.to_string_hum e) in
-          Ok N.top
-       | Ok addr ->
-          let addr_w = Word.of_int ~width:64 addr in
-          let target_seg = Table.find_addr segs addr_w in
-          match target_seg with
-          | None ->
-             (* probably a read or write to bss. i see in the knowledge base
-                that there are entries for bounds of .bss and .tbss
-                TODO: use those boundries to tell abstract_memory state about
-                bss. in the mean time, if there is a load or store of a constant
-                pointer that is not already allocated/present in the binary ELF
-                image, then return untainted 0 as if it were an initial load from
-                zero'd out bss. *)
-             let () = Format.printf "load_global: couldn't find addr %a in image\n%!"
-                                    Word.pp addr_w in
-             Ok (N.of_int ~width:(bap_size_to_int sz) 0
-                 |> set_untaint)
-          | Some (mem, seg) ->
-             match Memory.get ~addr:addr_w ~scale:sz mem with
-             | Error e ->
-                let segname = Image.Segment.name seg in
-                let addr_s = Word.to_string addr_w in
-                let err_s = Error.to_string_hum e in
-                Or_error.error_string @@
-                  sprintf "load_global: Error reading address %s from seg %s: %s"
-                          addr_s segname err_s
-             | Ok data ->
-                let res = N.of_word data in
-                (* let res_s = N.to_string res in *)
-                (* let () = printf "in load_global, loaded data was %s\n%!" res_s in *)
-                Ok res
+      let segs = Image.segments img in
+      match Wrapping_interval.to_int offs with
+      | Error e ->
+        let offs_s = Wrapping_interval.to_string offs in
+        let () = printf
+                   "load_global: couldn't convert offs %s to address for image: %s"
+                   offs_s (Error.to_string_hum e) in
+        Ok N.top
+      | Ok addr ->
+        let addr_w = Word.of_int ~width:64 addr in
+        let target_seg = Table.find_addr segs addr_w in
+        match target_seg with
+        | None ->
+          (* probably a read or write to bss. i see in the knowledge base
+             that there are entries for bounds of .bss and .tbss
+             TODO: use those boundries to tell abstract_memory state about
+             bss. in the mean time, if there is a load or store of a constant
+             pointer that is not already allocated/present in the binary ELF
+             image, then return untainted 0 as if it were an initial load from
+             zero'd out bss. *)
+          let () = Format.printf "load_global: couldn't find addr %a in image\n%!"
+                     Word.pp addr_w in
+          Ok (N.of_int ~width:(bap_size_to_int sz) 0
+              |> set_untaint)
+        | Some (mem, seg) ->
+          match Memory.get ~addr:addr_w ~scale:sz mem with
+          | Error e ->
+            let segname = Image.Segment.name seg in
+            let addr_s = Word.to_string addr_w in
+            let err_s = Error.to_string_hum e in
+            Or_error.error_string @@
+            sprintf "load_global: Error reading address %s from seg %s: %s"
+              addr_s segname err_s
+          | Ok data ->
+            let res = N.of_word data in
+            (* let res_s = N.to_string res in *)
+            (* let () = printf "in load_global, loaded data was %s\n%!" res_s in *)
+            Ok res
 
   let set_cell_to_top (c : C.t) ?(secret : bool = false) (mem : t) : t =
     let top = if secret then set_taint N.top else set_untaint N.top in
@@ -513,7 +513,7 @@ module Make(N : NumericDomain)
     { mem with cells = cells'; env = env' }
 
   let store ~(offs : Wrapping_interval.t) ~region
-            ~(width : Wrapping_interval.t) ~data ~valtype mem : t err =
+        ~(width : Wrapping_interval.t) ~data ~valtype mem : t err =
     let open Or_error.Monad_infix in
     let cel = C.make ~region ~offs ~width ~valtype in
     let celname = C.name cel in
@@ -541,7 +541,7 @@ module Make(N : NumericDomain)
     match Set.find mem.cells ~f:(C.same_cell cell) with
     | Some _ -> true
     | None -> false
-  
+
   let load ~(offs : Wrapping_interval.t) ~(width : Wrapping_interval.t)
         ~(size : size) ~(region : Region.t) ~(mem : t) : (N.t * t) err =
     let open Or_error.Monad_infix in
@@ -556,31 +556,31 @@ module Make(N : NumericDomain)
       store ~offs ~region ~width ~data ~valtype mem >>= fun mem' ->
       Ok (data, { mem' with globals_read = Set.add mem'.globals_read cell })
     else
-      if cell_exists ~cell ~mem
+    if cell_exists ~cell ~mem
+    then
+      let data = lookup (C.name cell) mem in
+      Ok (data, mem)
+    else
+      let overlap = get_overlapping_cells cell mem in
+      let numbits = bap_size_to_int size in
+      let signed = false in
+      let top = N.make_top numbits signed in
+      let cell_as_overlap = Overlap.of_cell cell top mem in
+      if Set.length overlap >= 1
       then
-        let data = lookup (C.name cell) mem in
-        Ok (data, mem)
+        let final = Set.fold overlap ~init:cell_as_overlap ~f:(fun current_data other_cell ->
+          let other_overlapper = Overlap.of_existing_cell other_cell mem in
+          Overlap.merge ~this:current_data ~other:other_overlapper) in
+        Ok (final.data, mem)
       else
-        let overlap = get_overlapping_cells cell mem in
-        let numbits = bap_size_to_int size in
-        let signed = false in
-        let top = N.make_top numbits signed in
-        let cell_as_overlap = Overlap.of_cell cell top mem in
-        if Set.length overlap >= 1
-        then
-          let final = Set.fold overlap ~init:cell_as_overlap ~f:(fun current_data other_cell ->
-                          let other_overlapper = Overlap.of_existing_cell other_cell mem in
-                          Overlap.merge ~this:current_data ~other:other_overlapper) in
-          Ok (final.data, mem)
-        else
-          Ok (top, mem)
-  
-(* on first load of global, load from the image into the abstract
+        Ok (top, mem)
+
+  (* on first load of global, load from the image into the abstract
      memory environment, then do the load a usual. this is unsound force
      general programs in the case of a previous overlapping store,
      but the cryptographic libs shouldn't do this, so ignoring
      overlap/nonalignment for now
-   *)
+  *)
   let load_of_bil_exp (e : Bil.exp) (idx_res : N.t)
         (size : Size.t) (m : t) : (N.t * t) err =
     let open Or_error.Monad_infix in
@@ -592,9 +592,9 @@ module Make(N : NumericDomain)
     let offs_size = match Wrapping_interval.size offs with
       | Some offs_size -> offs_size
       | None ->
-         failwith @@
-           sprintf "in load_of_bil_exp, couldn't convert offs %s to Z.t"
-             (Wrapping_interval.to_string offs) in
+        failwith @@
+        sprintf "in load_of_bil_exp, couldn't convert offs %s to Z.t"
+          (Wrapping_interval.to_string offs) in
     let max_ptd_to_elts = Z.of_int 64 in
     if Z.gt offs_size max_ptd_to_elts
     then
@@ -604,8 +604,8 @@ module Make(N : NumericDomain)
     else
       let is_scalar_ptr = offs_is_scalar && Set.is_empty regions in
       let regions = if is_scalar_ptr
-                    then Set.add regions Region.Global
-                    else regions in
+        then Set.add regions Region.Global
+        else regions in
       let regions = Set.to_list regions in
       Wrapping_interval.to_list offs >>= fun all_offsets ->
       let regions_and_offsets = List.cartesian_product regions all_offsets in
@@ -619,35 +619,35 @@ module Make(N : NumericDomain)
   (* don't let pointers point to too many locations. right now,
      this will error if the pointer points to more than 8 members
      of ~width~
-   *)
+  *)
   let ensure_offs_range_is_ok ~(offs : Wrapping_interval.t)
         ~(width : Wrapping_interval.t)
-      : Z.t err =
+    : Z.t err =
     let size = match Wrapping_interval.size offs with
-    | Some sz -> Ok sz
-    | None ->
-       Or_error.error_string @@
-         sprintf "in ensure_offs_range_is_ok, can't get size of offs (WI.t): %s"
-                 (Wrapping_interval.to_string offs) in
+      | Some sz -> Ok sz
+      | None ->
+        Or_error.error_string @@
+        sprintf "in ensure_offs_range_is_ok, can't get size of offs (WI.t): %s"
+          (Wrapping_interval.to_string offs) in
     Or_error.bind size ~f:(fun size ->
-    let max_pointers = Z.of_int 64 in
-    if Z.gt size max_pointers
-    then
-      Or_error.error_string
-        "in ensure_offs_range_is_ok, pointer points to too many data members, probably an unconstrained pointer"
-    else
-      Ok size)
+      let max_pointers = Z.of_int 64 in
+      if Z.gt size max_pointers
+      then
+        Or_error.error_string
+          "in ensure_offs_range_is_ok, pointer points to too many data members, probably an unconstrained pointer"
+      else
+        Ok size)
 
   let get_all_offs ~(offs : Wrapping_interval.t)
         ~(width : Wrapping_interval.t)
-      : Wrapping_interval.t list err =
+    : Wrapping_interval.t list err =
     let open Or_error.Monad_infix in
-    
+
     (match Wrapping_interval.to_z width with
-      | Some w -> Ok w
-      | None ->
-         Or_error.error_string "Couldn't convert width to int in get_all_offs")
-  
+     | Some w -> Ok w
+     | None ->
+       Or_error.error_string "Couldn't convert width to int in get_all_offs")
+
     >>= fun z_width ->
 
     let mem_idx_to_offs (mnum : Z.t) : Wrapping_interval.t err =
@@ -655,33 +655,33 @@ module Make(N : NumericDomain)
       let base = Wrapping_interval.to_z_lo offs in
       match base with
       | Some l ->
-         let new_base = Z.add l offs_offs in
-         Ok (Wrapping_interval.of_z new_base)
+        let new_base = Z.add l offs_offs in
+        Ok (Wrapping_interval.of_z new_base)
       | None ->
-         Or_error.error_string
-           "in get_all_offs, couldn't get lo part of offs interval"
+        Or_error.error_string
+          "in get_all_offs, couldn't get lo part of offs interval"
     in
-    
+
     ensure_offs_range_is_ok ~offs ~width >>= fun num_members ->
 
     let num_members_int = Z.to_int num_members in
 
     List.init num_members_int ~f:(fun mem_idx ->
-        Z.of_int mem_idx |> mem_idx_to_offs)
+      Z.of_int mem_idx |> mem_idx_to_offs)
 
     |> List.fold ~init:(Ok []) ~f:(fun acc offs ->
-           offs >>= fun offs ->
-           acc >>= fun offs_list ->
-           Ok (List.cons offs offs_list))
+      offs >>= fun offs ->
+      acc >>= fun offs_list ->
+      Ok (List.cons offs offs_list))
 
   let set_stack_canary (mem : t) : t =
     let fs_base = 0x0000_4000 in
 
     let fs_ptr = set_typd (N.of_int fs_base) CellType.Ptr in
     let fs_ptr = set_based (fs_ptr) Bases_domain.heap in
-    
+
     let stack_canary_width = Wrapping_interval.of_int 8 in
-    
+
     let stack_canary_value = N.of_int 0x123456 in
 
     let with_fs_base_set = setptr
@@ -702,52 +702,52 @@ module Make(N : NumericDomain)
     match env_with_canary_set with
     | Ok env' -> env'
     | Error e ->
-       failwith "in set_stack_canary, couldn't set value of canary"
-    
+      failwith "in set_stack_canary, couldn't set value of canary"
+
   (* on first store to a global, just treat it as every other store. *)
   let store_of_bil_exp (e : Bil.exp) ~(offs : N.t) ~data ~size m
-      : t err =
+    : t err =
     match e with
     | Bil.Store (_mem, idx, v, _endian, size) ->
-       (* let () = printf "in store_of_bil_exp, getting var names\n%!" in *)
-       let vars = Var_name_collector.run idx in
-       
-       (* let () = printf "in store_of_bil_exp, getting width\n%!" in *)
-       let width = bap_size_to_absdom size in
+      (* let () = printf "in store_of_bil_exp, getting var names\n%!" in *)
+      let vars = Var_name_collector.run idx in
 
-       (* let () = printf "in store_of_bil_exp, getting bases_to_load_from\n%!" in *)
-       let bases_to_load_from = BaseSetMap.bases_of_vars vars m.bases in
-       
-       (* let () = printf "in store_of_bil_exp, getting bases_to_load_from final\n%!" in *)
-       let bases_to_load_from = (if Set.is_empty bases_to_load_from
+      (* let () = printf "in store_of_bil_exp, getting width\n%!" in *)
+      let width = bap_size_to_absdom size in
+
+      (* let () = printf "in store_of_bil_exp, getting bases_to_load_from\n%!" in *)
+      let bases_to_load_from = BaseSetMap.bases_of_vars vars m.bases in
+
+      (* let () = printf "in store_of_bil_exp, getting bases_to_load_from final\n%!" in *)
+      let bases_to_load_from = (if Set.is_empty bases_to_load_from
                                 then Region.Set.from_region Region.Global
-                                 else bases_to_load_from)
-                                |> Region.Set.to_list in
+                                else bases_to_load_from)
+                               |> Region.Set.to_list in
 
-       let valtype = get_typd data in
-       
-       (* let () = printf "in store_of_bil_exp, getting intvl offs\n%!" in *)
-       let offs = get_intvl offs in
+      let valtype = get_typd data in
 
-       (match ensure_offs_range_is_ok ~offs ~width with
+      (* let () = printf "in store_of_bil_exp, getting intvl offs\n%!" in *)
+      let offs = get_intvl offs in
+
+      (match ensure_offs_range_is_ok ~offs ~width with
        | Error err ->
-          (* let () = printf "in store_of_bil_exp, denote of exp %s, offs: %s : %s\n%!" *)
-          (*                 (Exp.to_string e) *)
-          (*                 (Wrapping_interval.to_string offs) *)
-          (*                 (Error.to_string_hum err) in *)
-          Ok m
+         (* let () = printf "in store_of_bil_exp, denote of exp %s, offs: %s : %s\n%!" *)
+         (*                 (Exp.to_string e) *)
+         (*                 (Wrapping_interval.to_string offs) *)
+         (*                 (Error.to_string_hum err) in *)
+         Ok m
        | Ok _ ->
-          let all_offs = get_all_offs ~offs ~width in
+         let all_offs = get_all_offs ~offs ~width in
 
-          Or_error.bind all_offs ~f:(fun all_offs ->
+         Or_error.bind all_offs ~f:(fun all_offs ->
 
 
 
-          let base_offs_pairs = List.cartesian_product bases_to_load_from all_offs in
+           let base_offs_pairs = List.cartesian_product bases_to_load_from all_offs in
 
-          List.fold base_offs_pairs ~init:(Ok m) ~f:(fun env (base, offs) ->
-              Or_error.bind env ~f:(fun env ->
-                  store ~offs ~region:base ~width ~data ~valtype env))))
+           List.fold base_offs_pairs ~init:(Ok m) ~f:(fun env (base, offs) ->
+             Or_error.bind env ~f:(fun env ->
+               store ~offs ~region:base ~width ~data ~valtype env))))
     | _ -> Or_error.error_string
              "store_of_bil_exp: store got non-store expression"
 
@@ -760,14 +760,14 @@ module Make(N : NumericDomain)
     let rsp_offs_wi = get_intvl rsp_offs in
 
     (match BaseSetMap.find mem.bases rsp with
-    | Some bases -> (if Set.length bases <> 1
-                     then
-                       Or_error.error_string
-                         "store_init_ret_ptr: RSP should only have stack as its base before calling store_init_ret_ptr"
-                     else
-                       Ok (Set.to_list bases |> List.hd_exn))
-    | None -> Or_error.error_string
-                "store_init_ret_ptr: RSP should be setup before calling store_init_ret_ptr")
+     | Some bases -> (if Set.length bases <> 1
+                      then
+                        Or_error.error_string
+                          "store_init_ret_ptr: RSP should only have stack as its base before calling store_init_ret_ptr"
+                      else
+                        Ok (Set.to_list bases |> List.hd_exn))
+     | None -> Or_error.error_string
+                 "store_init_ret_ptr: RSP should be setup before calling store_init_ret_ptr")
     >>= fun stack_region ->
     let rsp_width = Wrapping_interval.of_int 64 in
     let init_val = set_untaint N.top in

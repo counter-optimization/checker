@@ -28,10 +28,10 @@ module DomainKey : KeyT = struct
 
   let create (type a) (n : string) : a k =
     let module M = struct
-        type t = a
-        type _ key += Key : t key
-        let name = n
-      end in
+      type t = a
+      type _ key += Key : t key
+      let name = n
+    end in
     (module M : K with type t = a)
 
   let eq_type (type a) (type b) (x : a k) (y : b k) : (a, b) eq =

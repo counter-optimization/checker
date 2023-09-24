@@ -48,7 +48,7 @@ module type NumericDomain = sig
 
   val extract : t -> int -> int -> t
   val concat : t -> t -> t
-  
+
   val booleq : t -> t -> t
   val boolneq : t -> t -> t
   val boollt : t -> t -> t
@@ -72,85 +72,85 @@ module type NumericDomain = sig
 end
 
 module type MemoryT =
-  sig
-    type t
-    
-    type v
-    
-    type regions
-    
-    type region
-    
-    type valtypes
+sig
+  type t
 
-    type 'a err = ('a, Error.t) Result.t
+  type v
 
-    val empty : t
+  type regions
 
-    val is_empty : t -> bool
-    
-    val lookup : string -> t -> v
+  type region
 
-    val init_arg : name:string -> Config.t -> sub term -> t -> t
-    
-    val set : string -> v -> t -> t
+  type valtypes
 
-    val unset : string -> t -> t
-    
-    val equal : t -> t -> bool
-    
-    val set_rsp : int -> t -> t err
-    
-    val set_rbp : int -> t -> t err
+  type 'a err = ('a, Error.t) Result.t
 
-    val set_img : t -> Image.t -> t
+  val empty : t
 
-    val get_img : t -> Image.t option
+  val is_empty : t -> bool
 
-    val set_stack_canary : t -> t
-    
-    val holds_ptr : string -> t -> bool
-    
-    val setptr : name:string -> regions:regions -> offs:v -> width:v -> t -> t
-    
-    val unptr : name:string -> t -> t
-    
-    (* val update_on_assn : lhs:Var.t -> rhs:v -> t -> t *)
-    
-    val load_of_bil_exp : Bil.exp -> v -> Size.t -> t -> (v * t) err
-    
-    val store_of_bil_exp : Bil.exp -> offs:v -> data:v -> size:Size.t -> t -> t err
+  val lookup : string -> t -> v
 
-    val store_global : addr:addr -> data:word -> valtype:Common.CellType.t -> t -> t err
+  val init_arg : name:string -> Config.t -> sub term -> t -> t
 
-    val havoc_on_call : t -> t
+  val set : string -> v -> t -> t
 
-    val merge : t -> t -> t
-    
-    val widen_threshold : int
-    
-    val widen_with_step : int -> 'a -> t -> t -> t
-    
-    val pp : t -> unit
-  end
+  val unset : string -> t -> t
+
+  val equal : t -> t -> bool
+
+  val set_rsp : int -> t -> t err
+
+  val set_rbp : int -> t -> t err
+
+  val set_img : t -> Image.t -> t
+
+  val get_img : t -> Image.t option
+
+  val set_stack_canary : t -> t
+
+  val holds_ptr : string -> t -> bool
+
+  val setptr : name:string -> regions:regions -> offs:v -> width:v -> t -> t
+
+  val unptr : name:string -> t -> t
+
+  (* val update_on_assn : lhs:Var.t -> rhs:v -> t -> t *)
+
+  val load_of_bil_exp : Bil.exp -> v -> Size.t -> t -> (v * t) err
+
+  val store_of_bil_exp : Bil.exp -> offs:v -> data:v -> size:Size.t -> t -> t err
+
+  val store_global : addr:addr -> data:word -> valtype:Common.CellType.t -> t -> t err
+
+  val havoc_on_call : t -> t
+
+  val merge : t -> t -> t
+
+  val widen_threshold : int
+
+  val widen_with_step : int -> 'a -> t -> t -> t
+
+  val pp : t -> unit
+end
 
 module NumericEnv(ValueDom : NumericDomain)
-       : (MemoryT with type v := ValueDom.t
-                   and type regions := unit
-                   and type region := unit
-                   and type valtypes := unit) = struct
+  : (MemoryT with type v := ValueDom.t
+              and type regions := unit
+              and type region := unit
+              and type valtypes := unit) = struct
 
   let get_intvl : ValueDom.t -> Wrapping_interval.t =
-      match ValueDom.get Wrapping_interval.key with
-      | Some f -> f
-      | None -> failwith "[Abstract] NumericEnv: couldn't extract wrapping interval"
-  
+    match ValueDom.get Wrapping_interval.key with
+    | Some f -> f
+    | None -> failwith "[Abstract] NumericEnv: couldn't extract wrapping interval"
+
   module M = Map.Make_binable_using_comparator(String)
-  
+
   module G = Graphlib.Make(Tid)(Unit)
-    
+
   type v = ValueDom.t
-  
+
   type t = ValueDom.t M.t
 
   type 'a err = ('a, Error.t) Result.t
@@ -158,13 +158,13 @@ module NumericEnv(ValueDom : NumericDomain)
   let empty : t = M.empty
 
   let is_empty : t -> bool = M.is_empty
-  
+
   let stack_ptr = "RSP"
-  
+
   let frame_ptr = "RBP"
-  
+
   let start_stack_addr = Word.of_int ~width:64 262144
-  
+
   let x86_64_default_taint = ["RDI"; "RSI"; "RDX"; "RCX"; "R8"; "R9"]
 
   let holds_ptr var_name env = false
@@ -181,9 +181,9 @@ module NumericEnv(ValueDom : NumericDomain)
   let unset name env : t = M.remove env name 
 
   let set_rsp offs env = Ok (set "RSP" (ValueDom.of_int offs) env)
-  
+
   let set_rbp offs env = Ok (set "RBP" (ValueDom.of_int offs) env)
-  
+
   let set_img env img = env
 
   let get_img _ = None
@@ -191,33 +191,33 @@ module NumericEnv(ValueDom : NumericDomain)
   let setptr ~name ~regions ~offs ~width env = env
 
   let set_stack_canary env = env
-  
+
   let unptr ~name env = env
-  
+
   let update_on_assn ~lhs ~rhs env = env
 
   let load_of_bil_exp (e : Bil.exp) _offs _sz env = Ok (ValueDom.top, env)
-  
+
   let store_of_bil_exp (e : Bil.exp) ~offs ~data ~size env = Ok env
 
   let store_global ~addr ~data ~valtype env = Ok env
 
   let havoc_on_call env = env
-  
+
   let mem = M.mem
-  
+
   let equal = M.equal ValueDom.equal
 
   let pp (env : t) : unit =
     let env_entry_to_string ~(key : string) ~(data: ValueDom.t)
-        : string =
+      : string =
       let val_str = ValueDom.to_string data in
       sprintf "%s --> %s" key val_str
     in
     printf "* Env is:\n%!";
     M.iteri env ~f:(fun ~key ~data ->
-        let entry_str = env_entry_to_string ~key ~data in
-        printf "\t%s\n%!" entry_str)
+      let entry_str = env_entry_to_string ~key ~data in
+      printf "\t%s\n%!" entry_str)
 
   let merge env1 env2 : t =
     (* let merge_helper ~key ~data prev = *)
@@ -231,24 +231,24 @@ module NumericEnv(ValueDom : NumericDomain)
     Map.merge_skewed env1 env2 ~combine:(fun ~key -> ValueDom.join)
 
   let widen_threshold = Common.ai_widen_threshold
-  
+
   let widen_with_step steps n prev_state new_state : t =
     let get_differing_keys prev_state new_state =
       M.fold prev_state ~init:Seq.empty ~f:(fun ~key ~data acc ->
-          let next = M.find_exn new_state key in
-          if ValueDom.equal data next
-          then acc
-          else Seq.cons key acc) in
+        let next = M.find_exn new_state key in
+        if ValueDom.equal data next
+        then acc
+        else Seq.cons key acc) in
     let widen_state prev_state new_state =
       let changed_keys = get_differing_keys prev_state new_state in
       Seq.fold changed_keys ~init:prev_state ~f:(fun prev changed ->
-          set changed ValueDom.top prev) in
+        set changed ValueDom.top prev) in
     let f = if steps < widen_threshold then merge else widen_state in
     f prev_state new_state
 end
 
 module DomainProduct(X : NumericDomain)(Y : NumericDomain)
-       : NumericDomain = struct
+  : NumericDomain = struct
   type t = X.t * Y.t
 
   let key : t Domain_key.DomainKey.k =
@@ -261,12 +261,12 @@ module DomainProduct(X : NumericDomain)(Y : NumericDomain)
     match X.get k with
     | Some f -> Some (fun elt -> f (fst elt))
     | None -> match Y.get k with
-              | Some f -> Some (fun elt -> f (snd elt))
-              | None -> None
+      | Some f -> Some (fun elt -> f (snd elt))
+      | None -> None
 
   let set key (x, y) newval =
     X.set key x newval, Y.set key y newval
-    
+
   let first (prod : t) : X.t =
     match prod with
     | x, y -> x
@@ -274,14 +274,14 @@ module DomainProduct(X : NumericDomain)(Y : NumericDomain)
   let second (prod : t) : Y.t =
     match prod with
     | x, y -> y
-  
+
   let bot = X.bot, Y.bot
   let top = X.top, Y.top
   let make_top width signed = X.make_top width signed, Y.make_top width signed
 
   let b1 = X.b1, Y.b1
   let b0 = X.b0, Y.b0
-  
+
   let order (x, y) (x', y') =
     let open KB.Order in
     match X.order x x', Y.order y y' with
@@ -311,7 +311,7 @@ module DomainProduct(X : NumericDomain)(Y : NumericDomain)
 
   let binop xf yf =
     fun (x, y) (x', y') -> xf x x', yf y y'
-                              
+
   let add = binop X.add Y.add
   let sub = binop X.sub Y.sub
   let mul = binop X.mul Y.mul
@@ -332,7 +332,7 @@ module DomainProduct(X : NumericDomain)(Y : NumericDomain)
   (* If at least one domain says it's true, then it *could* be true *) 
   let bincomp xf yf =
     fun (x, y) (x', y') -> xf x x', yf y y'
-  
+
   let booleq = bincomp X.booleq Y.booleq
   let boolneq = bincomp X.boolneq Y.boolneq
   let boollt = bincomp X.boollt Y.boollt
@@ -345,18 +345,18 @@ module DomainProduct(X : NumericDomain)(Y : NumericDomain)
   let could_be_true (x, y) =
     match get Wrapping_interval.key with
     | Some f ->
-       let wi = f (x, y) in
-       Wrapping_interval.could_be_true wi
+      let wi = f (x, y) in
+      Wrapping_interval.could_be_true wi
     | None ->
-       X.could_be_true x || Y.could_be_true y
+      X.could_be_true x || Y.could_be_true y
 
   let could_be_false (x, y) =
     match get Wrapping_interval.key with
     | Some f ->
-       let wi = f (x, y) in
-       Wrapping_interval.could_be_false wi
+      let wi = f (x, y) in
+      Wrapping_interval.could_be_false wi
     | None ->
-       X.could_be_false x || Y.could_be_false y
+      X.could_be_false x || Y.could_be_false y
 
   let cast_or_extract xf yf = fun n (x, y) -> xf n x, yf n y
   let unsigned = cast_or_extract X.unsigned Y.unsigned
@@ -378,27 +378,27 @@ module DomainProduct(X : NumericDomain)(Y : NumericDomain)
     if bw1 = bw2
     then bw1
     else
-      if bw1 = -1
-      then bw2
-      else bw1
+    if bw1 = -1
+    then bw2
+    else bw1
 end
 
 module AbstractInterpreter(N: NumericDomain)
-         (R : sig type t end)
-         (Rt : sig type t end)
-         (Vt : sig type t end)
-         (Env : MemoryT with type v := N.t
-                         and type region := R.t
-                         and type regions := Rt.t
-                         and type valtypes := Vt.t) = struct
+    (R : sig type t end)
+    (Rt : sig type t end)
+    (Vt : sig type t end)
+    (Env : MemoryT with type v := N.t
+                    and type region := R.t
+                    and type regions := Rt.t
+                    and type valtypes := Vt.t) = struct
   module E = Env
   module StringSet = Common.SS
 
   let get_intvl : N.t -> Wrapping_interval.t =
-      match N.get Wrapping_interval.key with
-      | Some f -> f
-      | None -> failwith "Couldn't extract interval information out of product domain during analysis"
-  
+    match N.get Wrapping_interval.key with
+    | Some f -> f
+    | None -> failwith "Couldn't extract interval information out of product domain during analysis"
+
   let denote_binop (op : binop) : N.t -> N.t -> N.t =
     match op with
     | Bil.PLUS -> N.add
@@ -438,108 +438,108 @@ module AbstractInterpreter(N: NumericDomain)
       begin
         match e with
         | Bil.Load (_mem, idx, _endian, size) ->
-           let (offs, st) = denote_exp idx st in
-           begin match E.load_of_bil_exp e offs size st with
-           | Ok res -> res
-           | Error msg -> failwith @@ Error.to_string_hum msg
-           end
+          let (offs, st) = denote_exp idx st in
+          begin match E.load_of_bil_exp e offs size st with
+          | Ok res -> res
+          | Error msg -> failwith @@ Error.to_string_hum msg
+          end
         | Bil.Store (_mem, idx, v, _endian, size) ->
-           let offs, st = denote_exp  idx st in
-           let data, st = denote_exp  v st in
-           begin match Env.store_of_bil_exp e ~offs ~data ~size st with
-           | Ok st -> (N.bot, st)
-           | Error msg -> failwith @@ Error.to_string_hum msg
-           end
+          let offs, st = denote_exp  idx st in
+          let data, st = denote_exp  v st in
+          begin match Env.store_of_bil_exp e ~offs ~data ~size st with
+          | Ok st -> (N.bot, st)
+          | Error msg -> failwith @@ Error.to_string_hum msg
+          end
         | Bil.BinOp (op, x, y) ->
-           let (x', st) = denote_exp x st in
-           let (y', st) = denote_exp y st in
-           (denote_binop op x' y', st)
+          let (x', st) = denote_exp x st in
+          let (y', st) = denote_exp y st in
+          (denote_binop op x' y', st)
         | Bil.UnOp (op, x) ->
-           let (x', st) = denote_exp x st in
-           (denote_unop op x', st)
+          let (x', st) = denote_exp x st in
+          (denote_unop op x', st)
         | Bil.Var v ->
-           let name = Var.name v in
-           (E.lookup name st, st)
+          let name = Var.name v in
+          (E.lookup name st, st)
         | Bil.Int w ->
-           (N.of_word w, st)
+          (N.of_word w, st)
         | Bil.Cast (cast, n, exp) ->
-           let (exp', st) = denote_exp  exp st in
-           (denote_cast cast n exp', st)
+          let (exp', st) = denote_exp  exp st in
+          (denote_cast cast n exp', st)
         | Bil.Ite (cond, ifthen, ifelse) ->
-           let (cond', st) = denote_exp cond st in
-           let truthy = N.could_be_true cond' in
-           let falsy = N.could_be_false cond' in
-           if truthy && not falsy
-           then denote_exp ifthen st
-           else if not truthy && falsy
-           then denote_exp ifelse st
-           else
-             let (then', st) = denote_exp ifthen st in
-             let (else', st) = denote_exp ifelse st in
-             (N.join then' else', st)
+          let (cond', st) = denote_exp cond st in
+          let truthy = N.could_be_true cond' in
+          let falsy = N.could_be_false cond' in
+          if truthy && not falsy
+          then denote_exp ifthen st
+          else if not truthy && falsy
+          then denote_exp ifelse st
+          else
+            let (then', st) = denote_exp ifthen st in
+            let (else', st) = denote_exp ifelse st in
+            (N.join then' else', st)
         | Bil.Unknown (str, _) ->
-           (* This seems to be used for at least:
-              setting undefined flags (like everything
-              but OF,CF after x86_64 mul)
+          (* This seems to be used for at least:
+             setting undefined flags (like everything
+             but OF,CF after x86_64 mul)
 
-              also, results of cpuid/feature identification in libsodium:
-              0003b294: RAX := pad:64[unknown[bits]:u32]
-              0003b297: RBX := pad:64[unknown[bits]:u32]
-              0003b29a: RCX := pad:64[unknown[bits]:u32]
-              0003b29d: RDX := pad:64[unknown[bits]:u32]
-              0003b2a9: #12582456 := RBX
-              0003b2ad: RBX := RSI
-              0003b2b1: RSI := #12582456
-              0003b2c3: #12582455 := low:32[RAX]
-              0003b2c6: OF := 0
-              0003b2c9: CF := 0
-              0003b2cc: AF := unknown[bits]:u1
-              0003b2d1: PF :=
-                        ~low:1[let $221 = #12582455 >> 4 ^ #12582455 in
-                               let $222 = $221 >> 2 ^ $221 in $222 >> 1 ^ $222]
-              0003b2d5: SF := high:1[#12582455]
-              0003b2d9: ZF := 0 = #12582455
+             also, results of cpuid/feature identification in libsodium:
+             0003b294: RAX := pad:64[unknown[bits]:u32]
+             0003b297: RBX := pad:64[unknown[bits]:u32]
+             0003b29a: RCX := pad:64[unknown[bits]:u32]
+             0003b29d: RDX := pad:64[unknown[bits]:u32]
+             0003b2a9: #12582456 := RBX
+             0003b2ad: RBX := RSI
+             0003b2b1: RSI := #12582456
+             0003b2c3: #12582455 := low:32[RAX]
+             0003b2c6: OF := 0
+             0003b2c9: CF := 0
+             0003b2cc: AF := unknown[bits]:u1
+             0003b2d1: PF :=
+             ~low:1[let $221 = #12582455 >> 4 ^ #12582455 in
+             let $222 = $221 >> 2 ^ $221 in $222 >> 1 ^ $222]
+             0003b2d5: SF := high:1[#12582455]
+             0003b2d9: ZF := 0 = #12582455
 
-              for now, return top *)
-           (N.bot, st)
+             for now, return top *)
+          (N.bot, st)
         | Bil.Let (var, exp, body) ->
-           let prestate = st in
-           let (binding, st) = denote_exp  exp st in
-           let name = Var.name var in
-           let st = E.set name binding st in
-           (* todo, what if a store in body *)
-           let (v, _) = denote_exp  body st in
-           (v, prestate)
+          let prestate = st in
+          let (binding, st) = denote_exp  exp st in
+          let name = Var.name var in
+          let st = E.set name binding st in
+          (* todo, what if a store in body *)
+          let (v, _) = denote_exp  body st in
+          (v, prestate)
         | Bil.Extract (hi, lo, e) ->
-           let (e', st) = denote_exp  e st in
-           (N.extract e' hi lo, st)
+          let (e', st) = denote_exp  e st in
+          (N.extract e' hi lo, st)
         | Bil.Concat (x, y) ->
-           let (x', st) = denote_exp  x st in
-           let (y', st) = denote_exp  y st in
-           (N.concat x' y', st)
+          let (x', st) = denote_exp  x st in
+          let (y', st) = denote_exp  y st in
+          (N.concat x' y', st)
       end
     with
     | Z.Overflow ->
-       let err = Format.sprintf
+      let err = Format.sprintf
                   "in AI.denote_elt, Z.Overflow in denoting exp: %a\n%!"
                   Exp.pps e
-       in
-       failwith err
+      in
+      failwith err
 
   let denote_def (subname : string) (d : def term) (st : E.t) : E.t  =
     let var = Def.lhs d in
     let varname = Var.name var in
     let rhs = Def.rhs d in
     let (denoted_rhs, st) = begin
-        try denote_exp rhs st with
-        | Z.Overflow ->
-           let elt_tid = Term.tid d in
-           let e = Format.sprintf
-                     "In AI.denote_def, Z.Overflow in denoting %a\n%!"
-                     Tid.pps elt_tid
-           in
-           failwith e
-      end
+      try denote_exp rhs st with
+      | Z.Overflow ->
+        let elt_tid = Term.tid d in
+        let e = Format.sprintf
+                  "In AI.denote_def, Z.Overflow in denoting %a\n%!"
+                  Tid.pps elt_tid
+        in
+        failwith e
+    end
     in
     E.set varname denoted_rhs st
 

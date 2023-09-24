@@ -12,10 +12,10 @@ module Bool = Z3.Boolean
 module Solver = Z3.Solver
 
 let ctxt = Z3.mk_context [
-               "model", "true";
-               "timeout", "50"
-                 (* "timeout", "200" (* in unsigned ms *) *)
-               ]
+  "model", "true";
+  "timeout", "50"
+  (* "timeout", "200" (* in unsigned ms *) *)
+]
 
 let solver = Solver.mk_solver_s ctxt "QF_BV"
 
@@ -23,32 +23,32 @@ module Executor = struct
   type constraints = Expr.expr list
 
   type state = {
-      constraints : constraints;
-      fresh_var_idx : int;
-      symbolic_var_map : (string, string) List.Assoc.t;
-      env : (string, Expr.expr) List.Assoc.t;
-      was_load : bool;
-      last_loaded_symname : string option; 
-      defs : def term list;
-      target_tid : tid;
-      do_check : bool;
-      do_ss : bool;
-      do_cs : bool;
-      do_cs_left : bool;
-      do_cs_right : bool;
-      profiling_data_path : string;
-      failed_ss : bool;
-      failed_cs_left : bool;
-      failed_cs_right : bool;
-      type_info : Type_determination.t
-    }
+    constraints : constraints;
+    fresh_var_idx : int;
+    symbolic_var_map : (string, string) List.Assoc.t;
+    env : (string, Expr.expr) List.Assoc.t;
+    was_load : bool;
+    last_loaded_symname : string option; 
+    defs : def term list;
+    target_tid : tid;
+    do_check : bool;
+    do_ss : bool;
+    do_cs : bool;
+    do_cs_left : bool;
+    do_cs_right : bool;
+    profiling_data_path : string;
+    failed_ss : bool;
+    failed_cs_left : bool;
+    failed_cs_right : bool;
+    type_info : Type_determination.t
+  }
 
   type t
-  
+
   module T = struct
     type t = state
   end
-    
+
   module ST = struct
     include Monad.State.T1(T)(Monad.Ident)
     include Monad.State.Make(T)(Monad.Ident)
@@ -56,22 +56,22 @@ module Executor = struct
   open ST.Syntax
 
   let expr_to_str e : string =
-      sprintf "(%s, (sort: %s, bw: %s))"
-        (Expr.to_string e)
-        (Sort.to_string @@ Expr.get_sort e)
-        (if Bitv.is_bv e
-         then sprintf "%d" @@ Bitv.get_size @@ Expr.get_sort e
-         else "")
+    sprintf "(%s, (sort: %s, bw: %s))"
+      (Expr.to_string e)
+      (Sort.to_string @@ Expr.get_sort e)
+      (if Bitv.is_bv e
+       then sprintf "%d" @@ Bitv.get_size @@ Expr.get_sort e
+       else "")
 
   let debug_print_sym_env st : unit =
     printf "var map is:\n%!";
     List.iter st.symbolic_var_map ~f:(fun (varname, symname) ->
-        printf "(%s, %s)\n%!" varname symname);
+      printf "(%s, %s)\n%!" varname symname);
     printf "type info is:\n%!";
     Type_determination.print st.type_info;
     printf "env map is:\n%!";
     List.iter st.env ~f:(fun (symname, expr) ->
-        printf "(%s, %s)\n%!" symname (expr_to_str expr))
+      printf "(%s, %s)\n%!" symname (expr_to_str expr))
 
   let def_terms_as_string : string ST.t =
     ST.gets @@ fun st ->
@@ -95,25 +95,25 @@ module Executor = struct
         ?(do_cs_right = false)
         defs target_tid type_info
         profiling_data_path = {
-      defs;
-      target_tid;
-      fresh_var_idx = 0;
-      last_loaded_symname = None;
-      was_load = false;
-      symbolic_var_map = [];
-      env = [];
-      constraints = [];
-      do_check = false;
-      do_ss;
-      do_cs;
-      do_cs_left;
-      do_cs_right;
-      profiling_data_path;
-      failed_ss = false;
-      failed_cs_left = false;
-      failed_cs_right = false;
-      type_info
-    }
+    defs;
+    target_tid;
+    fresh_var_idx = 0;
+    last_loaded_symname = None;
+    was_load = false;
+    symbolic_var_map = [];
+    env = [];
+    constraints = [];
+    do_check = false;
+    do_ss;
+    do_cs;
+    do_cs_left;
+    do_cs_right;
+    profiling_data_path;
+    failed_ss = false;
+    failed_cs_left = false;
+    failed_cs_right = false;
+    type_info
+  }
 
   let coerce_shift op ctxt x y =
     let sx = Bitv.get_size (Expr.get_sort x)
@@ -127,7 +127,7 @@ module Executor = struct
     | Z3.Error "canceled" -> x
 
   let bit0 = Expr.mk_numeral_int ctxt 0 (Bitv.mk_sort ctxt 1)
-  
+
   let bit1 = Expr.mk_numeral_int ctxt 1 (Bitv.mk_sort ctxt 1)
 
   let is_bool = Bool.is_bool
@@ -168,17 +168,17 @@ module Executor = struct
     | SLT -> fun ctxt l r -> bit_of_bool @@ Bitv.mk_slt ctxt l r
     | SLE -> fun ctxt l r -> bit_of_bool @@ Bitv.mk_sle ctxt l r
     | EQ -> fun ctxt x y -> Bitv.mk_not ctxt @@
-                              Bitv.mk_redor ctxt @@
-                                Bitv.mk_xor ctxt x y
+      Bitv.mk_redor ctxt @@
+      Bitv.mk_xor ctxt x y
     | NEQ -> fun ctxt x y -> Bitv.mk_redor ctxt @@
-                               Bitv.mk_xor ctxt x y
+      Bitv.mk_xor ctxt x y
 
   let z3_of_unop : unop -> _ = function
     | NEG -> Bitv.mk_neg
     | NOT -> Bitv.mk_not
 
   let binop op x y = z3_of_binop op ctxt x y
-  
+
   let unop op x = z3_of_unop op ctxt x
 
   let word x =
@@ -195,9 +195,9 @@ module Executor = struct
     and ns = hi-lo+1 in
     if ns > xs
     then if lo = 0 then Bitv.mk_zero_ext ctxt (ns-xs) x
-         else
-           Bitv.mk_extract ctxt hi lo @@
-             Bitv.mk_zero_ext ctxt (ns-xs) x
+      else
+        Bitv.mk_extract ctxt hi lo @@
+        Bitv.mk_zero_ext ctxt (ns-xs) x
     else Bitv.mk_extract ctxt hi lo x
 
   let concat x y = Bitv.mk_concat ctxt x y
@@ -288,8 +288,8 @@ module Executor = struct
     if was_load
     then
       ST.update @@ fun st ->
-                   { st with last_loaded_symname = Some symname;
-                             was_load = false }
+      { st with last_loaded_symname = Some symname;
+                was_load = false }
     else
       ST.return ()
 
@@ -304,11 +304,11 @@ module Executor = struct
   let push_def_constraint lhs_symname rhs_symvalue : unit ST.t =
     get_value_in_env lhs_symname >>= fun lhs_symvalue ->
     (match lhs_symvalue with
-      | Some lhs_symvalue -> ST.return lhs_symvalue
-      | None ->
-         let rhs_sort = Expr.get_sort rhs_symvalue in
-         let bw = Bitv.get_size rhs_sort in
-         fresh_bv_for_symbolic lhs_symname bw
+     | Some lhs_symvalue -> ST.return lhs_symvalue
+     | None ->
+       let rhs_sort = Expr.get_sort rhs_symvalue in
+       let bw = Bitv.get_size rhs_sort in
+       fresh_bv_for_symbolic lhs_symname bw
     ) >>= fun lhs_symvalue ->
     let eq_ctr = Bool.mk_eq ctxt lhs_symvalue rhs_symvalue in
     push_constraint eq_ctr
@@ -330,14 +330,14 @@ module Executor = struct
     | 128 -> 128
     | 256 -> 256
     | _ ->
-       let rec loop width allowed_widths : int =
-         match allowed_widths with
-         | [] -> failwith @@ sprintf "Couldn't get width for %d" width
-         | x :: xs -> if width <= x
-                      then x
-                      else loop width xs
-       in
-       loop width [1; 8; 16; 32; 64; 128; 256]
+      let rec loop width allowed_widths : int =
+        match allowed_widths with
+        | [] -> failwith @@ sprintf "Couldn't get width for %d" width
+        | x :: xs -> if width <= x
+          then x
+          else loop width xs
+      in
+      loop width [1; 8; 16; 32; 64; 128; 256]
 
   let set_free_vars : unit ST.t =
     ST.gets (fun st -> Type_determination.get_all_typed_vars st.type_info)
@@ -358,7 +358,7 @@ module Executor = struct
 
   module SilentStoreChecks = struct
     let on_fail = fun st -> { st with failed_ss = true }
-    
+
     let fail_ss = ST.update on_fail
   end
 
@@ -370,9 +370,9 @@ module Executor = struct
       ST.update @@ fun st -> { st with failed_cs_right = true }
 
     let add_iden = fun width -> word @@ Word.of_int ~width 0
-    
+
     let mul_iden = fun width -> word @@ Word.of_int ~width 1
-    
+
     let mul_zero = fun width -> word @@ Word.of_int ~width 0
 
     let and_iden = fun width -> word @@ Word.lnot @@ Word.zero width
@@ -397,25 +397,25 @@ module Executor = struct
       let no_checks = (left, []), (right, []) in
       let left_nots, right_nots = match op with
         | Bil.PLUS ->
-           (left, adds lw), (right, adds rw)
+          (left, adds lw), (right, adds rw)
         | Bil.MINUS ->
-           (left, none), (right, adds rw)
+          (left, none), (right, adds rw)
         | Bil.TIMES ->
-           (left, muls lw), (right, muls rw)
+          (left, muls lw), (right, muls rw)
         | Bil.DIVIDE | Bil.SDIVIDE ->
-           (left, [mul_zero lw]), (right, [mul_iden rw])
+          (left, [mul_zero lw]), (right, [mul_iden rw])
         | Bil.MOD  | Bil.SMOD ->
-           (left, none), (right, none)
+          (left, none), (right, none)
         | Bil.LSHIFT | Bil.RSHIFT -> 
-           (left, muls lw), (right, muls rw)
+          (left, muls lw), (right, muls rw)
         | Bil.ARSHIFT ->
-           (left, ands lw), (right, [mul_zero rw])
+          (left, ands lw), (right, [mul_zero rw])
         | Bil.AND ->
-           (left, ands lw), (right, ands rw)
+          (left, ands lw), (right, ands rw)
         | Bil.OR ->
-           (left, ands lw), (right, ands rw) 
+          (left, ands lw), (right, ands rw) 
         | Bil.XOR ->
-           (left, [mul_zero lw]), (right, [mul_zero rw])
+          (left, [mul_zero lw]), (right, [mul_zero rw])
         | Bil.EQ -> no_checks
         | Bil.NEQ -> no_checks
         | Bil.LT -> no_checks
@@ -448,112 +448,112 @@ module Executor = struct
     match status with
     | Solver.UNSATISFIABLE -> ST.return true (* safe *)
     | Solver.UNKNOWN ->
-       let reason = Solver.get_reason_unknown solver in
-       if String.Caseless.equal reason "timeout"
-       then
-         let () = printf "[SilentStores] symbolic compilation timed out for tid: %a\n%!" Tid.ppo st.target_tid in
-         ST.update onfail >>= fun () ->
-         ST.return false
-       else
-         failwith @@
-           Format.sprintf "in Symbolic.Executor.check_now, error checking constraints for solver: %s : %s"
-             (Solver.to_string solver)
-             reason
+      let reason = Solver.get_reason_unknown solver in
+      if String.Caseless.equal reason "timeout"
+      then
+        let () = printf "[SilentStores] symbolic compilation timed out for tid: %a\n%!" Tid.ppo st.target_tid in
+        ST.update onfail >>= fun () ->
+        ST.return false
+      else
+        failwith @@
+        Format.sprintf "in Symbolic.Executor.check_now, error checking constraints for solver: %s : %s"
+          (Solver.to_string solver)
+          reason
     | Solver.SATISFIABLE ->
-       let () = printf "[SilentStoresSymbolic] SAT\n%!" in
-       (* let model_str = match Solver.get_model solver with *)
-       (*   | Some m -> Model.to_string m *)
-       (*   | None -> "none" in *)
-       (* let reason = Solver.get_reason_unknown solver in *)
-       (* let constraints_string = get_solver_string st.constraints in *)
-       (* let () = printf "SAT: %s\n%!" reason; *)
-       (*          printf "=============Start debug info:=============\n%!"; *)
-       (*          printf "# MODEL:\n%s\n%!" model_str; *)
-       (*          debug_print_sym_env st; *)
-       (*          printf "# Constraints:\n%!"; *)
-       (*          printf "%s\n%!" constraints_string; *)
-       (*          printf "=============End debug info:=============\n%!" in *)
-       ST.update onfail >>= fun () ->
-       ST.return false
+      let () = printf "[SilentStoresSymbolic] SAT\n%!" in
+      (* let model_str = match Solver.get_model solver with *)
+      (*   | Some m -> Model.to_string m *)
+      (*   | None -> "none" in *)
+      (* let reason = Solver.get_reason_unknown solver in *)
+      (* let constraints_string = get_solver_string st.constraints in *)
+      (* let () = printf "SAT: %s\n%!" reason; *)
+      (*          printf "=============Start debug info:=============\n%!"; *)
+      (*          printf "# MODEL:\n%s\n%!" model_str; *)
+      (*          debug_print_sym_env st; *)
+      (*          printf "# Constraints:\n%!"; *)
+      (*          printf "%s\n%!" constraints_string; *)
+      (*          printf "=============End debug info:=============\n%!" in *)
+      ST.update onfail >>= fun () ->
+      ST.return false
 
   let rec supports_exp (exp : Bil.exp) : bool =
     match exp with
     | Bil.Load (_, idx_exp, _, _) ->
-       supports_exp idx_exp
+      supports_exp idx_exp
     | Bil.Store (_, idx, v, _, _) ->
-       supports_exp idx && supports_exp v
+      supports_exp idx && supports_exp v
     | Bil.BinOp (_, l, r) ->
-       supports_exp l && supports_exp r
+      supports_exp l && supports_exp r
     | Bil.UnOp (_, l) ->
-       supports_exp l
+      supports_exp l
     | Bil.Var _ -> true
     | Bil.Int _ -> true
     | Bil.Cast (_, _, subexp) ->
-       supports_exp subexp
+      supports_exp subexp
     | Bil.Let (_, _, _) -> false
     | Bil.Unknown (_, (Imm n)) -> true
     | Bil.Unknown (_, _) -> false
     | Bil.Ite (cond, then_, else_) ->
-       supports_exp cond &&
-         supports_exp then_ &&
-           supports_exp else_
+      supports_exp cond &&
+      supports_exp then_ &&
+      supports_exp else_
     | Bil.Extract (_, _, subexp) -> 
-       supports_exp subexp
+      supports_exp subexp
     | Bil.Concat (l, r) ->
-       supports_exp l && supports_exp r
+      supports_exp l && supports_exp r
 
   let rec eval_exp (exp : Bil.exp) : Expr.expr option ST.t =
     ST.get () >>= fun _ ->
     let res = match exp with
-    | Bil.Load (_, idx, en, sz) ->
-       eval_exp idx >>= fun _idx_val ->  
-       set_was_load true >>= fun () ->
-       let symname = Common.exp_to_string exp in
-       let sz = Common.int_of_sz sz in
-       fresh_bv_for_symbolic symname sz >>= fun value ->
-       ST.return @@ Some value
-    | Bil.Store (mem, idx, v, en, sz) ->
-       ST.get () >>= fun st ->
-       let mockload = Bil.Load (mem, idx, en, sz) in
-       let memcellsymname = Common.exp_to_string mockload in
-       eval_exp idx >>= fun idx_val -> 
-       eval_exp v >>= fun mcv ->
-       let curval = match mcv with
-         | Some curval -> curval
-         | None -> failwith "In symex, unsupported data in store"
-       in
-       (if st.do_check && st.do_ss
-       then
-         has_value_in_env memcellsymname >>= fun valpresent ->
-         if valpresent
+      | Bil.Load (_, idx, en, sz) ->
+        eval_exp idx >>= fun _idx_val ->  
+        set_was_load true >>= fun () ->
+        let symname = Common.exp_to_string exp in
+        let sz = Common.int_of_sz sz in
+        fresh_bv_for_symbolic symname sz >>= fun value ->
+        ST.return @@ Some value
+      | Bil.Store (mem, idx, v, en, sz) ->
+        ST.get () >>= fun st ->
+        let mockload = Bil.Load (mem, idx, en, sz) in
+        let memcellsymname = Common.exp_to_string mockload in
+        eval_exp idx >>= fun idx_val -> 
+        eval_exp v >>= fun mcv ->
+        let curval = match mcv with
+          | Some curval -> curval
+          | None -> failwith "In symex, unsupported data in store"
+        in
+        (if st.do_check && st.do_ss
          then
-           get_value_in_env_exn memcellsymname >>= fun symval ->
-           (* add_neq_constraint curval symval >>= fun () -> *)
-           add_is_eq_constraint curval symval >>= fun () ->
-           let start' = Time_ns.now () in
-           check_now SilentStoreChecks.on_fail >>= fun _store_safe ->
-           let end' = Time_ns.now () in
-           let chk_time = Time_ns.diff end' start' |> Time_ns.Span.to_int_ns in
-           def_terms_as_string >>= fun def_term_str ->
-           ST.gets (fun st -> st.constraints) >>= fun constraints ->
-           let silent_store_const_str = get_solver_string constraints in 
-           let profiling_data_csv_row = sprintf ",1,%d,,,\"%s\",,\"%s\""
-                                          chk_time
-                                          silent_store_const_str
-                                          def_term_str in
-           write_csv_profile_data profiling_data_csv_row >>= fun () ->
-           ST.return None
-         else SilentStoreChecks.fail_ss >>= fun () ->
-              ST.return None
-        else ST.return None) >>= fun res ->
-       push_def_constraint memcellsymname curval >>= fun () ->
-       ST.return res
-    | Bil.BinOp (op, x, y) ->
-       eval_exp x >>= fun ml ->
-       eval_exp y >>= fun mr ->
-       begin
-         match ml, mr with
-         | Some l, Some r ->
+           has_value_in_env memcellsymname >>= fun valpresent ->
+           if valpresent
+           then
+             get_value_in_env_exn memcellsymname >>= fun symval ->
+             (* add_neq_constraint curval symval >>= fun () -> *)
+             add_is_eq_constraint curval symval >>= fun () ->
+             let start' = Time_ns.now () in
+             check_now SilentStoreChecks.on_fail >>= fun _store_safe ->
+             let end' = Time_ns.now () in
+             let chk_time = Time_ns.diff end' start' |> Time_ns.Span.to_int_ns in
+             def_terms_as_string >>= fun def_term_str ->
+             ST.gets (fun st -> st.constraints) >>= fun constraints ->
+             let silent_store_const_str = get_solver_string constraints in 
+             let profiling_data_csv_row = sprintf ",1,%d,,,\"%s\",,\"%s\""
+                                            chk_time
+                                            silent_store_const_str
+                                            def_term_str in
+             write_csv_profile_data profiling_data_csv_row >>= fun () ->
+             ST.return None
+           else SilentStoreChecks.fail_ss >>= fun () ->
+             ST.return None
+         else ST.return None) >>= fun res ->
+        push_def_constraint memcellsymname curval >>= fun () ->
+        ST.return res
+      | Bil.BinOp (op, x, y) ->
+        eval_exp x >>= fun ml ->
+        eval_exp y >>= fun mr ->
+        begin
+          match ml, mr with
+          | Some l, Some r ->
             ST.gets (fun st -> st.do_check, st.do_cs) >>= fun (do_check, do_cs) ->
             begin
               if do_check && do_cs
@@ -561,14 +561,14 @@ module Executor = struct
                 CompSimpChecks.check_binop op l r >>= fun (do_left_checks, do_right_checks) ->
                 ST.get () >>= fun ini_st ->
                 let do_left_checks = if ini_st.do_cs_left
-                                     then do_left_checks
-                                     else ST.return ()
+                  then do_left_checks
+                  else ST.return ()
                 in
                 let do_right_checks = if ini_st.do_cs_right
-                                      then do_right_checks
-                                      else ST.return ()
+                  then do_right_checks
+                  else ST.return ()
                 in
-                
+
                 do_left_checks >>= fun () ->
                 let start' = Time_ns.now () in
                 check_now CompSimpChecks.on_left_fail >>= fun _ ->
@@ -584,7 +584,7 @@ module Executor = struct
                 let left_const_str = get_solver_string with_left_const.constraints in
                 let failed_cs_left = with_left_const.failed_cs_left in
                 ST.put ini_st >>= fun () ->
-                
+
                 do_right_checks >>= fun () ->
                 let start' = Time_ns.now () in
                 check_now CompSimpChecks.on_right_fail >>= fun _ ->
@@ -600,7 +600,7 @@ module Executor = struct
                 ST.get () >>= fun with_right_const ->
                 let right_const_str = get_solver_string with_right_const.constraints in
                 let failed_cs_right = with_right_const.failed_cs_right in
-                
+
                 def_terms_as_string >>= fun def_term_str ->
                 let profiling_data_csv_row = sprintf "1,,,%d,%d,\"%s\",\"%s\",\"%s\""
                                                left_chk_time
@@ -621,84 +621,84 @@ module Executor = struct
                 ST.return ()
             end >>= fun () ->
             ST.return @@ Some (binop op l r)
-         | _, _ ->
+          | _, _ ->
             failwith "In Symbolic.Executor, unsupported ops of binop"
-       end
-    | Bil.UnOp (op, x) ->
-       eval_exp x >>= fun mx ->
-       begin
-         match mx with
-         | Some x -> ST.return @@ Some (unop op x)
-         | None ->
+        end
+      | Bil.UnOp (op, x) ->
+        eval_exp x >>= fun mx ->
+        begin
+          match mx with
+          | Some x -> ST.return @@ Some (unop op x)
+          | None ->
             failwith "In Symbolic.Executor, unsupported op of unop"
-       end
-    | Bil.Var v ->
-       let varname = Var.name v in
-       has_symbolic_name varname >>= fun namepresent ->
-       let symname = if namepresent
-                     then get_symbolic_name_exn varname
-                     else new_symbolic varname
-       in
-       symname >>= fun symname ->
-       has_value_in_env symname >>= fun valpresent ->
-       begin
-         if valpresent
-         then get_value_in_env_exn symname
-         else
-           begin
-             match ABI.size_of_var_name varname with
-             | Some bw -> fresh_bv_for_symbolic symname bw
-             | None ->
+        end
+      | Bil.Var v ->
+        let varname = Var.name v in
+        has_symbolic_name varname >>= fun namepresent ->
+        let symname = if namepresent
+          then get_symbolic_name_exn varname
+          else new_symbolic varname
+        in
+        symname >>= fun symname ->
+        has_value_in_env symname >>= fun valpresent ->
+        begin
+          if valpresent
+          then get_value_in_env_exn symname
+          else
+            begin
+              match ABI.size_of_var_name varname with
+              | Some bw -> fresh_bv_for_symbolic symname bw
+              | None ->
                 let () = printf "Couldn't get bitwidth for var %s in symex compile of var" varname in
                 fresh_bv_for_symbolic symname 64
-           end
-       end >>= fun symval ->
-       ST.return @@ Some symval
-    | Bil.Int w -> ST.return @@ Some (word w)
-    | Bil.Cast (typ, sz, x) ->
-       eval_exp x >>= fun mx ->
-       begin
-         match mx with
-         | Some x -> ST.return @@ Some (cast typ sz x)
-         | None ->
+            end
+        end >>= fun symval ->
+        ST.return @@ Some symval
+      | Bil.Int w -> ST.return @@ Some (word w)
+      | Bil.Cast (typ, sz, x) ->
+        eval_exp x >>= fun mx ->
+        begin
+          match mx with
+          | Some x -> ST.return @@ Some (cast typ sz x)
+          | None ->
             failwith "In Symbolic.Executor, unsupported op of cast"
-       end
-    | Bil.Let (_, _, _) ->
-       failwith "in Symbolic.Executor.eval_exp, no support for let"
-    | Bil.Unknown (_, (Imm n)) ->
-       make_fresh_symbolic >>= fun symname ->
-       fresh_bv_for_symbolic symname n >>= fun bv ->
-       ST.return @@ Some bv
-    | Bil.Unknown (_, _) ->
-       failwith "in Symbolic.Executor.eval_exp, no support for generic unk"
-    | Bil.Ite (i, t, e) ->
-       eval_exp i >>= fun mi ->
-       eval_exp t >>= fun mt ->
-       eval_exp e >>= fun me ->
-       begin
-         match mi, mt, me with
-         | Some i, Some t, Some e -> ST.return @@ Some (ite i t e)
-         | _, _, _ ->
+        end
+      | Bil.Let (_, _, _) ->
+        failwith "in Symbolic.Executor.eval_exp, no support for let"
+      | Bil.Unknown (_, (Imm n)) ->
+        make_fresh_symbolic >>= fun symname ->
+        fresh_bv_for_symbolic symname n >>= fun bv ->
+        ST.return @@ Some bv
+      | Bil.Unknown (_, _) ->
+        failwith "in Symbolic.Executor.eval_exp, no support for generic unk"
+      | Bil.Ite (i, t, e) ->
+        eval_exp i >>= fun mi ->
+        eval_exp t >>= fun mt ->
+        eval_exp e >>= fun me ->
+        begin
+          match mi, mt, me with
+          | Some i, Some t, Some e -> ST.return @@ Some (ite i t e)
+          | _, _, _ ->
             failwith "in Symbolic.Executor.eval_exp, unsupported op of ite"
-       end
-    | Bil.Extract (hi, lo, x) ->
-       eval_exp x >>= fun mx ->
-       begin
-         match mx with
-         | Some x -> ST.return @@ Some (extract hi lo x)
-         | None ->
+        end
+      | Bil.Extract (hi, lo, x) ->
+        eval_exp x >>= fun mx ->
+        begin
+          match mx with
+          | Some x -> ST.return @@ Some (extract hi lo x)
+          | None ->
             failwith "in Symbolic.Executor.eval_exp, unsupported op of extract"
-       end
-    | Bil.Concat (x, y) ->
-       eval_exp x >>= fun ml ->
-       eval_exp y >>= fun mr ->
-       begin
-         match ml, mr with
-         | Some l, Some r ->
+        end
+      | Bil.Concat (x, y) ->
+        eval_exp x >>= fun ml ->
+        eval_exp y >>= fun mr ->
+        begin
+          match ml, mr with
+          | Some l, Some r ->
             ST.return @@ Some (concat l r)
-         | _, _ ->
+          | _, _ ->
             failwith "In Symbolic.Executor, unsupported ops of concat"
-       end
+        end
     in
     ST.get () >>= fun _ ->
     res
@@ -706,20 +706,20 @@ module Executor = struct
   let eval_def dt : unit ST.t =
     ST.return (Term.tid dt) >>= fun tid ->
     ST.update (fun st -> 
-    { st with do_check = Tid.equal tid st.target_tid }) >>= fun () ->
+      { st with do_check = Tid.equal tid st.target_tid }) >>= fun () ->
     let rhs = Def.rhs dt in
     eval_exp rhs >>= fun mr ->
     match mr with
     | Some result ->
-       let lhs = Def.lhs dt in
-       let varname = Var.name lhs in
-       new_symbolic varname >>= fun symname ->
-       push_def_constraint symname result >>= fun () ->
-       set_last_loaded_symname symname >>= fun () ->
-       ST.update (fun st -> { st with do_check = false }) >>= fun () ->
-       set_symbolic_val symname result
+      let lhs = Def.lhs dt in
+      let varname = Var.name lhs in
+      new_symbolic varname >>= fun symname ->
+      push_def_constraint symname result >>= fun () ->
+      set_last_loaded_symname symname >>= fun () ->
+      ST.update (fun st -> { st with do_check = false }) >>= fun () ->
+      set_symbolic_val symname result
     | None ->
-       ST.update @@ fun st -> { st with do_check = false }
+      ST.update @@ fun st -> { st with do_check = false }
 
   let eval_def_list defs : unit ST.t =
     let clear_old_constraints () : unit =
@@ -728,9 +728,9 @@ module Executor = struct
       ST.get () >>= fun st ->
       if not st.failed_ss && not st.failed_cs_left && not st.failed_cs_right
       then match defs with
-           | d :: defs' -> eval_def d >>= fun () ->
-                           loop defs'
-           | [] -> ST.return ()
+        | d :: defs' -> eval_def d >>= fun () ->
+          loop defs'
+        | [] -> ST.return ()
       else ST.return () in
     let () = clear_old_constraints () in 
     set_free_vars >>= fun () ->

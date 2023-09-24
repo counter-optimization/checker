@@ -6,7 +6,7 @@ open Monads.Std
     each variable's type is a fixed-width bitvector,
     so determining types comes down to figuring out each
     variable's width at it's specific def
- *)
+*)
 
 module Typed = struct
   type t = Bitvector of int [@@deriving compare, bin_io, sexp]
@@ -38,7 +38,7 @@ module State = struct
 
   let print : T.t -> unit =
     Map.iteri ~f:(fun ~key ~data ->
-        Format.printf "Var %s has type %s\n%!" key (Typed.to_string data))
+      Format.printf "Var %s has type %s\n%!" key (Typed.to_string data))
 end
 
 module ST = struct
@@ -81,30 +81,30 @@ let check_types_same_exn exp left right : unit =
 
 let is_arith_op = function
   | Bil.PLUS
-    | Bil.MINUS
-    | Bil.TIMES
-    | Bil.DIVIDE
-    | Bil.SDIVIDE
-    | Bil.MOD
-    | Bil.SMOD
-    | Bil.AND
-    | Bil.OR
-    | Bil.XOR -> true
+  | Bil.MINUS
+  | Bil.TIMES
+  | Bil.DIVIDE
+  | Bil.SDIVIDE
+  | Bil.MOD
+  | Bil.SMOD
+  | Bil.AND
+  | Bil.OR
+  | Bil.XOR -> true
   | _ -> false
 
 let is_lop = function
   | Bil.EQ
-    | Bil.NEQ
-    | Bil.LT
-    | Bil.LE
-    | Bil.SLT
-    | Bil.SLE -> true
+  | Bil.NEQ
+  | Bil.LT
+  | Bil.LE
+  | Bil.SLT
+  | Bil.SLE -> true
   | _ -> false
 
 let is_shift_op = function
   | Bil.LSHIFT
-    | Bil.RSHIFT
-    | Bil.ARSHIFT -> true
+  | Bil.RSHIFT
+  | Bil.ARSHIFT -> true
   | _ -> false
 
 let exp_is_var = function
@@ -121,89 +121,89 @@ let rec determine_types_from_exp (exp : Bil.exp) abi_typer : typd option ST.t =
   (*          State.print st.types *)
   (* in *)
   let typd = match exp with
-  | Bil.Load (_, _, _, sz) ->
-     ST.return @@ Option.return @@ Typed.Bitvector (Common.int_of_sz sz)
-  | Bil.Store (_, _, store_data, _, sz) -> ST.return None
-  | Bil.BinOp (op, left, right) ->
-     determine_types_from_exp left abi_typer >>= fun left_typd ->
-     determine_types_from_exp right abi_typer >>= fun right_typd ->
-     (* let () = printf "binop is %s\n%!" @@ Common.binop_to_string op in *)
-     let is_lop = is_lop op in
-     let is_arith_op = is_arith_op op in
-     let is_shift_op = is_shift_op op in
-     (match left_typd, right_typd with
+    | Bil.Load (_, _, _, sz) ->
+      ST.return @@ Option.return @@ Typed.Bitvector (Common.int_of_sz sz)
+    | Bil.Store (_, _, store_data, _, sz) -> ST.return None
+    | Bil.BinOp (op, left, right) ->
+      determine_types_from_exp left abi_typer >>= fun left_typd ->
+      determine_types_from_exp right abi_typer >>= fun right_typd ->
+      (* let () = printf "binop is %s\n%!" @@ Common.binop_to_string op in *)
+      let is_lop = is_lop op in
+      let is_arith_op = is_arith_op op in
+      let is_shift_op = is_shift_op op in
+      (match left_typd, right_typd with
        | Some left_typd, Some right_typd when is_lop || is_arith_op ->
-          let () = check_types_same_exn exp left_typd right_typd in
-          ST.return ()
+         let () = check_types_same_exn exp left_typd right_typd in
+         ST.return ()
        | Some left_typd, _ when is_lop || is_arith_op && (exp_is_var right) ->
-          let right_name = Var.name @@ get_var_exp right in
-          set_type_for_var right_name left_typd
+         let right_name = Var.name @@ get_var_exp right in
+         set_type_for_var right_name left_typd
        | _, Some right_typd when is_lop || is_arith_op && (exp_is_var left) ->
-          let left_name = Var.name @@ get_var_exp left in
-          set_type_for_var left_name right_typd
+         let left_name = Var.name @@ get_var_exp left in
+         set_type_for_var left_name right_typd
        | _ -> ST.return ()) >>= fun () ->
-     ST.return
-       (match left_typd, right_typd with
-       | _ when is_lop -> Some (Typed.Bitvector 1)
-       | Some l, _ when is_arith_op -> Some l
-       | _, Some r when is_arith_op -> Some r
-       | Some l, _ when is_shift_op -> Some l
-       (* | _, _ when is_shift_op -> *)
-       (*    failwith @@ sprintf "Can't type shift expr %a" Exp.pps exp *)
-       | Some l, _ -> Some l
-       | _, Some r -> Some r
-       | None, None -> None)
-  | Bil.UnOp (_, left) -> determine_types_from_exp left abi_typer
-  | Bil.Var var ->
-     let name = Var.name var in
-     if is_abi_typable abi_typer name
-     then
-       let width = Option.value_exn (abi_typer name) in
-       ST.return @@ Option.return @@ Typed.Bitvector width
-     else
-       has_type_in_env name >>= fun already_typed ->
-       if already_typed
-       then
-         get_type_in_env name >>| Option.return
-       else
-         ST.return None
-  | Bil.Int word ->
-     ST.return @@ Option.return @@ Typed.Bitvector (Word.bitwidth word)
-  | Bil.Cast (_, n, _) ->
-     ST.return @@ Option.return @@ Typed.Bitvector n
-  | Bil.Let (_, _, _) -> ST.return None
-  | Bil.Unknown (_, (Imm n)) ->
-     ST.return @@ Option.return @@ Typed.Bitvector n
-  | Bil.Unknown (_, _) ->
-     ST.return None
-  | Bil.Ite (_, then', else') ->
-     determine_types_from_exp then' abi_typer >>= fun then_typd ->
-     determine_types_from_exp else' abi_typer >>= fun else_typd ->
-     begin
-       match then_typd, else_typd with
-       | Some then_typd, Some else_typd ->
+      ST.return
+        (match left_typd, right_typd with
+         | _ when is_lop -> Some (Typed.Bitvector 1)
+         | Some l, _ when is_arith_op -> Some l
+         | _, Some r when is_arith_op -> Some r
+         | Some l, _ when is_shift_op -> Some l
+         (* | _, _ when is_shift_op -> *)
+         (*    failwith @@ sprintf "Can't type shift expr %a" Exp.pps exp *)
+         | Some l, _ -> Some l
+         | _, Some r -> Some r
+         | None, None -> None)
+    | Bil.UnOp (_, left) -> determine_types_from_exp left abi_typer
+    | Bil.Var var ->
+      let name = Var.name var in
+      if is_abi_typable abi_typer name
+      then
+        let width = Option.value_exn (abi_typer name) in
+        ST.return @@ Option.return @@ Typed.Bitvector width
+      else
+        has_type_in_env name >>= fun already_typed ->
+        if already_typed
+        then
+          get_type_in_env name >>| Option.return
+        else
+          ST.return None
+    | Bil.Int word ->
+      ST.return @@ Option.return @@ Typed.Bitvector (Word.bitwidth word)
+    | Bil.Cast (_, n, _) ->
+      ST.return @@ Option.return @@ Typed.Bitvector n
+    | Bil.Let (_, _, _) -> ST.return None
+    | Bil.Unknown (_, (Imm n)) ->
+      ST.return @@ Option.return @@ Typed.Bitvector n
+    | Bil.Unknown (_, _) ->
+      ST.return None
+    | Bil.Ite (_, then', else') ->
+      determine_types_from_exp then' abi_typer >>= fun then_typd ->
+      determine_types_from_exp else' abi_typer >>= fun else_typd ->
+      begin
+        match then_typd, else_typd with
+        | Some then_typd, Some else_typd ->
           let () = check_types_same_exn exp then_typd else_typd in
           ST.return @@ Option.return then_typd 
-       | Some then_typd, _ ->
+        | Some then_typd, _ ->
           ST.return @@ Option.return then_typd 
-       | _, Some else_typd ->
+        | _, Some else_typd ->
           ST.return @@ Option.return else_typd 
-       | _ ->
+        | _ ->
           failwith @@
-            sprintf "Can't determine type of ITE expr: %a" Exp.pps exp
-     end
-  | Bil.Extract (hi, lo, left) ->
-     let final_typd = Typed.Bitvector (hi - lo + 1) in
-     ST.return @@ Some final_typd
-  | Bil.Concat (left, right) ->
-     determine_types_from_exp left abi_typer >>= fun left_typd ->
-     determine_types_from_exp right abi_typer >>= fun right_typd ->
-     match left_typd, right_typd with
-     | Some left_typd, Some right_typd ->
+          sprintf "Can't determine type of ITE expr: %a" Exp.pps exp
+      end
+    | Bil.Extract (hi, lo, left) ->
+      let final_typd = Typed.Bitvector (hi - lo + 1) in
+      ST.return @@ Some final_typd
+    | Bil.Concat (left, right) ->
+      determine_types_from_exp left abi_typer >>= fun left_typd ->
+      determine_types_from_exp right abi_typer >>= fun right_typd ->
+      match left_typd, right_typd with
+      | Some left_typd, Some right_typd ->
         ST.return @@ Option.return @@ Typed.concat left_typd right_typd
-     | _ ->
+      | _ ->
         failwith @@
-          sprintf "Can't type a concat of two unknown types: %a" Exp.pps exp
+        sprintf "Can't type a concat of two unknown types: %a" Exp.pps exp
   in
   (* ST.get () >>= fun st -> *)
   (* let () = printf "leaving type det of exp %a, env:\n%!" Exp.ppo exp; *)
@@ -232,13 +232,13 @@ let process_def def abi_typer : unit ST.t =
       check_types_same_exn rhs lhs_expected_type rhs_type
     else
       set_type_for_var lhs rhs_type
-               
+
 let run defs abi_typer =
   let rec process_all_defs = function
     | [] -> ST.return ()
     | d :: ds ->
-       process_def d abi_typer >>= fun () ->
-       process_all_defs ds
+      process_def d abi_typer >>= fun () ->
+      process_all_defs ds
   in
   let initial_type_state = make_initial () in
   let compute_all_types = process_all_defs defs in

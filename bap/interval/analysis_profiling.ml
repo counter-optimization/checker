@@ -7,10 +7,10 @@ module KB = Bap_knowledge.Knowledge
 open KB.Monad_infix
 
 type t = {
-    start : int;
-    stop : int;
-    duration : int
-  }
+  start : int;
+  stop : int;
+  duration : int
+}
 
 type funcname = String.t
 
@@ -81,16 +81,16 @@ let start_slot = KB.Class.property
                    Common.int_total_order_dom
 
 let stop_slot = KB.Class.property
-                   ~package:Common.package
-                   cls
-                   "stoptime_ns"
-                   Common.int_total_order_dom
+                  ~package:Common.package
+                  cls
+                  "stoptime_ns"
+                  Common.int_total_order_dom
 
 let duration_slot = KB.Class.property
-                   ~package:Common.package
-                   cls
-                   "duration_ns"
-                   Common.int_total_order_dom
+                      ~package:Common.package
+                      cls
+                      "duration_ns"
+                      Common.int_total_order_dom
 
 let record_start_time () : t =
   let start = Time_ns.now () |> Time_ns.to_int_ns_since_epoch in
@@ -105,45 +105,45 @@ let record_duration_for (funcname : funcname)
       (event : event)
       (r : t) : unit =
   Toplevel.exec (KB.Object.create cls >>= fun obj ->
-  KB.all_unit [
-      KB.provide funcname_slot obj funcname;
-      KB.provide event_slot obj event;
-      KB.provide start_slot obj r.start;
-      KB.provide stop_slot obj r.stop;
-      KB.provide duration_slot obj r.duration;
-    ])
+                 KB.all_unit [
+                   KB.provide funcname_slot obj funcname;
+                   KB.provide event_slot obj event;
+                   KB.provide start_slot obj r.start;
+                   KB.provide stop_slot obj r.stop;
+                   KB.provide duration_slot obj r.duration;
+                 ])
 
 let print_prof_event (event : t KB.obj) : unit =
   Toplevel.exec begin
-      KB.collect funcname_slot event >>= fun funcname ->
-      KB.collect event_slot event >>= fun eventtype ->
-      KB.collect duration_slot event >>= fun duration ->
-      let eventtype = string_of_event eventtype in
-      let duration = Int.to_string duration in 
-      KB.return @@
-        printf "%s, %s, %s\n%!" funcname eventtype duration
-    end
+    KB.collect funcname_slot event >>= fun funcname ->
+    KB.collect event_slot event >>= fun eventtype ->
+    KB.collect duration_slot event >>= fun duration ->
+    let eventtype = string_of_event eventtype in
+    let duration = Int.to_string duration in 
+    KB.return @@
+    printf "%s, %s, %s\n%!" funcname eventtype duration
+  end
 
 let print_all_times () : unit =
   let funcname_grouper (event1 : t KB.obj) (event2 : t KB.obj) : bool =
     let is_equal = ref false in
     let () = Toplevel.exec begin
-                 KB.collect funcname_slot event1 >>= fun funcname1 ->
-                 KB.collect funcname_slot event2 >>= fun funcname2 ->
-                 is_equal := String.equal funcname1 funcname2;
-                 KB.return ()
-               end
+      KB.collect funcname_slot event1 >>= fun funcname1 ->
+      KB.collect funcname_slot event2 >>= fun funcname2 ->
+      is_equal := String.equal funcname1 funcname2;
+      KB.return ()
+    end
     in
     !is_equal
   in
   let do_printing = begin
-      KB.objects cls >>= fun prof_events ->
-      let grouped_events = Seq.group prof_events ~break:funcname_grouper in
-      let ungrouped_events = Seq.map grouped_events ~f:(Seq.of_list)
-                             |> Seq.join
-      in
-      KB.return @@ Seq.iter ungrouped_events ~f:print_prof_event
-    end
+    KB.objects cls >>= fun prof_events ->
+    let grouped_events = Seq.group prof_events ~break:funcname_grouper in
+    let ungrouped_events = Seq.map grouped_events ~f:(Seq.of_list)
+                           |> Seq.join
+    in
+    KB.return @@ Seq.iter ungrouped_events ~f:print_prof_event
+  end
   in
   Toplevel.exec do_printing
 

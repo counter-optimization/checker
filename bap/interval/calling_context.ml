@@ -27,8 +27,8 @@ module T = struct
       match cc with
       | [] -> ()
       | x :: xs ->
-         let tid_string = Tid.to_string x in
-         Format.fprintf ppf " %s " tid_string
+        let tid_string = Tid.to_string x in
+        Format.fprintf ppf " %s " tid_string
     in
     Format.fprintf ppf "[";
     loop ppf cc;
@@ -41,8 +41,8 @@ module T = struct
       | l :: ls, [] -> false
       | [], r :: rs -> false
       | l :: ls, r :: rs ->
-         loop ls rs (fun res ->
-             Tid.equal l r && res)
+        loop ls rs (fun res ->
+          Tid.equal l r && res)
     in
     loop l r (fun x -> x)
 end
@@ -71,7 +71,7 @@ include Regular
 let to_insn_tid (ctxt : t) : Tid.t =
   match ctxt with
   | [] ->
-     failwith "in Calling_context.to_insn_tid, couldn't get last insn tid of empty calling context"
+    failwith "in Calling_context.to_insn_tid, couldn't get last insn tid of empty calling context"
   | n :: ns -> n
 
 let add_callsite (cs : Tid.t) (ctxt : t) : t = List.cons cs ctxt

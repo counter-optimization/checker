@@ -5,10 +5,10 @@ open Graphlib.Std
 module SS = Common.SS
 
 module Directives(N : Abstract.NumericDomain)
-         (E : Abstract.MemoryT with type v := N.t
-                                and type region := Common.Region.t
-                                and type regions := Common.Region.Set.t
-                                and type valtypes := Common.cell_t) = struct
+    (E : Abstract.MemoryT with type v := N.t
+                           and type region := Common.Region.t
+                           and type regions := Common.Region.Set.t
+                           and type valtypes := Common.cell_t) = struct
 
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with
@@ -32,8 +32,8 @@ module Directives(N : Abstract.NumericDomain)
     type cnd = Eq of simple_operand * simple_operand
              | Lt of simple_operand * simple_operand
              | And of cnd * cnd
-                              [@@deriving compare, sexp]
-    
+    [@@deriving compare, sexp]
+
     type directive = Empty
                    | Value of cnd
                    | Jmp of cnd
@@ -61,7 +61,7 @@ module Directives(N : Abstract.NumericDomain)
       let (tidset, dir) = td in
       match dir with
       | Jmp c
-        | Value c -> Some c
+      | Value c -> Some c
       | _ -> None
 
     let is_tagged_combine (tdir : t) : bool =
@@ -82,13 +82,13 @@ module Directives(N : Abstract.NumericDomain)
       | Eq (_, _) -> []
       | Lt (_, _) -> []
       | And (c1, c2) ->
-         List.append (cnds_as_substs c1) (cnds_as_substs c2)
+        List.append (cnds_as_substs c1) (cnds_as_substs c2)
 
     let rec subst_cnd (target : cnd) ((replace, with_) : string * string) : cnd =
       let s = function
         | Var v -> if String.equal v replace
-                   then Var with_
-                   else Var v
+          then Var with_
+          else Var v
         | Num n -> Num n
       in
       match (target : cnd) with
@@ -119,8 +119,8 @@ module Directives(N : Abstract.NumericDomain)
                          (simple_operand_to_string c1)
                          (simple_operand_to_string c2)
       | And (c1, c2) -> Format.sprintf "%s && %s"
-                         (directive_cnd_to_string c1)
-                         (directive_cnd_to_string c2)
+                          (directive_cnd_to_string c1)
+                          (directive_cnd_to_string c2)
 
     let directive_to_string (d : directive) : string =
       match d with
@@ -154,113 +154,113 @@ module Directives(N : Abstract.NumericDomain)
     | Jmp c1, Jmp c2 -> Ok (Jmp (And (c1, c2)))
     | Combine c1, Combine c2 -> Ok (Combine (Tidset.union c1 c2))
     | _ ->
-       let lefts = directive_to_string left in
-       let rights = directive_to_string right in
-       let err_s = "Can't combine incompatible directives: " ^ lefts ^ " and " ^ rights in
-       Or_error.error_string err_s
+      let lefts = directive_to_string left in
+      let rights = directive_to_string right in
+      let err_s = "Can't combine incompatible directives: " ^ lefts ^ " and " ^ rights in
+      Or_error.error_string err_s
 
   let tagged_directive_and ((tids1, dir1) : tagged_directive)
         ((tids2, dir2) : tagged_directive) : tagged_directive Or_error.t =
     Or_error.bind (directive_and dir1 dir2) ~f:(fun dir ->
-        Ok (Tidset.union tids1 tids2, dir))
+      Ok (Tidset.union tids1 tids2, dir))
 
   let reduce_and_tagged_dirs (base : tagged_directive) (tds : tagged_directive list)
-      : tagged_directive Or_error.t =
+    : tagged_directive Or_error.t =
     let open Or_error.Monad_infix in
     List.fold tds ~init:(Ok base) ~f:(fun total_dir next_dir ->
-        total_dir >>= fun dir -> tagged_directive_and dir next_dir)
+      total_dir >>= fun dir -> tagged_directive_and dir next_dir)
 
   module Applier = struct
 
     module WI = Wrapping_interval
-    
+
     type pos_neg_applier = (E.t -> E.t) * (E.t -> E.t)
 
     let id : 'a. 'a -> 'a = fun x -> x
     let id_applier : pos_neg_applier = id, id
-      
+
     let rec eval_cnd : cnd -> pos_neg_applier =
       let propagate_taint oldleft oldright newval =
         let lt = get_taint oldleft in
         let rt = get_taint oldright in
         let new_wi = get_intvl newval in
         let final_taint = if WI.equal new_wi WI.bot
-                          then Checker_taint.Analysis.Notaint
-                          else Checker_taint.Analysis.join lt rt in
+          then Checker_taint.Analysis.Notaint
+          else Checker_taint.Analysis.join lt rt in
         set_taint newval final_taint in
       fun cnd ->
-      match cnd with
-      | Eq (Var a, Var b) ->
-         let pos_applier = fun (env : E.t) ->
-           let a_val = E.lookup a env in
-           let b_val = E.lookup b env in
-           let final_val = N.meet a_val b_val
-                           |> propagate_taint a_val b_val in
-           E.set a final_val env
-           |> E.set b final_val in
-         let neg_applier = fun (env : E.t) ->
-           let a_val = E.lookup a env in
-           let b_val = E.lookup b env in
-           let a_wi = get_intvl a_val in
-           let b_wi = get_intvl b_val in
-           let a_wi' = WI.try_remove_interval ~remove:b_wi ~from_:a_wi in
-           let b_wi' = WI.try_remove_interval ~remove:a_wi ~from_:b_wi in
-           let a_val' = set_intvl a_val a_wi'
-                        |> propagate_taint a_val b_val in
-           let b_val' = set_intvl b_val b_wi'
-                        |> propagate_taint a_val b_val in
-           E.set a a_val' env 
-           |> E.set b b_val' in
-         (pos_applier, neg_applier)
-      | Eq (Var v, Num w)
+        match cnd with
+        | Eq (Var a, Var b) ->
+          let pos_applier = fun (env : E.t) ->
+            let a_val = E.lookup a env in
+            let b_val = E.lookup b env in
+            let final_val = N.meet a_val b_val
+                            |> propagate_taint a_val b_val in
+            E.set a final_val env
+            |> E.set b final_val in
+          let neg_applier = fun (env : E.t) ->
+            let a_val = E.lookup a env in
+            let b_val = E.lookup b env in
+            let a_wi = get_intvl a_val in
+            let b_wi = get_intvl b_val in
+            let a_wi' = WI.try_remove_interval ~remove:b_wi ~from_:a_wi in
+            let b_wi' = WI.try_remove_interval ~remove:a_wi ~from_:b_wi in
+            let a_val' = set_intvl a_val a_wi'
+                         |> propagate_taint a_val b_val in
+            let b_val' = set_intvl b_val b_wi'
+                         |> propagate_taint a_val b_val in
+            E.set a a_val' env 
+            |> E.set b b_val' in
+          (pos_applier, neg_applier)
+        | Eq (Var v, Num w)
         | Eq (Num w, Var v) ->
-         let const = N.of_word w in
-         if Common.AMD64SystemVABI.var_name_is_flag v
-         then
-           let one = Word.one @@ Word.bitwidth w in
-           let zero = Word.zero @@ Word.bitwidth w in
-           let pos_val, neg_val = if Word.equal w one
-                                  then (N.of_word one, N.of_word zero)
-                                  else (N.of_word zero, N.of_word one) in
-           let pos_applier = E.set v pos_val in
-           let neg_applier = E.set v neg_val in
-           (pos_applier, neg_applier)
-         else
-           let pos_applier = fun (env : E.t) ->
-             let var_val = E.lookup v env in
-             let intersect = N.meet var_val const
+          let const = N.of_word w in
+          if Common.AMD64SystemVABI.var_name_is_flag v
+          then
+            let one = Word.one @@ Word.bitwidth w in
+            let zero = Word.zero @@ Word.bitwidth w in
+            let pos_val, neg_val = if Word.equal w one
+              then (N.of_word one, N.of_word zero)
+              else (N.of_word zero, N.of_word one) in
+            let pos_applier = E.set v pos_val in
+            let neg_applier = E.set v neg_val in
+            (pos_applier, neg_applier)
+          else
+            let pos_applier = fun (env : E.t) ->
+              let var_val = E.lookup v env in
+              let intersect = N.meet var_val const
+                              |> propagate_taint var_val const in
+              E.set v intersect env in
+            let neg_applier = fun (env : E.t) ->
+              let const_wi = get_intvl const in
+              let var_val = E.lookup v env in
+              let var_wi = get_intvl var_val in
+              let var_wi' = WI.try_remove_interval ~remove:const_wi ~from_:var_wi in
+              let var_val' = set_intvl var_val var_wi'
                              |> propagate_taint var_val const in
-             E.set v intersect env in
-           let neg_applier = fun (env : E.t) ->
-             let const_wi = get_intvl const in
-             let var_val = E.lookup v env in
-             let var_wi = get_intvl var_val in
-             let var_wi' = WI.try_remove_interval ~remove:const_wi ~from_:var_wi in
-             let var_val' = set_intvl var_val var_wi'
-                            |> propagate_taint var_val const in
-             E.set v var_val' env in
-           (pos_applier, neg_applier)
-      | Lt (Var a, Var b) ->
-         let pos_applier = fun (env : E.t) ->
-           failwith "LT (VAR A, VAR B) not supported in Directives.Applier.eval_cnd yet" in
-         let neg_applier = fun (env : E.t) ->
-           failwith "LT (VAR A, VAR B) not supported in Directives.Applier.eval_cnd yet" in
-         (pos_applier, neg_applier)
-      | Lt (Var v, Num w)
+              E.set v var_val' env in
+            (pos_applier, neg_applier)
+        | Lt (Var a, Var b) ->
+          let pos_applier = fun (env : E.t) ->
+            failwith "LT (VAR A, VAR B) not supported in Directives.Applier.eval_cnd yet" in
+          let neg_applier = fun (env : E.t) ->
+            failwith "LT (VAR A, VAR B) not supported in Directives.Applier.eval_cnd yet" in
+          (pos_applier, neg_applier)
+        | Lt (Var v, Num w)
         | Lt (Num w, Var v) ->
-         let pos_applier = fun (env : E.t) ->
-           failwith "LT (VAR A, NUM B) not supported in Directives.Applier.eval_cnd yet" in
-         let neg_applier = fun (env : E.t) ->
-           failwith "LT (VAR A, NUM B) not supported in Directives.Applier.eval_cnd yet" in
-         (pos_applier, neg_applier)
-      | And (c1, c2) ->
-         let (p1, n1) = eval_cnd c1 in
-         let (p2, n2) = eval_cnd c2 in
-         (fun e -> p2 (p1 e)), (fun e -> n2 (n1 e))
-      | _ ->
-         failwith
-           "Fallthrough case in Directives.Applier.eval_cnd shouldn't happen"
-      
+          let pos_applier = fun (env : E.t) ->
+            failwith "LT (VAR A, NUM B) not supported in Directives.Applier.eval_cnd yet" in
+          let neg_applier = fun (env : E.t) ->
+            failwith "LT (VAR A, NUM B) not supported in Directives.Applier.eval_cnd yet" in
+          (pos_applier, neg_applier)
+        | And (c1, c2) ->
+          let (p1, n1) = eval_cnd c1 in
+          let (p2, n2) = eval_cnd c2 in
+          (fun e -> p2 (p1 e)), (fun e -> n2 (n1 e))
+        | _ ->
+          failwith
+            "Fallthrough case in Directives.Applier.eval_cnd shouldn't happen"
+
     let build : tagged_directive -> pos_neg_applier =
       fun (tids, dir) ->
       match dir with
@@ -268,7 +268,7 @@ module Directives(N : Abstract.NumericDomain)
       | Jmp cnd -> eval_cnd cnd
       | _ -> id_applier
   end
-  
+
   module Extractor = struct
     module Grammar = struct
       let is_var_or_num : Bil.exp -> bool = function
@@ -282,9 +282,9 @@ module Directives(N : Abstract.NumericDomain)
 
       let is_simple_cnd : Bil.exp -> bool = function
         | Bil.BinOp (op, left, right) ->
-           is_comparator_binop op &&
-             is_var_or_num left &&
-               is_var_or_num right
+          is_comparator_binop op &&
+          is_var_or_num left &&
+          is_var_or_num right
         | _ -> false
 
       let is_var : Bil.exp -> bool = function
@@ -297,34 +297,34 @@ module Directives(N : Abstract.NumericDomain)
         match comp with
         | Bil.EQ -> Some Bil.EQ
         | _ -> None
-      
+
       let run (exp : Bil.exp) (tid : tid) : t option =
         if not @@ Grammar.is_simple_cnd exp
         then None
         else
           match exp with
           | Bil.BinOp (comparator, Bil.Var v, Bil.Int w)
-            | Bil.BinOp (comparator, Bil.Int w, Bil.Var v) ->
-             let dir_var = Var (Var.name v) in
-             let dir_num = Num w in
-             (match normalize_comparator comparator with
-              | Some Bil.EQ -> Some (Tidset.singleton tid,
-                                     Value (Eq (dir_var, dir_num)))
-              | _ -> None)
+          | Bil.BinOp (comparator, Bil.Int w, Bil.Var v) ->
+            let dir_var = Var (Var.name v) in
+            let dir_num = Num w in
+            (match normalize_comparator comparator with
+             | Some Bil.EQ -> Some (Tidset.singleton tid,
+                                    Value (Eq (dir_var, dir_num)))
+             | _ -> None)
           | Bil.BinOp (comparator, Bil.Var v, Bil.Var x) ->
-             let dir_v = Var (Var.name v) in
-             let dir_x = Var (Var.name x) in
-             (match normalize_comparator comparator with
-              | Some Bil.EQ -> Some (Tidset.singleton tid,
-                                     Value (Eq (dir_v, dir_x)))
-              | _ -> None)
+            let dir_v = Var (Var.name v) in
+            let dir_x = Var (Var.name x) in
+            (match normalize_comparator comparator with
+             | Some Bil.EQ -> Some (Tidset.singleton tid,
+                                    Value (Eq (dir_v, dir_x)))
+             | _ -> None)
           | _ -> None
     end
 
     type prereq = {
-        tidmap : Blk.elt Tid_map.t;
-        rd : Reachingdefs.t;
-      }
+      tidmap : Blk.elt Tid_map.t;
+      rd : Reachingdefs.t;
+    }
 
     let init tidmap rd : prereq =
       { tidmap; rd }
@@ -334,9 +334,9 @@ module Directives(N : Abstract.NumericDomain)
     let to_directive_map (dirs : t list) : directive_map =
       let emp = Tid_map.empty in
       List.fold dirs ~init:emp ~f:(fun dmap tdir ->
-          Set.to_list (fst tdir)
-          |> List.fold ~init:dmap ~f:(fun dmap tid ->
-                 Tid_map.set dmap ~key:tid ~data:tdir))
+        Set.to_list (fst tdir)
+        |> List.fold ~init:dmap ~f:(fun dmap tid ->
+          Tid_map.set dmap ~key:tid ~data:tdir))
 
     let last_deftid_is_simple_assign (p : prereq) (deftid : tid) : bool =
       match Tid_map.find p.tidmap deftid with
@@ -344,19 +344,19 @@ module Directives(N : Abstract.NumericDomain)
       | _ -> false
 
     let directive_if_simple_assign (p : prereq) (flagtid : tid) (deftid : tid)
-        : tagged_directive option =
+      : tagged_directive option =
       match Tid_map.find p.tidmap deftid with
       | Some (`Def d) when Grammar.is_var (Def.rhs d) ->
-         let lhs = T.Var (Def.lhs d |> Var.name) in
-         let rhs = (match Def.rhs d with
-           | Bil.Var v -> T.Var (Var.name v)
-           | _ -> failwith "shouldn't happen in directive_if_simple_assign") in
-         let tidset = Tidset.singleton flagtid in
-         Some (tidset, T.Value (T.Eq (lhs, rhs)))
+        let lhs = T.Var (Def.lhs d |> Var.name) in
+        let rhs = (match Def.rhs d with
+          | Bil.Var v -> T.Var (Var.name v)
+          | _ -> failwith "shouldn't happen in directive_if_simple_assign") in
+        let tidset = Tidset.singleton flagtid in
+        Some (tidset, T.Value (T.Eq (lhs, rhs)))
       | _ -> None
 
     let get_last_deftid (p : prereq) ~(var : string) ~(attid : tid)
-        : tid option =
+      : tid option =
       let last_defs = Reachingdefs.get_last_defs p.rd ~attid ~forvar:var in
       if Tidset.length last_defs = 1
       then Tidset.to_list last_defs |> List.hd
@@ -368,12 +368,12 @@ module Directives(N : Abstract.NumericDomain)
       let vars_of_base_exp = vars_of_simple_cnd flag_base_exp
                              |> SS.to_list in
       List.fold vars_of_base_exp ~init:[] ~f:(fun dirs used_var ->
-          let maybe_new_dir =
-            get_last_deftid p ~var:used_var ~attid:flag_tid >>= fun t ->
-              directive_if_simple_assign p flag_tid t in
-          match maybe_new_dir with
-          | Some dir -> dir :: dirs
-          | None -> dirs)
+        let maybe_new_dir =
+          get_last_deftid p ~var:used_var ~attid:flag_tid >>= fun t ->
+          directive_if_simple_assign p flag_tid t in
+        match maybe_new_dir with
+        | Some dir -> dir :: dirs
+        | None -> dirs)
 
     let get_merge_point_for_flag_dirs (p : prereq)
           ((tid,flagname) : tid * string)
@@ -390,80 +390,80 @@ module Directives(N : Abstract.NumericDomain)
                             |> List.rev in
         List.hd flag_dep_deps
         |> Option.bind ~f:(fun latest_dep ->
-               let latest_depset = Tidset.singleton latest_dep in
-               let tagged_combine_dir = (latest_depset, Combine (fst flagdirs)) in
-               Some tagged_combine_dir)
-      
+          let latest_depset = Tidset.singleton latest_dep in
+          let tagged_combine_dir = (latest_depset, Combine (fst flagdirs)) in
+          Some tagged_combine_dir)
+
     let get_conds_for_flag ((tid,flagname) : tid * string) (p : prereq) : t =
       let flag_tidset = Tidset.singleton tid in
       let flag_set_dir = flag_tidset, Value (Eq (Var flagname, Num (Word.one 1))) in
       let flag_exp = match Tid_map.find p.tidmap tid with
         | Some (`Def d) -> Def.rhs d
         | _ -> failwith @@
-                 Format.sprintf "Couldn't find def of flag %s (%a)"
-                   flagname
-                   Tid.pps tid
+          Format.sprintf "Couldn't find def of flag %s (%a)"
+            flagname
+            Tid.pps tid
       in
       (* if the exp setting the flag is simple, then also add it to the condition *)
       if Grammar.is_simple_cnd flag_exp
       then
         match Compiler.run flag_exp tid with
         | Some basedir ->
-           (match tagged_directive_and basedir flag_set_dir with
-            | Ok flag_set_dir ->
-               let sec_lvl_dirs = try_get_second_level_directives p tid flag_exp in
-               if List.is_empty sec_lvl_dirs
-               then
-                 flag_set_dir
-               else
-                 let all_dirs = List.map sec_lvl_dirs ~f:(fun tdir ->
-                                    substs_of_tdir tdir)
-                                |> List.join
-                                |> List.map ~f:(fun snd_lvl_subst ->
-                                       subst_tdir flag_set_dir snd_lvl_subst)
-                 in
-                 (match reduce_and_tagged_dirs flag_set_dir all_dirs with
-                  | Ok d -> d
-                  | Error e -> failwith (Error.to_string_hum e))
-            | Error e ->
-               let () = printf "[Trace] Couldn't combine basedir and flag_set_dir of flag %s (%a)\n%!" flagname Tid.ppo tid
+          (match tagged_directive_and basedir flag_set_dir with
+           | Ok flag_set_dir ->
+             let sec_lvl_dirs = try_get_second_level_directives p tid flag_exp in
+             if List.is_empty sec_lvl_dirs
+             then
+               flag_set_dir
+             else
+               let all_dirs = List.map sec_lvl_dirs ~f:(fun tdir ->
+                 substs_of_tdir tdir)
+                              |> List.join
+                              |> List.map ~f:(fun snd_lvl_subst ->
+                                subst_tdir flag_set_dir snd_lvl_subst)
                in
-               flag_set_dir)
+               (match reduce_and_tagged_dirs flag_set_dir all_dirs with
+                | Ok d -> d
+                | Error e -> failwith (Error.to_string_hum e))
+           | Error e ->
+             let () = printf "[Trace] Couldn't combine basedir and flag_set_dir of flag %s (%a)\n%!" flagname Tid.ppo tid
+             in
+             flag_set_dir)
         | None ->
-           let () = printf "[Trace] Couldn't get basedir from def of flag %s (%a)\n%!"
-                      flagname Tid.ppo tid
-           in
-           flag_set_dir
+          let () = printf "[Trace] Couldn't get basedir from def of flag %s (%a)\n%!"
+                     flagname Tid.ppo tid
+          in
+          flag_set_dir
       else
         flag_set_dir
   end
 end
 
 module Tree(N : Abstract.NumericDomain)
-         (E : Abstract.MemoryT with type v := N.t
-                                and type region := Common.Region.t
-                                and type regions := Common.Region.Set.t
-                                and type valtypes := Common.cell_t) = struct
-  
+    (E : Abstract.MemoryT with type v := N.t
+                           and type region := Common.Region.t
+                           and type regions := Common.Region.Set.t
+                           and type valtypes := Common.cell_t) = struct
+
   module Directives = Directives(N)(E)
-    
+
   module T = struct
     type node = Leaf of E.t | Parent of {
-                    left : node;
-                    directive : Directives.t;
-                    right : node;
-                  }
+      left : node;
+      directive : Directives.t;
+      right : node;
+    }
 
     type t = node
   end
-  
+
   include T
 
   let rec to_string (tree : t) : string =
     match tree with
     | Leaf l -> "(leaf)"
     | Parent { left; right; _ } ->
-       Format.sprintf "(Parent %s %s)" (to_string left) (to_string right)
+      Format.sprintf "(Parent %s %s)" (to_string left) (to_string right)
 
   let is_empty (tree : t) : bool =
     match tree with
@@ -481,39 +481,39 @@ module Tree(N : Abstract.NumericDomain)
     let rec loop ?(found : bool = false) : t -> t = function
       | Leaf n -> Leaf n
       | Parent { left; directive; right } ->
-         let (tid_tags, dir) = directive in
-         let found = found || tids_overlap tids tid_tags in
-         if found
-         then match loop ~found left, loop ~found right with
-              | Leaf l, Leaf r -> Leaf (E.merge l r)
-              | _, _ ->
-                 failwith "loop in combine_partitions didn't return leaves"
-         else Parent {
-                  left = loop ~found left;
-                  right = loop ~found right;
-                  directive
-                } in
+        let (tid_tags, dir) = directive in
+        let found = found || tids_overlap tids tid_tags in
+        if found
+        then match loop ~found left, loop ~found right with
+          | Leaf l, Leaf r -> Leaf (E.merge l r)
+          | _, _ ->
+            failwith "loop in combine_partitions didn't return leaves"
+        else Parent {
+          left = loop ~found left;
+          right = loop ~found right;
+          directive
+        } in
     loop tree
 
   let rec do_directive_split (tree : t) (tdir : Directives.tagged_directive) : t =
     match tree with
     | Leaf n ->
-       let true_pruner, false_pruner = Directives.Applier.build tdir in
-       let left_env = true_pruner n in
-       let right_env = false_pruner n in
-       let left = Leaf left_env in
-       let right = Leaf right_env in
-       Parent {
-           left;
-           right; 
-           directive = tdir
-         }
+      let true_pruner, false_pruner = Directives.Applier.build tdir in
+      let left_env = true_pruner n in
+      let right_env = false_pruner n in
+      let left = Leaf left_env in
+      let right = Leaf right_env in
+      Parent {
+        left;
+        right; 
+        directive = tdir
+      }
     | Parent { left; directive; right } ->
-       Parent {
-           left = do_directive_split left tdir;
-           right = do_directive_split right tdir;
-           directive;
-         }
+      Parent {
+        left = do_directive_split left tdir;
+        right = do_directive_split right tdir;
+        directive;
+      }
 
   let rec directive_already_applied (tree : t)
             (tdir : Directives.tagged_directive) : bool =
@@ -521,11 +521,11 @@ module Tree(N : Abstract.NumericDomain)
       match tree with
       | Leaf l -> k false
       | Parent p -> if Directives.equal p.directive tdir
-                    then k true
-                    else loop p.left (fun leftres ->
-                             if leftres
-                             then k true
-                             else loop p.right (fun x -> x)) in
+        then k true
+        else loop p.left (fun leftres ->
+          if leftres
+          then k true
+          else loop p.right (fun x -> x)) in
     loop tree (fun x -> x)
 
   let apply_directive (tree : t) (tdir : Directives.tagged_directive) : t =
@@ -540,24 +540,24 @@ module Tree(N : Abstract.NumericDomain)
       match l, r with
       | Leaf l, Leaf r -> k (E.equal l r)
       | Parent l, Parent r ->
-         Directives.equal l.directive r.directive &&
-           loop l.left r.left (fun left_res ->
-               k @@ 
-                 left_res &&
-                 loop l.right r.right (fun right_res -> right_res))
+        Directives.equal l.directive r.directive &&
+        loop l.left r.left (fun left_res ->
+          k @@ 
+          left_res &&
+          loop l.right r.right (fun right_res -> right_res))
       | _, _ -> k false in
     loop left right (fun x -> x)
-  
+
   let map t ~(f : E.t -> E.t) : t =
     let rec loop t k =
       match t with
       | Leaf node -> k @@ Leaf (f node)
       | Parent { left; directive; right } ->
-         loop left (fun left_tree ->
-             loop right (fun right_tree ->
-                 k @@ Parent { left = left_tree;
-                               right = right_tree;
-                               directive })) in
+        loop left (fun left_tree ->
+          loop right (fun right_tree ->
+            k @@ Parent { left = left_tree;
+                          right = right_tree;
+                          directive })) in
     loop t (fun x -> x)
 
   let map2 l r ~(f : E.t -> E.t -> E.t) =
@@ -567,14 +567,14 @@ module Tree(N : Abstract.NumericDomain)
       match l, r with
       | Leaf l, Leaf r -> k @@ Leaf (f l r)
       | Parent l, Parent r ->
-         if not @@ Directives.equal l.directive r.directive
-         then uneq_fail ()
-         else
-           loop l.left r.left (fun lefttree ->
-               loop l.right r.right (fun righttree ->
-                   k @@ Parent { left = lefttree;
-                                 right = righttree;
-                                 directive = l.directive }))
+        if not @@ Directives.equal l.directive r.directive
+        then uneq_fail ()
+        else
+          loop l.left r.left (fun lefttree ->
+            loop l.right r.right (fun righttree ->
+              k @@ Parent { left = lefttree;
+                            right = righttree;
+                            directive = l.directive }))
       | _, _ -> uneq_fail () in
     loop l r (fun x -> x)
 
@@ -582,14 +582,14 @@ module Tree(N : Abstract.NumericDomain)
     match tree with
     | Leaf n -> [f n]
     | Parent { left; right; _ } ->
-       List.append (map_list f left) (map_list f right)
+      List.append (map_list f left) (map_list f right)
 
   let rec left_fold_join ~(f : E.t -> N.t) = function
     | Leaf node -> f node
     | Parent { left; directive; right } ->
-       let left = left_fold_join ~f left in
-       let right = left_fold_join ~f right in
-       N.join left right
+      let left = left_fold_join ~f left in
+      let right = left_fold_join ~f right in
+      N.join left right
 
   (* conditions are the same on both sides of the tree,
      so just collect along the left side *)
@@ -597,9 +597,9 @@ module Tree(N : Abstract.NumericDomain)
     match tree with
     | Leaf e -> []
     | Parent p ->
-       (match Directives.cnd p.directive with
-        | Some cnd -> cnd :: conditions p.left
-        | None -> conditions p.left)
+      (match Directives.cnd p.directive with
+       | Some cnd -> cnd :: conditions p.left
+       | None -> conditions p.left)
 
   let rec conditions_prefix ~(prefix : Directives.cnd list)
             ~(of_ : Directives.cnd list) : bool =
@@ -607,8 +607,8 @@ module Tree(N : Abstract.NumericDomain)
     | [], _ -> true
     | _, [] -> false
     | x :: xs, y :: ys ->
-       0 = Directives.compare_cnd x y &&
-         conditions_prefix ~prefix:xs ~of_:ys
+      0 = Directives.compare_cnd x y &&
+      conditions_prefix ~prefix:xs ~of_:ys
 
   (* directives are the same on both sides of the tree,
      so just collect along the left side *)
@@ -617,18 +617,18 @@ module Tree(N : Abstract.NumericDomain)
       match subtree with
       | Leaf e -> []
       | Parent p ->
-         loop p.left (fun dirs ->
-             p.directive :: dirs) in
+        loop p.left (fun dirs ->
+          p.directive :: dirs) in
     loop tree (fun x -> x)
 
   let rec directives_prefix ~(prefix : Directives.t list)
-        ~(of_ : Directives.t list) : bool =
+            ~(of_ : Directives.t list) : bool =
     match prefix, of_ with
     | [], _ -> true
     | _, [] -> false
     | x :: prefixes, y :: ofs ->
-       0 = Directives.compare x y &&
-         directives_prefix ~prefix:prefixes ~of_:ofs
+      0 = Directives.compare x y &&
+      directives_prefix ~prefix:prefixes ~of_:ofs
 
   let directives_equal (left : t) (right : t) : bool =
     let left = directives left in
@@ -637,13 +637,13 @@ module Tree(N : Abstract.NumericDomain)
 
   (* precondition: Bool.equal true (directives ~prefix ~of_) *)
   let rec remove_directives_prefix ~(prefix : Directives.t list)
-        ~(of_ : Directives.t list) : Directives.t list =
+            ~(of_ : Directives.t list) : Directives.t list =
     match prefix, of_ with
     | [], _ -> of_
     | x :: prefixes, y :: ofs_ ->
-       remove_directives_prefix ~prefix:prefixes ~of_:ofs_
+      remove_directives_prefix ~prefix:prefixes ~of_:ofs_
     | _ ->
-       failwith "[Trace] remove_directives_prefix, ~prefix not prefix of ~of_"
+      failwith "[Trace] remove_directives_prefix, ~prefix not prefix of ~of_"
 
   let isomorphic_merge (left : t) (right : t) : t =
     let open Or_error.Monad_infix in
@@ -651,30 +651,30 @@ module Tree(N : Abstract.NumericDomain)
       match left, right with
       | Leaf left, Leaf right -> k (Ok (Leaf (E.merge left right)))
       | Parent left, Parent right ->
-         if not @@ Directives.equal left.directive right.directive
-         then
-           Or_error.error_string "[Trace] isomorphic merge does not support non-isomorphic trees (tree directives)"
-         else
-           let directive = left.directive in
-           loop left.left right.left (Or_error.bind ~f:(fun l ->
-           loop left.right right.right (Or_error.bind ~f:(fun r ->
-           k (Ok (Parent { left=l; right=r; directive }))))))
+        if not @@ Directives.equal left.directive right.directive
+        then
+          Or_error.error_string "[Trace] isomorphic merge does not support non-isomorphic trees (tree directives)"
+        else
+          let directive = left.directive in
+          loop left.left right.left (Or_error.bind ~f:(fun l ->
+            loop left.right right.right (Or_error.bind ~f:(fun r ->
+              k (Ok (Parent { left=l; right=r; directive }))))))
       | _ ->
-         Or_error.error_string "[Trace] tree merge does not support non-isomorphic trees (tree shape)"
+        Or_error.error_string "[Trace] tree merge does not support non-isomorphic trees (tree shape)"
     in
     match loop left right (fun x -> x) with
     | Ok res -> res
     | Error e ->
-       let () = printf "Failed to merge two trees:\n\t1. %s\n\t2. %s\n%!"
-                  (to_string left)
-                  (to_string right) in
-       failwith @@ Error.to_string_hum e
+      let () = printf "Failed to merge two trees:\n\t1. %s\n\t2. %s\n%!"
+                 (to_string left)
+                 (to_string right) in
+      failwith @@ Error.to_string_hum e
 
   let normalize_prefixed_trees ~(do_merge : bool) ~(suffix : Directives.t list)
         ~(target : t) ~(other : t) : t =
     let split tree tdir = if directive_already_applied tree tdir
-                          then tree
-                          else do_directive_split tree tdir in
+      then tree
+      else do_directive_split tree tdir in
     let refined_target = List.fold suffix
                            ~init:target
                            ~f:split in
@@ -686,14 +686,14 @@ module Tree(N : Abstract.NumericDomain)
     let rec try_find_img = function
       | Leaf l -> E.get_img l
       | Parent l ->
-         match try_find_img l.left with
-         | Some img -> Some img
-         | None -> try_find_img l.right in
+        match try_find_img l.left with
+        | Some img -> Some img
+        | None -> try_find_img l.right in
     let img = match try_find_img left with
       | Some img -> img
       | None -> match try_find_img right with
-                | Some img -> img
-                | None -> failwith "[Trace] Couldn't propagate img" in
+        | Some img -> img
+        | None -> failwith "[Trace] Couldn't propagate img" in
     let set_img = fun e -> E.set_img e img in
     map result ~f:set_img
 
@@ -706,49 +706,49 @@ module Tree(N : Abstract.NumericDomain)
     match pick_nonempty with
     | Some t -> t
     | None ->
-       let left_tdirs = directives left in
-       let right_tdirs = directives right in
-       if directives_prefix ~prefix:left_tdirs ~of_:right_tdirs
-       then
-         let remaining_suffix = remove_directives_prefix
-                                  ~prefix:left_tdirs
-                                  ~of_:right_tdirs in
-         normalize_prefixed_trees
-           ~do_merge:true
-           ~suffix:remaining_suffix
-           ~target:left
-           ~other:right
-         |> propagate_img left right
-       else
-         if directives_prefix ~prefix:right_tdirs ~of_:left_tdirs
-         then
-           let remaining_suffix = remove_directives_prefix
-                                    ~prefix:right_tdirs
-                                    ~of_:left_tdirs in
-           normalize_prefixed_trees
-             ~do_merge:true
-             ~suffix:remaining_suffix
-             ~target:right
-             ~other:left
-           |> propagate_img left right
-         else
-           (* neither refine each other, so pick (mid : t) s.t. 
-              mid refines both left and right *)
-           normalize_prefixed_trees
-             ~do_merge:false
-             ~suffix:right_tdirs
-             ~target:left
-             ~other:right
-           |> propagate_img left right
+      let left_tdirs = directives left in
+      let right_tdirs = directives right in
+      if directives_prefix ~prefix:left_tdirs ~of_:right_tdirs
+      then
+        let remaining_suffix = remove_directives_prefix
+                                 ~prefix:left_tdirs
+                                 ~of_:right_tdirs in
+        normalize_prefixed_trees
+          ~do_merge:true
+          ~suffix:remaining_suffix
+          ~target:left
+          ~other:right
+        |> propagate_img left right
+      else
+      if directives_prefix ~prefix:right_tdirs ~of_:left_tdirs
+      then
+        let remaining_suffix = remove_directives_prefix
+                                 ~prefix:right_tdirs
+                                 ~of_:left_tdirs in
+        normalize_prefixed_trees
+          ~do_merge:true
+          ~suffix:remaining_suffix
+          ~target:right
+          ~other:left
+        |> propagate_img left right
+      else
+        (* neither refine each other, so pick (mid : t) s.t. 
+           mid refines both left and right *)
+        normalize_prefixed_trees
+          ~do_merge:false
+          ~suffix:right_tdirs
+          ~target:left
+          ~other:right
+        |> propagate_img left right
 
   let any_node (tree : t) ~(f : E.t -> bool) : bool =
     let rec loop tree k =
       match tree with
       | Leaf e -> k (f e)
       | Parent { left; right; _ } ->
-         loop left (fun leftres ->
-             loop right (fun rightres ->
-                 leftres || rightres))
+        loop left (fun leftres ->
+          loop right (fun rightres ->
+            leftres || rightres))
     in
     loop tree (fun x -> x)
 
@@ -757,9 +757,9 @@ module Tree(N : Abstract.NumericDomain)
       match tree with
       | Leaf e -> k (f e)
       | Parent { left; right; _ } ->
-         loop left (fun leftres ->
-             loop right (fun rightres ->
-                 leftres && rightres))
+        loop left (fun leftres ->
+          loop right (fun rightres ->
+            leftres && rightres))
     in
     loop tree (fun x -> x)
 
@@ -768,18 +768,18 @@ module Tree(N : Abstract.NumericDomain)
       match tree with
       | Leaf _ -> k 1
       | Parent { left; right; _ } ->
-         loop left (fun leftsz ->
-             loop right (fun rightsz ->
-                 leftsz + rightsz))
+        loop left (fun leftsz ->
+          loop right (fun rightsz ->
+            leftsz + rightsz))
     in
     loop tree (fun x -> x)
 end
 
 module Env(N : Abstract.NumericDomain)
-         (E : Abstract.MemoryT with type v := N.t
-                                and type region := Common.Region.t
-                                and type regions := Common.Region.Set.t
-                                and type valtypes := Common.cell_t) = struct
+    (E : Abstract.MemoryT with type v := N.t
+                           and type region := Common.Region.t
+                           and type regions := Common.Region.Set.t
+                           and type valtypes := Common.cell_t) = struct
 
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with
@@ -791,8 +791,8 @@ module Env(N : Abstract.NumericDomain)
 
   module T = struct
     type env = {
-        tree : Tree.t;
-      }
+      tree : Tree.t;
+    }
 
     type t = env
   end
@@ -800,8 +800,8 @@ module Env(N : Abstract.NumericDomain)
   include T
 
   let empty : t = {
-      tree = Tree.Leaf E.empty;
-    }
+    tree = Tree.Leaf E.empty;
+  }
 
   let default_with_env : E.t -> t = fun env ->
     { tree = Tree.Leaf env }
@@ -818,18 +818,18 @@ module Env(N : Abstract.NumericDomain)
               (tree : Tree.t) : unit =
       match tree with
       | Tree.Leaf env ->
-         printf "%s:\n\t\t%!" (tdir_list_to_string ~is_left tdirstack);
-         E.pp env
+        printf "%s:\n\t\t%!" (tdir_list_to_string ~is_left tdirstack);
+        E.pp env
       | Tree.Parent p ->
-         let tdirstack = p.directive :: tdirstack in
-         loop ~tdirstack ~is_left:true p.left;
-         loop ~tdirstack ~is_left:false p.right
+        let tdirstack = p.directive :: tdirstack in
+        loop ~tdirstack ~is_left:true p.left;
+        loop ~tdirstack ~is_left:false p.right
     in
     loop tree ~is_left:true
 
   let of_mem (m : E.t) : t =
     { tree = Leaf m }
-  
+
   let equal (l : t) (r : t) : bool =
     Tree.equal l.tree r.tree
 
@@ -857,13 +857,13 @@ module ConditionFinder = struct
   type dep_analysis = Dependency_analysis.t
 
   type prereqs = {
-      rpo_traversal : rpo_traversal;
-      tidmap : tidmap;
-      rd : Reachingdefs.t;
-    }
+    rpo_traversal : rpo_traversal;
+    tidmap : tidmap;
+    rd : Reachingdefs.t;
+  }
 
   type flag_name = string
-  
+
   type live_flag = tid * flag_name
 
   type t = prereqs
@@ -886,10 +886,10 @@ module ConditionFinder = struct
         | Bil.Let (v, exp, body) -> loop exp || loop body
         | Bil.Unknown (_, _) -> false
         | Bil.Ite (i, t, e) ->
-           let all_names = SS.union SS.empty (Var_name_collector.run i)
-                           |> SS.union (Var_name_collector.run t)
-                           |> SS.union (Var_name_collector.run e) in
-           SS.mem all_names flagname
+          let all_names = SS.union SS.empty (Var_name_collector.run i)
+                          |> SS.union (Var_name_collector.run t)
+                          |> SS.union (Var_name_collector.run e) in
+          SS.mem all_names flagname
         | Bil.Extract (_, _, subexp) -> loop subexp
         | Bil.Concat (l, r) -> loop l || loop r in
       let rec used_in_cmov_ever (tids : tid Seq.t) : bool =
@@ -900,9 +900,9 @@ module ConditionFinder = struct
           let tids = Seq.tl_eagerly_exn tids in
           match Tid_map.find prereqs.tidmap hd with
           | Some (`Def d) ->
-             let rhs = Def.rhs d in
-             let used_in_cmov = loop rhs in
-             used_in_cmov || used_in_cmov_ever tids
+            let rhs = Def.rhs d in
+            let used_in_cmov = loop rhs in
+            used_in_cmov || used_in_cmov_ever tids
           | _ -> used_in_cmov_ever tids in
       let all_users = Reachingdefs.users_transitive_closure
                         prereqs.rd tid
@@ -914,26 +914,26 @@ module ConditionFinder = struct
         let tid = Calling_context.to_insn_tid cc in
         match Tid_map.find prereqs.tidmap tid with
         | Some (`Def d) ->
-           let defines = Var.name @@ Def.lhs d in
-           let is_flag = Common.AMD64SystemVABI.var_name_is_flag defines in
-           if is_flag && Reachingdefs.has_users prereqs.rd tid
-           then Some (tid, defines)
-           else None
+          let defines = Var.name @@ Def.lhs d in
+          let is_flag = Common.AMD64SystemVABI.var_name_is_flag defines in
+          if is_flag && Reachingdefs.has_users prereqs.rd tid
+          then Some (tid, defines)
+          else None
         | _ -> None in
       Seq.fold prereqs.rpo_traversal ~init:[] ~f:(fun liveflags cc ->
-          match get_live_flags cc with
-          | Some lfs -> lfs :: liveflags
-          | None -> liveflags)
+        match get_live_flags cc with
+        | Some lfs -> lfs :: liveflags
+        | None -> liveflags)
   end
 end
 
 module AbsInt = struct
   module Make(N : Abstract.NumericDomain)
-           (E : Abstract.MemoryT with type v := N.t
-                                  and type region := Common.Region.t
-                                  and type regions := Common.Region.Set.t
-                                  and type valtypes := Common.cell_t) = struct
-    
+      (E : Abstract.MemoryT with type v := N.t
+                             and type region := Common.Region.t
+                             and type regions := Common.Region.Set.t
+                             and type valtypes := Common.cell_t) = struct
+
     module Tree = Tree(N)(E)
     module TreeEnv = Env(N)(E)
     module Directives = Directives(N)(E)
@@ -946,16 +946,16 @@ module AbsInt = struct
     let nondet_denote_exp (exp : Bil.exp) (st : env) : N.t list =
       let base_denote_exp = fun env -> BaseInt.denote_exp exp env |> fst in
       Tree.map_list base_denote_exp st.tree
-    
+
     let denote_def (subname : string) (dmap : Directives.directive_map)
           (d : def term) (st : env) : env =
       let tid = Term.tid d in
       let st : env = if Directives.tid_has_directive dmap tid
-                     then
-                       (* let () = printf "[Trace] doing split at %a\n%!" Tid.ppo tid in *)
-                       let tdir = Directives.get_tdirective dmap tid in
-                       { tree = Tree.apply_directive st.tree tdir }
-                     else st in
+        then
+          (* let () = printf "[Trace] doing split at %a\n%!" Tid.ppo tid in *)
+          let tdir = Directives.get_tdirective dmap tid in
+          { tree = Tree.apply_directive st.tree tdir }
+        else st in
       let tree = Tree.map ~f:(BaseInt.denote_def subname d) st.tree in
       { tree }
 
@@ -972,9 +972,9 @@ module AbsInt = struct
     let denote_elt (subname : string) (dmap : Directives.directive_map)
           (e : Blk.elt) (st : env) : env =
       let () = if 5 <= TreeEnv.num_leaves st
-               then printf "[Trace] env at %a of sub %s has >=5 splits\n%!"
-                      Tid.ppo (Common.elt_to_tid e) subname
-               else () in
+        then printf "[Trace] env at %a of sub %s has >=5 splits\n%!"
+               Tid.ppo (Common.elt_to_tid e) subname
+        else () in
       match e with
       | `Def d -> denote_def subname dmap d st
       | `Jmp j -> denote_jmp subname dmap j st

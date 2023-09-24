@@ -41,6 +41,7 @@ S trace.ml
 S tidset.ml
 S reachingdefs.ml
 S dmp.ml
+S abstract_bitvector.ml
 
 B _build
 

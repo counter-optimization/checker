@@ -21,20 +21,20 @@ module T = struct
   (* flags_live: not computed or computed and true or false *)
   (* problematic_operands: doesn't apply or a list of operand indices *)
   type t = {
-      sub_name : string option;
-      opcode : string option;
-      addr : word option;
-      rpo_idx : int option;
-      tid : Tid.t option;
-      flags_live : SS.t;
-      is_live : bool option;
-      problematic_operands : int list option;
-      left_val : string option;
-      right_val : string option;
-      reason : reason;
-      desc : string;
-      flags_live_in : SS.t
-    } [@@deriving sexp, bin_io, compare]
+    sub_name : string option;
+    opcode : string option;
+    addr : word option;
+    rpo_idx : int option;
+    tid : Tid.t option;
+    flags_live : SS.t;
+    is_live : bool option;
+    problematic_operands : int list option;
+    left_val : string option;
+    right_val : string option;
+    reason : reason;
+    desc : string;
+    flags_live_in : SS.t
+  } [@@deriving sexp, bin_io, compare]
 
   let reason_dom = KB.Domain.flat
                      ~empty:None
@@ -53,22 +53,22 @@ module T = struct
                         Common.string_opt_domain
 
   let opcode_slot = KB.Class.property
-                        ~package:Common.package
-                        cls
-                        "mir-opcode"
-                        Common.string_opt_domain
+                      ~package:Common.package
+                      cls
+                      "mir-opcode"
+                      Common.string_opt_domain
 
   let addr_slot = KB.Class.property
-                        ~package:Common.package
-                        cls
-                        "vaddr"
-                        Common.word_opt_domain
+                    ~package:Common.package
+                    cls
+                    "vaddr"
+                    Common.word_opt_domain
 
   let rpo_idx_slot = KB.Class.property
-                        ~package:Common.package
-                        cls
-                        "rpo-idx"
-                        Common.int_opt_dom
+                       ~package:Common.package
+                       cls
+                       "rpo-idx"
+                       Common.int_opt_dom
 
   let tid_slot = KB.Class.property
                    ~package:Common.package
@@ -77,52 +77,52 @@ module T = struct
                    Common.tid_opt_domain
 
   let flags_live_slot = KB.Class.property
-                   ~package:Common.package
-                   cls
-                   "flags-live-out"
-                   Common.string_powset_dom
+                          ~package:Common.package
+                          cls
+                          "flags-live-out"
+                          Common.string_powset_dom
 
   let is_live_slot = KB.Class.property
-                   ~package:Common.package
-                   cls
-                   "is-live"
-                   Common.bool_opt_domain
+                       ~package:Common.package
+                       cls
+                       "is-live"
+                       Common.bool_opt_domain
 
   let problematic_operands_slot = KB.Class.property
-                   ~package:Common.package
-                   cls
-                   "problematic-operands"
-                   Common.int_list_opt_domain
+                                    ~package:Common.package
+                                    cls
+                                    "problematic-operands"
+                                    Common.int_list_opt_domain
 
   let left_val_slot = KB.Class.property
-                   ~package:Common.package
-                   cls
-                   "left-val"
-                   Common.string_opt_domain
+                        ~package:Common.package
+                        cls
+                        "left-val"
+                        Common.string_opt_domain
 
   let right_val_slot = KB.Class.property
-                   ~package:Common.package
-                   cls
-                   "right-val"
-                   Common.string_opt_domain
+                         ~package:Common.package
+                         cls
+                         "right-val"
+                         Common.string_opt_domain
 
   let reason_slot = KB.Class.property
-                   ~package:Common.package
-                   cls
-                   "reason"
-                   reason_dom
+                      ~package:Common.package
+                      cls
+                      "reason"
+                      reason_dom
 
   let desc_slot = KB.Class.property
-                   ~package:Common.package
-                   cls
-                   "desc"
-                   Common.string_flat_dom
+                    ~package:Common.package
+                    cls
+                    "desc"
+                    Common.string_flat_dom
 
   let flags_live_in_slot = KB.Class.property
-                   ~package:Common.package
-                   cls
-                   "flags-live-in"
-                   Common.string_powset_dom
+                             ~package:Common.package
+                             cls
+                             "flags-live-in"
+                             Common.string_powset_dom
 
   (* as filled as a checker can fill it while
      observing the analysis, hence base *)
@@ -135,16 +135,16 @@ module T = struct
         ~(problematic_operands : int list) : unit =
     let sub_cls = KB.Class.refine cls subname in
     Toplevel.exec begin
-        KB.Object.create sub_cls >>= fun obj ->
-        KB.all_unit [
-            KB.provide tid_slot obj (Some tid);
-            KB.provide sub_name_slot obj (Some subname);
-            KB.provide desc_slot obj desc;
-            KB.provide left_val_slot obj (Some left_val);
-            KB.provide right_val_slot obj (Some right_val);
-            KB.provide problematic_operands_slot obj (Some problematic_operands)
-          ]
-      end
+      KB.Object.create sub_cls >>= fun obj ->
+      KB.all_unit [
+        KB.provide tid_slot obj (Some tid);
+        KB.provide sub_name_slot obj (Some subname);
+        KB.provide desc_slot obj desc;
+        KB.provide left_val_slot obj (Some left_val);
+        KB.provide right_val_slot obj (Some right_val);
+        KB.provide problematic_operands_slot obj (Some problematic_operands)
+      ]
+    end
 
   let reify kbalert : t =
     let alert : t ref = ref { sub_name = None;
@@ -159,39 +159,39 @@ module T = struct
                               right_val = None;
                               reason = None;
                               desc = "";
-                                       flags_live_in = SS.empty }
+                              flags_live_in = SS.empty }
     in
     let () = Toplevel.exec begin
-        KB.collect tid_slot kbalert >>= fun tid ->
-        KB.collect sub_name_slot kbalert >>= fun sub_name ->
-        KB.collect opcode_slot kbalert >>= fun opcode ->
-        KB.collect addr_slot kbalert >>= fun addr ->
-        KB.collect rpo_idx_slot kbalert >>= fun rpo_idx ->
-        KB.collect flags_live_slot kbalert >>= fun flags_live ->
-        KB.collect is_live_slot kbalert >>= fun is_live ->
-        KB.collect problematic_operands_slot kbalert >>= fun problematic_operands ->
-        KB.collect left_val_slot kbalert >>= fun left_val ->
-        KB.collect right_val_slot kbalert >>= fun right_val ->
-        KB.collect reason_slot kbalert >>= fun reason ->
-        KB.collect desc_slot kbalert >>= fun desc ->
-        KB.collect flags_live_in_slot kbalert >>= fun flags_live_in ->
-        alert := {
-            tid;
-            sub_name;
-            opcode;
-            addr;
-            rpo_idx;
-            flags_live;
-            is_live;
-            problematic_operands;
-            left_val;
-            right_val;
-            reason;
-            desc;
-            flags_live_in
-          };
-        KB.return ()
-               end
+      KB.collect tid_slot kbalert >>= fun tid ->
+      KB.collect sub_name_slot kbalert >>= fun sub_name ->
+      KB.collect opcode_slot kbalert >>= fun opcode ->
+      KB.collect addr_slot kbalert >>= fun addr ->
+      KB.collect rpo_idx_slot kbalert >>= fun rpo_idx ->
+      KB.collect flags_live_slot kbalert >>= fun flags_live ->
+      KB.collect is_live_slot kbalert >>= fun is_live ->
+      KB.collect problematic_operands_slot kbalert >>= fun problematic_operands ->
+      KB.collect left_val_slot kbalert >>= fun left_val ->
+      KB.collect right_val_slot kbalert >>= fun right_val ->
+      KB.collect reason_slot kbalert >>= fun reason ->
+      KB.collect desc_slot kbalert >>= fun desc ->
+      KB.collect flags_live_in_slot kbalert >>= fun flags_live_in ->
+      alert := {
+        tid;
+        sub_name;
+        opcode;
+        addr;
+        rpo_idx;
+        flags_live;
+        is_live;
+        problematic_operands;
+        left_val;
+        right_val;
+        reason;
+        desc;
+        flags_live_in
+      };
+      KB.return ()
+    end
     in
     !alert
 end
@@ -214,8 +214,8 @@ let str_of_flags_live (flags_live : SS.t) : string =
     | [] -> "" (* e.g., in case flags_live is empty, otherwise never reached *)
     | final_flag_name :: [] -> acc ^ final_flag_name
     | cur_flag_name :: next_flag_name :: rest_flags ->
-       let cur_name_with_comma = cur_flag_name ^ "," in
-       loop (next_flag_name :: rest_flags) (acc ^ cur_name_with_comma) in
+      let cur_name_with_comma = cur_flag_name ^ "," in
+      loop (next_flag_name :: rest_flags) (acc ^ cur_name_with_comma) in
   loop flags_live ""
 
 module type Pass = sig
@@ -228,25 +228,25 @@ module OpcodeAndAddrFiller : Pass = struct
   type opcode_alist = (tid * String.t) list [@@deriving compare, sexp, bin_io]
 
   let opcode_alist_cls : (opcode_alist, unit) KB.cls = KB.Class.declare
-                                                   ~public:true
-                                                   ~package:Common.package
-                                                   "tid_to_opcode_alist"
-                                                   ()
+                                                         ~public:true
+                                                         ~package:Common.package
+                                                         "tid_to_opcode_alist"
+                                                         ()
 
   let opcode_alist_domain = KB.Domain.flat
-                           ~inspect:sexp_of_opcode_alist
-                           ~join:(fun left right -> Ok (List.append right left))
-                           ~empty:[]
-                           ~equal:(fun left right -> 0 = compare_opcode_alist left right)
-                           "opcode_alist_domain"
+                              ~inspect:sexp_of_opcode_alist
+                              ~join:(fun left right -> Ok (List.append right left))
+                              ~empty:[]
+                              ~equal:(fun left right -> 0 = compare_opcode_alist left right)
+                              "opcode_alist_domain"
 
   let final_opcode_alist : (opcode_alist, opcode_alist) KB.slot = KB.Class.property
-                                                           ~public:true
-                                                           ~package:Common.package
-                                                           opcode_alist_cls
-                                                           "final_opcode_alist"
-                                                           opcode_alist_domain
-  
+                                                                    ~public:true
+                                                                    ~package:Common.package
+                                                                    opcode_alist_cls
+                                                                    "final_opcode_alist"
+                                                                    opcode_alist_domain
+
   type addr_alist = (tid * word) list [@@deriving compare, sexp, bin_io]
 
   let addr_alist_cls : (addr_alist, unit) KB.cls = KB.Class.declare
@@ -254,20 +254,20 @@ module OpcodeAndAddrFiller : Pass = struct
                                                      ~package:Common.package
                                                      "label_to_addr_alist"
                                                      ()
-  
+
   let addr_alist_domain = KB.Domain.flat
                             ~inspect:sexp_of_addr_alist
-                           ~join:(fun left right -> Ok (List.append right left))
-                           ~empty:[]
-                           ~equal:(fun left right -> 0 = compare_addr_alist left right)
-                           "addr_alist_domain"
+                            ~join:(fun left right -> Ok (List.append right left))
+                            ~empty:[]
+                            ~equal:(fun left right -> 0 = compare_addr_alist left right)
+                            "addr_alist_domain"
 
   let final_addr_alist : (addr_alist, addr_alist) KB.slot = KB.Class.property
-                                                           ~public:true
-                                                           ~package:Common.package
-                                                           addr_alist_cls
-                                                           "final_addr_alist"
-                                                           addr_alist_domain
+                                                              ~public:true
+                                                              ~package:Common.package
+                                                              addr_alist_cls
+                                                              "final_addr_alist"
+                                                              addr_alist_domain
 
   type tidmap = (Tid.t, string, Tid.comparator_witness) Map.t
   type addrmap = (Tid.t, word, Tid.comparator_witness) Map.t
@@ -279,26 +279,26 @@ module OpcodeAndAddrFiller : Pass = struct
       KB.objects Theory.Program.cls >>= fun labels ->
       let init_alists : addr_alist * opcode_alist = ([], []) in
       let alists = Seq.fold labels ~init:(KB.return init_alists) ~f:(fun alists label ->
-                 alists >>= fun alists ->
-                 KB.collect Theory.Semantics.slot label >>= fun sema ->
-                 KB.collect Theory.Label.addr label >>= fun maybe_addr ->
-                 KB.collect Theory.Semantics.slot label >>= fun (insn : Insn.t) ->
-                 let opcode_str = Insn.name insn in
-                 let maybe_addr_bitvector =
-                   Option.bind maybe_addr ~f:(fun bitv ->
-                       Option.return @@ Bitvector.code_addr target bitv)
-                 in
-                 let addr_str = Option.value maybe_addr_bitvector ~default:(Word.one 64) in
-                 let bir_terms = KB.Value.get Term.slot sema in
-                 let tids_lists = List.map bir_terms ~f:(fun b ->
-                                             Blk.elts b
-                                             |> Seq.map ~f:Common.elt_to_tid
-                                             |> Seq.to_list) in
-                 let tids = List.join tids_lists in
-                 let tid_to_addr_alist = List.map tids ~f:(fun tid -> (tid, addr_str)) in
-                 let tid_to_opcode_alist = List.map tids ~f:(fun tid -> (tid, opcode_str)) in
-                 KB.return (List.append tid_to_addr_alist (fst alists),
-                            List.append tid_to_opcode_alist (snd alists))) in
+        alists >>= fun alists ->
+        KB.collect Theory.Semantics.slot label >>= fun sema ->
+        KB.collect Theory.Label.addr label >>= fun maybe_addr ->
+        KB.collect Theory.Semantics.slot label >>= fun (insn : Insn.t) ->
+        let opcode_str = Insn.name insn in
+        let maybe_addr_bitvector =
+          Option.bind maybe_addr ~f:(fun bitv ->
+            Option.return @@ Bitvector.code_addr target bitv)
+        in
+        let addr_str = Option.value maybe_addr_bitvector ~default:(Word.one 64) in
+        let bir_terms = KB.Value.get Term.slot sema in
+        let tids_lists = List.map bir_terms ~f:(fun b ->
+          Blk.elts b
+          |> Seq.map ~f:Common.elt_to_tid
+          |> Seq.to_list) in
+        let tids = List.join tids_lists in
+        let tid_to_addr_alist = List.map tids ~f:(fun tid -> (tid, addr_str)) in
+        let tid_to_opcode_alist = List.map tids ~f:(fun tid -> (tid, opcode_str)) in
+        KB.return (List.append tid_to_addr_alist (fst alists),
+                   List.append tid_to_opcode_alist (snd alists))) in
 
       alists >>= fun (addr_alist, opcode_alist) ->
       KB.Object.create addr_alist_cls >>= fun addr_alist_obj ->
@@ -312,22 +312,22 @@ module OpcodeAndAddrFiller : Pass = struct
     let (opcode_alist, st') = match KB.run opcode_alist_cls opcode_alist_obj cur_st with
       | Ok (opcode_alist, st') -> opcode_alist, st'
       | Error e ->
-         failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut opcodes : %s" @@
-           KB.Conflict.to_string e in
+        failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut opcodes : %s" @@
+        KB.Conflict.to_string e in
     let (addr_alist, st') = match KB.run addr_alist_cls addr_alist_obj cur_st with
       | Ok (addr_alist, st') -> addr_alist, st'
       | Error e ->
-         failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut addrs : %s" @@
-           KB.Conflict.to_string e in
+        failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut addrs : %s" @@
+        KB.Conflict.to_string e in
     let opcode_alist = KB.Value.get final_opcode_alist opcode_alist in
     let addr_alist = KB.Value.get final_addr_alist addr_alist in
     let opcode_lut = match Map.of_alist (module Tid) opcode_alist with
       | `Duplicate_key k ->
-         failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut, opcode_lut build, duplicate key: %a" Tid.pps k
+        failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut, opcode_lut build, duplicate key: %a" Tid.pps k
       | `Ok lut -> lut in
     let addr_lut = match Map.of_alist (module Tid) addr_alist with
       | `Duplicate_key k ->
-         failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut, addr_lut build, duplicate key: %a" Tid.pps k
+        failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut, addr_lut build, duplicate key: %a" Tid.pps k
       | `Ok lut -> lut in
     (addr_lut, opcode_lut)
 
@@ -335,9 +335,9 @@ module OpcodeAndAddrFiller : Pass = struct
     let alert_tid = Option.value_exn alert.tid in
     match Map.find addr_lut alert_tid with
     | Some addr_str -> 
-       { alert with addr = Some addr_str }
+      { alert with addr = Some addr_str }
     | None ->
-       failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut, set_addr_for_alert, couldn't get addr for alert on tid: %a" Tid.pps alert_tid
+      failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut, set_addr_for_alert, couldn't get addr for alert on tid: %a" Tid.pps alert_tid
 
   let set_opcode_for_alert proj (alert : T.t) (opcode_lut : tidmap) : T.t =
     let alert_tid = Option.value_exn alert.tid in
@@ -346,30 +346,30 @@ module OpcodeAndAddrFiller : Pass = struct
     let target = Project.target proj in
     let () =
       Toplevel.exec begin
-          KB.collect Theory.Semantics.slot alert_tid >>= fun sema ->
-          KB.collect Theory.Label.addr alert_tid >>= fun maybe_addr ->
-          let maybe_addr_bitvector =
-            Option.bind maybe_addr ~f:(fun bitv ->
-                Option.return @@ Bitvector.code_addr target bitv)
-          in
-          addr_str := Word.to_string @@
-                        Option.value maybe_addr_bitvector ~default:(Word.one 64);
-          opcode_name := Insn.name sema;
-          KB.return ()
-        end
+        KB.collect Theory.Semantics.slot alert_tid >>= fun sema ->
+        KB.collect Theory.Label.addr alert_tid >>= fun maybe_addr ->
+        let maybe_addr_bitvector =
+          Option.bind maybe_addr ~f:(fun bitv ->
+            Option.return @@ Bitvector.code_addr target bitv)
+        in
+        addr_str := Word.to_string @@
+          Option.value maybe_addr_bitvector ~default:(Word.one 64);
+        opcode_name := Insn.name sema;
+        KB.return ()
+      end
     in
     match Map.find opcode_lut alert_tid with
     | Some opcode_str -> 
-       { alert with opcode = Some opcode_str }
+      { alert with opcode = Some opcode_str }
     | None ->
-       failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut, set_opcode_for_alert, couldn't get opcode for alert on tid: %a" Tid.pps alert_tid
-                                            
+      failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut, set_opcode_for_alert, couldn't get opcode for alert on tid: %a" Tid.pps alert_tid
+
   let set_for_alert_set (alerts : Set.t) (proj : Project.t) : Set.t =
     let lut : lut = build_lut proj in
     let (addr_lut, opcode_lut) = lut in
     Set.map alerts ~f:(fun alert ->
-        let alert = set_addr_for_alert alert addr_lut in
-        set_opcode_for_alert proj alert opcode_lut)
+      let alert = set_addr_for_alert alert addr_lut in
+      set_opcode_for_alert proj alert opcode_lut)
 end
 
 module SubNameResolverFiller = struct
@@ -391,7 +391,7 @@ module SubNameResolverFiller = struct
 
   let seq = KB.Class.property named_symbols "seq" dom
               ~package:Common.package
-  
+
   let unresolved_prefix = "sub_"
 
   let has_unres_prefix =
@@ -399,15 +399,15 @@ module SubNameResolverFiller = struct
 
   let get_name_for_resolving alert =
     Option.bind alert.sub_name ~f:(fun name ->
-        if has_unres_prefix name
-        then Some name
-        else None)
+      if has_unres_prefix name
+      then Some name
+      else None)
 
   let needs_resolving alert =
     match alert.sub_name with
     | None -> false
     | Some subname ->
-       String.is_prefix subname ~prefix:unresolved_prefix
+      String.is_prefix subname ~prefix:unresolved_prefix
 
   let resolve_name unresolvedname db =
     let queryable_name = String.chop_prefix_if_exists unresolvedname
@@ -418,9 +418,9 @@ module SubNameResolverFiller = struct
     match Seq.find db ~f:entry_matches with
     | Some (_addrs, name) -> Some name
     | None ->
-       let () = printf "In Alert.SubNameResolverFiller.resolve_name, couldn't resolve name for symbol: %s" unresolvedname in
-       None
-       (* failwith @@  *)
+      let () = printf "In Alert.SubNameResolverFiller.resolve_name, couldn't resolve name for symbol: %s" unresolvedname in
+      None
+  (* failwith @@  *)
 
   let resolve_sub_names alerts proj =
     let filename = Option.value_exn (Project.get proj filename) in
@@ -431,27 +431,27 @@ module SubNameResolverFiller = struct
         let query = Ogre.Query.(select @@ from Image.Scheme.named_symbol) in
         match Ogre.eval (Ogre.collect query) ogre with
         | Error err ->
-           failwith @@ sprintf "In getting named symbols : %s" (Error.to_string_hum err)
+          failwith @@ sprintf "In getting named symbols : %s" (Error.to_string_hum err)
         | Ok o ->
-           let word_seq = Seq.map o ~f:(fun (addrf, name) ->
-                              (Word.of_int64 addrf, name)) in
-           KB.Object.create named_symbols >>= fun named_sym_obj ->
-           KB.provide seq named_sym_obj word_seq >>= fun () ->
-           KB.return named_sym_obj
+          let word_seq = Seq.map o ~f:(fun (addrf, name) ->
+            (Word.of_int64 addrf, name)) in
+          KB.Object.create named_symbols >>= fun named_sym_obj ->
+          KB.provide seq named_sym_obj word_seq >>= fun () ->
+          KB.return named_sym_obj
       end in
     let named_symbols = Toplevel.eval seq get_named_symbols in
     let queryable_named_symbols = Seq.map named_symbols ~f:(fun (addr, name) ->
-                                      Word.to_string addr, name) in
+      Word.to_string addr, name) in
     Set.map alerts ~f:(fun alert ->
-        if needs_resolving alert
-        then 
-          let unresolved = Option.value_exn alert.sub_name in
-          let resolved = resolve_name unresolved queryable_named_symbols in
-          let resolved = match resolved with
-            | Some name -> Some name
-            | None -> Some unresolved in
-          { alert with sub_name = resolved }
-        else alert)
+      if needs_resolving alert
+      then 
+        let unresolved = Option.value_exn alert.sub_name in
+        let resolved = resolve_name unresolved queryable_named_symbols in
+        let resolved = match resolved with
+          | Some name -> Some name
+          | None -> Some unresolved in
+        { alert with sub_name = resolved }
+      else alert)
 
   let set_for_alert_set alerts proj =
     let open Option.Monad_infix in
@@ -459,42 +459,42 @@ module SubNameResolverFiller = struct
       match a.sub_name with
       | None -> a
       | Some name ->
-         if not (has_unres_prefix name)
-         then a
-         else
-           let maliases = List.Assoc.find aliasmap name
+        if not (has_unres_prefix name)
+        then a
+        else
+          let maliases = List.Assoc.find aliasmap name
                            ~equal:String.equal in
-           match maliases with
-           | Some aliases when 0 = SS.length aliases ->
-              printf "[Alert] Couldn't resolve subname for %s" name;
-              a
-           | None ->
-              printf "[Alert] Couldn't resolve subname for %s" name;
-              a
-           | Some aliases when SS.length aliases > 0 ->
-              let newname = SS.elements aliases |> List.hd_exn in
-              let () = if SS.length aliases > 1
-                       then begin
-                           printf "[Alert] multiple sub name candidates for sub %s:\n%!" name;
-                           SS.iter aliases ~f:(printf "\t%s\n%!");
-                           printf "[Alert] picking first alias: %s\n%!" newname end
-                       else
-                         printf "[Alert] resolved %s to %s\n%!" name newname in
-              { a with sub_name = Some newname }
-           | _ -> failwith "impossible"
+          match maliases with
+          | Some aliases when 0 = SS.length aliases ->
+            printf "[Alert] Couldn't resolve subname for %s" name;
+            a
+          | None ->
+            printf "[Alert] Couldn't resolve subname for %s" name;
+            a
+          | Some aliases when SS.length aliases > 0 ->
+            let newname = SS.elements aliases |> List.hd_exn in
+            let () = if SS.length aliases > 1
+              then begin
+                printf "[Alert] multiple sub name candidates for sub %s:\n%!" name;
+                SS.iter aliases ~f:(printf "\t%s\n%!");
+                printf "[Alert] picking first alias: %s\n%!" newname end
+              else
+                printf "[Alert] resolved %s to %s\n%!" name newname in
+            { a with sub_name = Some newname }
+          | _ -> failwith "impossible"
     in
     let toresolve = Set.fold alerts ~init:SS.empty
-                             ~f:(fun toresolve a ->
-                               match get_name_for_resolving a with
-                               | Some n -> SS.add toresolve n
-                               | None -> toresolve) in
+                      ~f:(fun toresolve a ->
+                        match get_name_for_resolving a with
+                        | Some n -> SS.add toresolve n
+                        | None -> toresolve) in
     let () = printf "[Alerts] trying to resolve sub names:\n%!";
-             SS.iter toresolve ~f:(printf "\t%s\n%!") in
+      SS.iter toresolve ~f:(printf "\t%s\n%!") in
     let symbol_aliases = Config.get_all_named_symbols proj toresolve in
     let () = printf "[Config] resolved is:\n%!";
-             List.iter symbol_aliases ~f:(fun (sym, aliases) ->
-                 printf "\t%s ~~> %s\n%!" sym @@
-                   (SS.to_list aliases |> List.to_string ~f:(fun x -> x))) in
+      List.iter symbol_aliases ~f:(fun (sym, aliases) ->
+        printf "\t%s ~~> %s\n%!" sym @@
+        (SS.to_list aliases |> List.to_string ~f:(fun x -> x))) in
     Set.map alerts ~f:(set_for_alert symbol_aliases)
 end
 
@@ -505,13 +505,13 @@ module InsnIdxFiller = struct
     then
       match Idx_calculator.get_idx tid idx_map with
       | Some canonical_insn_idx ->
-         { alert with rpo_idx = Some canonical_insn_idx }
+        { alert with rpo_idx = Some canonical_insn_idx }
       | None ->
-         let err_msg = sprintf "Couldn't get canonical R11 idx for insn w/ tid: %a in InsnIdxFiller.set_for_alert" Tid.pps tid in
-         failwith err_msg
+        let err_msg = sprintf "Couldn't get canonical R11 idx for insn w/ tid: %a in InsnIdxFiller.set_for_alert" Tid.pps tid in
+        failwith err_msg
     else
       alert
-    
+
   let set_for_alert_set (idx_map : Idx_calculator.t) (alerts : Set.t) : Set.t =
     Set.map alerts ~f:(set_for_alert idx_map)
 end
@@ -519,13 +519,13 @@ end
 module RemoveAllEmptySubName : Pass = struct
   let set_for_alert_set alerts proj =
     Set.iter alerts ~f:(fun a ->
-        match a.sub_name with
-        | None ->
-           let tid = Option.value_exn a.tid in
-           Format.sprintf "[Alert] alert for %a had empty subname"
-             Tid.pps tid
-           |> failwith
-        | Some _ -> ());
+      match a.sub_name with
+      | None ->
+        let tid = Option.value_exn a.tid in
+        Format.sprintf "[Alert] alert for %a had empty subname"
+          Tid.pps tid
+        |> failwith
+      | Some _ -> ());
     alerts
     (* Set.filter alerts ~f:(fun alert -> Option.is_some alert.sub_name) *)
 end
@@ -542,10 +542,10 @@ module FlagsLiveOutFiller = struct
     let flags_live = match flags with
       | None -> SS.empty
       | Some flags ->
-         Core_kernel.Set.fold flags ~init:SS.empty ~f:(fun liveflags flagdeftid ->
-             if Reachingdefs.has_users rd flagdeftid
-             then SS.add liveflags @@ flagname flagdeftid
-             else liveflags) in
+        Core_kernel.Set.fold flags ~init:SS.empty ~f:(fun liveflags flagdeftid ->
+          if Reachingdefs.has_users rd flagdeftid
+          then SS.add liveflags @@ flagname flagdeftid
+          else liveflags) in
     { alert with flags_live }
 
   let set_for_alert_set tidmap flagownership depanalysis alerts : Set.t =
@@ -582,9 +582,9 @@ let t_of_reason_and_tid (reason : reason) (tid : Tid.t) : t =
 let add_problematic_operands (x : t) (prob_op : int list) : t =
   match x.problematic_operands with
   | Some prev ->
-     { x with problematic_operands = Some (List.append prob_op prev) }
+    { x with problematic_operands = Some (List.append prob_op prev) }
   | None ->
-     { x with problematic_operands = Some prob_op }
+    { x with problematic_operands = Some prob_op }
 
 (* note that this prints a csv row where every field is paranoidly double quoted. rfc4180 compliant. *)
 let to_string (x : t) : string =
@@ -606,10 +606,10 @@ let to_string (x : t) : string =
   let sub_name_str = match sub_name with
     | Some sub_name -> sub_name
     | None ->
-       let err_msg = Format.sprintf
-                       "in Alert.to_string for alert for tid %a, by the time alerts are output, all alerts should have their corresponding subroutine name filled out."
-                       Tid.pps tid in
-       failwith err_msg in
+      let err_msg = Format.sprintf
+                      "in Alert.to_string for alert for tid %a, by the time alerts are output, all alerts should have their corresponding subroutine name filled out."
+                      Tid.pps tid in
+      failwith err_msg in
   let opcode_str = Option.value opcode ~default:"" in
   let addr_str = Option.value addr ~default:(Word.one 64)
                  |> sprintf "%a" Word.pps in
@@ -619,7 +619,7 @@ let to_string (x : t) : string =
   let tid_str = Tid.to_string tid in
   let po_str = match problematic_operands with
     | Some ops -> String.concat ~sep:":" @@
-                    List.map ops ~f:Int.to_string
+      List.map ops ~f:Int.to_string
     | None -> "" in
   let left_str = Option.value left_val ~default:"" in
   let right_str = Option.value right_val ~default:"" in
@@ -666,13 +666,13 @@ module RemoveAndWarnEmptyInsnIdxAlerts : Pass = struct
     let csv_row = to_csv_row alert in 
     printf "[Alert] (%a) has empty insn idx. Full alert csv row is: %s\n%!"
       Tid.ppo tid csv_row
-  
+
   let has_insn_idx alert : bool =
     match alert.rpo_idx with
     | Some _ -> true
     | None ->
-       let () = warn_on_no_insn_idx alert in
-       false
+      let () = warn_on_no_insn_idx alert in
+      false
 
   let set_for_alert_set alerts _proj =
     Set.filter alerts ~f:has_insn_idx
@@ -681,11 +681,11 @@ end
 (* these are not supported by us right now *)
 module RemoveAlertsForCallInsns : Pass = struct
   let call_insn_prefix = "call"
-   
+
   let is_alert_on_call_insn alert : bool =
     match alert.opcode with
     | Some opcode_str ->
-       String.Caseless.is_prefix opcode_str ~prefix:call_insn_prefix
+      String.Caseless.is_prefix opcode_str ~prefix:call_insn_prefix
     | None -> false
 
   let set_for_alert_set alerts _proj =
@@ -695,9 +695,9 @@ end
 
 module RemoveUnsupportedMirOpcodes = struct
   type t = {
-      num_removed : int;
-      alerts : Set.t;
-    }
+    num_removed : int;
+    alerts : Set.t;
+  }
 
   (* prefix is checked case insensitive *)
   let unsupported_mir_opcode_prefixes = ["xorps";
@@ -721,8 +721,8 @@ module RemoveUnsupportedMirOpcodes = struct
 
   let is_unsupported : T.t -> bool = function
     | { opcode = Some mir_opcode_str; _ } ->
-       List.exists unsupported_mir_opcode_prefixes ~f:(fun prefix ->
-           String.Caseless.is_prefix mir_opcode_str ~prefix)
+      List.exists unsupported_mir_opcode_prefixes ~f:(fun prefix ->
+        String.Caseless.is_prefix mir_opcode_str ~prefix)
     | _ -> false
 
   let set_for_alert_set alerts _proj : t =
@@ -730,11 +730,11 @@ module RemoveUnsupportedMirOpcodes = struct
     let is_supported = fun alert ->
       let not_supported = is_unsupported alert in
       let () = if not_supported
-               then
-                 let () = unsupported_count := !unsupported_count + 1 in
-                 let alert_s = to_string alert in
-                 printf "[AlertFilter] alert (%s) removed since it is for unsupported insn\n%!" alert_s
-               else () in
+        then
+          let () = unsupported_count := !unsupported_count + 1 in
+          let alert_s = to_string alert in
+          printf "[AlertFilter] alert (%s) removed since it is for unsupported insn\n%!" alert_s
+        else () in
       not not_supported in
     { alerts = Set.filter alerts ~f:is_supported;
       num_removed = !unsupported_count }
@@ -762,8 +762,8 @@ module CombinedTransformFixerUpper : Pass = struct
   let transform_alert alert =
     match alert.opcode with
     | Some opcode -> if is_combined_opcode opcode
-                     then { alert with reason = SilentStores }
-                     else alert
+      then { alert with reason = SilentStores }
+      else alert
     | None -> alert
 
   let set_for_alert_set alerts _proj =
@@ -775,7 +775,7 @@ module RemoveSpuriousCompSimpAlerts = struct
     match alert.reason with
     | CompSimp -> true
     | _ -> false
-  
+
   let is_bad_subtract_warn alert =
     let subtract_opcode_substring = "sub" in
     let cmp_opcode_substring = "cmp" in
@@ -783,14 +783,14 @@ module RemoveSpuriousCompSimpAlerts = struct
     | None, _ -> false
     | _, None -> false
     | Some opcode, Some warn_op_indices ->
-       let opcode = String.lowercase opcode in
-       let is_sub = String.is_substring opcode ~substring:subtract_opcode_substring in
-       let is_sub = is_sub || String.is_substring opcode ~substring:cmp_opcode_substring in
-       let is_left_operand = Int.equal 0 in
-       let warns_on_left_operand = List.find warn_op_indices ~f:is_left_operand
-                                   |> Option.is_some
-       in
-       is_sub && warns_on_left_operand
+      let opcode = String.lowercase opcode in
+      let is_sub = String.is_substring opcode ~substring:subtract_opcode_substring in
+      let is_sub = is_sub || String.is_substring opcode ~substring:cmp_opcode_substring in
+      let is_left_operand = Int.equal 0 in
+      let warns_on_left_operand = List.find warn_op_indices ~f:is_left_operand
+                                  |> Option.is_some
+      in
+      is_sub && warns_on_left_operand
 
   (* rotate is a (x << amount) | (x >> amount') operation. as long
      as the shifts are safe, then the rotate is safe. it shouldn't be 
@@ -800,9 +800,9 @@ module RemoveSpuriousCompSimpAlerts = struct
     let ror_opcode_prefix = "ror" in
     match alert.opcode with
     | Some mir_opcode ->
-       (String.Caseless.is_prefix mir_opcode ~prefix:ror_opcode_prefix ||
-          String.Caseless.is_prefix mir_opcode ~prefix:rol_opcode_prefix) &&
-         String.equal "|" alert.desc
+      (String.Caseless.is_prefix mir_opcode ~prefix:ror_opcode_prefix ||
+       String.Caseless.is_prefix mir_opcode ~prefix:rol_opcode_prefix) &&
+      String.equal "|" alert.desc
     | _ -> false
 
   let is_bad_mov_warn alert =
@@ -812,10 +812,10 @@ module RemoveSpuriousCompSimpAlerts = struct
     match alert.opcode with
     | None -> false
     | Some opcode ->
-       let opcode = String.lowercase opcode in
-       let is_mov_or_cmov = String.is_substring opcode ~substring:mov_opcode_substring in
-       let is_string_store = String.is_substring opcode ~substring:store_opcode_substring in
-       is_mov_or_cmov || is_string_store
+      let opcode = String.lowercase opcode in
+      let is_mov_or_cmov = String.is_substring opcode ~substring:mov_opcode_substring in
+      let is_string_store = String.is_substring opcode ~substring:store_opcode_substring in
+      is_mov_or_cmov || is_string_store
 
   (** these should really be pruned out by a good interprocedural taint analysis.
       todo, revisit this once we have the interproc taint analysis. *)
@@ -826,11 +826,11 @@ module RemoveSpuriousCompSimpAlerts = struct
     match alert.opcode with
     | None -> false
     | Some _opcode ->
-       let opcode = String.lowercase _opcode in
-       let is_ret = String.is_substring opcode ~substring:ret in
-       let is_pop = String.is_substring opcode ~substring:pop in
-       let is_push = String.is_substring opcode ~substring:push in
-       is_ret || is_pop || is_push
+      let opcode = String.lowercase _opcode in
+      let is_ret = String.is_substring opcode ~substring:ret in
+      let is_pop = String.is_substring opcode ~substring:pop in
+      let is_push = String.is_substring opcode ~substring:push in
+      is_ret || is_pop || is_push
 
   let do_check_with_log checkname check alert : bool =
     let result = check alert in
@@ -843,12 +843,12 @@ module RemoveSpuriousCompSimpAlerts = struct
         ()
     in
     result
-  
+
   let is_spurious alert =
     do_check_with_log "SpuriousSUB" is_bad_subtract_warn alert ||
     do_check_with_log "SpuriousMOVorCMOVorSTOS" is_bad_mov_warn alert ||
-      do_check_with_log "SpuriousStackOperation" is_bad_stack_op alert ||
-        do_check_with_log "SpuriousROLorRORbinaryORwwarn" is_false_rotate_warn alert
+    do_check_with_log "SpuriousStackOperation" is_bad_stack_op alert ||
+    do_check_with_log "SpuriousROLorRORbinaryORwwarn" is_false_rotate_warn alert
 
   (** accept all alerts that:
       1) are not comp simp alerts OR
@@ -856,6 +856,6 @@ module RemoveSpuriousCompSimpAlerts = struct
   let set_for_alert_set alerts proj : Set.t =
     let filter_condition alert =
       (is_comp_simp_warn alert && not (is_spurious alert)) ||
-        not (is_comp_simp_warn alert) in
+      not (is_comp_simp_warn alert) in
     Set.filter alerts ~f:filter_condition
 end

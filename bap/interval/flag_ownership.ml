@@ -39,26 +39,26 @@ let get_flags_of_def_tid flagmap tid_of_def =
 let run () =
   let flagmap = ref (Tid_map.empty) in
   let () = Toplevel.exec begin
-      KB.objects T.Program.cls >>= fun labels ->
-      KB.Seq.iter labels ~f:(fun label ->
-          KB.collect T.Semantics.slot label >>= fun sema ->
-          let terms = KB.Value.get Term.slot sema in
-          KB.return @@ List.iter terms ~f:(fun blkterm ->
-                           let (nonflags, flags) = Seq.fold (Blk.elts blkterm) ~init:(TidSet.empty, TidSet.empty)
-                             ~f:(fun (nonflags, flags) elt ->
-                               match elt with
-                               | `Def d ->
-                                  let thistid = Term.tid d in
-                                  if is_def_of_flag d
-                                  then
-                                    (nonflags, TidSet.add flags thistid)
-                                  else
-                                    (TidSet.add nonflags thistid, flags)
-                               |  _ -> (nonflags, flags))
-                           in
-                           TidSet.iter nonflags ~f:(fun nonflagtid ->
-                               flagmap := Tid_map.set !flagmap ~key:nonflagtid ~data:flags)))
-             end
+    KB.objects T.Program.cls >>= fun labels ->
+    KB.Seq.iter labels ~f:(fun label ->
+      KB.collect T.Semantics.slot label >>= fun sema ->
+      let terms = KB.Value.get Term.slot sema in
+      KB.return @@ List.iter terms ~f:(fun blkterm ->
+        let (nonflags, flags) = Seq.fold (Blk.elts blkterm) ~init:(TidSet.empty, TidSet.empty)
+                                  ~f:(fun (nonflags, flags) elt ->
+                                    match elt with
+                                    | `Def d ->
+                                      let thistid = Term.tid d in
+                                      if is_def_of_flag d
+                                      then
+                                        (nonflags, TidSet.add flags thistid)
+                                      else
+                                        (TidSet.add nonflags thistid, flags)
+                                    |  _ -> (nonflags, flags))
+        in
+        TidSet.iter nonflags ~f:(fun nonflagtid ->
+          flagmap := Tid_map.set !flagmap ~key:nonflagtid ~data:flags)))
+  end
   in
   !flagmap
 
