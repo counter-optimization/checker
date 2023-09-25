@@ -66,6 +66,26 @@ let is_double_check = Extension.Configuration.flag
                         ~doc:"Is this a double-checking run?"
                         "double-check"
 
+let map_diff (type a b) (m1 : (a, b, _) Map.t) (m2 : (a, b, _) Map.t)
+      ~equal : a list =
+  let get_same_and_differing_keys m1 m2 =
+    let keys1 = Map.key_set m1 in
+    let keys2 = Map.key_set m2 in
+    let shared = Set.inter keys1 keys2 in
+    let only1 = Set.diff keys1 shared in
+    let only2 = Set.diff keys2 shared in
+    let differing = Set.union only1 only2 in
+    shared, differing in
+  let data_same key m1 m2 =
+    equal (Map.find_exn m1 key) (Map.find_exn m2 key) in
+  let same, differ = get_same_and_differing_keys m1 m2 in
+  let same_differ = Set.fold same ~init:[]
+                      ~f:(fun total same_key ->
+                        if data_same same_key m1 m2
+                        then total
+                        else same_key :: total) in
+  List.append (Set.to_list differ) same_differ
+
 let int_of_sz = function
   | `r8 -> 8
   | `r16 -> 16
@@ -337,7 +357,7 @@ let sub_of_tid_for_prog (p : Program.t) (t : Tid.t) : sub term Or_error.t =
     Format.sprintf "Couldn't find callee sub for tid %a" Tid.pps t
 
 module AnalysisBlackList = struct
-  let blacklisted_func_names : string list = ["interrupt"; "plt"; "sodium_init"; "get_cpu_features"]
+  let blacklisted_func_names : string list = ["interrupt"; "plt"; "sodium_init"; "get_cpu_features"] @ Dmp_helpers.checker_blacklisted_fns
 
   let contains_blacklisted_func_name (subname : string) : bool =
     List.fold blacklisted_func_names ~init:false ~f:(fun any_bld blname ->

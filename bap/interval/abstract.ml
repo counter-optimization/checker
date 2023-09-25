@@ -132,6 +132,8 @@ sig
   val widen_with_step : int -> 'a -> t -> t -> t
 
   val pp : t -> unit
+
+  val differs : t -> t -> string list
 end
 
 module NumericEnv(ValueDom : NumericDomain)
@@ -245,6 +247,8 @@ module NumericEnv(ValueDom : NumericDomain)
         set changed ValueDom.top prev) in
     let f = if steps < widen_threshold then merge else widen_state in
     f prev_state new_state
+
+  let differs = Common.map_diff ~equal:ValueDom.equal
 end
 
 module DomainProduct(X : NumericDomain)(Y : NumericDomain)
@@ -399,6 +403,8 @@ module AbstractInterpreter(N: NumericDomain)
     | Some f -> f
     | None -> failwith "Couldn't extract interval information out of product domain during analysis"
 
+  let set_bv = N.set Abstract_bitvector.key
+
   let denote_binop (op : binop) : N.t -> N.t -> N.t =
     match op with
     | Bil.PLUS -> N.add
@@ -547,8 +553,24 @@ module AbstractInterpreter(N: NumericDomain)
     failwith "denote_phi not implemented yet"
 
   let denote_jmp (subname : string) (j : jmp term) (st : E.t) : E.t =
+    let set_smalloc_return exp =
+      let res, st' = denote_exp exp st in
+      let target = get_intvl res in
+      match Wrapping_interval.to_int target with
+      | Ok addr when Dmp_helpers.is_smalloc_call addr ->
+        let bv = Abstract_bitvector.make_top 64 false |>
+                 Abstract_bitvector.logor Abstract_bitvector.with_bit_60_set in
+        let smalloc_return = set_bv N.top bv in
+        printf "[Abstract] setting return value of smalloc bv to: %s\n%!" (N.to_string smalloc_return);
+        E.havoc_on_call st |>
+        E.set Common.ABI.return_reg smalloc_return
+      | _ -> E.havoc_on_call st in
     match Jmp.kind j with
-    | Call c -> E.havoc_on_call st
+    | Call c ->
+      (match Call.target c with
+       | Indirect exp -> set_smalloc_return exp
+       | _ -> E.havoc_on_call st)
+    | Goto (Indirect exp) -> set_smalloc_return exp
     | Goto _ -> st
     | Ret _ -> st
     | Int _ -> st

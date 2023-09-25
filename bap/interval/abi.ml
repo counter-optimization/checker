@@ -14,12 +14,16 @@ module type ABIDef = sig
 
   val vector_arg_width : int
   val gpr_arg_width : int
+
+  val return_reg : string
 end
 
 module AMD64SystemVABI = struct
   let stack_reg = "RSP"
 
   let frame_reg = "RBP"
+
+  let return_reg = "RAX"
 
   let flag_names = Set.of_list (module String) ["CF"; "PF"; "AF"; "ZF"; "SF";
                                                 "TF"; "IF"; "DF"; "OF"]

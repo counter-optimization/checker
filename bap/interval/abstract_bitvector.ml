@@ -46,6 +46,10 @@ let is_bot {bw;conc;abs} =
   let bwand = Bitvec.logand conc abs mod (mm bw) in
   not (Bitvec.equal bwand z)
 
+let with_bit_60_set =
+  let conc = Bitvec.(!$"0x1000000000000000") in
+  { bw = 64; conc; abs = z }
+
 (* mostly for testing convenience *)
 let build bw conc maybes =
   let open Bitvec in
@@ -164,11 +168,18 @@ let sub x y =
   let mu = logor (logor chi x.abs mod m) y.abs mod m in
   let conc = logand dv (lnot mu mod m) mod m in
   { bw; conc; abs = mu }
+
+let logor x y =
+  let max_bw = Int.max x.bw y.bw in
+  let m = mm max_bw in
+  let conc = Bitvec.logor x.conc y.conc mod m in
+  let abs = Bitvec.logor x.abs y.abs mod m in
+  let abs = Bitvec.logand abs (Bitvec.lnot conc mod m) mod m in
+  { bw = max_bw; conc; abs }
   
 let lshift = unimplemented "lshift"
 let rshift = unimplemented "rshift"
 let logand = unimplemented "logand"
-let logor = unimplemented "logor"
 let logxor = unimplemented "logxor"
 let neg = unop_unimplemented "neg"
 let lnot = unop_unimplemented "lnot"

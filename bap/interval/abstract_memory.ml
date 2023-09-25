@@ -458,9 +458,9 @@ module Make(N : NumericDomain)
   let get_overlapping_cells (cell : C.t) (mem : t) : C.Set.t =
     Set.filter mem.cells ~f:(C.overlaps cell)
 
-  (* todo, whatever is breaking the Wrapping_interval.to_int at tid %0008b943
-     in analyzing argon2id *)
   let load_global (offs : Wrapping_interval.t) (sz : size) (m : t) : N.t err =
+    printf "[DebugMemory] loading global sz %d at offset %s\n%!"
+      (bap_size_to_int sz) (Wrapping_interval.to_string offs);
     match m.img with
     | None -> Or_error.error_string "load_global: memory's image should be set before load"
     | Some img ->
@@ -554,6 +554,10 @@ module Make(N : NumericDomain)
       load_global offs size mem >>= fun data ->
       let valtype = CellType.Unknown in
       store ~offs ~region ~width ~data ~valtype mem >>= fun mem' ->
+      printf "[DebugMemory] loaded global at offs %s, width %s, size: %d\n%!"
+        (Wrapping_interval.to_string offs)
+        (Wrapping_interval.to_string width)
+        (bap_size_to_int size);
       Ok (data, { mem' with globals_read = Set.add mem'.globals_read cell })
     else
     if cell_exists ~cell ~mem
@@ -866,4 +870,16 @@ module Make(N : NumericDomain)
        globals_read = widen_globals_read prev next }in
     let merger = if steps < widen_threshold then merge else (widen steps n) in
     merger prev next
+
+  let differs (m1 : t) (m2 : t) : string list =
+    let set_differ (type a) (s1 : (a, _) Set.t) (s2 : (a, _) Set.t) to_s =
+      let same = Set.inter s1 s2 in
+      Set.union (Set.diff s1 same) (Set.diff s2 same)
+      |> Set.to_list
+      |> List.map ~f:to_s in
+    let cell_diff = set_differ m1.cells m2.cells C.to_string in
+    let base_diff = Common.map_diff m1.bases m2.bases ~equal:BaseSet.equal in
+    let globals_diff = set_differ m1.globals_read m2.globals_read C.to_string in
+    let env_diff = Env.differs m1.env m2.env in
+    base_diff @ globals_diff @ env_diff @ cell_diff
 end

@@ -28,6 +28,7 @@ val bot : t
 val one : int -> t
 val b1 : t
 val b0 : t
+val with_bit_60_set : t
 val is_top : t -> bool
 val is_bot : t -> bool
 

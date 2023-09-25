@@ -18,7 +18,7 @@ module ABI = Common.AMD64SystemVABI
 module ProdIntvlxTaint = DomainProduct(Wrapping_interval)(Checker_taint.Analysis)
 module WithTypes = DomainProduct(ProdIntvlxTaint)(Type_domain)
 module WithBitvectors = DomainProduct(WithTypes)(Abstract_bitvector)
-module FinalDomain = DomainProduct(WithTypes)(Bases_domain)
+module FinalDomain = DomainProduct(WithBitvectors)(Bases_domain)
 
 module E = Abstract_memory.Make(FinalDomain)
 module R = Region
@@ -228,7 +228,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
   let subtid = Term.tid sub in
   let () = printf "[Driver] Running analysis on sub %s\n%!" subname in
   let () = record_analyzed_sub subname subtid in
-  (* let () = last_insn_ccs sub in *)
   let should_dump_bir = Extension.Configuration.get ctxt Common.debug_dump in
   let () = if should_dump_bir
     then printf "%a\n%!" Sub.ppo sub
@@ -241,10 +240,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
   let () = Analysis_profiling.record_duration_for subname Edgebuilding stop in
   match should_skip_analysis edges tidmap sub prog with
   | Some res ->
-    let sub_name = Sub.name sub in
-    let () = printf
-               "[Driver] Skipping analysis of single jmp subroutine %s\n%!"
-               sub_name in
+    printf "[Driver] Skipping analysis of single jmp subroutine %s\n%!" subname;
     res
   | None ->
     (* run the liveness analysis *)
@@ -258,9 +254,22 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let start = Analysis_profiling.record_start_time () in
 
     let irg = Sub.to_cfg sub in
-    let irg_first_blk = Graphlib.reverse_postorder_traverse (module IrCfg) irg
-                        |> Seq.hd_exn in
-      
+    let irg_first_blk = match Term.first blk_t sub with
+      | Some blk -> IrCfg.Node.create blk
+      | None -> failwith @@ sprintf "Sub %s has no basic blocks" subname in
+
+    (* dmp checker specific *)
+    let irg_rpo = Graphlib.reverse_postorder_traverse (module IrCfg) irg in
+    let lahf_sahf = Lahf_and_sahf.analyze irg_rpo IrCfg.Node.label in
+
+    Dmp_helpers.find_smalloc proj;
+    Dmp_helpers.print_smalloc_addrs ();
+    (* let smalloc_resolution = Config.get_all_named_symbols proj @@ *)
+    (*   Set.singleton (module String) "smalloc" in *)
+    (* List.iter smalloc_resolution ~f:(fun (name, addrs) -> *)
+    (*   Set.iter addrs ~f:(fun addr -> *)
+    (*     printf "smalloc resolution: %s, %s\n%!" name addr)); *)
+          
     let edges = List.map edges ~f:(Edge_builder.to_cc_edge) in
     let module G = Graphlib.Make(Calling_context)(Bool) in
     let cfg = Graphlib.create (module G) ~edges () in
@@ -318,6 +327,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                       ~init:env_with_img_set
                       ~f:(fun mem argname ->
                         E.init_arg ~name:argname config sub mem) in
+    
     let rpo_traversal = Graphlib.reverse_postorder_traverse (module G) cfg in
     let first_node = match first_insn_cc sub with
       | Some n -> n
@@ -377,49 +387,66 @@ let run_analyses sub img proj ~(is_toplevel : bool)
 
     let init_trace_env = TraceEnv.default_with_env final_env in
 
-    (* let init_mapping = G.Node.Map.set *)
-    (*                      G.Node.Map.empty *)
-    (*                      ~key:first_node *)
-    (*                      ~data:init_trace_env in *)
-    (* let init_sol = Solution.create init_mapping TraceEnv.empty in *)
-    
-    let init_mapping = IrCfg.Node.Map.set
-                         IrCfg.Node.Map.empty
-                         ~key:irg_first_blk
+    let init_mapping = G.Node.Map.set
+                         G.Node.Map.empty
+                         ~key:first_node
                          ~data:init_trace_env in
     let init_sol = Solution.create init_mapping TraceEnv.empty in
 
-    let tid_level_data : ((tid, TraceEnv.t, _) Map.t) ref = ref (Map.empty (module Tid)) in
+    (* let init_mapping = IrCfg.Node.Map.set *)
+    (*                      IrCfg.Node.Map.empty *)
+    (*                      ~key:irg_first_blk *)
+    (*                      ~data:init_trace_env in *)
+    (* let init_sol = Solution.create init_mapping TraceEnv.empty in *)
+
+    (* let tid_level_data : ((tid, TraceEnv.t, _) Map.t) ref = ref (Map.empty (module Tid)) in *)
     
     let analysis_results = Graphlib.fixpoint
-                             (module IrCfg)
-                             irg
+                             (* (module IrCfg) *)
+                             (* irg *)
+                             (module G)
+                             cfg
                              ~step:TraceEnv.widen_with_step
                              ~init:init_sol
                              ~equal:TraceEnv.equal
                              ~merge:TraceEnv.merge
-                             ~f:(fun node inenv ->
-                               let blk = IrCfg.Node.label node in
-                               let elts = Blk.elts blk in
-                               Seq.fold elts ~init:inenv ~f:(fun inenv elt ->
-                                 let elt_tid = elt_to_tid elt in
-                                 if Idx_calculator.is_part_of_idx_insn idx_st elt_tid
-                                 then inenv
-                                 else begin
-                                   tid_level_data := Map.set !tid_level_data ~key:elt_tid ~data:inenv;
-                                   let outenv = TraceAbsInt.denote_elt subname directive_map elt inenv in
-                                   outenv
-                                 end)) in
-                             (* ~f:(fun cc -> *)
-                             (*   let tid = Calling_context.to_insn_tid cc in *)
-                             (*   let elt = match Tid_map.find tidmap tid with *)
-                             (*     | Some elt -> elt *)
-                             (*     | None -> *)
-                             (*       failwith @@ *)
-                             (*       sprintf *)
-                             (*         "in calculating analysis_results, couldn't find tid %a in tidmap" *)
-                             (*         Tid.pps tid in *)
-                             (*   TraceAbsInt.denote_elt subname directive_map elt) in *)
+                             (* ~f:(fun node inenv -> *)
+                             (*   let blk = IrCfg.Node.label node in *)
+                             (*   printf "[Fixpoint] at blk %a, inenv:\n%!" Tid.ppo (Term.tid blk); *)
+                             (*   TraceEnv.pp inenv; *)
+                             (*   printf "\n%!"; *)
+                             (*   let elts = Blk.elts blk in *)
+                             (*   let outenv = Seq.fold elts ~init:inenv ~f:(fun inenv elt -> *)
+                             (*     let elt_tid = elt_to_tid elt in *)
+                             (*     if Idx_calculator.is_part_of_idx_insn idx_st elt_tid *)
+                             (*     then inenv *)
+                             (*     else match elt with *)
+                             (*       | `Def d -> *)
+                             (*         printf "[Debug] interpreting tid %a\n%!" Tid.ppo elt_tid; *)
+                             (*         tid_level_data := Map.set !tid_level_data ~key:elt_tid ~data:inenv; *)
+                             (*         TraceAbsInt.denote_elt subname directive_map elt inenv *)
+                             (*       | _ -> inenv) in *)
+                             (*   let in_envs = TraceEnv.Tree.map_list Fn.id inenv.tree in *)
+                             (*   let out_envs = TraceEnv.Tree.map_list Fn.id outenv.tree in *)
+                             (*   printf "[Debug] # in_envs: %d, # out_envs: %d\n%!" (List.length in_envs) (List.length out_envs); *)
+                             (*   (match List.zip in_envs out_envs with *)
+                             (*    | Ok zipped -> *)
+                             (*      let env_diffs = List.map zipped ~f:(fun (i, o) -> *)
+                             (*        printf "[Debug] abs mem equal?: %B\n%!" (E.equal i o); *)
+                             (*        E.differs i o) in *)
+                             (*      printf "[Debug] env_diffs: %s\n%!" (List.to_string env_diffs ~f:(List.to_string ~f:Fn.id)) *)
+                             (*    | Unequal_lengths -> printf "[Debug] unequal lengths\n%!"); *)
+                             (*   outenv) in *)
+                             ~f:(fun cc ->
+                               let tid = Calling_context.to_insn_tid cc in
+                               let elt = match Tid_map.find tidmap tid with
+                                 | Some elt -> elt
+                                 | None ->
+                                   failwith @@
+                                   sprintf
+                                     "in calculating analysis_results, couldn't find tid %a in tidmap"
+                                     Tid.pps tid in
+                               TraceAbsInt.denote_elt subname directive_map elt) in
     
     (* let analysis_results = Myfixpoint.compute *)
     (*                          (module IrCfg) *)
@@ -455,9 +482,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
       : Common.CheckerInterp with type t := FinalDomain.t =
     struct
       let denote_exp (tid : tid) (exp : Bil.exp) : FinalDomain.t list =
-        (* let cc = Calling_context.of_tid tid in *)
-        (* let in_state = Solution.get analysis_results cc in *)
-        let in_state = Map.find_exn !tid_level_data tid in
+        let cc = Calling_context.of_tid tid in
+        let in_state = Solution.get analysis_results cc in
+        (* let in_state = Map.find_exn !tid_level_data tid in *)
         TraceAbsInt.nondet_denote_exp exp in_state
     end
     in
@@ -548,9 +575,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
 
     let module GetCallees = Callees.Getter(FinalDomain) in
     let eval_indirect_exp : tid -> Bil.exp -> FinalDomain.t list = fun tid exp ->
-      (* let cc = Calling_context.of_tid tid in *)
-      (* let env = Solution.get analysis_results cc in *)
-      let env = Map.find_exn !tid_level_data tid in 
+      let cc = Calling_context.of_tid tid in
+      let env = Solution.get analysis_results cc in
+      (* let env = Map.find_exn !tid_level_data tid in  *)
       TraceAbsInt.nondet_denote_exp exp env
     in
 

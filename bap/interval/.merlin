@@ -42,6 +42,8 @@ S tidset.ml
 S reachingdefs.ml
 S dmp.ml
 S abstract_bitvector.ml
+S myfixpoint.ml
+S lahf_and_sahf.ml
 
 B _build
 
