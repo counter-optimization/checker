@@ -2,6 +2,7 @@ open Core_kernel
 open Bap.Std
 
 module KB = Bap_knowledge.Knowledge
+module BV = Bitvec              
        
 let package = "uarch-checker"
 
@@ -16,6 +17,8 @@ let o = Bitvec.one
 let os = Bitvec.ones
 let z = Bitvec.zero
 let bveq = Bitvec.equal
+
+let mbw x y = Int.max x.bw y.bw
 
 let os_for_bw bw = os mod (mm bw)
 let is_os x bw =
@@ -60,15 +63,31 @@ let equal x y = bveq x.conc y.conc && bveq x.abs y.abs
 
 let bw_equal x y = x.bw = y.bw
 
+(* does y contain x? *)
+let contains x y =
+  let bw = mbw x y in
+  let m = mm bw in
+  let abs_ok = BV.equal z (BV.lnot
+                             (BV.logor
+                                (BV.lnot x.abs mod m)
+                                y.abs
+                              mod m)
+                           mod m) in
+  let conc_ok = BV.equal z (BV.lnot
+                                (BV.logor
+                                   (BV.lnot y.conc mod m)
+                                   x.conc
+                                 mod m)
+                              mod m) in
+  abs_ok && conc_ok
+
 let order x y : KB.Order.partial =
-  let max_bw = mm (Int.max x.bw y.bw) in
-  let right = Bitvec.((y.conc lor y.abs) mod max_bw) in
-  let left = Bitvec.((x.conc lor x.abs) mod max_bw) in
-  let x_subseq_y = Bitvec.(equal ((left lor right) mod max_bw) right) in
-  let y_subseq_x = Bitvec.(equal ((right lor left) mod max_bw) left) in
   if is_bot x
   then KB.Order.LT
-  else match x_subseq_y, y_subseq_x with
+  else
+    let x_subseq_y = contains x y in
+    let y_subseq_x = contains y x in
+    match x_subseq_y, y_subseq_x with
     | true, true -> KB.Order.EQ
     | true, false -> KB.Order.LT
     | false, true -> KB.Order.GT
@@ -80,11 +99,6 @@ let compare x y =
   | KB.Order.LT -> -1
   | KB.Order.GT -> 1
   | KB.Order.NC -> failwith "non-total order"
-
-let contains x y =
-  match order x y with
-  | KB.Order.LT | KB.Order.EQ -> true
-  | _ -> false
 
 let join x y =
   let bw = Int.max x.bw y.bw in
@@ -175,6 +189,17 @@ let logor x y =
   let conc = Bitvec.logor x.conc y.conc mod m in
   let abs = Bitvec.logor x.abs y.abs mod m in
   let abs = Bitvec.logand abs (Bitvec.lnot conc mod m) mod m in
+  { bw = max_bw; conc; abs }
+
+let logand x y =
+  let max_bw = Int.max x.bw y.bw in
+  let m = mm max_bw in
+  let conc = Bitvec.logand x.conc y.conc mod m in
+  let allxs = Bitvec.logor x.conc x.abs mod m in
+  let allys = Bitvec.logor y.conc y.abs mod m in
+  let abs = Bitvec.logand
+              (Bitvec.lnot conc mod m)
+              (Bitvec.logand allxs allys mod m) mod m in
   { bw = max_bw; conc; abs }
   
 let lshift = unimplemented "lshift"

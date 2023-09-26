@@ -535,7 +535,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                elt
         else emp in
       let dmp_chkr_res = if do_dmp
-        then DmpChecker.check_elt sub to_tid elt
+        then DmpChecker.check_elt sub to_tid lahf_sahf elt
         else emp in
       combine_res dmp_chkr_res @@ 
       combine_res all_results @@

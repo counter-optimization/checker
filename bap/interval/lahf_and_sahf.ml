@@ -61,3 +61,7 @@ let analyze rpo bbize =
   let initial_in_transform = false in
   let initial_tids_in_transform = Tidset.empty in
   loop rpo initial_in_transform initial_tids_in_transform
+
+let print =
+  printf "Insns between lahf and sahf:\n%!";
+  Tidset.iter ~f:(printf "\t%a\n%!" Tid.ppo)
