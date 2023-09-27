@@ -578,7 +578,9 @@ let high len x =
 let length : t -> int option = function
   | Interval {lo; hi; width; signed} ->
     let zdiff = Z.sub hi lo in
-    Some (Z.to_int zdiff)
+    if Z.fits_int zdiff
+    then Some (Z.to_int zdiff)
+    else None
   | Bot -> None
 
 let to_int (intvl : t) : int Or_error.t =
