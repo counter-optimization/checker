@@ -32,7 +32,7 @@ module TraceEnv = Trace.Env(FinalDomain)(E)
 
 type check_sub_result = {
   callees : CRS.t;
-  liveness_info : Live_variables.t;
+  (* liveness_info : Live_variables.t; *)
   csevalstats : EvalStats.t;
   ssevalstats : EvalStats.t;
   alerts : Alert.Set.t
@@ -187,8 +187,8 @@ let should_skip_analysis (edges : Edge_builder.edges)
           Some { alerts = empty_alerts;
                  callees = callee_rels;
                  csevalstats = EvalStats.init;
-                 ssevalstats = EvalStats.init;
-                 liveness_info = Live_variables.IsUsedPass.UseRel.empty }
+                 ssevalstats = EvalStats.init; }
+                 (* liveness_info = Live_variables.IsUsedPass.UseRel.empty } *)
       end
     | _ -> failwith "in should_skip_analysis, subroutine is single instruction but non jump instruction. this case is not yet handled." 
   else
@@ -243,13 +243,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     printf "[Driver] Skipping analysis of single jmp subroutine %s\n%!" subname;
     res
   | None ->
-    (* run the liveness analysis *)
-    let () = printf "Running liveness analysis\n%!" in
-    let start = Analysis_profiling.record_start_time () in
-    let liveness = Live_variables.Analysis.run sub in
-    let stop = Analysis_profiling.record_stop_time start in
-    let () = Analysis_profiling.record_duration_for subname DependencyAnalysis stop in
-
     (* CFG *)
     let start = Analysis_profiling.record_start_time () in
 
@@ -264,11 +257,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
 
     Dmp_helpers.find_smalloc proj;
     Dmp_helpers.print_smalloc_addrs ();
-    (* let smalloc_resolution = Config.get_all_named_symbols proj @@ *)
-    (*   Set.singleton (module String) "smalloc" in *)
-    (* List.iter smalloc_resolution ~f:(fun (name, addrs) -> *)
-    (*   Set.iter addrs ~f:(fun addr -> *)
-    (*     printf "smalloc resolution: %s, %s\n%!" name addr)); *)
           
     let edges = List.map edges ~f:(Edge_builder.to_cc_edge) in
     let module G = Graphlib.Make(Calling_context)(Bool) in
@@ -593,8 +581,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     { alerts = all_alerts;
       callees = callees;
       csevalstats = all_results.cs_stats;
-      ssevalstats = all_results.ss_stats;
-      liveness_info = liveness }
+      ssevalstats = all_results.ss_stats }
 
 (* this fn needs to have return type unit b/c BAP passes
    should have type (Project.t -> unit). here, this function
@@ -635,7 +622,6 @@ let check_config config img ctxt proj : unit =
             ~(processed : SubSet.t)
             ~(res : checker_alerts)
             ~(callees : CRS.t)
-            ~(liveness : Live_variables.t)
             ~(is_toplevel : bool)
             ~(csevalstats : EvalStats.t)
             ~(ssevalstats : EvalStats.t)
@@ -657,7 +643,6 @@ let check_config config img ctxt proj : unit =
         loop ~worklist:worklist_wo_procd_wo_sub
           ~processed:next_processed
           ~res
-          ~liveness
           ~callees
           ~csevalstats
           ~ssevalstats
@@ -683,7 +668,6 @@ let check_config config img ctxt proj : unit =
         loop ~worklist:next_worklist
           ~processed:next_processed
           ~res:all_alerts
-          ~liveness:current_res.liveness_info
           ~callees:current_res.callees
           ~config
           ~csevalstats:total_cs_stats
@@ -693,7 +677,6 @@ let check_config config img ctxt proj : unit =
   (* Run the analyses and checkers *)
   let analysis_results = loop ~worklist
                            ~processed
-                           ~liveness:Live_variables.IsUsedPass.UseRel.empty
                            ~callees:CRS.empty
                            ~res:init_res
                            ~csevalstats:EvalStats.init

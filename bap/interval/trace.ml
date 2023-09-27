@@ -89,8 +89,7 @@ module Directives(N : Abstract.NumericDomain)
         | Var v -> if String.equal v replace
           then Var with_
           else Var v
-        | Num n -> Num n
-      in
+        | Num n -> Num n in
       match (target : cnd) with
       | Eq (l, r) -> Eq (s l, s r)
       | Lt (l, r) -> Lt (s l, s r)
