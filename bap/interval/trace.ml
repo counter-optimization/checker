@@ -378,7 +378,7 @@ module Directives(N : Abstract.NumericDomain)
           ((tid,flagname) : tid * string)
           (flagdirs : t) : t option =
       let imm_flag_deps = Reachingdefs.get_users p.rd tid in
-      if Tidset.length imm_flag_deps = 0
+      if Tidset.is_empty imm_flag_deps
       then None
       else
         let flag_dep_deps = Tidset.to_list imm_flag_deps in
@@ -429,12 +429,9 @@ module Directives(N : Abstract.NumericDomain)
              in
              flag_set_dir)
         | None ->
-          let () = printf "[Trace] Couldn't get basedir from def of flag %s (%a)\n%!"
-                     flagname Tid.ppo tid
-          in
+          printf "[Trace] Couldn't get basedir from def of flag %s (%a)\n%!" flagname Tid.ppo tid;
           flag_set_dir
-      else
-        flag_set_dir
+      else flag_set_dir
   end
 end
 
@@ -871,6 +868,15 @@ module ConditionFinder = struct
     { rpo_traversal; tidmap; rd = reachingdefs }
 
   module FlagScraper = struct
+    let flag_is_checkbit ((tid, flagname) : live_flag) prereqs =
+      let exp_is_dmp_bittest = function
+        | Bil.Cast (low, 1, (Bil.BinOp (rshift, (Bil.Var v), (Bil.Int w)))) -> true
+        | _ -> false in
+      match Tid_map.find prereqs.tidmap tid with
+      | None -> false
+      | Some (`Def d) -> exp_is_dmp_bittest (Def.rhs d)
+      | Some _ -> false
+    
     (* hopefully/probably *)
     let flag_used_in_cmov ((tid, flagname) : live_flag) (prereqs : prereqs) : bool =
       let rec loop (exp : Bil.exp) : bool =

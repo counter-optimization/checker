@@ -32,7 +32,6 @@ module TraceEnv = Trace.Env(FinalDomain)(E)
 
 type check_sub_result = {
   callees : CRS.t;
-  (* liveness_info : Live_variables.t; *)
   csevalstats : EvalStats.t;
   ssevalstats : EvalStats.t;
   alerts : Alert.Set.t
@@ -187,8 +186,7 @@ let should_skip_analysis (edges : Edge_builder.edges)
           Some { alerts = empty_alerts;
                  callees = callee_rels;
                  csevalstats = EvalStats.init;
-                 ssevalstats = EvalStats.init; }
-                 (* liveness_info = Live_variables.IsUsedPass.UseRel.empty } *)
+                 ssevalstats = EvalStats.init }
       end
     | _ -> failwith "in should_skip_analysis, subroutine is single instruction but non jump instruction. this case is not yet handled." 
   else
@@ -244,6 +242,10 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     res
   | None ->
     (* CFG *)
+    let do_cs = Extension.Configuration.get ctxt Common.do_cs_checks_param in
+    let do_ss = Extension.Configuration.get ctxt Common.do_ss_checks_param in
+    let do_dmp = Extension.Configuration.get ctxt Common.do_dmp_checks_param in
+    
     let start = Analysis_profiling.record_start_time () in
 
     let irg = Sub.to_cfg sub in
@@ -255,8 +257,12 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let irg_rpo = Graphlib.reverse_postorder_traverse (module IrCfg) irg in
     let lahf_sahf = Lahf_and_sahf.analyze irg_rpo IrCfg.Node.label in
 
-    Dmp_helpers.find_smalloc proj;
-    Dmp_helpers.print_smalloc_addrs ();
+    if do_dmp
+    then begin
+      Dmp_helpers.find_smalloc proj;
+      Dmp_helpers.print_smalloc_addrs ()
+    end
+    else ();
           
     let edges = List.map edges ~f:(Edge_builder.to_cc_edge) in
     let module G = Graphlib.Make(Calling_context)(Bool) in
@@ -347,15 +353,13 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                        cond_scrape_st in
     let cmov_cnd_flags = List.filter live_flags ~f:(fun lf ->
       Trace.ConditionFinder.FlagScraper.flag_used_in_cmov lf cond_scrape_st) in
+    let dmp_bittest_flags = List.filter live_flags ~f:(fun lf ->
+      Trace.ConditionFinder.FlagScraper.flag_is_checkbit lf cond_scrape_st) in
     let cond_extractor_st = TraceDir.Extractor.init tidmap reachingdefs in
     let dirs = List.fold cmov_cnd_flags ~init:[] ~f:(fun dirs lf ->
-      let split_dir = TraceDir.Extractor.get_conds_for_flag
-                        lf
-                        cond_extractor_st in
+      let split_dir = TraceDir.Extractor.get_conds_for_flag lf cond_extractor_st in
       let combine_dir = TraceDir.Extractor.get_merge_point_for_flag_dirs
-                          cond_extractor_st
-                          lf
-                          split_dir in
+                          cond_extractor_st lf split_dir in
       match combine_dir with
       | None ->
         let () = printf "[Drive] live flag <%a, %s> couldn't get both split and combine directives\n%!" Tid.ppo (fst lf) (snd lf) in
@@ -365,7 +369,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let () = printf "[Driver] trace part dirs are:\n%!";
       List.iter dirs ~f:(fun td ->
         printf "\t%s\n%!" @@ TraceDir.to_string td) in
-    let dirs = [] in 
+    let dirs = [] in
     let directive_map = TraceDir.Extractor.to_directive_map dirs in
     let () = printf "[Driver] Done running trace part pre-analysis\n%!" in
 
@@ -434,7 +438,12 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                    sprintf
                                      "in calculating analysis_results, couldn't find tid %a in tidmap"
                                      Tid.pps tid in
-                               TraceAbsInt.denote_elt subname directive_map elt) in
+                               TraceAbsInt.denote_elt subname directive_map elt
+                               (* fun st -> *)
+                               (*   printf "[Driver] denoting elt %a\n%!" Tid.ppo tid; *)
+                               (*   printf "[Driver] instate:\n%!"; *)
+                               (*   TraceEnv.pp st; *)
+                               (*   TraceAbsInt.denote_elt subname directive_map elt st *)) in
     
     (* let analysis_results = Myfixpoint.compute *)
     (*                          (module IrCfg) *)
@@ -461,10 +470,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let no_symex = Extension.Configuration.get ctxt Common.no_symex_param in
     let use_symex = not no_symex in
     let symex_profiling_out_file = Extension.Configuration.get ctxt Common.symex_profiling_output_file_path_param in
-
-    let do_cs = Extension.Configuration.get ctxt Common.do_cs_checks_param in
-    let do_ss = Extension.Configuration.get ctxt Common.do_ss_checks_param in
-    let do_dmp = Extension.Configuration.get ctxt Common.do_dmp_checks_param in
 
     let module TracePartCheckerOracle
       : Common.CheckerInterp with type t := FinalDomain.t =
