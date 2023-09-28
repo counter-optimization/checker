@@ -21,7 +21,7 @@
   (comp-simp:run-x86-64-impl #:insns attempt #:cpu attempt-cpu #:assert-cs true
                              #:verbose (print-verbose))
   (comp-simp:run-x86-64-impl #:insns spec #:cpu spec-cpu)
-  
+
   (comp-simp:assert-all-regs-but-scratch-equiv spec-cpu attempt-cpu)
 
   (when (check-flags)
@@ -39,7 +39,7 @@
   (define cex (verify (comp-simp-verify (car transform) attempt-cpu
                                         (cdr transform) spec-cpu)))
   (define short-result (if (unsat? cex) "unsat" "sat"))
-  (displayln (format "finished verification (~s)" short-result))
+  (displayln (format "finished verification (~s)\n" short-result))
   (when (print-verbose)
     (displayln cex)
     (displayln ""))
