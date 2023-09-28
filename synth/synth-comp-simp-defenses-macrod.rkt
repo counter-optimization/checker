@@ -26,13 +26,13 @@
   (define mm (core:make-flat-memmgr #:bitwidth 64))
   (init-cpu mm))
 
-(define (run-x86-64-impl #:insns insns #:cpu cpu #:assert-cs [cs false] #:verbose (v #f))
-  
+(define (run-x86-64-impl #:insns insns #:cpu cpu #:assert-cs [cs false]
+                         #:verbose [v #f] #:model [cex (unsat)])
   (define (run-insn i cpu)
     (match i
       ['noop #f]
       [_ 
-       (if cs (comp-simp-asserter #:insn i #:cpu cpu #:verbose v) void)
+       (if cs (comp-simp-asserter #:insn i #:cpu cpu #:verbose v #:model cex) void)
        (instruction-run i cpu)
       ]))
   
@@ -403,28 +403,32 @@
     (symbolics val)))
   (! (empty? regs-depended-on)))
 
-(define (assert-operand-is-not-special operand special-for-bw cpu [bw 0])
+(define (assert-operand-is-not-special operand special-for-bw cpu model [bw 0])
   (define operand-bw (if (zero? bw) (bitwidth-getter operand) bw))
   (define operand-val (trunc operand-bw (operand-decoder operand cpu)))
   (define special (special-for-bw operand-bw))
+  (define special-cond (bveq special operand-val))
   (when (value-depends-on-registers operand-val cpu)
-    (assert (! (bveq special operand-val)))))
+    (if (sat? model)
+      (when (evaluate special-cond model)
+        (displayln (format "\tASSERT FAIL: Operand ~a has special value ~a\n" operand special)))
+      (assert (! special-cond) "message"))))
 
-(define (comp-simp-asserter #:insn insn #:cpu cpu #:verbose v)
+(define (comp-simp-asserter #:insn insn #:cpu cpu #:verbose v #:model cex)
   (define zero-checker
-    (λ (op) (assert-operand-is-not-special op zero-for-bw cpu)))
+    (λ (op) (assert-operand-is-not-special op zero-for-bw cpu cex)))
   
   (define one-checker
-    (λ (op) (assert-operand-is-not-special op one-for-bw cpu)))
+    (λ (op) (assert-operand-is-not-special op one-for-bw cpu cex)))
   
   (define ones-checker
-    (λ (op) (assert-operand-is-not-special op ones-for-bw cpu)))
+    (λ (op) (assert-operand-is-not-special op ones-for-bw cpu cex)))
 
   (define zero-checker-five-bits
-    (λ (op) (assert-operand-is-not-special op zero-for-bw cpu 5)))
+    (λ (op) (assert-operand-is-not-special op zero-for-bw cpu cex 5)))
 
   (define zero-checker-six-bits
-    (λ (op) (assert-operand-is-not-special op zero-for-bw cpu 6)))
+    (λ (op) (assert-operand-is-not-special op zero-for-bw cpu cex 6)))
 
   (when v (displayln insn))
   (match insn

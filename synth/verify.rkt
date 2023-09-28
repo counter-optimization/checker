@@ -14,10 +14,7 @@
 
 (provide (all-defined-out))
 
-(define (comp-simp-verify attempt spec [flags '()])
-  (define spec-cpu (comp-simp:make-x86-64-cpu))
-  (define attempt-cpu (comp-simp:make-x86-64-cpu))
-
+(define (comp-simp-verify attempt attempt-cpu spec spec-cpu [flags '()])
   (comp-simp:assume-all-regs-equiv spec-cpu attempt-cpu)
   (comp-simp:assume-all-flags-equiv spec-cpu attempt-cpu)
 
@@ -46,12 +43,24 @@
 
 (define (run-verifier transform)
   (displayln "running verification...")
-  (define cex (verify (comp-simp-verify (car transform) (cdr transform))))
+  (define spec-cpu (comp-simp:make-x86-64-cpu))
+  (define attempt-cpu (comp-simp:make-x86-64-cpu))
+  (define attempt-cpu-copy 
+    (struct-copy cpu attempt-cpu
+                 [gprs (vector-copy (cpu-gprs attempt-cpu))]
+                 [flags (vector-copy (cpu-flags attempt-cpu))]))
+  (define cex (verify (comp-simp-verify (car transform) attempt-cpu
+                                        (cdr transform) spec-cpu)))
   (define short-result (if (unsat? cex) "unsat" "sat"))
   (displayln (format "finished verification (~s)" short-result))
   (when (print-verbose)
     (displayln cex)
     (displayln ""))
+  (when (sat? cex)
+    (displayln "Solver found a counterexample. Identifying failures...")
+    (comp-simp:run-x86-64-impl #:insns (car transform) #:cpu attempt-cpu-copy #:assert-cs true
+      #:verbose (print-verbose) #:model cex)
+    (displayln "done\n"))
   short-result)
 
 (define print-verbose (make-parameter #f))
