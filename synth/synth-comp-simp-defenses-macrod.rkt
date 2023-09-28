@@ -161,6 +161,14 @@
     (define f2 (cpu-flag-ref cpu2 flag-name))
     (assert (bveq f1 f2))))
 
+(define (compare-all-flags cpu1 cpu2)
+  (for ([flag-name flag-symbols])
+    (define f1 (cpu-flag-ref cpu1 flag-name))
+    (define f2 (cpu-flag-ref cpu2 flag-name))
+    (unless (bveq f1 f2)
+      (displayln (format "FLAG MISMATCH: ~a differs (~a vs ~a)" 
+                  flag-name f1 f2)))))
+
 ; Synthesis impl and spec for adding eax and ecx
 ; Adding eax <- eax + ecx
 (define (add-r/m32-r32-conc-impl)

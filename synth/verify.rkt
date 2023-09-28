@@ -14,31 +14,18 @@
 
 (provide (all-defined-out))
 
-(define (comp-simp-verify attempt attempt-cpu spec spec-cpu [flags '()])
+(define (comp-simp-verify attempt attempt-cpu spec spec-cpu)
   (comp-simp:assume-all-regs-equiv spec-cpu attempt-cpu)
   (comp-simp:assume-all-flags-equiv spec-cpu attempt-cpu)
 
   (comp-simp:run-x86-64-impl #:insns attempt #:cpu attempt-cpu #:assert-cs true
                              #:verbose (print-verbose))
   (comp-simp:run-x86-64-impl #:insns spec #:cpu spec-cpu)
-
-  ;; (define spec-reg-state-after (comp-simp:get-all-regs-but-raxes #:cpu spec-cpu))
-  ;; (define impl-reg-state-after (comp-simp:get-all-regs-but-raxes #:cpu attempt-cpu))
+  
   (comp-simp:assert-all-regs-but-scratch-equiv spec-cpu attempt-cpu)
-  
-  ;; (define spec-flag-state-after (comp-simp:get-all-flags #:cpu spec-cpu))
-  ;; (define impl-flag-state-after (comp-simp:get-all-flags #:cpu attempt-cpu))
-  ;; (comp-simp:assert-flags-equiv spec-flag-state-after impl-flag-state-after)
-  
-  ; (for ([reg regs])
-  ;   (define spec-reg (cpu-gpr-ref spec-cpu reg))
-  ;   (define impl-reg (cpu-gpr-ref attempt-cpu reg))
-  ;   (assert (bveq spec-reg impl-reg)))
 
-  (for ([flag flags])
-    (define spec-flag (cpu-flag-ref spec-cpu flag))
-    (define impl-flag (cpu-flag-ref attempt-cpu flag))
-    (assert (bveq spec-flag impl-flag)))
+  (when (check-flags)
+    (comp-simp:assert-all-flags-equiv spec-cpu attempt-cpu))
   )
 
 (define (run-verifier transform)
@@ -63,16 +50,22 @@
     (displayln "\nChecking register equivalence...")
     (comp-simp:compare-all-regs-but-scratch (evaluate spec-cpu cex)
                                             (evaluate attempt-cpu-copy cex))
+    (when (check-flags)
+      (displayln "\nChecking flag equivalence...")
+      (comp-simp:compare-all-flags (evaluate spec-cpu cex) (evaluate attempt-cpu-copy cex)))
     (displayln "done\n"))
   short-result)
 
 (define print-verbose (make-parameter #f))
+(define check-flags (make-parameter #f))
 
 (define insns-to-transform
   (command-line
    #:once-each
    [("-v" "--verbose") "Print verbose verification results instead of simply sat/unsat"
                        (print-verbose #t)]
+   [("-f" "--check-flags") "Check equivalence of flags in addition to registers"
+                           (check-flags #t)]
    #:args insns
    insns))
 

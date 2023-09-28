@@ -138,7 +138,7 @@
    (mov-r/m64-imm32 r11 (bv (expt 2 31) 32))
    (mov-r/m8-r8 r11b al) ; split lower 8 bits of rax into r11
    (add-r/m64-r64 r10 r11) ; perform addition
-  ;  (mov-r/m8-r8 cl r10b) ; recombine result
+   (mov-r/m8-r8 cl r10b) ; recombine result
    (mov-r/m8-r8 al r11b) ; restore rax
   ))
 
