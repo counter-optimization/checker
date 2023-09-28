@@ -147,6 +147,14 @@
     (define r2 (cpu-gpr-ref cpu2 reg-name))
     (assert (bveq r1 r2))))
 
+(define (compare-all-regs-but-scratch cpu1 cpu2)
+  (for ([reg-name all-regs-but-scratch])
+    (define r1 (cpu-gpr-ref cpu1 reg-name))
+    (define r2 (cpu-gpr-ref cpu2 reg-name))
+    (unless (bveq r1 r2)
+      (displayln (format "REG MISMATCH: ~a differs (~a vs ~a)" 
+                  (pretty-operand reg-name) r1 r2)))))
+
 (define (assert-all-flags-equiv cpu1 cpu2)
   (for ([flag-name flag-symbols])
     (define f1 (cpu-flag-ref cpu1 flag-name))
@@ -397,6 +405,24 @@
     [_ (printf "unhandled case in operand-decoder for operand ~a\n" operand)
        (exit 3)]))
 
+; returns the operand as a human-readable string
+(define (pretty-operand operand)
+  (match operand
+    [(struct gpr32 _) (register-name operand)]
+    [(struct gpr64 _) (register-name operand)]
+    [(struct gpr16 _) (register-name operand)]
+    [(struct gpr8 _) (register-name operand)]
+    ; probably an immediate
+    [(list smt ...) (decode-imm operand)]
+    [(? bitvector?) operand]
+    [(? bv?) operand]
+    [(quote implicit-rax) operand]
+    [(quote implicit-eax) operand]
+    [(quote implicit-ax) operand]
+    [(quote implicit-al) operand]
+    [_ (printf "unhandled case in pretty-operand for operand ~a\n" operand)
+       (exit 3)]))
+
 (define (value-depends-on-registers val cpu)
   (define regs-depended-on (filter 
     (lambda (reg) (vector-member reg (cpu-gprs cpu)))
@@ -411,7 +437,8 @@
   (when (value-depends-on-registers operand-val cpu)
     (if (sat? model)
       (when (evaluate special-cond model)
-        (displayln (format "\tASSERT FAIL: Operand ~a has special value ~a\n" operand special)))
+        (displayln (format "\tASSERT FAIL: Operand ~a has special value ~a\n" 
+                           (pretty-operand operand) special)))
       (assert (! special-cond) "message"))))
 
 (define (comp-simp-asserter #:insn insn #:cpu cpu #:verbose v #:model cex)

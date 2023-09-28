@@ -57,9 +57,12 @@
     (displayln cex)
     (displayln ""))
   (when (sat? cex)
-    (displayln "Solver found a counterexample. Identifying failures...")
+    (displayln "Solver found a counterexample. Searching for comp simp failures...")
     (comp-simp:run-x86-64-impl #:insns (car transform) #:cpu attempt-cpu-copy #:assert-cs true
       #:verbose (print-verbose) #:model cex)
+    (displayln "\nChecking register equivalence...")
+    (comp-simp:compare-all-regs-but-scratch (evaluate spec-cpu cex)
+                                            (evaluate attempt-cpu-copy cex))
     (displayln "done\n"))
   short-result)
 
