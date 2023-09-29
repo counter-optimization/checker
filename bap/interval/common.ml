@@ -97,6 +97,8 @@ let int_of_sz = function
 module AMD64SystemVABI = Abi.AMD64SystemVABI
 module ABI = AMD64SystemVABI
 
+let term_opt_domain : def term option KB.domain = KB.Domain.optional ~equal:Term.same "term-opt-domain"
+
 let string_flat_dom = KB.Domain.flat
                         ~empty:""
                         ~equal:String.equal

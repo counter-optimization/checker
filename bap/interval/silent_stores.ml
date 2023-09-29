@@ -16,6 +16,7 @@ module Checker(N : Abstract.NumericDomain)
     (Interp : Common.CheckerInterp with type t := N.t) = struct
   type st = {
     tid : tid;
+    term : def term;
     subname : string;
     alerts : Alert.Set.t;
     eval_stats : Stats.t;
@@ -25,8 +26,9 @@ module Checker(N : Abstract.NumericDomain)
 
   let dep_bound = 40
 
-  let init_st subname tid = {
+  let init_st subname tid term = {
     tid;
+    term;
     subname;
     alerts = emp;
     eval_stats = Stats.init;
@@ -69,8 +71,9 @@ module Checker(N : Abstract.NumericDomain)
     | Checker_taint.Analysis.Notaint -> false
     | Checker_taint.Analysis.Taint -> true
 
-  let build_alert ~tid ~desc ~left_val ~right_val ~subname : Alert.t =
+  let build_alert ~tid ~term ~desc ~left_val ~right_val ~subname : Alert.t =
     let tid = Some tid in
+    let term = Some term in
     let desc = desc in
     let left_val = Some (Wrapping_interval.to_string left_val) in
     let right_val = Some (Wrapping_interval.to_string right_val) in
@@ -83,7 +86,7 @@ module Checker(N : Abstract.NumericDomain)
     let flags_live = SS.empty in
     let flags_live_in = SS.empty in
     let is_live = None in
-    { tid; desc; left_val; right_val;
+    { tid; desc; left_val; right_val; term;
       reason; sub_name; problematic_operands;
       opcode; addr; rpo_idx; flags_live_in;
       flags_live; is_live }
@@ -189,11 +192,11 @@ module Checker(N : Abstract.NumericDomain)
         (tidmap : Blk.elt Tid_map.t)
         (elt : Blk.elt) : Alert.Set.t Common.checker_res =
     let subname = Sub.name sub in
-    let st = init_st subname tid in
     let empty_stats = Common.EvalStats.init in
-    let empty_res st = { warns = emp;
+    let empty_res st = { warns = st.alerts;
                          cs_stats = empty_stats;
-                         ss_stats = st.eval_stats } in
+                         ss_stats = st.eval_stats }
+    in
     let could_be_eq old new_ =
       let new_intvl = get_intvl new_ in
       let old_intvl = get_intvl old in
@@ -201,6 +204,7 @@ module Checker(N : Abstract.NumericDomain)
       Wrapping_interval.booleq old_intvl new_intvl in
     match elt with
     | `Def d ->
+      let st = init_st subname tid d in
       let rhs = Def.rhs d in
       begin
         match rhs with
@@ -260,7 +264,7 @@ module Checker(N : Abstract.NumericDomain)
                     let left_val = get_intvl prev_data in
                     let right_val = get_intvl new_data in
                     let desc = "failed symex check" in
-                    let alert = build_alert ~tid ~subname ~left_val ~right_val ~desc in
+                    let alert = build_alert ~tid ~term:d ~subname ~left_val ~right_val ~desc in
                     let alerts = Alert.Set.singleton alert in
                     { warns = alerts;
                       cs_stats = empty_stats;
@@ -270,14 +274,18 @@ module Checker(N : Abstract.NumericDomain)
                   let left_val = get_intvl prev_data in
                   let right_val = get_intvl new_data in
                   let desc = "failed interval equality" in
-                  let alert = build_alert ~tid ~subname ~left_val ~right_val ~desc in
+                  let alert = build_alert ~tid ~term:d ~subname ~left_val ~right_val ~desc in
                   let alerts = Alert.Set.singleton alert in
                   { warns = alerts;
                     cs_stats = empty_stats;
                     ss_stats = st.eval_stats }
               else empty_res @@ estats_incr_interval_pruned st
             else empty_res @@ estats_incr_taint_pruned st)
-        | _ -> empty_res st
+        | _ -> { warns = emp;
+                 cs_stats = empty_stats;
+                 ss_stats = empty_stats }
       end
-    | _ -> empty_res st
+    | _ -> { warns = emp;
+             cs_stats = empty_stats;
+             ss_stats = empty_stats }
 end

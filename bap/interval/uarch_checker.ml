@@ -38,25 +38,6 @@ module UarchCheckerExtension = struct
 
   let pass ctxt proj =
     let target_obj_name = get_target_file_name proj in
-    (* Toplevel.exec begin *)
-    (*   let open KB.Syntax in *)
-    (*   let addr = Bitvec.(!$"0x401500") in *)
-    (*   T.Label.for_addr ~package:target_obj_name addr >>= fun label -> *)
-    (*   let* sema = label-->T.Semantics.slot in *)
-    (*   let asm = Insn.asm sema in *)
-    (*   KB.return @@ printf "[DebugDriver] asm: %s\n%!" asm  *)
-    (* end; *)
-    (* Toplevel.exec begin *)
-    (*   let open KB.Syntax in *)
-    (*   KB.objects T.Program.cls >>= fun labels -> *)
-    (*   KB.Seq.iter labels ~f:(fun l -> *)
-    (*     let* sema = l-->T.Semantics.slot in *)
-    (*     let addr = KB.Value.get Sema_addrs.slot sema in *)
-    (*     KB.return @@ *)
-    (*     Format.printf "[DebugDriver] %a -addr-> %a\n%!" *)
-    (*       Tid.pp l *)
-    (*       Bitvec.pp addr) *)
-    (* end; *)
     let out_csv_file_name = Extension.Configuration.get ctxt
                               Common.output_csv_file_param in
     test_output_csv_file out_csv_file_name;
@@ -76,13 +57,14 @@ module UarchCheckerExtension = struct
     Driver.check_config config img ctxt proj
 
   let register_passes ctxt =
-    (* Project.register_pass ~name:"semantic-addrs" *)
-    (*   (fun proj -> Sema_addrs.init (); proj); *)
     Project.register_pass' (pass ctxt);
     Ok ()
 end
 
-let () = Extension.declare
-           ~features:["primus"; "symbolic-executor"; "symbolic-lisp-primitives"]
-           ~provides:[Common.package; "semantic-addrs"]
-           UarchCheckerExtension.register_passes
+let () =
+  Extension.declare
+    ~features:["primus"; "symbolic-executor"; "symbolic-lisp-primitives"]
+    ~provides:[Common.package; "semantic-addrs"]
+    UarchCheckerExtension.register_passes;
+  Extension.declare ~provides:["semantic-addrs"] (fun ctxt ->
+    Sema_addrs.init (); Ok ())

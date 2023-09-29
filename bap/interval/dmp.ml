@@ -28,8 +28,9 @@ module Checker(N : Abstract.NumericDomain)
     | Checker_taint.Analysis.Notaint -> false
     | Checker_taint.Analysis.Taint -> true
 
-  let build_alert ~tid ~desc ~subname : Alert.t =
+  let build_alert ~tid ~desc ~subname ~term : Alert.t =
     let tid = Some tid in
+    let term = Some term in
     let desc = desc in
     let left_val = Some "" in
     let right_val = Some "" in
@@ -42,7 +43,7 @@ module Checker(N : Abstract.NumericDomain)
     let flags_live = SS.empty in
     let flags_live_in = SS.empty in
     let is_live = None in
-    { tid; desc; left_val; right_val;
+    { tid; desc; left_val; right_val; term;
       reason; sub_name; problematic_operands;
       opcode; addr; rpo_idx; flags_live_in;
       flags_live; is_live }
@@ -81,7 +82,8 @@ module Checker(N : Abstract.NumericDomain)
          then
            let desc = "tainted value reaching store without 60th bit set" in
            let subname = Sub.name sub in
-           let alerts = Alert.Set.singleton @@ build_alert ~tid ~desc ~subname in
+           let alerts = Alert.Set.singleton @@
+             build_alert ~tid ~desc ~subname ~term:d in
            { empty_res with warns = alerts }
          else empty_res
        | _ -> empty_res)

@@ -26,6 +26,7 @@ module T = struct
     addr : word option;
     rpo_idx : int option;
     tid : Tid.t option;
+    term : def term option;
     flags_live : SS.t;
     is_live : bool option;
     problematic_operands : int list option;
@@ -45,6 +46,12 @@ module T = struct
                                      ~package:Common.package
                                      "alert"
                                      ()
+
+  let term_slot = KB.Class.property
+                    ~package:Common.package
+                    cls
+                    "term"
+                    Common.term_opt_domain
 
   let sub_name_slot = KB.Class.property
                         ~package:Common.package
@@ -152,6 +159,7 @@ module T = struct
                               addr = None;
                               rpo_idx = None;
                               tid = None;
+                              term = None;
                               flags_live = SS.empty;
                               is_live = None;
                               problematic_operands = None;
@@ -162,6 +170,7 @@ module T = struct
                               flags_live_in = SS.empty }
     in
     let () = Toplevel.exec begin
+      let open KB.Syntax in
       KB.collect tid_slot kbalert >>= fun tid ->
       KB.collect sub_name_slot kbalert >>= fun sub_name ->
       KB.collect opcode_slot kbalert >>= fun opcode ->
@@ -175,8 +184,10 @@ module T = struct
       KB.collect reason_slot kbalert >>= fun reason ->
       KB.collect desc_slot kbalert >>= fun desc ->
       KB.collect flags_live_in_slot kbalert >>= fun flags_live_in ->
+      let* term = kbalert-->term_slot in
       alert := {
         tid;
+        term;
         sub_name;
         opcode;
         addr;
@@ -223,152 +234,23 @@ module type Pass = sig
 end
 
 module OpcodeAndAddrFiller : Pass = struct
-  open KB.Monad_infix
-
-  type opcode_alist = (tid * String.t) list [@@deriving compare, sexp, bin_io]
-
-  let opcode_alist_cls : (opcode_alist, unit) KB.cls = KB.Class.declare
-                                                         ~public:true
-                                                         ~package:Common.package
-                                                         "tid_to_opcode_alist"
-                                                         ()
-
-  let opcode_alist_domain = KB.Domain.flat
-                              ~inspect:sexp_of_opcode_alist
-                              ~join:(fun left right -> Ok (List.append right left))
-                              ~empty:[]
-                              ~equal:(fun left right -> 0 = compare_opcode_alist left right)
-                              "opcode_alist_domain"
-
-  let final_opcode_alist : (opcode_alist, opcode_alist) KB.slot = KB.Class.property
-                                                                    ~public:true
-                                                                    ~package:Common.package
-                                                                    opcode_alist_cls
-                                                                    "final_opcode_alist"
-                                                                    opcode_alist_domain
-
-  type addr_alist = (tid * word) list [@@deriving compare, sexp, bin_io]
-
-  let addr_alist_cls : (addr_alist, unit) KB.cls = KB.Class.declare
-                                                     ~public:true
-                                                     ~package:Common.package
-                                                     "label_to_addr_alist"
-                                                     ()
-
-  let addr_alist_domain = KB.Domain.flat
-                            ~inspect:sexp_of_addr_alist
-                            ~join:(fun left right -> Ok (List.append right left))
-                            ~empty:[]
-                            ~equal:(fun left right -> 0 = compare_addr_alist left right)
-                            "addr_alist_domain"
-
-  let final_addr_alist : (addr_alist, addr_alist) KB.slot = KB.Class.property
-                                                              ~public:true
-                                                              ~package:Common.package
-                                                              addr_alist_cls
-                                                              "final_addr_alist"
-                                                              addr_alist_domain
-
-  type tidmap = (Tid.t, string, Tid.comparator_witness) Map.t
-  type addrmap = (Tid.t, word, Tid.comparator_witness) Map.t
-  type lut = addrmap * tidmap
-
-  let build_lut (proj : Project.t) : lut =
-    let target = Project.target proj in
-    let computation =
-      KB.objects Theory.Program.cls >>= fun labels ->
-      let init_alists : addr_alist * opcode_alist = ([], []) in
-      let alists = Seq.fold labels ~init:(KB.return init_alists) ~f:(fun alists label ->
-        alists >>= fun alists ->
-        KB.collect Theory.Semantics.slot label >>= fun sema ->
-        KB.collect Theory.Label.addr label >>= fun maybe_addr ->
-        let opcode_str = Insn.name sema in
-        let maybe_addr_bitvector =
-          Option.bind maybe_addr ~f:(fun bitv ->
-            Option.return @@ Bitvector.code_addr target bitv)
-        in
-        let addr_str = Option.value maybe_addr_bitvector ~default:(Word.one 64) in
-        let bir_terms = KB.Value.get Term.slot sema in
-        let tids_lists = List.map bir_terms ~f:(fun b ->
-          Blk.elts b
-          |> Seq.map ~f:Common.elt_to_tid
-          |> Seq.to_list) in
-        let tids = List.join tids_lists in
-        let tid_to_addr_alist = List.map tids ~f:(fun tid -> (tid, addr_str)) in
-        let tid_to_opcode_alist = List.map tids ~f:(fun tid -> (tid, opcode_str)) in
-        KB.return (List.append tid_to_addr_alist (fst alists),
-                   List.append tid_to_opcode_alist (snd alists))) in
-
-      alists >>= fun (addr_alist, opcode_alist) ->
-      KB.Object.create addr_alist_cls >>= fun addr_alist_obj ->
-      KB.provide final_addr_alist addr_alist_obj addr_alist >>= fun () ->
-      KB.Object.create opcode_alist_cls >>= fun opcode_alist_obj ->
-      KB.provide final_opcode_alist opcode_alist_obj opcode_alist >>= fun () ->
-      KB.return (addr_alist_obj, opcode_alist_obj) in
-    let opcode_alist_obj = computation >>= fun (addrs,ops) -> KB.return ops in
-    let addr_alist_obj = computation >>= fun (addrs,ops) -> KB.return addrs in
-    let cur_st = Toplevel.current () in
-    let (opcode_alist, st') = match KB.run opcode_alist_cls opcode_alist_obj cur_st with
-      | Ok (opcode_alist, st') -> opcode_alist, st'
-      | Error e ->
-        failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut opcodes : %s" @@
-        KB.Conflict.to_string e in
-    let (addr_alist, st') = match KB.run addr_alist_cls addr_alist_obj cur_st with
-      | Ok (addr_alist, st') -> addr_alist, st'
-      | Error e ->
-        failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut addrs : %s" @@
-        KB.Conflict.to_string e in
-    let opcode_alist = KB.Value.get final_opcode_alist opcode_alist in
-    let addr_alist = KB.Value.get final_addr_alist addr_alist in
-    let opcode_lut = match Map.of_alist (module Tid) opcode_alist with
-      | `Duplicate_key k ->
-        failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut, opcode_lut build, duplicate key: %a" Tid.pps k
-      | `Ok lut -> lut in
-    let addr_lut = match Map.of_alist (module Tid) addr_alist with
-      | `Duplicate_key k ->
-        failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut, addr_lut build, duplicate key: %a" Tid.pps k
-      | `Ok lut -> lut in
-    (addr_lut, opcode_lut)
-
-  let set_addr_for_alert (alert : T.t) (addr_lut : addrmap) : T.t =
-    let alert_tid = Option.value_exn alert.tid in
-    match Map.find addr_lut alert_tid with
-    | Some addr_str -> 
-      { alert with addr = Some addr_str }
-    | None ->
-      failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut, set_addr_for_alert, couldn't get addr for alert on tid: %a" Tid.pps alert_tid
-
-  let set_opcode_for_alert proj (alert : T.t) (opcode_lut : tidmap) : T.t =
-    let alert_tid = Option.value_exn alert.tid in
-    let opcode_name = ref "" in
-    let addr_str = ref "" in
-    let target = Project.target proj in
-    let () =
-      Toplevel.exec begin        
-        KB.collect Theory.Semantics.slot alert_tid >>= fun sema ->
-        KB.collect Theory.Label.addr alert_tid >>= fun maybe_addr ->
-        let maybe_addr_bitvector =
-          Option.bind maybe_addr ~f:(fun bitv ->
-            Option.return @@ Bitvector.code_addr target bitv)
-        in
-        addr_str := Word.to_string @@
-          Option.value maybe_addr_bitvector ~default:(Word.one 64);
-        opcode_name := Insn.name sema;
-        KB.return ()
-      end
-    in
-    match Map.find opcode_lut alert_tid with
-    | Some opcode_str -> 
-      { alert with opcode = Some opcode_str }
-    | None ->
-      failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut, set_opcode_for_alert, couldn't get opcode for alert on tid: %a" Tid.pps alert_tid
-
   let set_for_alert_set (alerts : Set.t) (proj : Project.t) : Set.t =
-    let lut = build_lut proj in
-    let (addr_lut, opcode_lut) = lut in
-    Set.map alerts ~f:(fun alert ->
-      let alert = set_addr_for_alert alert addr_lut in
-      set_opcode_for_alert proj alert opcode_lut)
+    let set_for_alert alert =
+      let term = Option.value_exn alert.term in
+      match Term.get_attr term Disasm.insn with
+      | Some sema ->
+        let addr = KB.Value.get Sema_addrs.slot sema
+                   |> Bitvec.to_int
+                   |> Word.of_int ~width:64 in
+        let opc = KB.Value.get Insn.Slot.name sema in
+        { alert with opcode = Some opc;
+                     addr = Some addr }
+      | None ->
+        let tid = Option.value_exn alert.tid in
+        failwith @@
+        sprintf "[OpcodeAndAddrFiller] couldn't get for %a" Tid.pps tid
+    in
+    Set.map alerts ~f:set_for_alert
 end
 
 module SubNameResolverFiller = struct
@@ -568,6 +450,7 @@ let t_of_reason_and_tid (reason : reason) (tid : Tid.t) : t =
     addr = None;
     rpo_idx = None;
     tid = Some tid;
+    term = None;
     reason;
     flags_live = SS.empty;
     is_live = None;

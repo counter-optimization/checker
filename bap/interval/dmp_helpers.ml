@@ -138,7 +138,19 @@ let find_guard_points sub =
       else None
     | _ -> None
   in
+  let elt_to_tid = function
+  | `Jmp j -> Term.tid j
+  | `Def d -> Term.tid d
+  | `Phi p -> Term.tid p
+  in
   let get_jmp_targets (insns : Blk.elt Seq.t) var =
+    let fail s =
+      printf
+        "[Dmp_helpers] Couldn't get jmp targets for dmp pointer bit test:%s\n%!" s;
+      printf "[Dmp_helpers] at tid: %a\n%!"
+        Tid.ppo (Seq.hd_exn insns |> elt_to_tid);
+      []
+    in
     let bit_cleared = Seq.drop insns 6 in
     let bit_set = Seq.drop bit_cleared 1 in
     match Seq.hd bit_cleared, Seq.hd bit_set with
@@ -147,11 +159,9 @@ let find_guard_points sub =
       | Goto (Direct cltid), Goto (Direct settid) ->
         [{ var; set=false; location=cltid };
          { var; set=true; location=settid }]
-      | _ -> failwith
-               "[Dmp_helpers] Couldn't get jmp targets for dmp pointer bit test"
+      | _ -> fail "1"
       end
-    | _, _ -> 
-      failwith "[Dmp_helpers] Couldn't get jmp targets for dmp pointer bit test"
+    | _, _ -> fail "2"
   in
   let rec get_guards ?(guards = []) insns =
     let open Option.Monad_infix in
@@ -173,7 +183,7 @@ let find_guard_points sub =
   in
   let guards_to_map (gs : guard_point list) : guard_map =
     List.fold gs ~init:Tid.Map.empty ~f:(fun m {var;set;location} ->
-      Tid.Map.add_exn m ~key:location ~data: {var;set})
+      Tid.Map.set m ~key:location ~data: {var;set})
   in
   let irg = Sub.to_cfg sub in
   let rpo = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in

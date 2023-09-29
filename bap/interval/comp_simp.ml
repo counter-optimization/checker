@@ -15,6 +15,7 @@ module Checker(N : Abstract.NumericDomain)
     (Interp : Common.CheckerInterp with type t := N.t) = struct
   type st = {
     tid : tid;
+    term : def term;
     subname : string;
     alerts : Alert.Set.t;
     eval_stats : Stats.t;
@@ -22,9 +23,10 @@ module Checker(N : Abstract.NumericDomain)
 
   let emp = Alert.Set.empty
 
-  let init_st subname tid = {
+  let init_st subname tid term = {
     tid;
     subname;
+    term;
     alerts = emp;
     eval_stats = Stats.init;
   }
@@ -208,6 +210,7 @@ module Checker(N : Abstract.NumericDomain)
         let right_val = Some (WI.to_string wr) in
         let alert : Alert.t = {
           tid = Some st.tid;
+          term = Some st.term;
           desc;
           left_val;
           right_val;
@@ -269,7 +272,6 @@ module Checker(N : Abstract.NumericDomain)
 
   let check_elt (subname : string) (tid : tid) (elt : Blk.elt)
     : Alert.Set.t Common.checker_res =
-    let st = init_st subname tid in
     let empty_stats = Common.EvalStats.init in
     match elt with
     | `Def d ->
@@ -278,6 +280,7 @@ module Checker(N : Abstract.NumericDomain)
       let should_check = not is_def_of_flag in
       if should_check
       then
+        let st = init_st subname tid d in    
         let rhs = Def.rhs d in
         let _, st = check_exp rhs st in
         { warns = st.alerts;
@@ -286,11 +289,11 @@ module Checker(N : Abstract.NumericDomain)
         }
       else
         { warns = emp;
-          cs_stats = st.eval_stats;
+          cs_stats = empty_stats;
           ss_stats = empty_stats
         }
     | _ -> { warns = emp;
-             cs_stats = st.eval_stats;
+             cs_stats = empty_stats;
              ss_stats = empty_stats
            }
 end
