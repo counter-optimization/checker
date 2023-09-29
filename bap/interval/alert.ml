@@ -282,8 +282,7 @@ module OpcodeAndAddrFiller : Pass = struct
         alists >>= fun alists ->
         KB.collect Theory.Semantics.slot label >>= fun sema ->
         KB.collect Theory.Label.addr label >>= fun maybe_addr ->
-        KB.collect Theory.Semantics.slot label >>= fun (insn : Insn.t) ->
-        let opcode_str = Insn.name insn in
+        let opcode_str = Insn.name sema in
         let maybe_addr_bitvector =
           Option.bind maybe_addr ~f:(fun bitv ->
             Option.return @@ Bitvector.code_addr target bitv)
@@ -345,7 +344,7 @@ module OpcodeAndAddrFiller : Pass = struct
     let addr_str = ref "" in
     let target = Project.target proj in
     let () =
-      Toplevel.exec begin
+      Toplevel.exec begin        
         KB.collect Theory.Semantics.slot alert_tid >>= fun sema ->
         KB.collect Theory.Label.addr alert_tid >>= fun maybe_addr ->
         let maybe_addr_bitvector =
@@ -365,7 +364,7 @@ module OpcodeAndAddrFiller : Pass = struct
       failwith @@ sprintf "In OpcodeAndAddrFiller.build_lut, set_opcode_for_alert, couldn't get opcode for alert on tid: %a" Tid.pps alert_tid
 
   let set_for_alert_set (alerts : Set.t) (proj : Project.t) : Set.t =
-    let lut : lut = build_lut proj in
+    let lut = build_lut proj in
     let (addr_lut, opcode_lut) = lut in
     Set.map alerts ~f:(fun alert ->
       let alert = set_addr_for_alert alert addr_lut in
