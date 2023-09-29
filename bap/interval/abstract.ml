@@ -7,69 +7,7 @@ open Monads.Std
 module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 
-module type NumericDomain = sig
-  type t
-
-  val key : t Domain_key.DomainKey.k
-  val get : 'a Domain_key.DomainKey.k -> (t -> 'a) option
-  val set : 'a Domain_key.DomainKey.k -> t -> 'a -> t
-
-  val bot : t
-  val top : t
-  val make_top : int -> bool -> t 
-
-  val b1 : t
-  val b0 : t
-
-  val order : t -> t -> KB.Order.partial
-  val compare : t -> t -> int
-  val equal : t -> t -> bool
-  val join : t -> t -> t
-  val meet : t -> t -> t
-  val contains : t -> t -> bool (* Useful for checkers *)
-
-  (* BIL specific *)
-  val add : t -> t -> t
-  val sub : t -> t -> t
-  val mul : t -> t -> t
-  val div : t -> t -> t
-  val sdiv : t -> t -> t
-  val umod : t -> t -> t
-  val smod : t -> t -> t
-  val lshift : t -> t -> t
-  val rshift : t -> t -> t
-  val arshift : t -> t -> t
-  val logand : t -> t -> t
-  val logor : t -> t -> t
-  val logxor : t -> t -> t
-
-  val neg : t -> t
-  val lnot : t -> t
-
-  val extract : t -> int -> int -> t
-  val concat : t -> t -> t
-
-  val booleq : t -> t -> t
-  val boolneq : t -> t -> t
-  val boollt : t -> t -> t
-  val boolle : t -> t -> t
-  val boolslt : t -> t -> t
-  val boolsle : t -> t -> t
-  val could_be_true : t -> bool
-  val could_be_false : t -> bool
-
-  val unsigned : int -> t -> t
-  val signed : int -> t -> t
-  val low : int -> t -> t
-  val high : int -> t -> t
-
-  val to_string : t -> string
-  val of_int : ?width:int -> int -> t
-  val of_word : word -> t
-  val of_z : ?width:int -> Z.t -> t
-  val bitwidth : t -> int
-  val sexp_of_t : t -> Sexp.t
-end
+module type NumericDomain = Numeric_domain.Sig
 
 module type MemoryT =
 sig
@@ -403,8 +341,6 @@ module AbstractInterpreter(N: NumericDomain)
     | Some f -> f
     | None -> failwith "Couldn't extract interval information out of product domain during analysis"
 
-  let set_bv = N.set Abstract_bitvector.key
-
   let denote_binop (op : binop) : N.t -> N.t -> N.t =
     match op with
     | Bil.PLUS -> N.add
@@ -553,14 +489,20 @@ module AbstractInterpreter(N: NumericDomain)
     failwith "denote_phi not implemented yet"
 
   let denote_jmp (subname : string) (j : jmp term) (st : E.t) : E.t =
+    (* match Jmp.kind j with *)
+    (* | Call c -> E.havoc_on_call st *)
+    (* | Goto (Indirect exp) -> st *)
+    (* | Goto _ -> st *)
+    (* | Ret _ -> st *)
+    (* | Int _ -> st *)
     let set_smalloc_return exp =
       let res, st' = denote_exp exp st in
       let target = get_intvl res in
       match Wrapping_interval.to_int target with
       | Ok addr when Dmp_helpers.is_smalloc_call addr ->
-        let bv = Abstract_bitvector.make_top 64 false |>
-                 Abstract_bitvector.logor Abstract_bitvector.with_bit_60_set in
-        let smalloc_return = set_bv N.top bv in
+        let bv = Abstract_bitvector.make_top 64 false
+                 |> Abstract_bitvector.set_60_bit in
+        let smalloc_return = Abstract_bitvector.set_in_prod N.set N.top bv in
         printf "[Abstract] setting return value of smalloc bv to: %s\n%!" (N.to_string smalloc_return);
         E.havoc_on_call st |>
         E.set Common.ABI.return_reg smalloc_return

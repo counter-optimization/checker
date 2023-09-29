@@ -18,7 +18,7 @@ module ABI = Common.AMD64SystemVABI
 module ProdIntvlxTaint = DomainProduct(Wrapping_interval)(Checker_taint.Analysis)
 module WithTypes = DomainProduct(ProdIntvlxTaint)(Type_domain)
 module WithBitvectors = DomainProduct(WithTypes)(Abstract_bitvector)
-module FinalDomain = DomainProduct(WithBitvectors)(Bases_domain)
+module FinalDomain : Numeric_domain.Sig = DomainProduct(WithBitvectors)(Bases_domain)
 
 module E = Abstract_memory.Make(FinalDomain)
 module R = Region
@@ -263,6 +263,22 @@ let run_analyses sub img proj ~(is_toplevel : bool)
       Dmp_helpers.print_smalloc_addrs ()
     end
     else ();
+
+    let dmp_bt_guards = Dmp_helpers.find_guard_points sub in
+    let dmp_bt_set tid (st : TraceEnv.t) : TraceEnv.t =
+      let open Abstract_bitvector in
+      let tree = match Dmp_helpers.get_guard dmp_bt_guards tid with
+        | Some {var;set} ->
+          TraceEnv.Tree.map st.tree ~f:(fun st ->
+            let v = E.lookup var st in
+            let bv = of_prod FinalDomain.get v in
+            let f = if set then set_60_bit else clear_60_bit in
+            let v = set_in_prod FinalDomain.set v (f bv) in
+            E.set var v st)
+        | None -> st.tree
+      in
+      { tree }
+    in
           
     let edges = List.map edges ~f:(Edge_builder.to_cc_edge) in
     let module G = Graphlib.Make(Calling_context)(Bool) in
@@ -353,8 +369,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                        cond_scrape_st in
     let cmov_cnd_flags = List.filter live_flags ~f:(fun lf ->
       Trace.ConditionFinder.FlagScraper.flag_used_in_cmov lf cond_scrape_st) in
-    let dmp_bittest_flags = List.filter live_flags ~f:(fun lf ->
-      Trace.ConditionFinder.FlagScraper.flag_is_checkbit lf cond_scrape_st) in
+    (* let dmp_bittest_flags = List.filter live_flags ~f:(fun lf -> *)
+    (*   Trace.ConditionFinder.FlagScraper.flag_is_checkbit lf cond_scrape_st) in *)
     let cond_extractor_st = TraceDir.Extractor.init tidmap reachingdefs in
     let dirs = List.fold cmov_cnd_flags ~init:[] ~f:(fun dirs lf ->
       let split_dir = TraceDir.Extractor.get_conds_for_flag lf cond_extractor_st in
@@ -429,7 +445,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                              (*      printf "[Debug] env_diffs: %s\n%!" (List.to_string env_diffs ~f:(List.to_string ~f:Fn.id)) *)
                              (*    | Unequal_lengths -> printf "[Debug] unequal lengths\n%!"); *)
                              (*   outenv) in *)
-                             ~f:(fun cc ->
+                             ~f:(fun cc st ->
                                let tid = Calling_context.to_insn_tid cc in
                                let elt = match Tid_map.find tidmap tid with
                                  | Some elt -> elt
@@ -438,7 +454,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                    sprintf
                                      "in calculating analysis_results, couldn't find tid %a in tidmap"
                                      Tid.pps tid in
-                               TraceAbsInt.denote_elt subname directive_map elt
+                               let st = dmp_bt_set tid st in
+                               TraceAbsInt.denote_elt subname directive_map elt st
                                (* fun st -> *)
                                (*   printf "[Driver] denoting elt %a\n%!" Tid.ppo tid; *)
                                (*   printf "[Driver] instate:\n%!"; *)

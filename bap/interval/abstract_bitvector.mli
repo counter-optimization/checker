@@ -67,9 +67,15 @@ val signed : int -> t -> t
 val low : int -> t -> t
 val high : int -> t -> t
 
+val set_60_bit : t -> t
+val clear_60_bit : t -> t
+
 val key : t Domain_key.DomainKey.k
 val get : 'a Domain_key.DomainKey.k -> (t -> 'a) option
 val set : 'a Domain_key.DomainKey.k -> t -> 'a -> t
-
+(* val of_prod : 'a. (module Numeric_domain.Sig with type t = 'a) -> 'a -> t *)
+(* val set_in_prod : 'a. (module Numeric_domain.Sig with type t = 'a) -> 'a -> t -> 'a *)
+val of_prod : 'a. (t Domain_key.DomainKey.k -> ('a -> t) option) -> 'a -> t
+val set_in_prod : 'a. (t Domain_key.DomainKey.k -> 'a -> t -> 'a) -> 'a -> t -> 'a
 
   

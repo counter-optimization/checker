@@ -2,6 +2,9 @@ open Core_kernel
 open Bap_main
 open Bap.Std
 
+module KB = Bap_core_theory.KB
+module T = Bap_core_theory.Theory
+
 module UarchCheckerExtension = struct
   let get_target_file_name proj =
     match Project.get proj filename with
@@ -35,6 +38,25 @@ module UarchCheckerExtension = struct
 
   let pass ctxt proj =
     let target_obj_name = get_target_file_name proj in
+    (* Toplevel.exec begin *)
+    (*   let open KB.Syntax in *)
+    (*   let addr = Bitvec.(!$"0x401500") in *)
+    (*   T.Label.for_addr ~package:target_obj_name addr >>= fun label -> *)
+    (*   let* sema = label-->T.Semantics.slot in *)
+    (*   let asm = Insn.asm sema in *)
+    (*   KB.return @@ printf "[DebugDriver] asm: %s\n%!" asm  *)
+    (* end; *)
+    (* Toplevel.exec begin *)
+    (*   let open KB.Syntax in *)
+    (*   KB.objects T.Program.cls >>= fun labels -> *)
+    (*   KB.Seq.iter labels ~f:(fun l -> *)
+    (*     let* sema = l-->T.Semantics.slot in *)
+    (*     let addr = KB.Value.get Sema_addrs.slot sema in *)
+    (*     KB.return @@ *)
+    (*     Format.printf "[DebugDriver] %a -addr-> %a\n%!" *)
+    (*       Tid.pp l *)
+    (*       Bitvec.pp addr) *)
+    (* end; *)
     let out_csv_file_name = Extension.Configuration.get ctxt
                               Common.output_csv_file_param in
     test_output_csv_file out_csv_file_name;
@@ -53,11 +75,14 @@ module UarchCheckerExtension = struct
     printf "Configured:\n%!"; Config.pp config;
     Driver.check_config config img ctxt proj
 
-  let register_pass ctxt =
+  let register_passes ctxt =
+    (* Project.register_pass ~name:"semantic-addrs" *)
+    (*   (fun proj -> Sema_addrs.init (); proj); *)
     Project.register_pass' (pass ctxt);
     Ok ()
 end
 
 let () = Extension.declare
            ~features:["primus"; "symbolic-executor"; "symbolic-lisp-primitives"]
-           UarchCheckerExtension.register_pass
+           ~provides:[Common.package; "semantic-addrs"]
+           UarchCheckerExtension.register_passes

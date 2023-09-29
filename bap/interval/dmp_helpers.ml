@@ -1,5 +1,6 @@
 open Core_kernel
 open Bap.Std
+open Graphlib.Std
 
 module KB = Bap_knowledge.Knowledge
 module T = Bap_core_theory.Theory
@@ -92,3 +93,95 @@ let is_smalloc_call (addr : int) : bool =
     KB.return (res := Word.Set.mem addrs addr)
   end;
   !res
+
+type guard_point = {
+  var : string;
+  set : bool;
+  location : tid;
+}
+
+type gmentry = { var : string; set : bool }
+
+type guard_map = gmentry Tid.Map.t
+
+let guard_to_string {var;set;location} =
+  let set = if set then "1" else "0" in
+  let tid = Tid.to_string location in
+  Format.sprintf "<%s, %s, %s>" var set tid
+
+let print_guards guards =
+  let rec loop = function
+    | g :: gs ->
+      printf "%s %!" @@ guard_to_string g;
+      loop gs
+    | [] -> ()
+  in
+  printf "[Dmp_helpers] guards: %!";
+  loop guards
+
+let needs_set : guard_map -> tid -> bool = Tid.Map.mem
+let get_guard : guard_map -> tid -> gmentry option = Tid.Map.find
+
+(* 6th insn after `CF := low:1(VAR >> 0x3C)` is 
+   the condition jmp
+   7th insn after is the fall through *)
+let find_guard_points sub =
+  let rshift_bits width = Word.of_int ~width 0x3c in
+  let is_cf_assn d =
+    String.Caseless.equal "cf" @@ Var.name @@ Def.lhs d
+  in
+  let is_bt_3c = function
+    | Bil.Cast (Bil.LOW, 1, (Bil.BinOp (Bil.RSHIFT, Bil.Var v, Bil.Int w))) ->
+      let width = Word.bitwidth w in
+      if Word.equal (rshift_bits width) w
+      then Some (Var.name v)
+      else None
+    | _ -> None
+  in
+  let get_jmp_targets (insns : Blk.elt Seq.t) var =
+    let bit_cleared = Seq.drop insns 6 in
+    let bit_set = Seq.drop bit_cleared 1 in
+    match Seq.hd bit_cleared, Seq.hd bit_set with
+    | Some (`Jmp cl), Some (`Jmp set) ->
+      begin match Jmp.kind cl, Jmp.kind set with
+      | Goto (Direct cltid), Goto (Direct settid) ->
+        [{ var; set=false; location=cltid };
+         { var; set=true; location=settid }]
+      | _ -> failwith
+               "[Dmp_helpers] Couldn't get jmp targets for dmp pointer bit test"
+      end
+    | _, _ -> 
+      failwith "[Dmp_helpers] Couldn't get jmp targets for dmp pointer bit test"
+  in
+  let rec get_guards ?(guards = []) insns =
+    let open Option.Monad_infix in
+    match insns with
+    | None -> guards
+    | Some insns ->
+      let rst = Seq.tl insns in
+      match Seq.hd insns with
+      | Some (`Def d) when is_cf_assn d ->
+        let exp = Def.rhs d in
+        begin match is_bt_3c exp with
+        | Some var ->
+          let new_targets = get_jmp_targets insns var in
+          get_guards rst ~guards:(new_targets @ guards)
+        | None -> get_guards rst ~guards
+        end
+      | Some (`Def d) -> get_guards rst ~guards
+      | _ -> guards
+  in
+  let guards_to_map (gs : guard_point list) : guard_map =
+    List.fold gs ~init:Tid.Map.empty ~f:(fun m {var;set;location} ->
+      Tid.Map.add_exn m ~key:location ~data: {var;set})
+  in
+  let irg = Sub.to_cfg sub in
+  let rpo = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
+  Seq.fold rpo ~init:[] ~f:(fun guards node ->
+    let blk = Graphs.Ir.Node.label node in
+    let elts = Blk.elts blk in
+    let new_guards = get_guards (Some elts) in
+    new_guards @ guards)
+  |> guards_to_map
+      
+  

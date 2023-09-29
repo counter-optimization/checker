@@ -201,13 +201,20 @@ let logand x y =
               (Bitvec.lnot conc mod m)
               (Bitvec.logand allxs allys mod m) mod m in
   { bw = max_bw; conc; abs }
+
+let lnot {bw;conc;abs} =
+  let m = mm bw in
+  let not_conc = Bitvec.lnot conc mod m in
+  let not_abs = Bitvec.lnot abs mod m in
+  let conc = Bitvec.logand not_conc not_abs mod m in
+  { bw; conc; abs }
   
 let lshift = unimplemented "lshift"
 let rshift = unimplemented "rshift"
 let logand = unimplemented "logand"
 let logxor = unimplemented "logxor"
 let neg = unop_unimplemented "neg"
-let lnot = unop_unimplemented "lnot"
+             
 let extract x hi lo =
   printf "Abstract_bitvector.extract unimplemented";
   make_top (hi - lo + 1) false
@@ -248,6 +255,11 @@ let high n _ =
   printf "Abstract_bitvector.high unimplemented";
   make_top n false
 
+(** checker specific. convenience *)
+let set_60_bit = logor with_bit_60_set
+
+let clear_60_bit = logand (lnot with_bit_60_set)
+
 (** As constituent of product domain *)
 module Key = Domain_key.DomainKey
 
@@ -262,3 +274,19 @@ let set : type a. a Key.k -> t -> a -> t = fun k other replace ->
   match Key.eq_type k key with
   | Eq -> replace
   | Neq -> other
+
+(* let of_prod (type a) (module N : Numeric_domain.Sig with type t = a) prod : t = *)
+(*   match N.get key with *)
+(*   | Some f -> f prod *)
+(*   | None -> failwith "[Abstract_bitvector] Couldn't extract abs bitvector out of product domain" *)
+
+(* let set_in_prod (type a) (module N : Numeric_domain.Sig with type t = a) prod bv : a = *)
+(*   N.set key prod bv *)
+
+let of_prod (type n) (get : t Domain_key.DomainKey.k -> (n -> t) option) (prod : n) : t =
+  match get key with
+  | Some f -> f prod
+  | None -> failwith "[Abstract_bitvector] Couldn't extract abs bitvector out of product domain"
+
+let set_in_prod (type a) (set : t Domain_key.DomainKey.k -> a -> t -> a) (prod : a) (bv : t) : a =
+  set key prod bv

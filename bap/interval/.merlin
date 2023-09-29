@@ -26,7 +26,6 @@ S edge_builder.ml
 S type_domain.ml
 S bases_domain.ml
 S var_name_collector.ml
-S live_variables.ml
 S liveness.ml
 S idx_calculator.ml
 S test_main.ml
@@ -44,6 +43,8 @@ S dmp.ml
 S abstract_bitvector.ml
 S myfixpoint.ml
 S lahf_and_sahf.ml
+S sema_addrs.ml
+S numeric_domain.ml
 
 B _build
 
