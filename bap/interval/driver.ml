@@ -593,7 +593,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let stop = Analysis_profiling.record_stop_time start in
 
     let () = Analysis_profiling.record_duration_for subname CalleeAnalysis stop in
-    Logs.info ~src (fun m -> m "Done getting callees for analysis");
+    Logs.info ~src (fun m -> m "Callee analysis finished.");
     { alerts = all_alerts;
       callees = callees; }
     
@@ -602,18 +602,17 @@ let run_analyses sub img proj ~(is_toplevel : bool)
    gets curried until it has this type.
 *)
 let check_config config img ctxt proj : unit =
-  let () = Random.self_init () in
+  Random.self_init ();
   let target_fns = Config.get_target_fns_exn config proj in
   let worklist = SubSet.of_list @@ Sequence.to_list target_fns in
   let processed = SubSet.empty in
   let init_res = Alert.Set.empty in
   let global_store_data = Global_function_pointers.Libsodium.Analysis.get_all_init_fn_ptr_data ctxt proj in
-  let () = Format.printf "Global stores are:\n%!";
-    List.iter global_store_data ~f:(fun { data; addr } ->
-      Format.printf "mem[%a] <- %a\n%!"
-        Word.pp addr
-        Word.pp data)
-  in
+  Logs.debug ~src (fun m -> m "Global stores are:");
+  List.iter global_store_data ~f:(fun { data; addr } ->
+    Logs.debug ~src (fun m -> m "mem[%a] <- %a"
+                                Word.pp addr
+                                Word.pp data));
 
   let () = printf "Computing all return insns:\n%!" in
   let () = ReturnInsnsGetter.compute_all_returns () in
