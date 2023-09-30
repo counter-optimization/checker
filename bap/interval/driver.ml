@@ -737,13 +737,22 @@ let check_config config img ctxt proj : unit =
 
   let cs_stats = analysis_results.csevalstats in
   let ss_stats = analysis_results.ssevalstats in
-  let () = Format.printf "Done processing all functions\n%!" in
-  let () = printf "cs stats:\n%s%!" @@ EvalStats.to_json_string cs_stats in
-  let () = printf "ss stats:\n%s%!" @@ EvalStats.to_json_string ss_stats in
-  let () = printf "\n%!";
-    printf "num alerts removed due to unsupported MIR opcodes: %d\n%!"
-      unsupported_count in
+  Logs.info ~src (fun m ->
+    m "Done processing all functions");
+  printf "cs stats:\n%s%!" (EvalStats.to_json_string cs_stats);
+  printf "ss stats:\n%s%!" (EvalStats.to_json_string ss_stats);
+  
+  Logs.info ~src (fun m -> m "dmp stats:");
+  let dmp_stats = Uc_stats.(get dmp_stats) in
+  Logs.info ~src (fun m ->
+    m "%s" @@ Uc_stats.to_json_string dmp_stats);
+  
+  Logs.info ~src (fun m ->
+    m "num alerts removed due to unsupported MIR opcodes: %d"
+      unsupported_count);
+  
   let csv_out_file_name = Extension.Configuration.get ctxt Common.output_csv_file_param in
-  let () = printf "writing checker alerts to file: %s\n%!" csv_out_file_name in
+  Logs.info ~src (fun m ->
+    m "writing checker alerts to file: %s" csv_out_file_name);
   Alert.save_alerts_to_csv_file ~filename:csv_out_file_name all_alerts;
   Analysis_profiling.print_all_times ()

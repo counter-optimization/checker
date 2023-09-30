@@ -17,11 +17,6 @@ module Checker(N : Abstract.NumericDomain)
     | Some f -> f
     | None -> failwith "[DmpChecker] Couldn't extract taint information out of product domain"
 
-  let get_bv : N.t -> Abstract_bitvector.t =
-    match N.get Abstract_bitvector.key with
-    | Some f -> f
-    | None -> failwith "[DmpChecker] Couldn't extract abs bitvector info out of product domain"
-
   let is_tainted n =
     match get_taint n with
     | Checker_taint.Analysis.Notaint -> false
@@ -53,20 +48,38 @@ module Checker(N : Abstract.NumericDomain)
      and SAHF *)
   let check_elt sub tid lahf_sahf elt
     : Alert.Set.t Common.checker_res =
-    let could_be_tainted = List.exists ~f:is_tainted in
+    let incr_taint_stat () =
+      Uc_stats.(incr dmp_stats taint_pruned)
+    in
+    let incr_bv_stat () =
+      Uc_stats.(incr dmp_stats bv_pruned)
+    in
+    let incr_total () =
+      Uc_stats.(incr dmp_stats total)
+    in
+    let could_be_tainted e =
+      let is_tainted = List.exists e ~f:is_tainted in
+      if not is_tainted then incr_taint_stat () else ();
+      is_tainted
+    in
     let bit_60_unset exp =
       let module BV = Abstract_bitvector in
-      let exp_bv = get_bv exp in
+      let exp_bv = BV.of_prod N.get exp in
       let bit60 = BV.with_bit_60_set in
-      BV.contains BV.b0 (BV.logand exp_bv bit60) in
-    let could_have_bit_60_unset =
-      List.exists ~f:bit_60_unset in
+      BV.contains BV.b0 (BV.logand exp_bv bit60)
+    in
+    let could_have_bit_60_unset e =
+      let is_unset = List.exists e ~f:bit_60_unset in
+      if not is_unset then incr_bv_stat () else ();
+      is_unset
+    in
     let empty_stats = Common.EvalStats.init in
     let empty_res : Alert.Set.t Common.checker_res = {
       warns = Alert.Set.empty;
       cs_stats = empty_stats;
       ss_stats = empty_stats
-    } in
+    }
+    in
     if Lahf_and_sahf.tid_part_of_transform lahf_sahf tid
     then empty_res
     else
@@ -74,6 +87,7 @@ module Checker(N : Abstract.NumericDomain)
     | `Def d ->
       (match Def.rhs d with
        | Bil.Store (_mem, idx, store_data, _endian, _size) ->
+         incr_total ();
          let denoted_store_exp = Interp.denote_exp tid store_data in
          let denoted_pointer_exp = Interp.denote_exp tid idx in
          if could_be_tainted denoted_store_exp &&
