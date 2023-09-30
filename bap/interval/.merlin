@@ -4,7 +4,6 @@ S driver.ml
 S var_name_scraper.ml
 S analysis_info.ml
 S interval_analysis.ml
-S map_lattice.ml
 S wrapping_interval.ml
 S common.ml
 S config.ml
@@ -45,6 +44,8 @@ S myfixpoint.ml
 S lahf_and_sahf.ml
 S sema_addrs.ml
 S numeric_domain.ml
+S uc_log.ml
+S uc_stats.ml
 
 B _build
 
@@ -55,5 +56,6 @@ PKG graphlib
 PKG zarith
 PKG ounit2
 PKG monads
-PKG bap-primus
 PKG z3
+PKG logs
+PKG lwt

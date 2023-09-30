@@ -11,6 +11,8 @@ type t
 
 let package = "uarch-checker"
 
+let src = Uc_log.create_src "Dmp_helpers"
+
 let checker_blacklisted_fns = ["smalloc";
                                "sodium_smalloc";
                                "sfree";
@@ -112,11 +114,11 @@ let guard_to_string {var;set;location} =
 let print_guards guards =
   let rec loop = function
     | g :: gs ->
-      printf "%s %!" @@ guard_to_string g;
+      Logs.msg ~src Logs.Info (fun m -> m "%s" (guard_to_string g));
       loop gs
     | [] -> ()
   in
-  printf "[Dmp_helpers] guards: %!";
+  Logs.msg ~src Logs.Info (fun m -> m "guards:");
   loop guards
 
 let needs_set : guard_map -> tid -> bool = Tid.Map.mem
@@ -145,10 +147,10 @@ let find_guard_points sub =
   in
   let get_jmp_targets (insns : Blk.elt Seq.t) var =
     let fail s =
-      printf
-        "[Dmp_helpers] Couldn't get jmp targets for dmp pointer bit test:%s\n%!" s;
-      printf "[Dmp_helpers] at tid: %a\n%!"
-        Tid.ppo (Seq.hd_exn insns |> elt_to_tid);
+      let tid = (Seq.hd_exn insns |> elt_to_tid) in
+      Logs.err ~src
+        (fun m -> m "couldn't get jmp targets for dmp pointer bit test %s at %a"
+                    s Tid.pp tid);
       []
     in
     let bit_cleared = Seq.drop insns 6 in

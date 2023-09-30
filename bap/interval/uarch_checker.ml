@@ -5,6 +5,8 @@ open Bap.Std
 module KB = Bap_core_theory.KB
 module T = Bap_core_theory.Theory
 
+let src = Uc_log.create_src "uarch-checker-main"
+
 module UarchCheckerExtension = struct
   let get_target_file_name proj =
     match Project.get proj filename with
@@ -34,12 +36,21 @@ module UarchCheckerExtension = struct
     Out_channel.create filename
       ~binary:false
       ~append:false
-    |> Out_channel.close 
+    |> Out_channel.close
+
+  let init_logging ctxt =
+    let lvl = Extension.Configuration.get ctxt
+                Common.global_log_level_param
+    in
+    Uc_log.init ();
+    Uc_log.set_global_level lvl
 
   let pass ctxt proj =
+    init_logging ctxt;
     let target_obj_name = get_target_file_name proj in
     let out_csv_file_name = Extension.Configuration.get ctxt
-                              Common.output_csv_file_param in
+                              Common.output_csv_file_param
+    in
     test_output_csv_file out_csv_file_name;
     let i = Image.create ~backend:"llvm" target_obj_name in
     let img_and_errs = match i with
@@ -51,9 +62,12 @@ module UarchCheckerExtension = struct
     in
     let img = fst img_and_errs in
     let config_path = Extension.Configuration.get ctxt
-                        Common.config_file_path_param in
-    let config = Config.Parser.parse_config_file ~path:config_path in
-    printf "Configured:\n%!"; Config.pp config;
+                        Common.config_file_path_param
+    in
+    let config = Config.Parser.parse_config_file
+                   ~path:config_path
+    in
+    Logs.info ~src (fun m -> m "Configured:\n");
     Driver.check_config config img ctxt proj
 
   let register_passes ctxt =

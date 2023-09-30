@@ -3,7 +3,7 @@ TEST_SRCS ::= $(shell ls *.ml)
 TEST_OBJS = $(addprefix $(BUILD_DIR)/, $(TEST_SRCS:.ml=.cmo))
 TEST_INTFS = $(addprefix $(BUILD_DIR)/, $(TEST_SRCS:.ml=.cmi))
 TEST_NATIVES = $(addprefix $(BUILD_DIR)/, $(TEST_SRCS:.ml=.cmx))
-OCAML_PKGS = -package regular -package ppx_bap -package core_kernel -package bap-knowledge -package bap-core-theory -package bap-main -package bap -package bap-primus
+OCAML_PKGS = -package regular -package ppx_bap -package core_kernel -package bap-knowledge -package bap-core-theory -package bap-main -package bap -package logs -package lwt
 PLUGIN_NAME = uarch_checker.plugin
 
 BAPBUILD_JOB_SLOTS=4
@@ -24,7 +24,7 @@ release: bap-plugin
 debug: bap-plugin
 
 bap-plugin: *.ml
-	 bapbuild -pkg z3 -pkg bap-primus -j $(BAPBUILD_JOB_SLOTS) $(PLUGIN_NAME)
+	 bapbuild -pkg logs -pkg lwt -pkg z3 -j $(BAPBUILD_JOB_SLOTS) $(PLUGIN_NAME)
 
 global_check: debug
 	# --uarch-checker-no-symex

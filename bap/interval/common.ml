@@ -1,7 +1,6 @@
 open Core_kernel
 open Bap_main
 open Bap.Std
-open Bap_primus.Std
 open Graphlib.Std
 open Monads.Std
 
@@ -39,6 +38,13 @@ let config_file_path_param = Extension.Configuration.parameter
                                ~doc:"Path to cio config file"
                                Extension.Type.string
                                "config-file"
+
+let global_log_level_param = Extension.Configuration.parameter
+                               ~doc:"Global log level"
+                               ~aliases:["log"]
+                               (Extension.Type.enum
+                                  Uc_log.bap_cl_arg_enum)
+                               "log-level"
 
 let do_ss_checks_param = Extension.Configuration.flag
                            ~doc:"Do silent store checks?"

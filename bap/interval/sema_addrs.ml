@@ -35,6 +35,6 @@ let provide_label () =
     KB.provide T.Semantics.slot label sema'
   | None -> KB.return ()
 
-let init () =
+let init () =  
   provide_label ()
   

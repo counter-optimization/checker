@@ -1,7 +1,6 @@
 open Core_kernel
 open Bap.Std
 open Graphlib.Std
-open Bap_primus.Std
 open Monads.Std
 
 module T = Bap_core_theory.Theory

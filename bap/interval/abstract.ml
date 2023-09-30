@@ -1,6 +1,5 @@
 open Core_kernel
 open Bap.Std
-open Bap_primus.Std
 open Graphlib.Std
 open Monads.Std
 

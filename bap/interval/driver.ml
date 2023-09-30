@@ -30,6 +30,8 @@ module TraceAbsInt = Trace.AbsInt.Make(FinalDomain)(E)
 module TraceDir = Trace.Directives(FinalDomain)(E)
 module TraceEnv = Trace.Env(FinalDomain)(E)
 
+let src = Uc_log.create_src "Driver"
+
 type check_sub_result = {
   callees : CRS.t;
   csevalstats : EvalStats.t;
@@ -224,12 +226,15 @@ let run_analyses sub img proj ~(is_toplevel : bool)
       ctxt : check_sub_result =
   let subname = Sub.name sub in
   let subtid = Term.tid sub in
-  let () = printf "[Driver] Running analysis on sub %s\n%!" subname in
-  let () = record_analyzed_sub subname subtid in
+  
+  printf "[Driver] Running analysis on sub %s\n%!" subname;
+  record_analyzed_sub subname subtid;
+  
   let should_dump_bir = Extension.Configuration.get ctxt Common.debug_dump in
   let () = if should_dump_bir
     then printf "%a\n%!" Sub.ppo sub
     else () in
+  
   let prog = Project.program proj in
   let idx_st = Idx_calculator.build sub in
   let start = Analysis_profiling.record_start_time () in
@@ -273,7 +278,11 @@ let run_analyses sub img proj ~(is_toplevel : bool)
             let v = E.lookup var st in
             let bv = of_prod FinalDomain.get v in
             let f = if set then set_60_bit else clear_60_bit in
-            let v = set_in_prod FinalDomain.set v (f bv) in
+            let bv = f bv in
+            let v = set_in_prod FinalDomain.set v bv in
+            Logs.debug ~src
+              (fun m -> m "%a bv: %s\n%!"
+                          Tid.pp tid (to_string bv));
             E.set var v st)
         | None -> st.tree
       in
