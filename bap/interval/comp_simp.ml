@@ -16,53 +16,30 @@ module Checker(N : Abstract.NumericDomain)
     tid : tid;
     term : def term;
     subname : string;
-    alerts : Alert.Set.t;
-    eval_stats : Stats.t;
   }
-
+  
   let emp = Alert.Set.empty
+  let init_st subname tid term = {tid;subname;term}
 
-  let init_st subname tid term = {
-    tid;
-    subname;
-    term;
-    alerts = emp;
-    eval_stats = Stats.init;
-  }
-
-  let merge_st st1 st2 = {
-    st1 with
-    alerts = Alert.Set.union st1.alerts st2.alerts;
-    eval_stats = Stats.combine st1.eval_stats st2.eval_stats
-  }
-
-  let estats_incr_total_considered st =
-    { st with
-      eval_stats = Stats.incr_total_considered st.eval_stats }
-
-  let estats_incr_taint_pruned st =
-    { st with
-      eval_stats = Stats.incr_taint_pruned st.eval_stats }
-
-  let estats_incr_interval_pruned st =
-    { st with
-      eval_stats = Stats.incr_interval_pruned st.eval_stats }
-
+  let estats_incr_total_considered st = Uc_stats.(incr cs_stats total)
+  let estats_incr_taint_pruned st = Uc_stats.(incr cs_stats taint_pruned)
+  let estats_incr_interval_pruned st = Uc_stats.(incr cs_stats interval_pruned)
+                                         
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with
     | Some f -> f
-    | None -> failwith "Couldn't extract interval information out of product domain, in module Comp_simp.Checker"
+    | None -> failwith "[CSChkr] Couldn't extract interval from product domain"
 
   let get_taint : N.t -> Checker_taint.Analysis.t =
     match N.get Checker_taint.Analysis.key with
     | Some f -> f
-    | None -> failwith "Couldn't extract taint information out of product domain, in module Comp_simp.Checker"
+    | None -> failwith "[CSChkr] Couldn't extract taint from product domain"
 
   (* increment total considered *)
-  let incr_total_considered binop st : st =
+  let incr_total_considered binop st : unit =
     match binop with
     | Bil.EQ | Bil.NEQ | Bil.LT | Bil.LE | Bil.SLT
-    | Bil.SLE | Bil.MOD | Bil.SMOD -> st
+    | Bil.SLE | Bil.MOD | Bil.SMOD -> ()
     | _ -> estats_incr_total_considered st
 
   (* 
@@ -109,7 +86,7 @@ module Checker(N : Abstract.NumericDomain)
      incr taint pruned if (left not tainted && right not tainted)
      left tainted && left not bad && right not tainted && right bad
   *)
-  let check_binop (binop : Bil.binop) (l : N.t) (r : N.t) (st : st) : st =
+  let check_binop (binop : Bil.binop) (l : N.t) (r : N.t) (st : st) : Alert.Set.t =
     let safe_bitwidth : WI.t -> int = function
       | Bot -> 1
       | intvl -> WI.bitwidth intvl
@@ -140,13 +117,12 @@ module Checker(N : Abstract.NumericDomain)
       | Bil.MINUS -> true
       | _ -> false
     in
-    let st = incr_total_considered binop st in
+    incr_total_considered binop st;
     let untainted = (not binop_is_sub && not tl && not tr) ||
                     (binop_is_sub && not tr)
     in
     if untainted
-    then
-      estats_incr_taint_pruned st
+    then (estats_incr_taint_pruned st; emp)
     else
       let () = match binop with
         | Bil.PLUS ->
@@ -198,8 +174,7 @@ module Checker(N : Abstract.NumericDomain)
 
       in
       if interval_pruned
-      then
-        estats_incr_interval_pruned st
+      then (estats_incr_interval_pruned st; emp)
       else
         let problematic_operands = [] in
         let problematic_operands = List.append (if !left_bad then [0] else []) problematic_operands in
@@ -216,7 +191,6 @@ module Checker(N : Abstract.NumericDomain)
           reason = Alert.CompSimp;
           sub_name = Some st.subname;
           problematic_operands;
-
           opcode = None;
           addr = None;
           rpo_idx = None;
@@ -225,53 +199,54 @@ module Checker(N : Abstract.NumericDomain)
           is_live = None;
         }
         in
-        { st with alerts = Alert.Set.add st.alerts alert }
+        Alert.Set.singleton alert
 
-  let check_binop_nondet (binop : Bil.binop) (l : N.t list) (r : N.t list)
-        (st : st) : st =
+  let check_binop_nondet (binop : Bil.binop) (l : N.t list)
+        (r : N.t list) (st : st) : Alert.Set.t =
     let operands = List.cartesian_product l r in
-    List.fold operands ~init:st ~f:(fun st (lrand, rrand) ->
-      check_binop binop lrand rrand st)
+    List.fold operands ~init:emp ~f:(fun alerts (lrand, rrand) ->
+      Set.union alerts @@ check_binop binop lrand rrand st)
 
-  let rec check_exp (expr : Bil.exp) (st : st) : N.t list * st =
+  let rec check_exp (expr : Bil.exp) (st : st) : N.t list * Alert.Set.t =
+    let j3 x y z = Set.union x y |> Set.union z in
     match expr with
     | Bil.Load (_, idx, _, _) ->
       (Interp.denote_exp st.tid expr, snd @@ check_exp idx st)
     | Bil.Store (_, idx, data, _, _) ->
-      ([N.bot], merge_st (snd @@ check_exp idx st) (snd @@ check_exp data st))
+      ([N.bot], Set.union
+                  (snd @@ check_exp idx st)
+                  (snd @@ check_exp data st))
     | Bil.BinOp (op, l, r) ->
-      let l, st = check_exp l st in
-      let r, st = check_exp r st in
-      (Interp.denote_exp st.tid expr, check_binop_nondet op l r st)
+      let l, lalerts = check_exp l st in
+      let r, ralerts = check_exp r st in
+      (Interp.denote_exp st.tid expr,
+       j3 lalerts ralerts @@ check_binop_nondet op l r st)
     | Bil.UnOp (_, subexp) ->
       (Interp.denote_exp st.tid expr, snd @@ check_exp subexp st)
     | Bil.Var _ ->
-      (Interp.denote_exp st.tid expr, st)
+      (Interp.denote_exp st.tid expr, emp)
     | Bil.Int _ ->
-      (Interp.denote_exp st.tid expr, st)
+      (Interp.denote_exp st.tid expr, emp)
     | Bil.Cast (_, _, subexp) ->
       (Interp.denote_exp st.tid expr, snd @@ check_exp subexp st)
     | Bil.Let (_, e, body) ->
-      (Interp.denote_exp st.tid expr, merge_st
-                                        (snd @@ check_exp e st)
-                                        (snd @@ check_exp body st))
+      (Interp.denote_exp st.tid expr,
+       Set.union (snd @@ check_exp e st) (snd @@ check_exp body st))
     | Bil.Unknown (_, _) ->
-      (Interp.denote_exp st.tid expr, st)
+      (Interp.denote_exp st.tid expr, emp)
     | Bil.Ite (i, t, e) ->
-      let st = merge_st (snd @@ check_exp i st) (snd @@ check_exp t st)
-               |> merge_st (snd @@ check_exp e st)
+      let alerts = j3 (snd @@ check_exp i st)
+                     (snd @@ check_exp t st)
+                     (snd @@ check_exp e st)
       in
-      (Interp.denote_exp st.tid expr, st)
+      (Interp.denote_exp st.tid expr, alerts)
     | Bil.Extract (_, _, subexp) ->
       (Interp.denote_exp st.tid expr, snd @@ check_exp subexp st)
     | Bil.Concat (l, r) ->
-      (Interp.denote_exp st.tid expr, merge_st
-                                        (snd @@ check_exp l st)
-                                        (snd @@ check_exp r st))
+      (Interp.denote_exp st.tid expr,
+       Set.union (snd @@ check_exp l st) (snd @@ check_exp r st))
 
-  let check_elt (subname : string) (tid : tid) (elt : Blk.elt)
-    : Alert.Set.t Common.checker_res =
-    let empty_stats = Common.EvalStats.init in
+  let check_elt (subname : string) (tid : tid) (elt : Blk.elt) : Alert.Set.t =
     match elt with
     | `Def d ->
       let defining = Def.lhs d |> Var.name in
@@ -281,18 +256,8 @@ module Checker(N : Abstract.NumericDomain)
       then
         let st = init_st subname tid d in    
         let rhs = Def.rhs d in
-        let _, st = check_exp rhs st in
-        { warns = st.alerts;
-          cs_stats = st.eval_stats;
-          ss_stats = empty_stats
-        }
-      else
-        { warns = emp;
-          cs_stats = empty_stats;
-          ss_stats = empty_stats
-        }
-    | _ -> { warns = emp;
-             cs_stats = empty_stats;
-             ss_stats = empty_stats
-           }
+        let _, alerts = check_exp rhs st in
+        alerts
+      else emp
+    | _ -> emp
 end

@@ -46,8 +46,7 @@ module Checker(N : Abstract.NumericDomain)
      if it is a store of tainted data to a pointer without 
      bit 60 set in the pointer AND it is not between a LAHF 
      and SAHF *)
-  let check_elt sub tid lahf_sahf elt
-    : Alert.Set.t Common.checker_res =
+  let check_elt sub tid lahf_sahf elt : Alert.Set.t =
     let incr_taint_stat () =
       Uc_stats.(incr dmp_stats taint_pruned)
     in
@@ -73,15 +72,9 @@ module Checker(N : Abstract.NumericDomain)
       if not is_unset then incr_bv_stat () else ();
       is_unset
     in
-    let empty_stats = Common.EvalStats.init in
-    let empty_res : Alert.Set.t Common.checker_res = {
-      warns = Alert.Set.empty;
-      cs_stats = empty_stats;
-      ss_stats = empty_stats
-    }
-    in
+    let emp = Alert.Set.empty in
     if Lahf_and_sahf.tid_part_of_transform lahf_sahf tid
-    then empty_res
+    then emp
     else
     match elt with
     | `Def d ->
@@ -97,8 +90,8 @@ module Checker(N : Abstract.NumericDomain)
            let subname = Sub.name sub in
            let alerts = Alert.Set.singleton @@
              build_alert ~tid ~desc ~subname ~term:d in
-           { empty_res with warns = alerts }
-         else empty_res
-       | _ -> empty_res)
-    | _ -> empty_res
+           alerts
+         else emp
+       | _ -> emp)
+    | _ -> emp
 end

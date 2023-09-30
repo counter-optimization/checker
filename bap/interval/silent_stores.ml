@@ -18,44 +18,22 @@ module Checker(N : Abstract.NumericDomain)
     tid : tid;
     term : def term;
     subname : string;
-    alerts : Alert.Set.t;
-    eval_stats : Stats.t;
   }
 
   let emp = Alert.Set.empty
-
   let dep_bound = 40
 
   let init_st subname tid term = {
     tid;
     term;
     subname;
-    alerts = emp;
-    eval_stats = Stats.init;
   }
 
-  let merge_st st1 st2 = {
-    st1 with
-    alerts = Alert.Set.union st1.alerts st2.alerts;
-    eval_stats = Stats.combine st1.eval_stats st2.eval_stats
-  }
-
-  let estats_incr_total_considered st =
-    { st with
-      eval_stats = Stats.incr_total_considered st.eval_stats }
-
-  let estats_incr_taint_pruned st =
-    { st with
-      eval_stats = Stats.incr_taint_pruned st.eval_stats }
-
-  let estats_incr_interval_pruned st =
-    { st with
-      eval_stats = Stats.incr_interval_pruned st.eval_stats }
-
-  let estats_incr_symex_pruned st =
-    { st with
-      eval_stats = Stats.incr_symex_pruned st.eval_stats }
-
+  let estats_incr_total_considered st = Uc_stats.(incr ss_stats total)
+  let estats_incr_taint_pruned st = Uc_stats.(incr ss_stats taint_pruned)
+  let estats_incr_interval_pruned st = Uc_stats.(incr ss_stats interval_pruned)
+  let estats_incr_symex_pruned st = Uc_stats.(incr ss_stats symex_pruned)
+      
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with
     | Some f -> f
@@ -190,13 +168,8 @@ module Checker(N : Abstract.NumericDomain)
         (profiling_data_path : string)
         (rd : Reachingdefs.t)
         (tidmap : Blk.elt Tid_map.t)
-        (elt : Blk.elt) : Alert.Set.t Common.checker_res =
+        (elt : Blk.elt) : Alert.Set.t =
     let subname = Sub.name sub in
-    let empty_stats = Common.EvalStats.init in
-    let empty_res st = { warns = st.alerts;
-                         cs_stats = empty_stats;
-                         ss_stats = st.eval_stats }
-    in
     let could_be_eq old new_ =
       let new_intvl = get_intvl new_ in
       let old_intvl = get_intvl old in
@@ -209,14 +182,14 @@ module Checker(N : Abstract.NumericDomain)
       begin
         match rhs with
         | Bil.Store (mem, idx, new_data, endian, size) ->
-          let st = estats_incr_total_considered st in
+          estats_incr_total_considered st;
           let new_data = Interp.denote_exp st.tid new_data in
 
           let load_of_prev_data = Bil.Load (mem, idx, endian, size) in
           let prev_data = Interp.denote_exp st.tid load_of_prev_data in
 
           List.cartesian_product new_data prev_data
-          |> List.fold ~init:(empty_res st) ~f:(fun res (prev_data, new_data) ->
+          |> List.fold ~init:emp ~f:(fun alerts (prev_data, new_data) ->
             if is_tainted prev_data || is_tainted new_data
             then
               if could_be_eq prev_data new_data
@@ -231,33 +204,39 @@ module Checker(N : Abstract.NumericDomain)
                     else Option.value_exn !all_defs_of_sub in
                   let prev_def_term = get_prev_defterm
                                         ~of_:tid
-                                        ~defs:all_defs_of_sub in
+                                        ~defs:all_defs_of_sub
+                  in
                   let prev_store = match prev_def_term with
                     | None -> None
                     | Some prev -> if store_depends_on ~target:d ~prev
                       then Some prev
-                      else None in
+                      else None
+                  in
                   let deps = get_up_to_n_dependent_insns
                                ~prev_store
                                ~n:dep_bound
                                ~sub
                                ~for_:tid
                                ~rd
-                               ~tidmap in
+                               ~tidmap
+                  in
                   let type_info = Type_determination.run
                                     all_defs_of_sub
-                                    Common.AMD64SystemVABI.size_of_var_name in
+                                    Common.AMD64SystemVABI.size_of_var_name
+                  in
                   let dependent_vars = Var_name_collector.run_on_defs deps in
                   let type_info = Type_determination.narrow_to_vars
                                     dependent_vars
-                                    type_info in
+                                    type_info
+                  in
                   let do_check = Symbolic.Executor.eval_def_list deps in
                   let init_st = Symbolic.Executor.init
                                   ~do_ss:true
                                   deps
                                   tid
                                   type_info
-                                  profiling_data_path in
+                                  profiling_data_path
+                  in
                   let (), fini_st = Symbolic.Executor.run do_check init_st in
                   if fini_st.failed_ss
                   then
@@ -266,26 +245,18 @@ module Checker(N : Abstract.NumericDomain)
                     let desc = "failed symex check" in
                     let alert = build_alert ~tid ~term:d ~subname ~left_val ~right_val ~desc in
                     let alerts = Alert.Set.singleton alert in
-                    { warns = alerts;
-                      cs_stats = empty_stats;
-                      ss_stats = st.eval_stats }
-                  else empty_res @@ estats_incr_symex_pruned st
+                    alerts
+                  else (estats_incr_symex_pruned st; emp)
                 else
                   let left_val = get_intvl prev_data in
                   let right_val = get_intvl new_data in
                   let desc = "failed interval equality" in
                   let alert = build_alert ~tid ~term:d ~subname ~left_val ~right_val ~desc in
                   let alerts = Alert.Set.singleton alert in
-                  { warns = alerts;
-                    cs_stats = empty_stats;
-                    ss_stats = st.eval_stats }
-              else empty_res @@ estats_incr_interval_pruned st
-            else empty_res @@ estats_incr_taint_pruned st)
-        | _ -> { warns = emp;
-                 cs_stats = empty_stats;
-                 ss_stats = empty_stats }
+                  alerts
+              else (estats_incr_interval_pruned st; emp)
+            else (estats_incr_taint_pruned st; emp))
+        | _ -> emp
       end
-    | _ -> { warns = emp;
-             cs_stats = empty_stats;
-             ss_stats = empty_stats }
+    | _ -> emp
 end

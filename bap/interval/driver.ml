@@ -32,20 +32,14 @@ module TraceEnv = Trace.Env(FinalDomain)(E)
 
 let src = Uc_log.create_src "Driver"
 
-type check_sub_result = {
-  callees : CRS.t;
-  csevalstats : EvalStats.t;
-  ssevalstats : EvalStats.t;
-  alerts : Alert.Set.t
-}
-
-type checker_alerts = Alert.Set.t
-
 type analysis_result = {
   callees : CRS.t;
-  alerts : checker_alerts;
-  csevalstats : EvalStats.t;
-  ssevalstats : EvalStats.t
+  alerts : Alert.Set.t;
+}
+
+let emp_analysis_result = {
+  callees = CRS.empty;
+  alerts = Alert.Set.empty
 }
 
 type t
@@ -159,7 +153,7 @@ let last_insn_of_sub sub : Blk.elt =
 let should_skip_analysis (edges : Edge_builder.edges)
       (tidmap : Blk.elt Tid_map.t)
       (sub : sub term)
-      (prog : Program.t) : check_sub_result option =
+      (prog : Program.t) : analysis_result option =
   let has_no_edges = List.is_empty edges in
   let insns = Map.data tidmap in
   let has_one_insn =  insns |> List.length |> Int.equal 1 in
@@ -181,14 +175,15 @@ let should_skip_analysis (edges : Edge_builder.edges)
         match totid with
         | None -> failwith "todo"
         | Some totid ->
-          let callee_rels = CRS.singleton { callee = totid ;
-                                            caller = Term.tid sub ;
-                                            callsite = Term.tid j } in
-          let empty_alerts = Alert.Set.empty in
-          Some { alerts = empty_alerts;
-                 callees = callee_rels;
-                 csevalstats = EvalStats.init;
-                 ssevalstats = EvalStats.init }
+          let callee_rels = CRS.singleton {
+            callee = totid ;
+            caller = Term.tid sub ;
+            callsite = Term.tid j }
+          in
+          Some {
+            alerts = Alert.Set.empty;
+            callees = callee_rels;
+          }
       end
     | _ -> failwith "in should_skip_analysis, subroutine is single instruction but non jump instruction. this case is not yet handled." 
   else
@@ -223,7 +218,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
       ~(do_ss_checks : bool)
       ~(do_cs_checks : bool)
       ~(flagownership : Flag_ownership.t)
-      ctxt : check_sub_result =
+      ctxt : analysis_result =
   let subname = Sub.name sub in
   let subtid = Term.tid sub in
   
@@ -512,15 +507,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let module SSChecker = Silent_stores.Checker(FinalDomain)(TracePartCheckerOracle) in
     let module DmpChecker = Dmp.Checker(FinalDomain)(TracePartCheckerOracle) in
 
-    let combine_res x y = Common.combine_checker_res x y Alert.Set.union in
-
-    let emp = {
-      warns = Alert.Set.empty;
-      cs_stats = Common.EvalStats.init;
-      ss_stats = Common.EvalStats.init
-    }
-    in
-
     let elt_of_tid tid = match Tid_map.find tidmap tid with
       | Some elt -> elt
       | None ->
@@ -529,10 +515,11 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     in
 
     let defs = ref None in
+    let emp = Alert.Set.empty in
 
-    let () = printf "[Driver] Running checkers\n%!" in
+    Logs.info ~src (fun m -> m "Running checkers");
     let start = Analysis_profiling.record_start_time () in
-    let all_results = List.fold edges ~init:emp ~f:(fun all_results (_, to_cc, _) ->
+    let all_alerts = List.fold edges ~init:emp ~f:(fun alerts (_, to_cc, _) ->
       let to_tid = Calling_context.to_insn_tid to_cc in
       let elt = elt_of_tid to_tid in
       let cs_chkr_res = if do_cs
@@ -556,17 +543,15 @@ let run_analyses sub img proj ~(is_toplevel : bool)
       let dmp_chkr_res = if do_dmp
         then DmpChecker.check_elt sub to_tid lahf_sahf elt
         else emp in
-      combine_res dmp_chkr_res @@ 
-      combine_res all_results @@
-      combine_res ss_chkr_res cs_chkr_res
-    ) in
+      Set.union alerts cs_chkr_res
+      |> Set.union ss_chkr_res
+      |> Set.union dmp_chkr_res)
+    in
     let stop = Analysis_profiling.record_stop_time start in
-    let () = Analysis_profiling.record_duration_for subname CsChecking stop in
-    let () = printf "[Driver] Done running checkers\n%!" in
+    Analysis_profiling.record_duration_for subname CsChecking stop;
+    Logs.info ~src (fun m -> m "Done running checkers");
     
-    let all_alerts = all_results.warns in
-
-    let () = printf "Running insn idx filler\n%!" in
+    Logs.info ~src (fun m-> m "Running insn idx filler");
     let start = Analysis_profiling.record_start_time () in
     let all_alerts = Alert.InsnIdxFiller.set_for_alert_set idx_st all_alerts in
     let stop = Analysis_profiling.record_stop_time start in
@@ -608,12 +593,10 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let stop = Analysis_profiling.record_stop_time start in
 
     let () = Analysis_profiling.record_duration_for subname CalleeAnalysis stop in
-    let () = printf "Done getting callees for analysis\n%!" in
+    Logs.info ~src (fun m -> m "Done getting callees for analysis");
     { alerts = all_alerts;
-      callees = callees;
-      csevalstats = all_results.cs_stats;
-      ssevalstats = all_results.ss_stats }
-
+      callees = callees; }
+    
 (* this fn needs to have return type unit b/c BAP passes
    should have type (Project.t -> unit). here, this function
    gets curried until it has this type.
@@ -651,15 +634,13 @@ let check_config config img ctxt proj : unit =
     else () in
   let rec loop ~(worklist : SubSet.t)
             ~(processed : SubSet.t)
-            ~(res : checker_alerts)
+            ~(res : Alert.Set.t)
             ~(callees : CRS.t)
             ~(is_toplevel : bool)
-            ~(csevalstats : EvalStats.t)
-            ~(ssevalstats : EvalStats.t)
             ~(config : Config.t) : analysis_result =
     let worklist_wo_procd = Set.diff worklist processed in
     if SubSet.is_empty worklist_wo_procd
-    then { alerts = res; csevalstats; ssevalstats; callees } 
+    then { alerts = res; callees } 
     else
       let sub = Set.min_elt_exn worklist_wo_procd in
       let worklist_wo_procd_wo_sub = Set.remove worklist_wo_procd sub in
@@ -675,8 +656,6 @@ let check_config config img ctxt proj : unit =
           ~processed:next_processed
           ~res
           ~callees
-          ~csevalstats
-          ~ssevalstats
           ~is_toplevel:false
           ~config
       else
@@ -694,15 +673,11 @@ let check_config config img ctxt proj : unit =
           printf "CallOf: (%s, %s)\n%!" (Sub.name sub) (Sub.name callee)) in
         let next_worklist = SubSet.union worklist_wo_procd_wo_sub callee_subs in
         let all_alerts = Alert.Set.union res current_res.alerts in
-        let total_cs_stats = EvalStats.combine current_res.csevalstats csevalstats in
-        let total_ss_stats = EvalStats.combine current_res.ssevalstats ssevalstats in
         loop ~worklist:next_worklist
           ~processed:next_processed
           ~res:all_alerts
           ~callees:current_res.callees
           ~config
-          ~csevalstats:total_cs_stats
-          ~ssevalstats:total_ss_stats
           ~is_toplevel:false
   in
   (* Run the analyses and checkers *)
@@ -710,8 +685,6 @@ let check_config config img ctxt proj : unit =
                            ~processed
                            ~callees:CRS.empty
                            ~res:init_res
-                           ~csevalstats:EvalStats.init
-                           ~ssevalstats:EvalStats.init
                            ~is_toplevel:true
                            ~config in
   (* post-processing *)
@@ -733,20 +706,29 @@ let check_config config img ctxt proj : unit =
 
   let res = Alert.RemoveUnsupportedMirOpcodes.set_for_alert_set all_alerts proj in
   let all_alerts = res.alerts in
-  let unsupported_count = res.num_removed in
-
-  let cs_stats = analysis_results.csevalstats in
-  let ss_stats = analysis_results.ssevalstats in
+  
   Logs.info ~src (fun m ->
     m "Done processing all functions");
-  printf "cs stats:\n%s%!" (EvalStats.to_json_string cs_stats);
-  printf "ss stats:\n%s%!" (EvalStats.to_json_string ss_stats);
   
+  (* SS stat printing *)
+  Logs.info ~src (fun m -> m "ss stats:");
+  let ss_stats = Uc_stats.(get ss_stats) in
+  Logs.info ~src (fun m ->
+    m "%s" @@ Uc_stats.to_json_string ss_stats);
+
+  (* CS stat printing *)
+  Logs.info ~src (fun m -> m "cs stats:");
+  let cs_stats = Uc_stats.(get cs_stats) in
+  Logs.info ~src (fun m ->
+    m "%s" @@ Uc_stats.to_json_string cs_stats);
+
+  (* DMP stat printing *)
   Logs.info ~src (fun m -> m "dmp stats:");
   let dmp_stats = Uc_stats.(get dmp_stats) in
   Logs.info ~src (fun m ->
     m "%s" @@ Uc_stats.to_json_string dmp_stats);
-  
+
+  let unsupported_count = res.num_removed in
   Logs.info ~src (fun m ->
     m "num alerts removed due to unsupported MIR opcodes: %d"
       unsupported_count);

@@ -43,9 +43,10 @@ let get_smalloc_addrs () =
 let print_smalloc_addrs () =
   Toplevel.exec begin
     get_smalloc_addrs () >>= fun addrs ->
-    printf "[Dmp_helper] smalloc addrs are:%!";
-    Word.Set.iter addrs ~f:(printf "%a, " Word.ppo);
-    KB.return (printf "\n%!")
+    Logs.debug ~src (fun m -> m "smalloc addrs are:");
+    Word.Set.iter addrs ~f:(fun addr ->
+      Logs.debug ~src (fun m -> m "\t%a" Word.pp addr));
+    KB.return ()
   end
 
 let find_smalloc proj =
@@ -114,11 +115,11 @@ let guard_to_string {var;set;location} =
 let print_guards guards =
   let rec loop = function
     | g :: gs ->
-      Logs.msg ~src Logs.Info (fun m -> m "%s" (guard_to_string g));
+      Logs.debug ~src (fun m -> m "\t%s" (guard_to_string g));
       loop gs
     | [] -> ()
   in
-  Logs.msg ~src Logs.Info (fun m -> m "guards:");
+  Logs.debug ~src (fun m -> m "guards:");
   loop guards
 
 let needs_set : guard_map -> tid -> bool = Tid.Map.mem
@@ -189,11 +190,13 @@ let find_guard_points sub =
   in
   let irg = Sub.to_cfg sub in
   let rpo = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
-  Seq.fold rpo ~init:[] ~f:(fun guards node ->
+  let guards = Seq.fold rpo ~init:[] ~f:(fun guards node ->
     let blk = Graphs.Ir.Node.label node in
     let elts = Blk.elts blk in
     let new_guards = get_guards (Some elts) in
     new_guards @ guards)
-  |> guards_to_map
+  in
+  print_guards guards;
+  guards_to_map guards
       
   
