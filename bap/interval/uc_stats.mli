@@ -32,3 +32,4 @@ val incr : stat_category -> stat_type -> unit
 val get : stat_category -> t
 val stat : t -> stat_type -> count
 val to_json_string : t -> string
+val info_print : stat_category -> string -> unit

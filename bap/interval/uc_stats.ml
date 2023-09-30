@@ -133,3 +133,9 @@ let to_json_string stats =
                   |> String.concat ~sep:"\n"
   in
   sprintf "{\n%s}\n" json_body
+
+let info_print statcat headermsg =
+  Logs.info ~src (fun m -> m "%s:" headermsg);
+  let stats = get statcat in
+  Logs.info ~src (fun m ->
+    m "%s" @@ to_json_string stats);

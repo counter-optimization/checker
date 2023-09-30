@@ -212,6 +212,9 @@ let first_insn_cc sub =
     let first_cc = Calling_context.of_tid first_tid in
     Some first_cc)
 
+let do_ (type a) ~(if_ : bool) ~(default : a) (f : unit -> a) : a =
+    if if_ then f () else default
+
 let run_analyses sub img proj ~(is_toplevel : bool)
       ~(bss_init_stores : Global_function_pointers.global_const_store list)
       ~(config : Config.t)
@@ -226,9 +229,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
   record_analyzed_sub subname subtid;
   
   let should_dump_bir = Extension.Configuration.get ctxt Common.debug_dump in
-  let () = if should_dump_bir
-    then printf "%a\n%!" Sub.ppo sub
-    else () in
+  do_ ~if_:should_dump_bir ~default:() (fun () ->
+    Logs.debug ~src (fun m -> m "%a" Sub.pp sub));
   
   let prog = Project.program proj in
   let idx_st = Idx_calculator.build sub in
@@ -257,12 +259,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let irg_rpo = Graphlib.reverse_postorder_traverse (module IrCfg) irg in
     let lahf_sahf = Lahf_and_sahf.analyze irg_rpo IrCfg.Node.label in
 
-    if do_dmp
-    then begin
+    do_ ~if_:do_dmp ~default:() (fun () ->
       Dmp_helpers.find_smalloc proj;
-      Dmp_helpers.print_smalloc_addrs ()
-    end
-    else ();
+      Dmp_helpers.print_smalloc_addrs ());
 
     let dmp_bt_guards = Dmp_helpers.find_guard_points sub in
     let dmp_bt_set tid (st : TraceEnv.t) : TraceEnv.t =
@@ -373,8 +372,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                        cond_scrape_st in
     let cmov_cnd_flags = List.filter live_flags ~f:(fun lf ->
       Trace.ConditionFinder.FlagScraper.flag_used_in_cmov lf cond_scrape_st) in
-    (* let dmp_bittest_flags = List.filter live_flags ~f:(fun lf -> *)
-    (*   Trace.ConditionFinder.FlagScraper.flag_is_checkbit lf cond_scrape_st) in *)
+  
     let cond_extractor_st = TraceDir.Extractor.init tidmap reachingdefs in
     let dirs = List.fold cmov_cnd_flags ~init:[] ~f:(fun dirs lf ->
       let split_dir = TraceDir.Extractor.get_conds_for_flag lf cond_extractor_st in
@@ -522,27 +520,16 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let all_alerts = List.fold edges ~init:emp ~f:(fun alerts (_, to_cc, _) ->
       let to_tid = Calling_context.to_insn_tid to_cc in
       let elt = elt_of_tid to_tid in
-      let cs_chkr_res = if do_cs
-        then CompSimpChecker.check_elt
-               subname
-               to_tid
-               elt
-        else emp in
-      let ss_chkr_res = if do_ss
-        then SSChecker.check_elt
-               use_symex
-               sub
-               to_tid
-               idx_st
-               defs
-               symex_profiling_out_file
-               reachingdefs
-               tidmap
-               elt
-        else emp in
-      let dmp_chkr_res = if do_dmp
-        then DmpChecker.check_elt sub to_tid lahf_sahf elt
-        else emp in
+      let cs_chkr_res = do_ ~if_:do_cs ~default:emp (fun () ->
+        CompSimpChecker.check_elt subname to_tid elt)
+      in
+      let ss_chkr_res = do_ ~if_:do_ss ~default:emp (fun () ->
+        SSChecker.check_elt use_symex sub to_tid idx_st
+          defs symex_profiling_out_file reachingdefs tidmap elt) 
+      in
+      let dmp_chkr_res = do_ ~if_:do_dmp ~default:emp (fun () ->
+        DmpChecker.check_elt sub to_tid lahf_sahf elt)
+      in
       Set.union alerts cs_chkr_res
       |> Set.union ss_chkr_res
       |> Set.union dmp_chkr_res)
@@ -696,36 +683,20 @@ let check_config config img ctxt proj : unit =
   let all_alerts = Alert.RemoveAlertsForCallInsns.set_for_alert_set all_alerts proj in
 
   let is_double_check = Extension.Configuration.get ctxt Common.is_double_check in
-  let all_alerts = if is_double_check
-    then all_alerts
-    else
-      Alert.RemoveAndWarnEmptyInsnIdxAlerts.set_for_alert_set all_alerts proj in
+  let all_alerts = do_ ~if_:(not is_double_check) ~default:all_alerts (fun () ->
+    Alert.RemoveAndWarnEmptyInsnIdxAlerts.set_for_alert_set all_alerts proj)
+  in
 
   let all_alerts = Alert.CombinedTransformFixerUpper.set_for_alert_set all_alerts proj in
 
   let res = Alert.RemoveUnsupportedMirOpcodes.set_for_alert_set all_alerts proj in
   let all_alerts = res.alerts in
   
-  Logs.info ~src (fun m ->
-    m "Done processing all functions");
+  Logs.info ~src (fun m -> m "Done processing all functions");
   
-  (* SS stat printing *)
-  Logs.info ~src (fun m -> m "ss stats:");
-  let ss_stats = Uc_stats.(get ss_stats) in
-  Logs.info ~src (fun m ->
-    m "%s" @@ Uc_stats.to_json_string ss_stats);
-
-  (* CS stat printing *)
-  Logs.info ~src (fun m -> m "cs stats:");
-  let cs_stats = Uc_stats.(get cs_stats) in
-  Logs.info ~src (fun m ->
-    m "%s" @@ Uc_stats.to_json_string cs_stats);
-
-  (* DMP stat printing *)
-  Logs.info ~src (fun m -> m "dmp stats:");
-  let dmp_stats = Uc_stats.(get dmp_stats) in
-  Logs.info ~src (fun m ->
-    m "%s" @@ Uc_stats.to_json_string dmp_stats);
+  Uc_stats.(info_print cs_stats "cs stats:");
+  Uc_stats.(info_print ss_stats "ss stats:");
+  Uc_stats.(info_print dmp_stats "dmp stats:");
 
   let unsupported_count = res.num_removed in
   Logs.info ~src (fun m ->
