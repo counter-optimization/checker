@@ -30,6 +30,8 @@ type event = Edgebuilding
            | ClassicLivenessOne
            | ClassicLivenessTwo
            | NewDependenceAnalysis
+           | LahfSahfAnalysis
+           | DmpGuardPointAnalysis
            | None
 [@@deriving equal]
 
@@ -50,6 +52,8 @@ let string_of_event = function
   | ClassicLivenessOne -> "ClassicLivenessOne"
   | ClassicLivenessTwo -> "ClassicLivenessTwo"
   | NewDependenceAnalysis -> "NewDependenceAnalysis"
+  | LahfSahfAnalysis -> "LahfSahfAnalysis"
+  | DmpGuardPointAnalysis -> "DmpGuardPointAnalysis"
   | None -> "None"
 
 let cls : (t, unit) KB.Class.t = KB.Class.declare
@@ -127,13 +131,12 @@ let print_prof_event (event : t KB.obj) : unit =
 let print_all_times () : unit =
   let funcname_grouper (event1 : t KB.obj) (event2 : t KB.obj) : bool =
     let is_equal = ref false in
-    let () = Toplevel.exec begin
+    Toplevel.exec begin
       KB.collect funcname_slot event1 >>= fun funcname1 ->
       KB.collect funcname_slot event2 >>= fun funcname2 ->
       is_equal := String.equal funcname1 funcname2;
       KB.return ()
-    end
-    in
+    end;
     !is_equal
   in
   let do_printing = begin

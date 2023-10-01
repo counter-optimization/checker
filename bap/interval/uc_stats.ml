@@ -85,6 +85,14 @@ let unsupported_pruned =
     ~public
     int_to_dom
 
+let lahf_sahf_pruned =
+  KB.Class.property
+    checker_stat_cls
+    "Dmp stores pruned due to being between LAHF-SAHF"
+    ~package
+    ~public
+    int_to_dom
+
 (** KB symbols for interning *)
 type stat_category = string
 let dmp_stats = "dmp-stats"
@@ -126,7 +134,8 @@ let to_json_string stats =
                      "interval_pruend", interval_pruned;
                      "interproc_pruned", interproc_pruned;
                      "symex_pruned", symex_pruned;
-                     "unsupported_prune", unsupported_pruned;]
+                     "unsupported_pruned", unsupported_pruned;
+                     "lahf_sahf_pruned", lahf_sahf_pruned]
   in
   let json_body = List.map print_order
                     ~f:(fun (n, v) -> s n @@ stat stats v)

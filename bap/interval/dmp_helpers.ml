@@ -103,7 +103,12 @@ type guard_point = {
   location : tid;
 }
 
-type gmentry = { var : string; set : bool }
+type guard = {
+  var : string;
+  set : bool
+}
+
+type gmentry = guard list ref
 
 type guard_map = gmentry Tid.Map.t
 
@@ -185,8 +190,15 @@ let find_guard_points sub =
       | _ -> guards
   in
   let guards_to_map (gs : guard_point list) : guard_map =
-    List.fold gs ~init:Tid.Map.empty ~f:(fun m {var;set;location} ->
-      Tid.Map.set m ~key:location ~data: {var;set})
+    List.fold gs ~init:Tid.Map.empty
+      ~f:(fun m {var;set;location} ->
+        match Tid.Map.find m location with
+        | Some guards ->
+          guards := {var;set} :: !guards;
+          m
+        | None ->
+          let guards = ref [{var;set}] in
+          Tid.Map.set m ~key:location ~data:guards)
   in
   let irg = Sub.to_cfg sub in
   let rpo = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in

@@ -24,6 +24,8 @@ type event = Edgebuilding
            | ClassicLivenessOne
            | ClassicLivenessTwo
            | NewDependenceAnalysis
+           | LahfSahfAnalysis
+           | DmpGuardPointAnalysis
            | None
 [@@deriving equal]
 

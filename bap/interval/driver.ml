@@ -251,37 +251,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let start = Analysis_profiling.record_start_time () in
 
     let irg = Sub.to_cfg sub in
-    let irg_first_blk = match Term.first blk_t sub with
-      | Some blk -> IrCfg.Node.create blk
-      | None -> failwith @@ sprintf "Sub %s has no basic blocks" subname in
-
-    (* dmp checker specific *)
-    let irg_rpo = Graphlib.reverse_postorder_traverse (module IrCfg) irg in
-    let lahf_sahf = Lahf_and_sahf.analyze irg_rpo IrCfg.Node.label in
-
-    do_ ~if_:do_dmp ~default:() (fun () ->
-      Dmp_helpers.find_smalloc proj;
-      Dmp_helpers.print_smalloc_addrs ());
-
-    let dmp_bt_guards = Dmp_helpers.find_guard_points sub in
-    let dmp_bt_set tid (st : TraceEnv.t) : TraceEnv.t =
-      let open Abstract_bitvector in
-      let tree = match Dmp_helpers.get_guard dmp_bt_guards tid with
-        | Some {var;set} ->
-          TraceEnv.Tree.map st.tree ~f:(fun st ->
-            let v = E.lookup var st in
-            let bv = of_prod FinalDomain.get v in
-            let f = if set then set_60_bit else clear_60_bit in
-            let bv = f bv in
-            let v = set_in_prod FinalDomain.set v bv in
-            Logs.debug ~src
-              (fun m -> m "%a bv: %s\n%!"
-                          Tid.pp tid (to_string bv));
-            E.set var v st)
-        | None -> st.tree
-      in
-      { tree }
-    in
+    (* let irg_first_blk = match Term.first blk_t sub with *)
+    (*   | Some blk -> IrCfg.Node.create blk *)
+    (*   | None -> failwith @@ sprintf "Sub %s has no basic blocks" subname in *)
           
     let edges = List.map edges ~f:(Edge_builder.to_cc_edge) in
     let module G = Graphlib.Make(Calling_context)(Bool) in
@@ -311,6 +283,53 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let stop = Analysis_profiling.record_stop_time start in
     let () = Analysis_profiling.record_duration_for subname ClassicLivenessTwo stop in
     let () = printf "Done running classical dataflow liveness 2\n%!" in
+
+    (* dmp checker specific *)
+    let start = Analysis_profiling.record_start_time () in
+    (* let irg_rpo = Graphlib.reverse_postorder_traverse (module IrCfg) irg in *)
+    let lahf_sahf = Lahf_and_sahf.run_on_cfg (module G) cfg tidmap in
+    let stop = Analysis_profiling.record_stop_time start in
+    Analysis_profiling.record_duration_for
+      subname
+      Analysis_profiling.LahfSahfAnalysis
+      stop;
+
+    Lahf_and_sahf.print lahf_sahf;
+
+    do_ ~if_:do_dmp ~default:() (fun () ->
+      Dmp_helpers.find_smalloc proj;
+      Dmp_helpers.print_smalloc_addrs ());
+
+    let start = Analysis_profiling.record_start_time () in
+    let dmp_bt_guards = Dmp_helpers.find_guard_points sub in
+    let stop = Analysis_profiling.record_stop_time start in
+    Analysis_profiling.record_duration_for
+      subname
+      Analysis_profiling.DmpGuardPointAnalysis
+      stop;
+    
+    let dmp_bt_set tid (st : TraceEnv.t) : TraceEnv.t =
+      let open Abstract_bitvector in
+      let tree = match Dmp_helpers.get_guard dmp_bt_guards tid with
+        | Some guards ->
+          Logs.debug ~src (fun m ->
+            m "Found guard at tid %a" Tid.pp tid);
+          List.fold !guards ~init:st.tree
+            ~f:(fun t {var;set} ->
+              TraceEnv.Tree.map t ~f:(fun st ->
+                let v = E.lookup var st in
+                let bv = of_prod FinalDomain.get v in
+                let f = if set then set_60_bit else clear_60_bit in
+                let bv = f bv in
+                let v = set_in_prod FinalDomain.set v bv in
+                Logs.debug ~src
+                  (fun m -> m "%a bv: %s\n%!"
+                              Tid.pp tid (to_string bv));
+                E.set var v st))
+        | None -> st.tree
+      in
+      { tree }
+    in
 
     (* set up initial solution *)
     let start = Analysis_profiling.record_start_time () in
@@ -613,11 +632,9 @@ let check_config config img ctxt proj : unit =
   let do_cs_checks = Extension.Configuration.get ctxt Common.do_cs_checks_param in
 
   let should_dump_kb = Extension.Configuration.get ctxt Common.debug_dump in
-  let () = if should_dump_kb
-    then
-      let cur_kb = Toplevel.current () in
-      Format.printf "%a\n%!" KB.pp_state cur_kb
-    else () in
+  do_ ~if_:(should_dump_kb) ~default:() (fun () ->
+    Format.printf "%a\n%!" KB.pp_state @@ Toplevel.current ());
+
   let rec loop ~(worklist : SubSet.t)
             ~(processed : SubSet.t)
             ~(res : Alert.Set.t)
@@ -694,9 +711,9 @@ let check_config config img ctxt proj : unit =
   
   Logs.info ~src (fun m -> m "Done processing all functions");
   
-  Uc_stats.(info_print cs_stats "cs stats:");
-  Uc_stats.(info_print ss_stats "ss stats:");
-  Uc_stats.(info_print dmp_stats "dmp stats:");
+  Uc_stats.(info_print cs_stats "cs stats");
+  Uc_stats.(info_print ss_stats "ss stats");
+  Uc_stats.(info_print dmp_stats "dmp stats");
 
   let unsupported_count = res.num_removed in
   Logs.info ~src (fun m ->

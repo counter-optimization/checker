@@ -25,6 +25,7 @@ val interval_pruned : stat_type
 val interproc_pruned : stat_type
 val symex_pruned : stat_type
 val unsupported_pruned : stat_type
+val lahf_sahf_pruned : stat_type
   
 type t
 type count = int

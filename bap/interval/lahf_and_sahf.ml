@@ -1,67 +1,109 @@
 open Core_kernel
 open Bap.Std
+open Graphlib.Std
 
 type t = Tidset.t
 
+type state =
+  | Inside
+  | InsideMaybeSahf
+  | Outside
+
+let src = Uc_log.create_src "lahf-sahf"
+
 let tid_part_of_transform = Tidset.mem
 
-let num_sahf_insns = 6
-let num_lahf_insns = 1
-let lahf_insn_var_names = ["RAX"; "SF"; "ZF"; "AF"; "PF"; "CF"]
-                          |> Common.SS.of_list
+let lahf_insn_var_names =
+  ["RAX"; "SF"; "ZF"; "AF"; "PF"; "CF"]
+  |> Common.SS.of_list
 
-let analyze rpo bbize =
-  let g = Seq.nth in
-  let is_rax_load d =
-    match Def.rhs d with
-    | Bil.Cast (HIGH, 8, Bil.Cast (LOW, 16, Bil.Var v)) ->
-      String.Caseless.equal (Var.name v) "rax"
-    | _ -> false in
-  let is_flag_store d =
-    Set.mem Common.ABI.flag_names (Var.name (Def.lhs d)) &&
-    match Def.rhs d with
-    | Bil.Extract (hi, lo, subexp) when hi = lo -> true
-    | _ -> false in
-  let likely_sahf elts =
-    match g elts 0, g elts 1 with
-    | Some (`Def raxload), Some (`Def sfload) ->
-      is_rax_load raxload && is_flag_store sfload
-    | _ -> false in
-  let likely_lahf elts =
-    match Seq.hd elts with
-    | Some (`Def d) ->
+let run_on_cfg (type g) (module G : Graph with type t = g and type node = Calling_context.t) g tidmap =
+  let is_rax_load = function
+    | `Def d ->
+      begin match Def.rhs d with
+      | Bil.Cast (HIGH, 8, Bil.Cast (LOW, 16, Bil.Var v)) ->
+        String.Caseless.equal (Var.name v) "rax"
+      | _ -> false end
+    | _ -> false
+  in
+  let is_flag_store = function
+    | `Def d ->
+      Set.mem Common.ABI.flag_names (Var.name (Def.lhs d)) &&
+      begin match Def.rhs d with
+      | Bil.Extract (hi, lo, subexp) when hi = lo -> true
+      | _ -> false end
+    | _ -> false
+  in
+  let likely_lahf = function
+    | `Def d ->
       if String.equal "RAX" (Var.name (Def.lhs d))
       then
-        let rhs_var_names = Var_name_collector.run (Def.rhs d) in
+        let rhs = Def.rhs d in
+        let rhs_var_names = Var_name_collector.run rhs in
         Common.SS.equal rhs_var_names lahf_insn_var_names
       else false
-    | _ -> false in
-  let rec analyze_elts elts intx ins =
-    match Seq.hd elts with
-    | Some e ->
-      if likely_sahf elts
-      then analyze_elts (Seq.drop elts num_sahf_insns) false ins
-      else if likely_lahf elts
-      then analyze_elts (Seq.drop elts num_lahf_insns) true ins
-      else if intx
-      then
-        let tid = Common.elt_to_tid e in
-        analyze_elts (Seq.drop elts 1) intx (Set.add ins tid)
-      else analyze_elts (Seq.drop elts 1) intx ins
-    | None -> (intx, ins) in
-  let rec loop rpo intx ins =
-    match Seq.hd rpo with
-    | Some node ->
-      let bb = bbize node in
-      let elts = Blk.elts bb in
-      let (intx, ins) = analyze_elts elts intx ins in
-      let rpo' = Seq.drop rpo 1 in
-      loop rpo' intx ins
-    | None -> ins in
-  let initial_in_transform = false in
-  let initial_tids_in_transform = Tidset.empty in
-  loop rpo initial_in_transform initial_tids_in_transform
-
-let print =
+    | _ -> false
+  in
+  let tween_tids = ref Tid.Set.empty in
+  let delay_tid : tid option ref = ref None in
+  let interp_node cc (st : state) =
+    let tid = Calling_context.to_insn_tid cc in
+    let elt = match Tid_map.find tidmap tid with
+      | Some elt -> elt
+      | None ->
+        Logs.err ~src (fun m ->
+          m "Couldnt' find tid %a in lahf_sahf run_on_cfg"
+            Tid.pp tid);
+        failwith "lahf_and_sahf.run_on_cfg error"
+    in
+    match st with
+    | Inside when is_rax_load elt ->
+      delay_tid := Some tid; InsideMaybeSahf
+    | InsideMaybeSahf when is_flag_store elt ->
+      delay_tid := None; Outside
+    | InsideMaybeSahf when is_rax_load elt ->
+      delay_tid := Some tid; InsideMaybeSahf
+    | InsideMaybeSahf ->
+      (if Option.is_some !delay_tid
+       then tween_tids := Set.add
+                            !tween_tids
+                            (Option.value_exn !delay_tid)
+       else ());
+      Inside
+    | Inside ->
+      tween_tids := Set.add !tween_tids tid;
+      Inside
+    | Outside when likely_lahf elt -> Inside
+    | Outside -> Outside
+  in
+  let merge l r = match l, r with
+    | Outside, Outside -> Outside
+    | Inside, Inside -> Inside
+    | InsideMaybeSahf, InsideMaybeSahf -> InsideMaybeSahf
+    | Inside, _ -> Inside
+    | _, Inside -> Inside
+    | InsideMaybeSahf, _ -> InsideMaybeSahf
+    | _, InsideMaybeSahf -> InsideMaybeSahf
+  in
+  let equal l r = match l, r with
+    | Outside, Outside -> true
+    | Inside, Inside -> true
+    | InsideMaybeSahf, InsideMaybeSahf -> true
+    | _, _ -> false
+  in
+  let step _visits _node = merge in
+  let init_map = G.Node.Map.empty in
+  let init_sol = Solution.create init_map Outside in
+  let _res = Graphlib.fixpoint (module G) g
+               ~step
+               ~equal
+               ~merge
+               ~init:init_sol
+               ~f:interp_node
+  in
+  !tween_tids
+    
+let print tweens =
   printf "Insns between lahf and sahf:\n%!";
-  Tidset.iter ~f:(printf "\t%a\n%!" Tid.ppo)
+  Tidset.iter tweens ~f:(fun tid -> Logs.debug ~src (fun m ->
+    m "\t%a" Tid.pp tid))
