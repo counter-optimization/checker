@@ -9,7 +9,9 @@ module KB = Bap_core_theory.KB
 open KB.Monad_infix
 
 type reason = CompSimp | SilentStores | Dmp | None
-                           [@@deriving sexp, bin_io, compare, equal]
+[@@deriving sexp, bin_io, compare, equal]
+
+let src = Uc_log.create_src "alert"
 
 let string_of_reason = function
   | CompSimp -> "comp-simp"
@@ -369,8 +371,9 @@ module SubNameResolverFiller = struct
                         match get_name_for_resolving a with
                         | Some n -> SS.add toresolve n
                         | None -> toresolve) in
-    let () = printf "[Alerts] trying to resolve sub names:\n%!";
-      SS.iter toresolve ~f:(printf "\t%s\n%!") in
+    Logs.info ~src (fun m ->
+      m "[Alerts] trying to resolve sub names:\n");
+    SS.iter toresolve ~f:(fun n -> Logs.info ~src (fun m -> m "\t%s" n));
     let symbol_aliases = Config.get_all_named_symbols proj toresolve in
     let () = printf "[Config] resolved is:\n%!";
       List.iter symbol_aliases ~f:(fun (sym, aliases) ->

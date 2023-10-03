@@ -39,19 +39,32 @@ module UarchCheckerExtension = struct
     |> Out_channel.close
 
   let init_logging ctxt =
-    let lvl = Extension.Configuration.get ctxt
-                Common.global_log_level_param
-    in
     Uc_log.init ();
-    Uc_log.set_global_level lvl
+    Extension.Configuration.get ctxt
+      Common.global_log_level_param
+    |> Uc_log.set_global_level
+
+  let put_addrs_in_sema () =
+    let open KB.Syntax in
+    Toplevel.exec begin
+      KB.objects T.Program.cls >>= 
+      KB.Seq.iter ~f:(fun lb ->
+        let* sema = lb-->T.Semantics.slot in
+        let* addr = lb-->T.Label.addr in
+        match addr with
+        | Some bv -> 
+          let v = KB.Value.put Sema_addrs.slot sema bv in
+          KB.provide T.Semantics.slot lb v
+        | None -> KB.return ())
+    end
 
   let pass ctxt proj =
     init_logging ctxt;
     let target_obj_name = get_target_file_name proj in
     let out_csv_file_name = Extension.Configuration.get ctxt
-                              Common.output_csv_file_param
-    in
+                              Common.output_csv_file_param in
     test_output_csv_file out_csv_file_name;
+    
     let i = Image.create ~backend:"llvm" target_obj_name in
     let img_and_errs = match i with
       | Ok i -> i
@@ -61,13 +74,14 @@ module UarchCheckerExtension = struct
           target_obj_name
     in
     let img = fst img_and_errs in
+    
     let config_path = Extension.Configuration.get ctxt
-                        Common.config_file_path_param
-    in
+                        Common.config_file_path_param in
     let config = Config.Parser.parse_config_file
-                   ~path:config_path
-    in
+                   ~path:config_path in
     Logs.info ~src (fun m -> m "Configured:\n");
+    
+    put_addrs_in_sema ();
     Driver.check_config config img ctxt proj
 
   let register_passes ctxt =
@@ -77,8 +91,8 @@ end
 
 let () =
   Extension.declare
-    ~features:["primus"; "symbolic-executor"; "symbolic-lisp-primitives"]
-    ~provides:[Common.package; "semantic-addrs"]
-    UarchCheckerExtension.register_passes;
-  Extension.declare ~provides:["semantic-addrs"] (fun ctxt ->
-    Sema_addrs.init (); Ok ())
+    ~features:["primus"; "symbolic-executor"; "symbolic-lisp-primitives"; "semantic-addrs"]
+    ~provides:[Common.package]
+    UarchCheckerExtension.register_passes
+  (* Extension.declare ~provides:["semantic-addrs"] (fun ctxt -> *)
+  (*   Sema_addrs.init (); Ok ()) *)

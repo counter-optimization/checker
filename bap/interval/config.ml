@@ -36,6 +36,9 @@ module T = struct
     secret_args : secret_map
   }
 
+  type function_name = string
+  type exn += UnresolvedFunction of function_name
+
   let empty_secrets = Set.empty (module Int)
 
   let empty_symbols = Set.empty (module String)
@@ -50,11 +53,24 @@ module T = struct
 
   let filename proj = Option.value_exn @@ Project.get proj filename
 
+  let try_prog_resolve prog toresolve =
+    let emp = Sub.Set.empty in
+    let unresolved = String.Set.empty in
+    let init = emp, unresolved in
+    let subs = Term.enum sub_t prog in
+    let named = Seq.map subs ~f:(fun s -> (Sub.name s, s))
+                |> String.Map.of_sequence_exn in
+    Set.fold toresolve ~init ~f:(fun (res, unres) name ->
+      match String.Map.find named name with
+      | Some sub -> (Sub.Set.add res sub, unres)
+      | None -> (res, String.Set.add unres name))
+
   let get_all_named_symbols proj toresolve =
+    Logs.info ~src (fun m ->
+      m "get_all_named_symbols toresolve is: %s"
+        (Set.to_list toresolve |> List.to_string ~f:Fn.id));
     let resolved = ref [] in
     let filename = filename proj in
-    Logs.debug ~src (fun m ->
-      m "%a" KB.pp_state (Toplevel.current ()));
     (Toplevel.exec begin
        Theory.Unit.for_file filename >>= fun unit ->
        KB.collect Image.Spec.slot unit >>= fun ogre_doc ->
@@ -96,78 +112,80 @@ module T = struct
                  Logs.debug ~src (fun m -> m "\t%s" als));
                let aliases = Set.union base_set aliases in
                KB.return (resolved := (orig_sym, aliases) :: !resolved)) end);
-    Logs.debug ~src (fun m ->
-      m "%a" KB.pp_state (Toplevel.current ()));
     !resolved
 
 
   let get_target_fns_exn config proj : sub term Sequence.t =
     let prog = Project.program proj in
-    let subs = Term.enum sub_t prog in
-    let target_fn_names = config.target_fns in
-    let target_subs = Seq.filter subs ~f:(fun sub ->
-      let name = Sub.name sub in
-      Set.mem target_fn_names name) in
-    let find_sub_by_name name =
-      Seq.find subs ~f:(fun s -> Sub.name s |> String.equal name)
-    in
-    let find_first_valid_alias alias_set =
-      let rec loop = function
-        | [] -> None
-        | a :: aliases -> begin match find_sub_by_name a with
-          | None -> loop aliases
-          | Some s -> Some s end in
-      loop @@ Set.to_list alias_set
-    in
-    if Seq.length target_subs <> Set.length target_fn_names
-    then
-      let need_to_resolve = Set.filter target_fn_names ~f:(fun target ->
-        let found_sub_names = Seq.map target_subs ~f:Sub.name in
-        let equal = String.equal in
-        not @@ Seq.mem found_sub_names target ~equal)
-      in
-      let symbol_aliases = get_all_named_symbols proj need_to_resolve in
-      let () = printf "[Config] resolved is:\n%!";
-        List.iter symbol_aliases ~f:(fun (sym, aliases) ->
-          printf "\t%s ~~> %s\n%!" sym @@
-          (Set.to_list aliases |> List.to_string ~f:(fun x -> x))) in
-      let () = printf "[Config] couldn't find subs for:\n%!";
-        Set.iter need_to_resolve ~f:(printf "\t%s\n%!") in
-      let unresolved : string list ref = ref [] in
-      let emp_seq : sub term Seq.t = Seq.empty in
-      let resolved = Set.fold need_to_resolve ~init:emp_seq
-                       ~f:(fun resolved target ->
-                         let aliases = List.Assoc.find symbol_aliases target ~equal:String.equal in
-                         match aliases with
-                         | None ->
-                           let () = printf "[Config] (A) Couldn't resolve aliases for target fn: %s\n%!" target in
-                           let () = unresolved := target :: !unresolved in
-                           resolved
-                         | Some aliases ->
-                           let () = printf "[Config] Aliases of %s are:\n%!" target;
-                             Set.iter aliases ~f:(printf "\t%s\n%!") in
-                           begin match find_first_valid_alias aliases with
-                           | None ->
-                             let () = printf "[Config] (B) Couldn't resolve aliases for target fn: %s\n%!" target in
-                             let () = unresolved := target :: !unresolved in
-                             resolved
-                           | Some sub -> Seq.cons sub resolved end) in
-      let target_subs = Seq.append resolved target_subs in
-      if List.is_empty !unresolved
-      then target_subs
-      else
-        (* collect the func names we couldn't find for analysis
-           and throw an exception*)
-        let found_names = Seq.map target_subs ~f:Sub.name |> Seq.to_list in
-        let target_fn_name_not_resolved name : bool =
-          not @@ List.mem found_names name ~equal:String.equal in
-        let problematic_fn_names = Set.filter target_fn_names
-                                     ~f:target_fn_name_not_resolved
-                                   |> Set.to_list in
-        let problematic_names_str = List.to_string problematic_fn_names ~f:(fun x -> x) in
-        failwith @@ sprintf
-                      "[Config] get_target_fns_exn: couldn't find function symbol in the target object file for targetted functions: %s" problematic_names_str
-    else target_subs
+    let toresolve = config.target_fns in
+    let resolved, unresolved = try_prog_resolve prog toresolve in
+    if String.Set.is_empty unresolved
+    then Sub.Set.to_sequence resolved
+    else
+      let exn = UnresolvedFunction (String.Set.to_list unresolved
+                                    |> List.to_string ~f:Fn.id) in
+      raise exn
+    (* let find_sub_by_name name = *)
+    (*   Term.enum sub_t prog |> *)
+    (*   Seq.find ~f:(fun s -> Sub.name s |> String.equal name) *)
+    (* in *)
+    (* let find_first_valid_alias alias_set = *)
+    (*   let rec loop = function *)
+    (*     | [] -> None *)
+    (*     | a :: aliases -> begin match find_sub_by_name a with *)
+    (*       | None -> loop aliases *)
+    (*       | Some s -> Some s end in *)
+    (*   loop @@ Set.to_list alias_set *)
+    (* in *)
+    (* if not @@ String.Set.is_empty unresolved *)
+    (* then *)
+    (*   let need_to_resolve = Set.filter toresolve ~f:(fun target -> *)
+    (*     let found_sub_names = Seq.map target_subs ~f:Sub.name in *)
+    (*     let equal = String.equal in *)
+    (*     not @@ Seq.mem found_sub_names target ~equal) *)
+    (*   in *)
+    (*   let symbol_aliases = get_all_named_symbols proj need_to_resolve in *)
+    (*   let () = printf "[Config] resolved is:\n%!"; *)
+    (*     List.iter symbol_aliases ~f:(fun (sym, aliases) -> *)
+    (*       printf "\t%s ~~> %s\n%!" sym @@ *)
+    (*       (Set.to_list aliases |> List.to_string ~f:(fun x -> x))) in *)
+    (*   let () = printf "[Config] couldn't find subs for:\n%!"; *)
+    (*     Set.iter need_to_resolve ~f:(printf "\t%s\n%!") in *)
+    (*   let unresolved : string list ref = ref [] in *)
+    (*   let emp_seq : sub term Seq.t = Seq.empty in *)
+    (*   let resolved = Set.fold need_to_resolve ~init:emp_seq *)
+    (*                    ~f:(fun resolved target -> *)
+    (*                      let aliases = List.Assoc.find symbol_aliases target ~equal:String.equal in *)
+    (*                      match aliases with *)
+    (*                      | None -> *)
+    (*                        let () = printf "[Config] (A) Couldn't resolve aliases for target fn: %s\n%!" target in *)
+    (*                        let () = unresolved := target :: !unresolved in *)
+    (*                        resolved *)
+    (*                      | Some aliases -> *)
+    (*                        let () = printf "[Config] Aliases of %s are:\n%!" target; *)
+    (*                          Set.iter aliases ~f:(printf "\t%s\n%!") in *)
+    (*                        begin match find_first_valid_alias aliases with *)
+    (*                        | None -> *)
+    (*                          let () = printf "[Config] (B) Couldn't resolve aliases for target fn: %s\n%!" target in *)
+    (*                          let () = unresolved := target :: !unresolved in *)
+    (*                          resolved *)
+    (*                        | Some sub -> Seq.cons sub resolved end) in *)
+    (*   let target_subs = Seq.append resolved target_subs in *)
+    (*   if List.is_empty !unresolved *)
+    (*   then target_subs *)
+    (*   else *)
+    (*     (\* collect the func names we couldn't find for analysis *)
+    (*        and throw an exception*\) *)
+    (*     let found_names = Seq.map target_subs ~f:Sub.name |> Seq.to_list in *)
+    (*     let target_fn_name_not_resolved name : bool = *)
+    (*       not @@ List.mem found_names name ~equal:String.equal in *)
+    (*     let problematic_fn_names = Set.filter toresolve *)
+    (*                                  ~f:target_fn_name_not_resolved *)
+    (*                                |> Set.to_list in *)
+    (*     let problematic_names_str = List.to_string problematic_fn_names ~f:(fun x -> x) in *)
+    (*     failwith @@ sprintf *)
+    (*                   "[Config] get_target_fns_exn: couldn't find function symbol in the target object file for targetted functions: %s" problematic_names_str *)
+    (* else target_subs *)
 
   let pp c =
     printf "init_fns: %s\n%!" @@ List.to_string ~f:(fun x -> x) (Set.to_list c.init_fns);
