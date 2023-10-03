@@ -7,6 +7,8 @@ module KB = Bap_core_theory.KB
 
 open KB.Monad_infix
 
+let src = Uc_log.create_src "config"
+
 (* 
    config_file ::= ( init_fn )* ( analyze_fn ) ( analyze_fn )*
 
@@ -46,36 +48,56 @@ module T = struct
     | Some arg_indices -> Some (Set.to_list arg_indices)
     | None -> None
 
+  let filename proj = Option.value_exn @@ Project.get proj filename
+
   let get_all_named_symbols proj toresolve =
     let resolved = ref [] in
-    let filename = Option.value_exn (Project.get proj filename) in
-    let () = Toplevel.exec begin
-      Theory.Unit.for_file filename >>= fun unit ->
-      KB.collect Image.Spec.slot unit >>= fun ogre ->
-      let query = Ogre.Query.(select @@ from Image.Scheme.named_symbol) in
-      match Ogre.eval (Ogre.collect query) ogre with
-      | Error err ->
-        failwith @@ sprintf "[Config] named symbols : %s"
-                      (Error.to_string_hum err)
-      | Ok qr ->
-        let targeted = Seq.filter qr ~f:(fun (_, sym) -> Set.mem toresolve sym) in
-        let is_targeted addr =
-          Seq.find targeted ~f:(fun x -> Int64.equal addr @@ fst x) in
-        KB.objects Theory.Program.cls >>= fun tids ->
-        KB.Seq.iter tids ~f:(fun tid ->
-          KB.collect Theory.Label.addr tid >>= function
-          | None -> KB.return ()
-          | Some addr ->
-            let addr = Bitvec.to_int64 addr in
-            match is_targeted addr with
-            | None -> KB.return ()
-            | Some (_, orig_sym) ->
-              KB.collect Theory.Label.aliases tid >>= fun aliases ->
-              let base_set = List.Assoc.find !resolved orig_sym
-                               ~equal:String.equal
-                             |> Option.value ~default:(Set.empty (module String)) in
-              let aliases = Set.union base_set aliases in
-              KB.return (resolved := (orig_sym, aliases) :: !resolved)) end in
+    let filename = filename proj in
+    Logs.debug ~src (fun m ->
+      m "%a" KB.pp_state (Toplevel.current ()));
+    (Toplevel.exec begin
+       Theory.Unit.for_file filename >>= fun unit ->
+       KB.collect Image.Spec.slot unit >>= fun ogre_doc ->
+       let query = Ogre.Query.(select @@ from Image.Scheme.named_symbol) in
+       match Ogre.eval (Ogre.collect query) ogre_doc with
+       | Error err ->
+         failwith @@
+         sprintf "[Config] named symbols : %s" (Error.to_string_hum err)
+       | Ok qr ->
+         let targeted = Seq.filter qr
+                          ~f:(fun (addr, sym) -> Set.mem toresolve sym)
+         in
+         Seq.iter targeted ~f:(fun (addr, sym) ->
+           Logs.debug ~src (fun m -> m "toresolve: %a, %s" Int64.pp addr sym));
+         let is_targeted addr =
+           Seq.find targeted ~f:(fun (oaddr, _name) ->
+             Int64.equal addr oaddr)
+         in
+         KB.objects Theory.Program.cls >>= fun tids ->
+         KB.Seq.iter tids ~f:(fun tid ->
+           KB.collect Theory.Label.addr tid >>= function
+           | None -> KB.return ()
+           | Some addr ->
+             let addr = Bitvec.to_int64 addr in
+             match is_targeted addr with
+             | None -> KB.return ()
+             | Some (_, orig_sym) ->
+               Logs.debug ~src (fun m -> m "tid %a has addr %a" Tid.pp tid Int64.pp addr);
+               Logs.debug ~src (fun m -> m "that sym is: %s" orig_sym);
+               KB.collect Theory.Label.aliases tid >>= fun aliases ->
+               Logs.debug ~src (fun m -> m "that tid's aliases are:");
+               Set.iter aliases ~f:(fun als ->
+                 Logs.debug ~src (fun m -> m "\t%s" als));
+               let base_set = List.Assoc.find !resolved orig_sym
+                                ~equal:String.equal
+                              |> Option.value ~default:(Set.empty (module String)) in
+               Logs.debug ~src (fun m -> m "base set is:");
+               Set.iter base_set ~f:(fun als ->
+                 Logs.debug ~src (fun m -> m "\t%s" als));
+               let aliases = Set.union base_set aliases in
+               KB.return (resolved := (orig_sym, aliases) :: !resolved)) end);
+    Logs.debug ~src (fun m ->
+      m "%a" KB.pp_state (Toplevel.current ()));
     !resolved
 
 
@@ -87,20 +109,23 @@ module T = struct
       let name = Sub.name sub in
       Set.mem target_fn_names name) in
     let find_sub_by_name name =
-      Seq.find subs ~f:(fun s -> Sub.name s |> String.equal name) in
+      Seq.find subs ~f:(fun s -> Sub.name s |> String.equal name)
+    in
     let find_first_valid_alias alias_set =
       let rec loop = function
         | [] -> None
         | a :: aliases -> begin match find_sub_by_name a with
           | None -> loop aliases
           | Some s -> Some s end in
-      loop @@ Set.to_list alias_set in
+      loop @@ Set.to_list alias_set
+    in
     if Seq.length target_subs <> Set.length target_fn_names
     then
       let need_to_resolve = Set.filter target_fn_names ~f:(fun target ->
         let found_sub_names = Seq.map target_subs ~f:Sub.name in
         let equal = String.equal in
-        not @@ Seq.mem found_sub_names target ~equal) in
+        not @@ Seq.mem found_sub_names target ~equal)
+      in
       let symbol_aliases = get_all_named_symbols proj need_to_resolve in
       let () = printf "[Config] resolved is:\n%!";
         List.iter symbol_aliases ~f:(fun (sym, aliases) ->
