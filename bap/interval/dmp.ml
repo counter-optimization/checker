@@ -48,16 +48,16 @@ module Checker(N : Abstract.NumericDomain)
      and SAHF *)
   let check_elt sub tid lahf_sahf elt : Alert.Set.t =
     let incr_taint_stat () =
-      Uc_stats.(incr dmp_stats taint_pruned)
+      Uc_stats.Eval.(incr dmp_stats taint_pruned)
     in
     let incr_bv_stat () =
-      Uc_stats.(incr dmp_stats bv_pruned)
+      Uc_stats.Eval.(incr dmp_stats bv_pruned)
     in
     let incr_total () =
-      Uc_stats.(incr dmp_stats total)
+      Uc_stats.Eval.(incr dmp_stats total)
     in
     let incr_lahf_sahf () =
-      Uc_stats.(incr dmp_stats lahf_sahf_pruned)
+      Uc_stats.Eval.(incr dmp_stats lahf_sahf_pruned)
     in
     let could_be_tainted e =
       let is_tainted = List.exists e ~f:is_tainted in

@@ -42,51 +42,9 @@ let emp_analysis_result = {
   alerts = Alert.Set.empty
 }
 
-type t
-
 module SubSet = struct
   include Set.Make_binable_using_comparator(Sub)
 end
-
-let subs_analyzed_cls : (t, unit) KB.Class.t = KB.Class.declare
-                                                 "subs-analyzed"
-                                                 ()
-                                                 ~package:Common.package
-
-let analyzed_sub_tid_slot = KB.Class.property
-                              ~package:Common.package
-                              subs_analyzed_cls
-                              "analyzed-sub-tid"
-                              Common.tid_opt_domain
-
-let analyzed_sub_name_slot = KB.Class.property
-                               ~package:Common.package
-                               subs_analyzed_cls
-                               "analyzed-sub-name-tid"
-                               Common.string_flat_dom
-
-let get_analyzed_subnames () : Set.M(String).t =
-  let open KB.Monad_infix in
-  let subnames = ref (Set.empty (module String)) in
-  let () = Toplevel.exec begin
-    KB.objects subs_analyzed_cls >>= fun analyzed ->
-    KB.Seq.iter analyzed ~f:(fun v ->
-      KB.collect analyzed_sub_name_slot v >>= fun name ->
-      subnames := Set.add !subnames name;
-      KB.return ())
-  end
-  in
-  !subnames
-
-let record_analyzed_sub subname subtid : unit =
-  let open KB.Monad_infix in
-  Toplevel.exec begin
-    KB.Object.create subs_analyzed_cls >>= fun obj ->
-    KB.all_unit [
-      KB.provide analyzed_sub_name_slot obj subname;
-      KB.provide analyzed_sub_tid_slot obj (Some subtid)
-    ]
-  end
 
 let insns_of_node n = Blk.elts @@ Graphs.Ir.Node.label n
 let first_insn_of_blk b =
@@ -94,23 +52,6 @@ let first_insn_of_blk b =
   match Seq.hd insns with
   | Some i -> i
   | None -> failwith "In first_insn_of_blk, couldn't find first insn"
-
-let get_ret_insn_tid sub_nodes =
-  let num = Seq.length sub_nodes in
-  let last_node = Seq.nth_exn sub_nodes (num - 1) in
-  let insns = insns_of_node last_node in
-  let num_insns = Seq.length insns in
-  let res =
-    Seq.fold insns ~init:(None, 1) ~f:(fun (last, idx) insn ->
-      let next_idx = idx + 1 in
-      match idx, insn with
-      | n, `Jmp j when n = num_insns -> Some (Term.tid j), next_idx
-      | n, _ when n = num_insns -> failwith "Jmp/Ret was not last insn in sub"
-      | _, _ -> None, next_idx)
-  in
-  match res with
-  | Some tid, _ -> tid
-  | _, _ -> failwith "Error finding last insn in sub"
 
 let sub_of_tid_exn tid proj : sub Term.t =
   let prog = Project.program proj in
@@ -123,19 +64,6 @@ let sub_of_tid_exn tid proj : sub Term.t =
               Tid.pps tid
     in
     failwith e
-
-let last_insn_of_sub sub : Blk.elt =
-  let irg = Sub.to_cfg sub in
-  let rev_nodes = Graphlib.postorder_traverse (module Graphs.Ir) irg in
-  let last_node = match Seq.hd rev_nodes with
-    | Some n -> n
-    | None ->
-      let sub_name = Sub.name sub in
-      let err_s = sprintf "Couldn't get last node of sub %s in last_insns_of_sub" sub_name in
-      failwith err_s in
-  let last_node_insns = insns_of_node last_node in
-  let num_insns = Seq.length last_node_insns in
-  Seq.nth_exn last_node_insns (num_insns - 1)
 
 (* this is for handling special cases ffrom heavily optimized
    assembly: the case where a function is really just a label
@@ -225,8 +153,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
   let subname = Sub.name sub in
   let subtid = Term.tid sub in
   
-  printf "[Driver] Running analysis on sub %s\n%!" subname;
-  record_analyzed_sub subname subtid;
+  Logs.info ~src (fun m -> m "Analyzing %s" subname);
+  Uc_stats.AnalysisInfo.record_analyzed_sub subname subtid;
   
   let should_dump_bir = Extension.Configuration.get ctxt Common.debug_dump in
   do_ ~if_:should_dump_bir ~default:() (fun () ->
@@ -250,7 +178,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     
     let start = Analysis_profiling.record_start_time () in
 
-    let irg = Sub.to_cfg sub in
+    (* let irg = Sub.to_cfg sub in *)
     (* let irg_first_blk = match Term.first blk_t sub with *)
     (*   | Some blk -> IrCfg.Node.create blk *)
     (*   | None -> failwith @@ sprintf "Sub %s has no basic blocks" subname in *)
@@ -620,10 +548,6 @@ let check_config config img ctxt proj : unit =
                                 Word.pp addr
                                 Word.pp data));
 
-  let () = printf "Computing all return insns:\n%!" in
-  let () = ReturnInsnsGetter.compute_all_returns () in
-  let () = printf "Done.\n%!" in
-
   let () = printf "Computing flag ownership:\n%!" in
   let flagownership = Flag_ownership.run () in
   let () = printf "Done.\n%!" in
@@ -711,9 +635,9 @@ let check_config config img ctxt proj : unit =
   
   Logs.info ~src (fun m -> m "Done processing all functions");
   
-  Uc_stats.(info_print cs_stats "cs stats");
-  Uc_stats.(info_print ss_stats "ss stats");
-  Uc_stats.(info_print dmp_stats "dmp stats");
+  Uc_stats.Eval.(info_print cs_stats "cs stats");
+  Uc_stats.Eval.(info_print ss_stats "ss stats");
+  Uc_stats.Eval.(info_print dmp_stats "dmp stats");
 
   let unsupported_count = res.num_removed in
   Logs.info ~src (fun m ->

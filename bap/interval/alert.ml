@@ -281,10 +281,9 @@ module SubNameResolverFiller = struct
     String.Caseless.is_prefix ~prefix:unresolved_prefix
 
   let get_name_for_resolving alert =
-    Option.bind alert.sub_name ~f:(fun name ->
-      if has_unres_prefix name
-      then Some name
-      else None)
+    let open Option.Monad_infix in
+    alert.sub_name >>= fun name ->
+    if has_unres_prefix name then Some name else None
 
   let needs_resolving alert =
     match alert.sub_name with
@@ -366,20 +365,24 @@ module SubNameResolverFiller = struct
             { a with sub_name = Some newname }
           | _ -> failwith "impossible"
     in
-    let toresolve = Set.fold alerts ~init:SS.empty
+    let toresolve = Set.fold alerts ~init:String.Set.empty
                       ~f:(fun toresolve a ->
                         match get_name_for_resolving a with
-                        | Some n -> SS.add toresolve n
+                        | Some n -> String.Set.add toresolve n
                         | None -> toresolve) in
     Logs.info ~src (fun m ->
       m "[Alerts] trying to resolve sub names:\n");
-    SS.iter toresolve ~f:(fun n -> Logs.info ~src (fun m -> m "\t%s" n));
-    let symbol_aliases = Config.get_all_named_symbols proj toresolve in
-    let () = printf "[Config] resolved is:\n%!";
-      List.iter symbol_aliases ~f:(fun (sym, aliases) ->
-        printf "\t%s ~~> %s\n%!" sym @@
-        (SS.to_list aliases |> List.to_string ~f:(fun x -> x))) in
-    Set.map alerts ~f:(set_for_alert symbol_aliases)
+    String.Set.iter toresolve ~f:(fun n -> Logs.info ~src (fun m -> m "\t%s" n));
+    let none_to_resolve = String.Set.is_empty toresolve in
+    if none_to_resolve
+    then alerts
+    else
+      let symbol_aliases = Config.get_all_named_symbols proj toresolve in
+      let () = printf "[Config] resolved is:\n%!";
+        List.iter symbol_aliases ~f:(fun (sym, aliases) ->
+          printf "\t%s ~~> %s\n%!" sym @@
+          (SS.to_list aliases |> List.to_string ~f:(fun x -> x))) in
+      Set.map alerts ~f:(set_for_alert symbol_aliases)
 end
 
 module InsnIdxFiller = struct

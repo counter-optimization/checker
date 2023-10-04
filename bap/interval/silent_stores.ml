@@ -29,10 +29,10 @@ module Checker(N : Abstract.NumericDomain)
     subname;
   }
 
-  let estats_incr_total_considered st = Uc_stats.(incr ss_stats total)
-  let estats_incr_taint_pruned st = Uc_stats.(incr ss_stats taint_pruned)
-  let estats_incr_interval_pruned st = Uc_stats.(incr ss_stats interval_pruned)
-  let estats_incr_symex_pruned st = Uc_stats.(incr ss_stats symex_pruned)
+  let estats_incr_total_considered st = Uc_stats.Eval.(incr ss_stats total)
+  let estats_incr_taint_pruned st = Uc_stats.Eval.(incr ss_stats taint_pruned)
+  let estats_incr_interval_pruned st = Uc_stats.Eval.(incr ss_stats interval_pruned)
+  let estats_incr_symex_pruned st = Uc_stats.Eval.(incr ss_stats symex_pruned)
       
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with

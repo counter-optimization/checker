@@ -21,9 +21,9 @@ module Checker(N : Abstract.NumericDomain)
   let emp = Alert.Set.empty
   let init_st subname tid term = {tid;subname;term}
 
-  let estats_incr_total_considered st = Uc_stats.(incr cs_stats total)
-  let estats_incr_taint_pruned st = Uc_stats.(incr cs_stats taint_pruned)
-  let estats_incr_interval_pruned st = Uc_stats.(incr cs_stats interval_pruned)
+  let estats_incr_total_considered st = Uc_stats.Eval.(incr cs_stats total)
+  let estats_incr_taint_pruned st = Uc_stats.Eval.(incr cs_stats taint_pruned)
+  let estats_incr_interval_pruned st = Uc_stats.Eval.(incr cs_stats interval_pruned)
                                          
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with

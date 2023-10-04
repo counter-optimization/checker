@@ -9,6 +9,8 @@ module KB = Bap_knowledge.Knowledge
 
 open Abstract
 
+let src = Uc_log.create_src "callees"
+
 (* gets callees one-level deep.
    in the call graph, each node of the graph is a term id (Tid).
    the call graph only includes direct calls.
@@ -43,10 +45,6 @@ module Getter(N : NumericDomain) = struct
     match N.get Wrapping_interval.key with
     | Some f -> f
     | None -> failwith "callees.get_intvl: Couldn't extract interval information out of product domain"
-
-  let is_ret_branch (j : jmp term) (ret_insn_tids : ReturnInsnsGetter.t) : bool =
-    let jmp_tid = Term.tid j in
-    ReturnInsnsGetter.is_return ret_insn_tids jmp_tid
 
   let sub_name_of_tid_exn (proj : Project.t) (tid : Tid.t) : string =
     let prog = Project.program proj in
@@ -118,12 +116,18 @@ module Getter(N : NumericDomain) = struct
             wi_err_msg in
         Or_error.error_string err_msg
 
-  let of_jmp_term (j : jmp term) (sub : sub term) (prog : Program.t) (all_ret_tids : ReturnInsnsGetter.t) sol : rel option Or_error.t =
+  let of_jmp_term (j : jmp term) (sub : sub term) (prog : Program.t) sol : rel option Or_error.t =
     let open Or_error.Monad_infix in
+    let is_ret j =
+      let sema = Term.get_attr j Disasm.insn in
+      match sema with
+      | Some sema -> Insn.is Insn.return sema
+      | None -> false
+    in
     let caller_tid = Term.tid sub in
     let callsite_tid = Term.tid j in
     match Jmp.kind j with
-    | _ when is_ret_branch j all_ret_tids -> Ok None
+    | _ when is_ret j -> Ok None
     (* for now, direct jmps not considered a direct or indirect call *)
     | Goto (Direct totid) -> Ok None
     | Goto (Indirect exp) ->
@@ -148,12 +152,11 @@ module Getter(N : NumericDomain) = struct
   let get_callees sub proj sol : rel Or_error.t list =
     let prog = Project.program proj in
     let blks = Term.enum blk_t sub in
-    let ret_jmp_tids = ReturnInsnsGetter.get_all_returns () in
     let jmp_terms = Seq.map blks ~f:(fun b -> Term.enum jmp_t b |> Seq.to_list)
                     |> Seq.to_list
                     |> List.join in
     let callees = List.map jmp_terms ~f:(fun jt ->
-      of_jmp_term jt sub prog ret_jmp_tids sol) in
+      of_jmp_term jt sub prog sol) in
     List.filter callees ~f:(function
       | Ok maybe_cr -> Option.is_some maybe_cr
       | Error _ -> true)

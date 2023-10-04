@@ -502,7 +502,6 @@ module AbstractInterpreter(N: NumericDomain)
         let bv = Abstract_bitvector.make_top 64 false
                  |> Abstract_bitvector.set_60_bit in
         let smalloc_return = Abstract_bitvector.set_in_prod N.set N.top bv in
-        printf "[Abstract] setting return value of smalloc bv to: %s\n%!" (N.to_string smalloc_return);
         E.havoc_on_call st |>
         E.set Common.ABI.return_reg smalloc_return
       | _ -> E.havoc_on_call st in

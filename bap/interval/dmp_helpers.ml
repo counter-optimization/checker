@@ -21,6 +21,11 @@ let checker_blacklisted_fns = ["smalloc";
                                "smemcpy";
                                "handle64BitStore"]
 
+type subname = string
+let is_blacklisted (name : subname) : bool =
+  let prefix = "__mrd_global_ctor" in
+  String.Caseless.is_prefix ~prefix name
+
 let smalloc_addr_clz : (t, unit) KB.cls = KB.Class.declare
                                             ~public:true
                                             ~package

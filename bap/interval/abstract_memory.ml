@@ -6,6 +6,8 @@ module ABI = Common.ABI
 
 open Abstract
 
+let src = Uc_log.create_src "abstractmemory"
+
 (* This is an implementation based on the paper 'Field-Sensitive Value *)
 (* Analysis of Embedded C Programs with Union Types and Pointer *)
 (* Arithmetics'. *)
@@ -459,8 +461,9 @@ module Make(N : NumericDomain)
     Set.filter mem.cells ~f:(C.overlaps cell)
 
   let load_global (offs : Wrapping_interval.t) (sz : size) (m : t) : N.t err =
-    printf "[DebugMemory] loading global sz %d at offset %s\n%!"
-      (bap_size_to_int sz) (Wrapping_interval.to_string offs);
+    Logs.debug ~src (fun m -> m "loading global sz %d at offset %s\n%!"
+                                (bap_size_to_int sz)
+                                (Wrapping_interval.to_string offs));
     match m.img with
     | None -> Or_error.error_string "load_global: memory's image should be set before load"
     | Some img ->
@@ -554,10 +557,11 @@ module Make(N : NumericDomain)
       load_global offs size mem >>= fun data ->
       let valtype = CellType.Unknown in
       store ~offs ~region ~width ~data ~valtype mem >>= fun mem' ->
-      printf "[DebugMemory] loaded global at offs %s, width %s, size: %d\n%!"
-        (Wrapping_interval.to_string offs)
-        (Wrapping_interval.to_string width)
-        (bap_size_to_int size);
+      Logs.debug ~src
+        (fun m -> m "loaded global at offs %s, width %s, size: %d\n%!"
+                    (Wrapping_interval.to_string offs)
+                    (Wrapping_interval.to_string width)
+                    (bap_size_to_int size));
       Ok (data, { mem' with globals_read = Set.add mem'.globals_read cell })
     else
     if cell_exists ~cell ~mem

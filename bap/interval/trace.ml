@@ -850,8 +850,6 @@ module ConditionFinder = struct
 
   type tidmap = Edge_builder.tidmap
 
-  type dep_analysis = Dependency_analysis.t
-
   type prereqs = {
     rpo_traversal : rpo_traversal;
     tidmap : tidmap;
