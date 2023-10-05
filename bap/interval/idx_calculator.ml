@@ -131,15 +131,9 @@ let build_idx_map_for_blk basic_blk idx_map : (idx Tid_map.t * Set.M(Tid).t) =
     then (idx_map, idx_insn_tids)
     else
       let curdef = Seq.hd_exn defterms in
-      (* let () = printf "Processing def term: %a\n%!" Def.ppo curdef in *)
       let rest_defs = Option.value_exn (Seq.tl defterms) in
       let lhs = Def.lhs curdef in 
       let assigned_var = Var.name lhs in
-      (* let () = printf "Var assigned is: %s\n%!" assigned_var in *)
-      (* let () = if Option.is_some cur_idx *)
-      (*          then printf "Cur idx is %d\n%!" @@ Option.value_exn cur_idx *)
-      (*          else printf "No cur idx\n%!" *)
-      (* in *)
       let rhs = Def.rhs curdef in
       let env = try_assigning_consts lhs rhs env in
       let current_tid = Term.tid curdef in
@@ -148,15 +142,10 @@ let build_idx_map_for_blk basic_blk idx_map : (idx Tid_map.t * Set.M(Tid).t) =
         let cur_idx = get_idx_from_idx_insn_rhs rhs env current_tid in
         let idx_insn_tids = Set.add idx_insn_tids current_tid in
         let is_idx_insn_flags = true in
-        (* let () = printf "New cur_idx is: %d\n%!" cur_idx in *)
-        (* let () = printf "Tid %a is an idx insn\n%!" Tid.ppo current_tid in *)
-        (* let () = printf "Setting is_idx_insn_flags %B\n%!" is_idx_insn_flags in *)
         loop ~is_idx_insn_flags rest_defs (Some cur_idx) idx_map idx_insn_tids env
       else
         let cur_is_flag = Common.AMD64SystemVABI.var_name_is_flag assigned_var in
         let is_flag_of_idx_insn = is_idx_insn_flags && cur_is_flag in
-        (* let () = printf "not sbb insns, is it a flag?: %B\n%!" cur_is_flag in *)
-        (* let () = printf "not sbb insns, is it a flag of idx insn?: %B\n%!" is_flag_of_idx_insn in *)
         if is_flag_of_idx_insn
         then
           let idx_insn_tids = Set.add idx_insn_tids current_tid in

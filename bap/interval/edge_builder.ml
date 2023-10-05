@@ -46,27 +46,6 @@ let from_ : edge -> Tid.t = function
 let to_ : edge -> Tid.t = function
   | (from', to', _is_interproc) -> to'
 
-let iter_insns sub : unit =
-  let irg = Sub.to_cfg sub in
-  let free_vars = Sub.free_vars sub in
-  let () = Var.Set.iter free_vars ~f:(fun v -> Format.printf "Free var: %s\n%!" (Var.name v)) in
-
-  let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
-
-  let print_sub_defs graphnode =
-    let bb = Graphs.Ir.Node.label graphnode in
-    let insns = Blk.elts bb in
-    let print_insn = function
-      | `Def d -> Format.printf "iter_insns--Def: %s\n%!" @@ Def.to_string d
-      | `Phi p -> Format.printf "iter_insns--Phi: %s\n%!" @@ Phi.to_string p
-      | `Jmp j -> Format.printf "iter_insns--Jmp: %s\n%!" @@ Jmp.to_string j
-    in
-    Seq.iter insns ~f:print_insn
-  in
-
-  let () = Format.printf "nodes are:\n%!" in
-  Seq.iter nodes ~f:print_sub_defs
-
 let to_cc_edge ((from', to', is_interproc) : edge) : cc_edge =
   let c = Calling_context.of_tid in
   (c from', c to', is_interproc)
@@ -99,11 +78,6 @@ let insns_of_node n idx_st =
     | `Def d ->
       let tid = Term.tid d in
       let part_of_indexing = Idx_calculator.is_part_of_idx_insn idx_st tid in
-      (* let () = if part_of_indexing *)
-      (*          then *)
-      (*            printf "in Edge_builder.insns_of_node: skipping idx insn def: %a\n%!" Def.ppo d *)
-      (*          else *)
-      (*            printf "in Edge_builder.insns_of_node: keeping def: %a\n%!" Def.ppo d in *)
       not part_of_indexing
     | _ -> true)
 

@@ -31,6 +31,7 @@ module TraceDir = Trace.Directives(FinalDomain)(E)
 module TraceEnv = Trace.Env(FinalDomain)(E)
 
 let src = Uc_log.create_src "Driver"
+let header = Uc_log.create_header src
 
 type analysis_result = {
   callees : CRS.t;
@@ -191,26 +192,30 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let () = Analysis_profiling.record_duration_for subname CfgCreation stop in
 
     (* here, liveness means classical dataflow liveness *)
-    let () = printf "Running classical dataflow liveness 1\n%!" in
+    Logs.info ~src (fun m ->
+      m ~header "Running classical dataflow liveness 1");
     let start = Analysis_profiling.record_start_time () in
     let dataflow_liveness = Liveness.run_on_cfg (module G) cfg tidmap in
     let stop = Analysis_profiling.record_stop_time start in
     let () = Analysis_profiling.record_duration_for subname ClassicLivenessOne stop in
-    let () = printf "Done running classical dataflow liveness 1\n%!" in
+    Logs.info ~src (fun m ->
+      m ~header "Done running classical dataflow liveness 1");
 
     let start = Analysis_profiling.record_start_time () in
     let dead_defs = Liveness.get_dead_defs dataflow_liveness tidmap in
     let edges = Edge_builder.remove_dead_defs edges dead_defs in
     let cfg = Graphlib.create (module G) ~edges () in
     let stop = Analysis_profiling.record_stop_time start in
-    let () = Analysis_profiling.record_duration_for subname RemoveDeadFlagDefs stop in
+    Analysis_profiling.record_duration_for subname RemoveDeadFlagDefs stop;
 
-    let () = printf "Running classical dataflow liveness 2\n%!" in
+    Logs.info ~src (fun m ->
+      m ~header "Running classical dataflow liveness 2");
     let start = Analysis_profiling.record_start_time () in
     let dataflow_liveness = Liveness.run_on_cfg (module G) cfg tidmap in
     let stop = Analysis_profiling.record_stop_time start in
-    let () = Analysis_profiling.record_duration_for subname ClassicLivenessTwo stop in
-    let () = printf "Done running classical dataflow liveness 2\n%!" in
+    Analysis_profiling.record_duration_for subname ClassicLivenessTwo stop;
+    Logs.info ~src (fun m ->
+      m ~header "Done running classical dataflow liveness 1");
 
     (* dmp checker specific *)
     let start = Analysis_profiling.record_start_time () in
@@ -404,6 +409,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                      "in calculating analysis_results, couldn't find tid %a in tidmap"
                                      Tid.pps tid in
                                let st = dmp_bt_set tid st in
+                               Logs.debug ~src (fun m -> m "denoting elt %a" Tid.pp tid);
                                TraceAbsInt.denote_elt subname directive_map elt st
                                (* fun st -> *)
                                (*   printf "[Driver] denoting elt %a\n%!" Tid.ppo tid; *)
