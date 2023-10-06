@@ -11,7 +11,11 @@ open KB.Monad_infix
 type reason = CompSimp | SilentStores | Dmp | None
 [@@deriving sexp, bin_io, compare, equal]
 
-let src = Uc_log.create_src "alert"
+let log_prefix = sprintf "%s.alert" Common.package
+module L = struct
+  include Dolog.Log
+  let () = set_prefix log_prefix
+end
 
 let string_of_reason = function
   | CompSimp -> "comp-simp"
@@ -370,9 +374,8 @@ module SubNameResolverFiller = struct
                         match get_name_for_resolving a with
                         | Some n -> String.Set.add toresolve n
                         | None -> toresolve) in
-    Logs.info ~src (fun m ->
-      m "[Alerts] trying to resolve sub names:\n");
-    String.Set.iter toresolve ~f:(fun n -> Logs.info ~src (fun m -> m "\t%s" n));
+    L.info "trying to resolve sub names:";
+    String.Set.iter toresolve ~f:(L.info "\t%s");
     let none_to_resolve = String.Set.is_empty toresolve in
     if none_to_resolve
     then alerts

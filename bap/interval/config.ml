@@ -7,7 +7,11 @@ module KB = Bap_core_theory.KB
 
 open KB.Monad_infix
 
-let src = Uc_log.create_src "config"
+let log_prefix = sprintf "%s.config" Common.package
+module L = struct
+  include Dolog.Log
+  let () = set_prefix log_prefix
+end
 
 (* 
    config_file ::= ( init_fn )* ( analyze_fn ) ( analyze_fn )*
@@ -66,9 +70,8 @@ module T = struct
       | None -> (res, String.Set.add unres name))
 
   let get_all_named_symbols proj toresolve =
-    Logs.info ~src (fun m ->
-      m "get_all_named_symbols toresolve is: %s"
-        (Set.to_list toresolve |> List.to_string ~f:Fn.id));
+    L.info "get_all_named_symbols toresolve is: %s"
+        (Set.to_list toresolve |> List.to_string ~f:Fn.id);
     let resolved = ref [] in
     let filename = filename proj in
     (Toplevel.exec begin
@@ -84,7 +87,7 @@ module T = struct
                           ~f:(fun (addr, sym) -> Set.mem toresolve sym)
          in
          Seq.iter targeted ~f:(fun (addr, sym) ->
-           Logs.debug ~src (fun m -> m "toresolve: %a, %s" Int64.pp addr sym));
+           L.debug "toresolve: %s, %s" (Int64.to_string addr) sym);
          let is_targeted addr =
            Seq.find targeted ~f:(fun (oaddr, _name) ->
              Int64.equal addr oaddr)
@@ -98,18 +101,17 @@ module T = struct
              match is_targeted addr with
              | None -> KB.return ()
              | Some (_, orig_sym) ->
-               Logs.debug ~src (fun m -> m "tid %a has addr %a" Tid.pp tid Int64.pp addr);
-               Logs.debug ~src (fun m -> m "that sym is: %s" orig_sym);
+               L.debug "tid %a has addr %s" Tid.ppo tid (Int64.to_string addr);
+               L.debug "that sym is: %s" orig_sym;
                KB.collect Theory.Label.aliases tid >>= fun aliases ->
-               Logs.debug ~src (fun m -> m "that tid's aliases are:");
+               L.debug "that tid's aliases are:";
                Set.iter aliases ~f:(fun als ->
-                 Logs.debug ~src (fun m -> m "\t%s" als));
+                 L.debug "\t%s" als);
                let base_set = List.Assoc.find !resolved orig_sym
                                 ~equal:String.equal
                               |> Option.value ~default:(Set.empty (module String)) in
-               Logs.debug ~src (fun m -> m "base set is:");
-               Set.iter base_set ~f:(fun als ->
-                 Logs.debug ~src (fun m -> m "\t%s" als));
+               L.debug "base set is:";
+               Set.iter base_set ~f:(L.debug "\t%s");
                let aliases = Set.union base_set aliases in
                KB.return (resolved := (orig_sym, aliases) :: !resolved)) end);
     !resolved

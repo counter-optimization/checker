@@ -6,7 +6,11 @@ module KB = Bap_knowledge.Knowledge
 
 open KB.Syntax
 
-let src = Uc_log.create_src "uc-stats"
+let log_prefix = sprintf "%s.uc_stats" Common.package
+module L = struct
+  include Dolog.Log
+  let () = set_prefix log_prefix
+end            
 
 let int_to_dom = KB.Domain.total
                    ~inspect:Int.sexp_of_t
@@ -188,8 +192,7 @@ module Eval = struct
     sprintf "{\n%s}\n" json_body
 
   let info_print statcat headermsg =
-    Logs.info ~src (fun m -> m "%s:" headermsg);
+    L.info "%s:" headermsg;
     let stats = get statcat in
-    Logs.info ~src (fun m ->
-      m "%s" @@ to_json_string stats);
+    L.info "%s" (to_json_string stats);
 end

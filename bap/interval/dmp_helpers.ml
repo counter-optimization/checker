@@ -11,7 +11,11 @@ type t
 
 let package = "uarch-checker"
 
-let src = Uc_log.create_src "Dmp_helpers"
+let log_prefix = sprintf "%s.dmp_helpers" package
+module L = struct
+  include Dolog.Log
+  let () = set_prefix log_prefix
+end
 
 let checker_blacklisted_fns = ["smalloc";
                                "sodium_smalloc";
@@ -48,9 +52,8 @@ let get_smalloc_addrs () =
 let print_smalloc_addrs () =
   Toplevel.exec begin
     get_smalloc_addrs () >>= fun addrs ->
-    Logs.debug ~src (fun m -> m "smalloc addrs are:");
-    Word.Set.iter addrs ~f:(fun addr ->
-      Logs.debug ~src (fun m -> m "\t%a" Word.pp addr));
+    L.debug "%s" "smalloc addrs are:";
+    Word.Set.iter addrs ~f:(L.debug "\t%a" Word.ppo);
     KB.return ()
   end
 
@@ -125,11 +128,11 @@ let guard_to_string {var;set;location} =
 let print_guards guards =
   let rec loop = function
     | g :: gs ->
-      Logs.debug ~src (fun m -> m "\t%s" (guard_to_string g));
+      L.debug "\t%s" (guard_to_string g);
       loop gs
     | [] -> ()
   in
-  Logs.debug ~src (fun m -> m "guards:");
+  L.debug "%s" "guards:";
   loop guards
 
 let needs_set : guard_map -> tid -> bool = Tid.Map.mem
@@ -159,9 +162,8 @@ let find_guard_points sub =
   let get_jmp_targets (insns : Blk.elt Seq.t) var =
     let fail s =
       let tid = (Seq.hd_exn insns |> elt_to_tid) in
-      Logs.err ~src
-        (fun m -> m "couldn't get jmp targets for dmp pointer bit test %s at %a"
-                    s Tid.pp tid);
+      L.error "couldn't get jmp targets for dmp pointer bit test %s at %a"
+                    s Tid.ppo tid;
       []
     in
     let bit_cleared = Seq.drop insns 6 in

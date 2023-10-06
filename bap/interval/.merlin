@@ -55,5 +55,5 @@ PKG zarith
 PKG ounit2
 PKG monads
 PKG z3
-PKG logs
 PKG lwt
+PKG dolog

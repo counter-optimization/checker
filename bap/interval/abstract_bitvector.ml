@@ -6,7 +6,11 @@ module BV = Bitvec
        
 let package = "uarch-checker"
 
-let src = Uc_log.create_src "abstract-bitvector"
+let log_prefix = sprintf "%s.abs_bv" Common.package
+module L = struct
+  include Dolog.Log
+  let () = set_prefix log_prefix
+end            
 
 type t = { bw: int;
            conc: Bitvec.t;
@@ -111,7 +115,7 @@ let join x y =
   { bw; conc; abs = abstract }
 
 let meet x y =
-  Logs.debug ~src (fun m -> m "Abstract_bitvector.meet not implemented");
+  L.debug "Abstract_bitvector.meet not implemented";
   let max_bw = Int.max x.bw y.bw in
   make_top max_bw false
     
@@ -149,11 +153,11 @@ let sexp_of_t (x : t) =
 let bitwidth { bw; _ } = bw
 
 let unimplemented op = fun x y ->
-  Logs.debug ~src (fun m -> m "Abstract.bitvector.%s unimplemented" op);
+  L.debug "Abstract.bitvector.%s unimplemented" op;
   top
 
 let unop_unimplemented op = fun x ->
-  Logs.debug ~src (fun m -> m "Abstract.bitvector.%s unimplemented" op);
+  L.debug "Abstract.bitvector.%s unimplemented" op;
   make_top x.bw false
 
 (* most of these are implemented using the tristate num operations
@@ -218,8 +222,7 @@ let logxor = unimplemented "logxor"
 let neg = unop_unimplemented "neg"
              
 let extract x hi lo =
-  Logs.debug ~src (fun m ->
-    m "Abstract_bitvector.extract unimplemented");
+  L.debug "Abstract_bitvector.extract unimplemented";
   make_top (hi - lo + 1) false
 let concat = unimplemented "concat"
 
@@ -239,23 +242,23 @@ let boolslt = unimplemented "boolslt"
 let boolsle = unimplemented "boolsle"
 
 let could_be_true _ =
-  Logs.debug ~src (fun m -> m "Abstract_bitvector.could_be_true unimplemented");
+  L.debug "Abstract_bitvector.could_be_true unimplemented";
   true
 let could_be_false _ =
-  Logs.debug ~src (fun m -> m "Abstract_bitvector.could_be_false unimplemented");
+  L.debug "Abstract_bitvector.could_be_false unimplemented";
   true
 
 let unsigned n _ =
-  Logs.debug ~src (fun m -> m "Abstract_bitvector.unsigned unimplemented");
+  L.debug "Abstract_bitvector.unsigned unimplemented";
   make_top n false
 let signed n _ =
-  Logs.debug ~src (fun m -> m "Abstract_bitvector.signed unimplemented");
+  L.debug "Abstract_bitvector.signed unimplemented";
   make_top n false
 let low n _ =
-  Logs.debug ~src (fun m -> m "Abstract_bitvector.low unimplemented");
+  L.debug "Abstract_bitvector.low unimplemented";
   make_top n false
 let high n _ =
-  Logs.debug ~src (fun m -> m "Abstract_bitvector.high unimplemented");
+  L.debug "Abstract_bitvector.high unimplemented";
   make_top n false
 
 (** checker specific. convenience *)

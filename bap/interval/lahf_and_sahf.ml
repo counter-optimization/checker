@@ -9,7 +9,11 @@ type state =
   | InsideMaybeSahf
   | Outside
 
-let src = Uc_log.create_src "lahf-sahf"
+let log_prefix = sprintf "%s.lahfsahf" Common.package
+module L = struct
+  include Dolog.Log
+  let () = set_prefix log_prefix
+end
 
 let tid_part_of_transform = Tidset.mem
 
@@ -51,9 +55,8 @@ let run_on_cfg (type g) (module G : Graph with type t = g and type node = Callin
     let elt = match Tid_map.find tidmap tid with
       | Some elt -> elt
       | None ->
-        Logs.err ~src (fun m ->
-          m "Couldnt' find tid %a in lahf_sahf run_on_cfg"
-            Tid.pp tid);
+        L.error "Couldnt' find tid %a in lahf_sahf run_on_cfg"
+          Tid.ppo tid;
         failwith "lahf_and_sahf.run_on_cfg error"
     in
     match st with
@@ -105,5 +108,4 @@ let run_on_cfg (type g) (module G : Graph with type t = g and type node = Callin
     
 let print tweens =
   printf "Insns between lahf and sahf:\n%!";
-  Tidset.iter tweens ~f:(fun tid -> Logs.debug ~src (fun m ->
-    m "\t%a" Tid.pp tid))
+  Tidset.iter tweens ~f:(L.debug "\t%a" Tid.ppo)

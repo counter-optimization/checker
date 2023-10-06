@@ -5,7 +5,11 @@ open Bap.Std
 module KB = Bap_core_theory.KB
 module T = Bap_core_theory.Theory
 
-let src = Uc_log.create_src "uarch-checker-main"
+let log_prefix = sprintf "%s.uarch_checker" Common.package
+module L = struct
+  include Dolog.Log
+  let () = set_prefix log_prefix
+end
 
 module UarchCheckerExtension = struct
   let get_target_file_name proj =
@@ -39,10 +43,9 @@ module UarchCheckerExtension = struct
     |> Out_channel.close
 
   let init_logging ctxt =
-    Uc_log.init ();
     Extension.Configuration.get ctxt
       Common.global_log_level_param
-    |> Uc_log.set_global_level
+    |> Uc_log.init
 
   let put_addrs_in_sema () =
     let open KB.Syntax in
@@ -79,7 +82,8 @@ module UarchCheckerExtension = struct
                         Common.config_file_path_param in
     let config = Config.Parser.parse_config_file
                    ~path:config_path in
-    Logs.info ~src (fun m -> m "Configured:\n");
+
+    L.info "%s" "Configured\n";
     
     put_addrs_in_sema ();
     Driver.check_config config img ctxt proj

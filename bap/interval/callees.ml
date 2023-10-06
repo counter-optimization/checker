@@ -9,7 +9,11 @@ module KB = Bap_knowledge.Knowledge
 
 open Abstract
 
-let src = Uc_log.create_src "callees"
+let log_prefix = sprintf "%s.callees" Common.package
+module L = struct
+  include Dolog.Log
+  let () = set_prefix log_prefix
+end
 
 (* gets callees one-level deep.
    in the call graph, each node of the graph is a term id (Tid).

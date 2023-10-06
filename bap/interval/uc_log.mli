@@ -1,11 +1,9 @@
 open Core_kernel
 
-val init : unit -> unit
+module L = Dolog.Log
 
-val set_global_level : Logs.level -> unit
+val init : L.log_level -> unit
 
-val bap_cl_arg_enum : (string * Logs.level) list
+val set_global_level : L.log_level -> unit
 
-val create_src : ?doc:string -> string -> Logs.src
-
-val create_header : Logs.src -> string
+val bap_cl_arg_enum : (string * L.log_level) list

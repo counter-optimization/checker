@@ -37,7 +37,13 @@ module GroupRunner(Sizer : sig val n : int end) = struct
                
   let runners = Array.create ~len:Sizer.n default_runner
 
+  type exn += TooManyRunnersRegistered of int
+  let check_num_runners () =
+    if !last = Sizer.n
+    then raise (TooManyRunnersRegistered Sizer.n)
+    
   let register_runner (type a) (module Pass : PASS with type t = a) : unit =
+    check_num_runners ();
     let r = Runner ((module Pass), Pass.default ()) in
     runners.(!last) <- r;
     Int.incr last

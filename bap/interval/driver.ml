@@ -30,8 +30,11 @@ module TraceAbsInt = Trace.AbsInt.Make(FinalDomain)(E)
 module TraceDir = Trace.Directives(FinalDomain)(E)
 module TraceEnv = Trace.Env(FinalDomain)(E)
 
-let src = Uc_log.create_src "Driver"
-let header = Uc_log.create_header src
+let log_prefix = sprintf "%s.driver" Common.package
+module L = struct
+  include Dolog.Log
+  let () = set_prefix log_prefix
+end
 
 type analysis_result = {
   callees : CRS.t;
@@ -119,18 +122,14 @@ let should_skip_analysis (edges : Edge_builder.edges)
     | _ -> failwith "in should_skip_analysis, subroutine is single instruction but non jump instruction. this case is not yet handled." 
   else None
 
-let first_insn_cc (g : Graphs.Tid.t) : Calling_context.t =
-  let entry = Graphs.Tid.start in
-  let firsts = Graphs.Tid.Node.succs entry g in
-  let first_node = if Seq.length firsts = 1
-    then
-      let first_node = Seq.hd_exn firsts in
-      Logs.debug ~src (fun m ->
-        m ~header "first node is %a" Tid.pp first_node);
-      first_node
-    else raise EntryNodeNotFound
-  in
-  Calling_context.of_tid first_node
+let first_insn_cc sub =
+  
+  let bbs = Term.enum blk_t sub in
+  Option.bind (Seq.hd bbs) ~f:(fun first_bb ->
+    let first_elt = Edge_builder.first_insn_of_blk first_bb in
+    let first_tid = Common.elt_to_tid first_elt in
+    let first_cc = Calling_context.of_tid first_tid in
+    Some first_cc)
 
 let do_ (type a) ~(if_ : bool) ~(default : a) (f : unit -> a) : a =
     if if_ then f () else default
@@ -145,16 +144,25 @@ let run_analyses sub img proj ~(is_toplevel : bool)
   let subname = Sub.name sub in
   let subtid = Term.tid sub in
   
-  Logs.info ~src (fun m -> m "Analyzing %s" subname);
+  L.info "Analyzing %s" subname;
   Uc_stats.AnalysisInfo.record_analyzed_sub subname subtid;
   
   let should_dump_bir = Extension.Configuration.get ctxt Common.debug_dump in
   do_ ~if_:should_dump_bir ~default:() (fun () ->
-    Logs.debug ~src (fun m -> m "%a" Sub.pp sub));
+    L.debug "%a" Sub.ppo sub);
   
   let prog = Project.program proj in
   let tid_graph = Sub.to_graph sub in
-  
+  (* let entry = Graphs.Tid.start in *)
+  (* let firsts = Graphs.Tid.Node.succs entry tid_graph in *)
+  (* let first_node = if Seq.length firsts = 1 *)
+  (*   then *)
+  (*     let first_node = Seq.hd_exn firsts in *)
+  (*     L.debug "first node of %s is %a" subname *)
+  (*       Tid.ppo first_node); *)
+  (*     first_node *)
+  (*   else raise EntryNodeNotFound *)
+  (* in *)
                                      
   let irg = Sub.to_cfg sub in
   let irg_rpo = Graphlib.reverse_postorder_traverse
@@ -193,14 +201,12 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let () = Analysis_profiling.record_duration_for subname CfgCreation stop in
 
     (* here, liveness means classical dataflow liveness *)
-    Logs.info ~src (fun m ->
-      m ~header "Running classical dataflow liveness 1");
+    L.info "Running classical dataflow liveness 1";
     let start = Analysis_profiling.record_start_time () in
     let dataflow_liveness = Liveness.run_on_cfg (module G) cfg tidmap in
     let stop = Analysis_profiling.record_stop_time start in
     let () = Analysis_profiling.record_duration_for subname ClassicLivenessOne stop in
-    Logs.info ~src (fun m ->
-      m ~header "Done running classical dataflow liveness 1");
+    L.info "Done running classical dataflow liveness 1";
 
     let start = Analysis_profiling.record_start_time () in
     let dead_defs = Liveness.get_dead_defs dataflow_liveness tidmap in
@@ -209,14 +215,12 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let stop = Analysis_profiling.record_stop_time start in
     Analysis_profiling.record_duration_for subname RemoveDeadFlagDefs stop;
 
-    Logs.info ~src (fun m ->
-      m ~header "Running classical dataflow liveness 2");
+    L.info "Running classical dataflow liveness 2";
     let start = Analysis_profiling.record_start_time () in
     let dataflow_liveness = Liveness.run_on_cfg (module G) cfg tidmap in
     let stop = Analysis_profiling.record_stop_time start in
     Analysis_profiling.record_duration_for subname ClassicLivenessTwo stop;
-    Logs.info ~src (fun m ->
-      m ~header "Done running classical dataflow liveness 1");
+    L.info "Done running classical dataflow liveness 1";
 
     (* dmp checker specific *)
     let start = Analysis_profiling.record_start_time () in
@@ -246,8 +250,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
       let open Abstract_bitvector in
       let tree = match Dmp_helpers.get_guard dmp_bt_guards tid with
         | Some guards ->
-          Logs.debug ~src (fun m ->
-            m "Found guard at tid %a" Tid.pp tid);
+          L.debug "Found guard at tid %a" Tid.ppo tid;
           List.fold !guards ~init:st.tree
             ~f:(fun t {var;set} ->
               TraceEnv.Tree.map t ~f:(fun st ->
@@ -256,9 +259,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                 let f = if set then set_60_bit else clear_60_bit in
                 let bv = f bv in
                 let v = set_in_prod FinalDomain.set v bv in
-                Logs.debug ~src
-                  (fun m -> m "%a bv: %s\n%!"
-                              Tid.pp tid (to_string bv));
+                L.debug "%a bv: %s\n%!" Tid.ppo tid (to_string bv);
                 E.set var v st))
         | None -> st.tree
       in
@@ -295,7 +296,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                         E.init_arg ~name:argname config sub mem) in
     
     let rpo_traversal = Graphlib.reverse_postorder_traverse (module G) cfg in
-    let first_node = first_insn_cc tid_graph in
+    let first_node = match first_insn_cc sub with
+      | Some n -> n
+      | None -> failwith "[Driver] cfg building init sol, couldn't get first node" in
 
     let stop = Analysis_profiling.record_stop_time start in
     let () = Analysis_profiling.record_duration_for subname InitEnvSetup stop in
@@ -335,9 +338,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
         dirs
       | Some combine_dir ->
         split_dir :: combine_dir :: dirs) in
-    let () = printf "[Driver] trace part dirs are:\n%!";
-      List.iter dirs ~f:(fun td ->
-        printf "\t%s\n%!" @@ TraceDir.to_string td) in
+    L.debug "trace part directives are:";
+    List.iter dirs ~f:(fun td ->
+      L.debug "\t%s" @@ TraceDir.to_string td);
     let dirs = [] in
     let directive_map = TraceDir.Extractor.to_directive_map dirs in
     let () = printf "[Driver] Done running trace part pre-analysis\n%!" in
@@ -408,7 +411,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                      "in calculating analysis_results, couldn't find tid %a in tidmap"
                                      Tid.pps tid in
                                let st = dmp_bt_set tid st in
-                               Logs.debug ~src (fun m -> m "denoting elt %a" Tid.pp tid);
+                               L.debug "denoting elt %a" Tid.ppo tid;
                                TraceAbsInt.denote_elt subname directive_map elt st
                                (* fun st -> *)
                                (*   printf "[Driver] denoting elt %a\n%!" Tid.ppo tid; *)
@@ -467,7 +470,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let defs = ref None in
     let emp = Alert.Set.empty in
 
-    Logs.info ~src (fun m -> m "Running checkers");
+    L.info "Running checkers";
     let start = Analysis_profiling.record_start_time () in
     let all_alerts = List.fold edges ~init:emp ~f:(fun alerts (_, to_cc, _) ->
       let to_tid = Calling_context.to_insn_tid to_cc in
@@ -488,9 +491,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     in
     let stop = Analysis_profiling.record_stop_time start in
     Analysis_profiling.record_duration_for subname CsChecking stop;
-    Logs.info ~src (fun m -> m "Done running checkers");
+    L.info "Done running checkers";
     
-    Logs.info ~src (fun m-> m "Running insn idx filler");
+    L.info "Running insn idx filler";
     let start = Analysis_profiling.record_start_time () in
     let all_alerts = Alert.InsnIdxFiller.set_for_alert_set idx_st all_alerts in
     let stop = Analysis_profiling.record_stop_time start in
@@ -532,7 +535,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let stop = Analysis_profiling.record_stop_time start in
 
     let () = Analysis_profiling.record_duration_for subname CalleeAnalysis stop in
-    Logs.info ~src (fun m -> m "Callee analysis finished.");
+    L.info "Callee analysis finished";
     { alerts = all_alerts;
       callees = callees; }
     
@@ -548,15 +551,13 @@ let check_config config img ctxt proj : unit =
   let init_res = Alert.Set.empty in
   
   let global_store_data = Global_function_pointers.Libsodium.Analysis.get_all_init_fn_ptr_data ctxt proj in
-  Logs.debug ~src (fun m -> m "Global stores are:");
+  L.debug "Global stores are:";
   List.iter global_store_data ~f:(fun { data; addr } ->
-    Logs.debug ~src (fun m -> m "mem[%a] <- %a"
-                                Word.pp addr
-                                Word.pp data));
+    L.debug "mem[%a] <- %a" Word.ppo addr Word.ppo data);
 
-  let () = printf "Computing flag ownership:\n%!" in
+  L.info "Computing flag ownership:";
   let flagownership = Flag_ownership.run () in
-  let () = printf "Done.\n%!" in
+  L.info "Done";
 
   let do_ss_checks = Extension.Configuration.get ctxt Common.do_ss_checks_param in
   let do_cs_checks = Extension.Configuration.get ctxt Common.do_cs_checks_param in
@@ -639,19 +640,17 @@ let check_config config img ctxt proj : unit =
   let res = Alert.RemoveUnsupportedMirOpcodes.set_for_alert_set all_alerts proj in
   let all_alerts = res.alerts in
   
-  Logs.info ~src (fun m -> m "Done processing all functions");
+  L.info "Done processing all functions";
   
   Uc_stats.Eval.(info_print cs_stats "cs stats");
   Uc_stats.Eval.(info_print ss_stats "ss stats");
   Uc_stats.Eval.(info_print dmp_stats "dmp stats");
 
   let unsupported_count = res.num_removed in
-  Logs.info ~src (fun m ->
-    m "num alerts removed due to unsupported MIR opcodes: %d"
-      unsupported_count);
+  L.info "num alerts removed due to unsupported MIR opcodes: %d"
+    unsupported_count;
   
   let csv_out_file_name = Extension.Configuration.get ctxt Common.output_csv_file_param in
-  Logs.info ~src (fun m ->
-    m "writing checker alerts to file: %s" csv_out_file_name);
+  L.info "writing checker alerts to file: %s" csv_out_file_name;
   Alert.save_alerts_to_csv_file ~filename:csv_out_file_name all_alerts;
   Analysis_profiling.print_all_times ()
