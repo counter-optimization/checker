@@ -38,6 +38,8 @@ type analysis_result = {
   alerts : Alert.Set.t;
 }
 
+type exn += EntryNodeNotFound
+
 let emp_analysis_result = {
   callees = CRS.empty;
   alerts = Alert.Set.empty
@@ -115,31 +117,20 @@ let should_skip_analysis (edges : Edge_builder.edges)
           }
       end
     | _ -> failwith "in should_skip_analysis, subroutine is single instruction but non jump instruction. this case is not yet handled." 
-  else
-    None
+  else None
 
-let last_insn_ccs sub =
-  let graph = Sub.to_graph sub in
-  let exit_edges = Graphs.Tid.edges graph
-                   |> Seq.filter ~f:(fun edge ->
-                     Graphs.Tid.Edge.label edge
-                     |> Tid.equal Graphs.Tid.exit) in
-  (* let exit_bbs = Seq.map exit_edges ~f:(fun edge -> *)
-  (*                    let from_bb = Graphs.Tid.Edge.src edge in *)
-  let () = printf "[Driver] exit edges are: \n%!";
-    Seq.iter exit_edges ~f:(fun edge ->
-      let from_ = Graphs.Tid.Edge.src edge in
-      let to_ = Graphs.Tid.Edge.dst edge in
-      printf "\t<%a, %a>\n%!" Tid.ppo from_ Tid.ppo to_) in
-  ()
-
-let first_insn_cc sub =
-  let bbs = Term.enum blk_t sub in
-  Option.bind (Seq.hd bbs) ~f:(fun first_bb ->
-    let first_elt = Edge_builder.first_insn_of_blk first_bb in
-    let first_tid = Common.elt_to_tid first_elt in
-    let first_cc = Calling_context.of_tid first_tid in
-    Some first_cc)
+let first_insn_cc (g : Graphs.Tid.t) : Calling_context.t =
+  let entry = Graphs.Tid.start in
+  let firsts = Graphs.Tid.Node.succs entry g in
+  let first_node = if Seq.length firsts = 1
+    then
+      let first_node = Seq.hd_exn firsts in
+      Logs.debug ~src (fun m ->
+        m ~header "first node is %a" Tid.pp first_node);
+      first_node
+    else raise EntryNodeNotFound
+  in
+  Calling_context.of_tid first_node
 
 let do_ (type a) ~(if_ : bool) ~(default : a) (f : unit -> a) : a =
     if if_ then f () else default
@@ -163,6 +154,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
   
   let prog = Project.program proj in
   let tid_graph = Sub.to_graph sub in
+  
+                                     
   let irg = Sub.to_cfg sub in
   let irg_rpo = Graphlib.reverse_postorder_traverse
                   (module IrCfg)
@@ -191,11 +184,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let do_dmp = Extension.Configuration.get ctxt Common.do_dmp_checks_param in
     
     let start = Analysis_profiling.record_start_time () in
-
-    (* let irg = Sub.to_cfg sub in *)
-    (* let irg_first_blk = match Term.first blk_t sub with *)
-    (*   | Some blk -> IrCfg.Node.create blk *)
-    (*   | None -> failwith @@ sprintf "Sub %s has no basic blocks" subname in *)
           
     let edges = List.map edges ~f:(Edge_builder.to_cc_edge) in
     let module G = Graphlib.Make(Calling_context)(Bool) in
@@ -307,9 +295,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                         E.init_arg ~name:argname config sub mem) in
     
     let rpo_traversal = Graphlib.reverse_postorder_traverse (module G) cfg in
-    let first_node = match first_insn_cc sub with
-      | Some n -> n
-      | None -> failwith "[Driver] cfg building init sol, couldn't get first node" in
+    let first_node = first_insn_cc tid_graph in
 
     let stop = Analysis_profiling.record_stop_time start in
     let () = Analysis_profiling.record_duration_for subname InitEnvSetup stop in
