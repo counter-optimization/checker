@@ -7,7 +7,6 @@ module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 module ABI = Common.AMD64SystemVABI
 module SS = Common.SS
-module Stats = Common.EvalStats
 
 module Checker(N : Abstract.NumericDomain)
     (Interp : Common.CheckerInterp with type t := N.t) = struct

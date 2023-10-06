@@ -72,6 +72,12 @@ let is_double_check = Extension.Configuration.flag
                         ~doc:"Is this a double-checking run?"
                         "double-check"
 
+let elt_to_tid (e : Blk.elt) : tid =
+  match e with
+  | `Jmp j -> Term.tid j
+  | `Def d -> Term.tid d
+  | `Phi p -> Term.tid p
+
 let map_diff (type a b) (m1 : (a, b, _) Map.t) (m2 : (a, b, _) Map.t)
       ~equal : a list =
   let get_same_and_differing_keys m1 m2 =
@@ -104,6 +110,12 @@ module AMD64SystemVABI = Abi.AMD64SystemVABI
 module ABI = AMD64SystemVABI
 
 let term_opt_domain : def term option KB.domain = KB.Domain.optional ~equal:Term.same "term-opt-domain"
+
+let int_flat_dom = KB.Domain.flat
+                     ~inspect:Int.sexp_of_t
+                     ~empty:(-1)
+                     ~equal:Int.equal
+                     "int-flat-dom"
 
 let string_flat_dom = KB.Domain.flat
                         ~empty:""
@@ -145,106 +157,15 @@ let int_list_opt_domain = KB.Domain.optional
                             ~equal:(List.equal Int.equal)
                             "int_list_opt_domain"
 
-module EvalStats = struct
-  type t = {
-    total_considered : int;
-    taint_pruned : int;
-    interval_pruned : int;
-    interproc_pruned : int;
-    symex_pruned : int;
-    interval_verified : int;
-    symex_verified : int;
-    unsupported_pruned : int;
-  }
+let tids_of_blk (blk : blk term) : Tid.Set.t =
+  Blk.elts blk
+  |> Seq.fold ~init:Tid.Set.empty ~f:(fun tids elt ->
+    Tid.Set.add tids @@ elt_to_tid elt)
 
-  let init = {
-    total_considered = 0;
-    taint_pruned = 0;
-    interval_pruned = 0;
-    interproc_pruned = 0;
-    symex_pruned = 0;
-    interval_verified = 0;
-    unsupported_pruned = 0;
-    symex_verified = 0;
-  }
-
-  let to_json_string s =
-    let field_to_string value name = sprintf "\"%s\" : \"%d\"" name value in
-    let total_considered = field_to_string s.total_considered "total_considered" in
-    let taint_pruned = field_to_string s.taint_pruned "taint_pruned" in
-    let interval_pruned = field_to_string s.interval_pruned "interval_pruned" in
-    let interproc_pruned = field_to_string s.interproc_pruned "interproc_pruned" in
-    let symex_pruned = field_to_string s.symex_pruned "symex_pruned" in
-    let interval_verified = field_to_string s.interval_verified "interval_verified" in
-    let symex_verified = field_to_string s.symex_verified "symex_verified" in
-    let unsupported_pruned = field_to_string s.unsupported_pruned "unsupported_pruned" in
-    let all_fields = [total_considered;
-                      taint_pruned;
-                      interval_pruned;
-                      interproc_pruned;
-                      symex_pruned;
-                      unsupported_pruned;
-                      interval_verified;
-                      symex_verified]
-    in
-    let all_fields_newlined = String.concat ~sep:"\n" all_fields in
-    let json = sprintf "{\n%s}" all_fields_newlined in
-    json
-
-  let combine x y =
-    { total_considered = x.total_considered + y.total_considered;
-      taint_pruned = x.taint_pruned + y.taint_pruned;
-      interval_pruned = x.interval_pruned + y.interval_pruned;
-      interproc_pruned = x.interproc_pruned + y.interproc_pruned;
-      symex_pruned = x.symex_pruned + y.symex_pruned;
-      interval_verified = x.interval_verified + y.interval_verified;
-      unsupported_pruned = x.unsupported_pruned + y.unsupported_pruned;
-      symex_verified = x.symex_verified + y.symex_verified }
-
-  let incr_total_considered st =
-    { st with
-      total_considered = st.total_considered + 1 }
-
-  let incr_taint_pruned st =
-    { st with
-      taint_pruned = st.taint_pruned + 1 }
-
-  let incr_interval_pruned st =
-    { st with
-      interval_pruned = st.interval_pruned + 1 }
-
-  let incr_interproc_pruned st =
-    { st with
-      interproc_pruned = st.interproc_pruned + 1 }
-
-  let incr_symex_pruned st =
-    { st with
-      symex_pruned = st.symex_pruned + 1 }
-
-  let incr_unsupported_pruned st =
-    { st with
-      unsupported_pruned = st.unsupported_pruned + 1 }
-
-  let incr_symex_verified st =
-    { st with
-      symex_verified = st.symex_verified + 1 }
-
-  let incr_interval_verified st =
-    { st with
-      interval_verified = st.interval_verified + 1 }
-end
-
-type 'a checker_res = {
-  warns : 'a;
-  cs_stats : EvalStats.t;
-  ss_stats : EvalStats.t
-}
-
-let combine_checker_res x y f =
-  { warns = f x.warns y.warns;
-    cs_stats = EvalStats.combine x.cs_stats y.cs_stats;
-    ss_stats = EvalStats.combine x.ss_stats y.ss_stats;
-  }
+let tids_of_blks (blks : blk term list) : Tid.Set.t =
+  List.fold blks ~init:Tid.Set.empty ~f:(fun tids blk ->
+    Tid.Set.union (tids_of_blk blk) tids)
+  
 
 module CalleeRel = struct
   module T = struct
@@ -506,11 +427,7 @@ let rec exp_to_string (e : Bil.exp) : string =
    | Bil.Concat (left, right) ->
      sprintf "<%s@@%s>" (exp_to_string left) (exp_to_string right))
 
-let elt_to_tid (e : Blk.elt) : tid =
-  match e with
-  | `Jmp j -> Term.tid j
-  | `Def d -> Term.tid d
-  | `Phi p -> Term.tid p
+
 
 (* technically, this way is not fully correct.
    calling jmp_is_return on a return will always

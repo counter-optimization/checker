@@ -6,12 +6,6 @@ open Monads.Std
 
 open Abstract
 
-module Stats = Common.EvalStats
-
-module DefTermSet = struct
-  include Set.Make_binable_using_comparator(Def)
-end
-
 module Checker(N : Abstract.NumericDomain)
     (Interp : Common.CheckerInterp with type t := N.t) = struct
   type st = {
@@ -99,7 +93,7 @@ module Checker(N : Abstract.NumericDomain)
         ~(n: int) ~(sub: sub term) ~(for_ : tid)
         ~(rd : Reachingdefs.t) ~(tidmap : Blk.elt Tid_map.t)
     : def term list =
-    let emp = DefTermSet.empty in
+    let emp = Def.Set.empty in
     let dt_compare left right =
       let lefttid = Term.tid left in
       let righttid = Term.tid right in
@@ -110,16 +104,16 @@ module Checker(N : Abstract.NumericDomain)
       | Some elt -> (match elt with
         | `Def d -> Some d
         | _ -> None) in
-    let rec take_n ~(n : int) ~(to_ : DefTermSet.t) from_ =
+    let rec take_n ~(n : int) ~(to_ : Def.Set.t) from_ =
       if n = 0
       then to_
       else
         match from_ with
         | [] -> to_
-        | dt :: from_' -> if DefTermSet.mem to_ dt
+        | dt :: from_' -> if Def.Set.mem to_ dt
           then take_n ~n ~to_ from_'
           else
-            let to_ = DefTermSet.add to_ dt in
+            let to_ = Def.Set.add to_ dt in
             let from_ = from_' in
             let n = n - 1 in
             take_n ~n ~to_ from_ in
@@ -129,35 +123,35 @@ module Checker(N : Abstract.NumericDomain)
       Tidset.fold uses ~init:emp ~f:(fun dts use_tid ->
         match dt_only_lookup ~tidmap ~tid:use_tid with
         | None -> dts
-        | Some defterm -> DefTermSet.add dts defterm) in
-    let rec loop ~(old: DefTermSet.t)
-              ~(added: DefTermSet.t) : DefTermSet.t =
-      let newly_added = DefTermSet.diff added old in
-      let doesnt_need_processing = DefTermSet.is_empty newly_added in
+        | Some defterm -> Def.Set.add dts defterm) in
+    let rec loop ~(old: Def.Set.t)
+              ~(added: Def.Set.t) : Def.Set.t =
+      let newly_added = Def.Set.diff added old in
+      let doesnt_need_processing = Def.Set.is_empty newly_added in
       if doesnt_need_processing
       then old
       else
-        let old_sz = DefTermSet.length old in
-        let added_sz = DefTermSet.length newly_added in
+        let old_sz = Def.Set.length old in
+        let added_sz = Def.Set.length newly_added in
         if old_sz + added_sz >= n
         then
-          let top_off_elts = DefTermSet.to_list newly_added
+          let top_off_elts = Def.Set.to_list newly_added
                              |> take_n ~n ~to_:old in
-          DefTermSet.union old top_off_elts
+          Def.Set.union old top_off_elts
         else
-          let old' = DefTermSet.union old newly_added in
-          let added' = DefTermSet.fold newly_added
+          let old' = Def.Set.union old newly_added in
+          let added' = Def.Set.fold newly_added
                          ~init:emp
                          ~f:(fun to_add dt ->
                            Set.union to_add @@ deps_of_dt dt) in
           loop ~old:old' ~added:added' in
     let start_term = Option.value_exn (dt_only_lookup ~tidmap ~tid:for_) in
-    let start = DefTermSet.singleton start_term in
+    let start = Def.Set.singleton start_term in
     let start = match prev_store with
-      | Some prev_store -> DefTermSet.add start prev_store
+      | Some prev_store -> Def.Set.add start prev_store
       | None -> start in
     loop ~old:emp ~added:start
-    |> DefTermSet.to_list
+    |> Def.Set.to_list
     |> List.sort ~compare:dt_compare
 
   let check_elt (do_symex : bool)

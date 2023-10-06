@@ -162,7 +162,20 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     Logs.debug ~src (fun m -> m "%a" Sub.pp sub));
   
   let prog = Project.program proj in
-  let idx_st = Idx_calculator.build sub in
+  let tid_graph = Sub.to_graph sub in
+  let irg = Sub.to_cfg sub in
+  let irg_rpo = Graphlib.reverse_postorder_traverse
+                  (module IrCfg)
+                  irg
+                |> Seq.map ~f:IrCfg.Node.label
+  in
+  let succ = fun t -> Graphs.Tid.Node.succs t tid_graph in
+  (* let idx_st = Idx_calculator.build sub in *)
+  let idx_st = Uc_single_shot_pass.run_single
+                 (module Idx_calculator.Pass)
+                 irg_rpo
+  in
+  let idx_st = Idx_calculator.Pass.get_state ~succ idx_st in
   let start = Analysis_profiling.record_start_time () in
   let edges, tidmap = Edge_builder.run_one sub proj idx_st in
   let stop = Analysis_profiling.record_stop_time start in
@@ -547,6 +560,7 @@ let check_config config img ctxt proj : unit =
   let worklist = SubSet.of_list @@ Sequence.to_list target_fns in
   let processed = SubSet.empty in
   let init_res = Alert.Set.empty in
+  
   let global_store_data = Global_function_pointers.Libsodium.Analysis.get_all_init_fn_ptr_data ctxt proj in
   Logs.debug ~src (fun m -> m "Global stores are:");
   List.iter global_store_data ~f:(fun { data; addr } ->

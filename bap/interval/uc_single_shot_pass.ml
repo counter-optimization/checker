@@ -4,45 +4,112 @@ open Bap.Std
 module KB = Bap_knowledge.Knowledge
 module T = Bap_core_theory.Theory
 
-module State = Monads.Std.Monad.State
+type _ key = ..
 
 module type PASS = sig
   type t
-    
-  val onjmp : jmp term -> t
-  val ondef : def term -> t
-  val onphi : phi term -> t
+  type _ key += Key : t key
+  val default : unit -> t
+  val onjmp : jmp term -> t -> t
+  val ondef : def term -> t -> t
+  val onphi : phi term -> t -> t
 end
 
-(* module IdxInsnCollector : PASS = struct *)
-(*   module TS = Tid.Set *)
-                
-(*   type state = TS.t *)
-(*   type t = (unit, state) State.t *)
-             
-(*   let is_r11 = String.Caseless.is_substring *)
-(*                  ~substring:"%r11" *)
+type runner =
+    Runner : (module PASS with type t = 'a) * 'a -> runner
 
-(*   let is_sbb = String.Caseless.is_substring *)
-(*                    ~substring:"sbbq" *)
+module DefaultPass : PASS = struct
+  type t = bool
+  type _ key += Key : t key
+  let default () = false
+  let onjmp _ _ = false
+  let ondef _ _ = false
+  let onphi _ _ = false
+end
 
-(*   let try_get_idx dt = *)
-(*     let open Option.Monad_infix in *)
-(*     Term.get_attr dt Disasm.insn >>= fun sema -> *)
-(*     KB.Value.get T.Semantics.code sema >>= fun asm -> *)
-(*     if is_sbb asm *)
-(*     then *)
-(*       let fields = String.split asm ~on:" " in *)
-(*       match fields with *)
-(*       | opcode :: idx :: reg :: [] when is_r11 reg -> *)
-(*         String.drop_prefix *)
-(*       | _ -> None *)
-(*     else None *)
+let default_runner = Runner ((module DefaultPass),
+                             DefaultPass.default ())
 
-(*   let ondef dt = *)
-(*     let sema = get_sema dt in *)
+module GroupRunner(Sizer : sig val n : int end) = struct
+  type mapper = { run : 'a. (module PASS with type t = 'a) -> 'a -> 'a }
     
+  let last = ref 0
+               
+  let runners = Array.create ~len:Sizer.n default_runner
+
+  let register_runner (type a) (module Pass : PASS with type t = a) : unit =
+    let r = Runner ((module Pass), Pass.default ()) in
+    runners.(!last) <- r;
+    Int.incr last
+
+  type ('a, 'b) eq = Eq : ('a, 'a) eq | Neq
+  type analysis_name = string
+  let check_eq (type a b)
+        (module P : PASS with type t = a)
+        (module Q : PASS with type t = b) : (a, b) eq =
+    match P.Key with
+    | Q.Key -> Eq
+    | _ -> Neq
     
-(*   let onjmp _ = State.return () *)
-(*   let onphi _ = State.return () *)
-(* end *)
+  let get_final_state (type a) (module Pass : PASS with type t = a) : a =
+    let v : a ref = ref (Pass.default ()) in
+    for ii = 0 to (Sizer.n - 1) do
+      match runners.(ii) with
+      | Runner ((module P), st) -> begin
+          match check_eq (module P) (module Pass) with
+          | Eq -> v := st
+          | Neq -> ()
+        end
+    done;
+    !v
+
+  let map {run} : unit =
+    for ii = 0 to (Sizer.n - 1) do
+      match runners.(ii) with
+      | Runner ((module Pass), st) ->
+        let st' = run (module Pass) st in
+        runners.(ii) <- Runner ((module Pass), st')
+    done
+
+  let init_states () =
+    map { run = fun (type a)
+            (module Pass : PASS with type t = a)
+            _ -> Pass.default ()
+        }
+
+  let step elt =
+    let stepfn = match elt with
+      | `Def d -> {
+          run = fun (type a)
+            (module Pass : PASS with type t=a) st ->
+            Pass.ondef d st
+        }
+      | `Jmp j -> {
+          run = fun (type a)
+            (module Pass : PASS with type t=a) st ->
+            Pass.onjmp j st
+        }
+      | `Phi p -> {
+          run = fun (type a)
+            (module Pass : PASS with type t=a) st ->
+            Pass.onphi p st
+        }
+    in
+    map stepfn
+
+  let run (blks : Blk.t Seq.t) : unit =
+    init_states ();
+    Seq.iter blks ~f:(fun blk ->
+      Blk.elts blk |> Seq.iter ~f:step);
+end
+
+let run_single (type st) (module Pass : PASS with type t = st) (blks : Blk.t Seq.t) : st =
+  let init = Pass.default () in
+  Seq.map blks ~f:(Blk.elts)
+  |> Seq.fold ~init ~f:(fun st elts ->
+    Seq.fold elts ~init:st ~f:(fun st -> function
+      | `Def d -> Pass.ondef d st
+      | `Jmp j -> Pass.onjmp j st
+      | `Phi p -> Pass.onphi p st))
+    
+
