@@ -30,12 +30,23 @@ module TraceAbsInt = Trace.AbsInt.Make(FinalDomain)(E)
 module TraceDir = Trace.Directives(FinalDomain)(E)
 module TraceEnv = Trace.Env(FinalDomain)(E)
 
+(** Single shot pass runner *)
+module GroupedAnalyses = Uc_single_shot_pass.GroupRunner(struct let n = 2 end)
+    
+let () =
+  GroupedAnalyses.register_runner
+    (module Dmp_helpers.FindSafePtrBitTestPass);
+  GroupedAnalyses.register_runner
+    (module Idx_calculator.Pass)
+
+(** Logging *)
 let log_prefix = sprintf "%s.driver" Common.package
 module L = struct
   include Dolog.Log
   let () = set_prefix log_prefix
 end
 
+(** Driver types *)
 type analysis_result = {
   callees : CRS.t;
   alerts : Alert.Set.t;
@@ -153,16 +164,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
   
   let prog = Project.program proj in
   let tid_graph = Sub.to_graph sub in
-  (* let entry = Graphs.Tid.start in *)
-  (* let firsts = Graphs.Tid.Node.succs entry tid_graph in *)
-  (* let first_node = if Seq.length firsts = 1 *)
-  (*   then *)
-  (*     let first_node = Seq.hd_exn firsts in *)
-  (*     L.debug "first node of %s is %a" subname *)
-  (*       Tid.ppo first_node); *)
-  (*     first_node *)
-  (*   else raise EntryNodeNotFound *)
-  (* in *)
                                      
   let irg = Sub.to_cfg sub in
   let irg_rpo = Graphlib.reverse_postorder_traverse
@@ -171,16 +172,21 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                 |> Seq.map ~f:IrCfg.Node.label
   in
   let succ = fun t -> Graphs.Tid.Node.succs t tid_graph in
-  (* let idx_st = Idx_calculator.build sub in *)
-  let idx_st = Uc_single_shot_pass.run_single
+
+  GroupedAnalyses.run irg_rpo;
+  let idx_st = GroupedAnalyses.get_final_state
                  (module Idx_calculator.Pass)
-                 irg_rpo
   in
+  let dmp_st = GroupedAnalyses.get_final_state
+                 (module Dmp_helpers.FindSafePtrBitTestPass)
+  in
+
   let idx_st = Idx_calculator.Pass.get_state ~succ idx_st in
   let start = Analysis_profiling.record_start_time () in
   let edges, tidmap = Edge_builder.run_one sub proj idx_st in
   let stop = Analysis_profiling.record_stop_time start in
   let () = Analysis_profiling.record_duration_for subname Edgebuilding stop in
+  
   match should_skip_analysis edges tidmap sub prog with
   | Some res ->
     printf "[Driver] Skipping analysis of single jmp subroutine %s\n%!" subname;
@@ -190,22 +196,20 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let do_cs = Extension.Configuration.get ctxt Common.do_cs_checks_param in
     let do_ss = Extension.Configuration.get ctxt Common.do_ss_checks_param in
     let do_dmp = Extension.Configuration.get ctxt Common.do_dmp_checks_param in
-    
-    let start = Analysis_profiling.record_start_time () in
-          
+
+    let start = Analysis_profiling.record_start_time () in          
     let edges = List.map edges ~f:(Edge_builder.to_cc_edge) in
     let module G = Graphlib.Make(Calling_context)(Bool) in
     let cfg = Graphlib.create (module G) ~edges () in
-    
     let stop = Analysis_profiling.record_stop_time start in
-    let () = Analysis_profiling.record_duration_for subname CfgCreation stop in
+    Analysis_profiling.record_duration_for subname CfgCreation stop;
 
     (* here, liveness means classical dataflow liveness *)
     L.info "Running classical dataflow liveness 1";
     let start = Analysis_profiling.record_start_time () in
     let dataflow_liveness = Liveness.run_on_cfg (module G) cfg tidmap in
     let stop = Analysis_profiling.record_stop_time start in
-    let () = Analysis_profiling.record_duration_for subname ClassicLivenessOne stop in
+    Analysis_profiling.record_duration_for subname ClassicLivenessOne stop;
     L.info "Done running classical dataflow liveness 1";
 
     let start = Analysis_profiling.record_start_time () in
@@ -238,37 +242,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
       Dmp_helpers.find_smalloc proj;
       Dmp_helpers.print_smalloc_addrs ());
 
-    let start = Analysis_profiling.record_start_time () in
-    let dmp_bt_guards = Dmp_helpers.find_guard_points sub in
-    let stop = Analysis_profiling.record_stop_time start in
-    Analysis_profiling.record_duration_for
-      subname
-      Analysis_profiling.DmpGuardPointAnalysis
-      stop;
-    
-    let dmp_bt_set tid (st : TraceEnv.t) : TraceEnv.t =
-      let open Abstract_bitvector in
-      let tree = match Dmp_helpers.get_guard dmp_bt_guards tid with
-        | Some guards ->
-          L.debug "Found guard at tid %a" Tid.ppo tid;
-          List.fold !guards ~init:st.tree
-            ~f:(fun t {var;set} ->
-              TraceEnv.Tree.map t ~f:(fun st ->
-                let v = E.lookup var st in
-                let bv = of_prod FinalDomain.get v in
-                let f = if set then set_60_bit else clear_60_bit in
-                let bv = f bv in
-                let v = set_in_prod FinalDomain.set v bv in
-                L.debug "%a bv: %s\n%!" Tid.ppo tid (to_string bv);
-                E.set var v st))
-        | None -> st.tree
-      in
-      { tree }
-    in
-
     (* set up initial solution *)
     let start = Analysis_profiling.record_start_time () in
-    let () = printf "[Driver] Setting up initial solution \n%!" in
+    L.info "setting up initial solution";
     let empty = E.empty in
     let stack_addr = 0x7fff_fff0 in
 
@@ -301,23 +277,55 @@ let run_analyses sub img proj ~(is_toplevel : bool)
       | None -> failwith "[Driver] cfg building init sol, couldn't get first node" in
 
     let stop = Analysis_profiling.record_stop_time start in
-    let () = Analysis_profiling.record_duration_for subname InitEnvSetup stop in
+    Analysis_profiling.record_duration_for subname InitEnvSetup stop;
 
-    let () = printf "[Driver] running reaching defs\n%!" in
+    L.info "running reaching defs";
     let start = Analysis_profiling.record_start_time () in
     let reachingdefs = Reachingdefs.run_on_cfg (module G) cfg sub tidmap flagownership first_node in
     let stop = Analysis_profiling.record_stop_time start in
-    let () = Analysis_profiling.record_duration_for subname ReachingDefs stop in
-    let () = printf "[Driver] done running reaching defs\n%!" in
+    Analysis_profiling.record_duration_for subname ReachingDefs stop;
+    L.info "done running reaching defs";
+
+    let start = Analysis_profiling.record_start_time () in
+    let dmp_bt_guards = Dmp_helpers.FindSafePtrBitTestPass.get_guard_points
+                          dmp_st
+                          reachingdefs
+                          Reachingdefs.users_transitive_closure
+    in
+    let stop = Analysis_profiling.record_stop_time start in
+    Analysis_profiling.record_duration_for
+      subname
+      Analysis_profiling.DmpGuardPointAnalysis
+      stop;
+    
+    let dmp_bt_set tid (st : TraceEnv.t) : TraceEnv.t =
+      let open Abstract_bitvector in
+      let tree = match Dmp_helpers.get_guard dmp_bt_guards tid with
+        | Some guards ->
+          L.debug "Found guard at tid %a" Tid.ppo tid;
+          List.fold !guards ~init:st.tree
+            ~f:(fun t {var;set} ->
+              TraceEnv.Tree.map t ~f:(fun st ->
+                let v = E.lookup var st in
+                let bv = of_prod FinalDomain.get v in
+                let f = if set then set_60_bit else clear_60_bit in
+                let bv = f bv in
+                let v = set_in_prod FinalDomain.set v bv in
+                L.debug "%a bv: %s\n%!" Tid.ppo tid (to_string bv);
+                E.set var v st))
+        | None -> st.tree
+      in
+      { tree }
+    in
 
     let stop = Analysis_profiling.record_stop_time start in
-    let () = Analysis_profiling.record_duration_for
-               subname
-               NewDependenceAnalysis
-               stop in
-    let () = printf "Done running dependency analysis\n%!" in
+    Analysis_profiling.record_duration_for
+      subname
+      NewDependenceAnalysis
+      stop;
+    L.info "Done running dependency analysis";
 
-    let () = printf "[Driver] running trace part pre-analysis\n%!" in
+    L.info "running trace part pre-analysis";
     let cond_scrape_st = Trace.ConditionFinder.init
                            ~rpo_traversal
                            ~tidmap
@@ -343,10 +351,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
       L.debug "\t%s" @@ TraceDir.to_string td);
     let dirs = [] in
     let directive_map = TraceDir.Extractor.to_directive_map dirs in
-    let () = printf "[Driver] Done running trace part pre-analysis\n%!" in
+    L.info "done running trace part pre-analysis";
 
-    let () = printf "[Driver] Running trace part abstract interpreter\n%!" in
-
+    L.info "running trace part abstract interpreter";
     let start = Analysis_profiling.record_start_time () in
 
     let init_trace_env = TraceEnv.default_with_env final_env in
@@ -356,51 +363,14 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                          ~key:first_node
                          ~data:init_trace_env in
     let init_sol = Solution.create init_mapping TraceEnv.empty in
-
-    (* let init_mapping = IrCfg.Node.Map.set *)
-    (*                      IrCfg.Node.Map.empty *)
-    (*                      ~key:irg_first_blk *)
-    (*                      ~data:init_trace_env in *)
-    (* let init_sol = Solution.create init_mapping TraceEnv.empty in *)
-
-    (* let tid_level_data : ((tid, TraceEnv.t, _) Map.t) ref = ref (Map.empty (module Tid)) in *)
     
     let analysis_results = Graphlib.fixpoint
-                             (* (module IrCfg) *)
-                             (* irg *)
                              (module G)
                              cfg
                              ~step:TraceEnv.widen_with_step
                              ~init:init_sol
                              ~equal:TraceEnv.equal
                              ~merge:TraceEnv.merge
-                             (* ~f:(fun node inenv -> *)
-                             (*   let blk = IrCfg.Node.label node in *)
-                             (*   printf "[Fixpoint] at blk %a, inenv:\n%!" Tid.ppo (Term.tid blk); *)
-                             (*   TraceEnv.pp inenv; *)
-                             (*   printf "\n%!"; *)
-                             (*   let elts = Blk.elts blk in *)
-                             (*   let outenv = Seq.fold elts ~init:inenv ~f:(fun inenv elt -> *)
-                             (*     let elt_tid = elt_to_tid elt in *)
-                             (*     if Idx_calculator.is_part_of_idx_insn idx_st elt_tid *)
-                             (*     then inenv *)
-                             (*     else match elt with *)
-                             (*       | `Def d -> *)
-                             (*         printf "[Debug] interpreting tid %a\n%!" Tid.ppo elt_tid; *)
-                             (*         tid_level_data := Map.set !tid_level_data ~key:elt_tid ~data:inenv; *)
-                             (*         TraceAbsInt.denote_elt subname directive_map elt inenv *)
-                             (*       | _ -> inenv) in *)
-                             (*   let in_envs = TraceEnv.Tree.map_list Fn.id inenv.tree in *)
-                             (*   let out_envs = TraceEnv.Tree.map_list Fn.id outenv.tree in *)
-                             (*   printf "[Debug] # in_envs: %d, # out_envs: %d\n%!" (List.length in_envs) (List.length out_envs); *)
-                             (*   (match List.zip in_envs out_envs with *)
-                             (*    | Ok zipped -> *)
-                             (*      let env_diffs = List.map zipped ~f:(fun (i, o) -> *)
-                             (*        printf "[Debug] abs mem equal?: %B\n%!" (E.equal i o); *)
-                             (*        E.differs i o) in *)
-                             (*      printf "[Debug] env_diffs: %s\n%!" (List.to_string env_diffs ~f:(List.to_string ~f:Fn.id)) *)
-                             (*    | Unequal_lengths -> printf "[Debug] unequal lengths\n%!"); *)
-                             (*   outenv) in *)
                              ~f:(fun cc st ->
                                let tid = Calling_context.to_insn_tid cc in
                                let elt = match Tid_map.find tidmap tid with
@@ -412,34 +382,12 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                      Tid.pps tid in
                                let st = dmp_bt_set tid st in
                                L.debug "denoting elt %a" Tid.ppo tid;
-                               TraceAbsInt.denote_elt subname directive_map elt st
-                               (* fun st -> *)
-                               (*   printf "[Driver] denoting elt %a\n%!" Tid.ppo tid; *)
-                               (*   printf "[Driver] instate:\n%!"; *)
-                               (*   TraceEnv.pp st; *)
-                               (*   TraceAbsInt.denote_elt subname directive_map elt st *)) in
-    
-    (* let analysis_results = Myfixpoint.compute *)
-    (*                          (module IrCfg) *)
-    (*                          irg *)
-    (*                          ~step:TraceEnv.widen_with_step *)
-    (*                          ~init:init_sol *)
-    (*                          ~equal:TraceEnv.equal *)
-    (*                          ~merge:TraceEnv.merge *)
-    (*                          ~f:(fun blk inenv inmap -> *)
-    (*                            let blk = IrCfg.Node.label blk in *)
-    (*                            let elts = Term.enum def_t blk in *)
-    (*                            let (final_env, final_map) = *)
-    (*                              Seq.fold elts *)
-    (*                                ~init:(inenv, inmap) *)
-    (*                                ~f:(fun (inenv, inmap) elt -> *)
-    (*                                  let outenv = TraceAbsInt.denote_elt subname directive_map elt inenv in *)
-    (*                                  let elt_tid = elt_to_tid elt in *)
-    (*                                  (outenv, Map.set inmap ~key:elt_tid ~data:inenv))) in  *)
+                               TraceAbsInt.denote_elt subname directive_map elt st)
+    in
 
-    let () = printf "[Driver] Done running trace part abstract interpreter\n%!" in
+    L.info "done running trace part abstract interpreter\n%!";
     let stop = Analysis_profiling.record_stop_time start in
-    let () = Analysis_profiling.record_duration_for subname AbsInt stop in
+    Analysis_profiling.record_duration_for subname AbsInt stop;
 
     let no_symex = Extension.Configuration.get ctxt Common.no_symex_param in
     let use_symex = not no_symex in
@@ -497,26 +445,26 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let start = Analysis_profiling.record_start_time () in
     let all_alerts = Alert.InsnIdxFiller.set_for_alert_set idx_st all_alerts in
     let stop = Analysis_profiling.record_stop_time start in
-    let () = Analysis_profiling.record_duration_for subname AlertIdxFilling stop in
-    let () = printf "Done running insn idx filler\n%!" in
+    Analysis_profiling.record_duration_for subname AlertIdxFilling stop;
+    L.info "Done running insn idx filler";
 
     (* this is really dependency analysis info, not liveness info *)
-    let () = printf "Running flags live out filler\n%!" in
+    L.info "Running flags live out filler";
     let start = Analysis_profiling.record_start_time () in
     let all_alerts = Alert.FlagsLiveOutFiller.set_for_alert_set tidmap flagownership reachingdefs all_alerts in
     let stop = Analysis_profiling.record_stop_time start in
-    let () = Analysis_profiling.record_duration_for subname AlertDependencyFilling stop in
-    let () = printf "Done running flags live out filler\n%!" in
+    Analysis_profiling.record_duration_for subname AlertDependencyFilling stop;
+    L.info "done running flags live out filler";
 
-    let () = printf "Setting dataflow liveness in alerts\n%!" in
+    L.info "Setting dataflow liveness in alerts";
     let start = Analysis_profiling.record_start_time () in
     let all_alerts = Alert.DataflowLivenessFiller.set_for_alert_set all_alerts dataflow_liveness
     in
     let stop = Analysis_profiling.record_stop_time start in
-    let () = Analysis_profiling.record_duration_for subname AlertLivenessFilling stop in
-    let () = printf "Done setting dataflow liveness in alerts\n%!" in
+    Analysis_profiling.record_duration_for subname AlertLivenessFilling stop;
+    L.info "Done setting dataflow liveness in alerts";
 
-    let () = printf "Getting callees for analysis\n%!" in
+    L.info "Getting callees for analysis";
     let start = Analysis_profiling.record_start_time () in
 
     let module GetCallees = Callees.Getter(FinalDomain) in
@@ -534,7 +482,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     in
     let stop = Analysis_profiling.record_stop_time start in
 
-    let () = Analysis_profiling.record_duration_for subname CalleeAnalysis stop in
+    Analysis_profiling.record_duration_for subname CalleeAnalysis stop;
     L.info "Callee analysis finished";
     { alerts = all_alerts;
       callees = callees; }
@@ -579,19 +527,18 @@ let check_config config img ctxt proj : unit =
       let sub = Set.min_elt_exn worklist_wo_procd in
       let worklist_wo_procd_wo_sub = Set.remove worklist_wo_procd sub in
       let next_processed = Set.add processed sub in
-      let () = Format.printf "Processing sub %s (%a)\n%!" (Sub.name sub)
-                 Tid.pp (Term.tid sub) in
+      L.info "processing sub %s (%a)" (Sub.name sub) Tid.ppo (Term.tid sub);
       if AnalysisBlackList.sub_is_blacklisted sub ||
          AnalysisBlackList.sub_is_not_linked sub
-      then
-        let () = Format.printf "Sub %s is blacklisted or not linked into the object file, skipping...\n%!"
-                   (Sub.name sub) in
+      then begin
+        L.info "Skipping sub %s: blacklisted or not linked" (Sub.name sub);
         loop ~worklist:worklist_wo_procd_wo_sub
           ~processed:next_processed
           ~res
           ~callees
           ~is_toplevel:false
           ~config
+      end
       else
         let current_res = run_analyses sub img proj ctxt
                             ~is_toplevel
@@ -603,8 +550,8 @@ let check_config config img ctxt proj : unit =
         let callee_subs = CRS.to_list current_res.callees
                           |> List.map ~f:(fun (r : CR.t) -> sub_of_tid_exn r.callee proj)
                           |> SubSet.of_list in
-        let () = SubSet.iter callee_subs ~f:(fun callee ->
-          printf "CallOf: (%s, %s)\n%!" (Sub.name sub) (Sub.name callee)) in
+        SubSet.iter callee_subs ~f:(fun callee ->
+          L.info "CallOf: (%s, %s)\n%!" (Sub.name sub) (Sub.name callee));
         let next_worklist = SubSet.union worklist_wo_procd_wo_sub callee_subs in
         let all_alerts = Alert.Set.union res current_res.alerts in
         loop ~worklist:next_worklist

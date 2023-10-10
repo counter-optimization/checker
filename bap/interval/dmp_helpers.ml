@@ -120,6 +120,8 @@ type gmentry = guard list ref
 
 type guard_map = gmentry Tid.Map.t
 
+let mk_guard ~var ~set : guard = { var;set }
+
 let guard_to_string {var;set;location} =
   let set = if set then "1" else "0" in
   let tid = Tid.to_string location in
@@ -138,84 +140,125 @@ let print_guards guards =
 let needs_set : guard_map -> tid -> bool = Tid.Map.mem
 let get_guard : guard_map -> tid -> gmentry option = Tid.Map.find
 
-(* 6th insn after `CF := low:1(VAR >> 0x3C)` is 
-   the condition jmp
-   7th insn after is the fall through *)
-let find_guard_points sub =
-  let rshift_bits width = Word.of_int ~width 0x3c in
-  let is_cf_assn d =
-    String.Caseless.equal "cf" @@ Var.name @@ Def.lhs d
-  in
-  let is_bt_3c = function
-    | Bil.Cast (Bil.LOW, 1, (Bil.BinOp (Bil.RSHIFT, Bil.Var v, Bil.Int w))) ->
-      let width = Word.bitwidth w in
-      if Word.equal (rshift_bits width) w
-      then Some (Var.name v)
-      else None
-    | _ -> None
-  in
-  let elt_to_tid = function
+let elt_to_tid = function
   | `Jmp j -> Term.tid j
   | `Def d -> Term.tid d
   | `Phi p -> Term.tid p
-  in
-  let get_jmp_targets (insns : Blk.elt Seq.t) var =
-    let fail s =
-      let tid = (Seq.hd_exn insns |> elt_to_tid) in
-      L.error "couldn't get jmp targets for dmp pointer bit test %s at %a"
-                    s Tid.ppo tid;
-      []
-    in
-    let bit_cleared = Seq.drop insns 6 in
-    let bit_set = Seq.drop bit_cleared 1 in
-    match Seq.hd bit_cleared, Seq.hd bit_set with
-    | Some (`Jmp cl), Some (`Jmp set) ->
-      begin match Jmp.kind cl, Jmp.kind set with
-      | Goto (Direct cltid), Goto (Direct settid) ->
-        [{ var; set=false; location=cltid };
-         { var; set=true; location=settid }]
-      | _ -> fail "1"
-      end
-    | _, _ -> fail "2"
-  in
-  let rec get_guards ?(guards = []) insns =
-    let open Option.Monad_infix in
-    match insns with
-    | None -> guards
-    | Some insns ->
-      let rst = Seq.tl insns in
-      match Seq.hd insns with
-      | Some (`Def d) when is_cf_assn d ->
-        let exp = Def.rhs d in
-        begin match is_bt_3c exp with
-        | Some var ->
-          let new_targets = get_jmp_targets insns var in
-          get_guards rst ~guards:(new_targets @ guards)
-        | None -> get_guards rst ~guards
-        end
-      | Some (`Def d) -> get_guards rst ~guards
-      | _ -> guards
-  in
-  let guards_to_map (gs : guard_point list) : guard_map =
-    List.fold gs ~init:Tid.Map.empty
-      ~f:(fun m {var;set;location} ->
-        match Tid.Map.find m location with
-        | Some guards ->
-          guards := {var;set} :: !guards;
-          m
-        | None ->
-          let guards = ref [{var;set}] in
-          Tid.Map.set m ~key:location ~data:guards)
-  in
-  let irg = Sub.to_cfg sub in
-  let rpo = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
-  let guards = Seq.fold rpo ~init:[] ~f:(fun guards node ->
-    let blk = Graphs.Ir.Node.label node in
-    let elts = Blk.elts blk in
-    let new_guards = get_guards (Some elts) in
-    new_guards @ guards)
-  in
-  print_guards guards;
-  guards_to_map guards
-      
+
+module FindSafePtrBitTestPass : sig
   
+  include Uc_single_shot_pass.PASS
+            
+  val get_guard_points : 'a. t -> 'a -> ('a -> tid -> Tid.Set.t) -> guard_map
+    
+end = struct
+  type varname = string
+    
+  type jmp_target = tid
+    
+  type c_or_s = Clear of jmp_target | Set of jmp_target
+                  
+  type t = {
+    bt_tids : varname Tid.Map.t;
+    jmps : c_or_s Tid.Map.t;
+    clear_jmp : tid option;
+  }
+
+  type _ Uc_single_shot_pass.key += Key : t Uc_single_shot_pass.key
+
+  type exn += GuardPointNoJmpTid
+  let get_guard_points (type a) (st : t) (rds : a) (getrts : a -> tid -> Tid.Set.t) : guard_map =
+    let init : guard_map = Tid.Map.empty in
+    Tid.Map.fold st.bt_tids ~init ~f:(fun ~key ~data acc ->
+      let var = data in
+      let rts = getrts rds key in
+      let jmptids = Tid.Map.key_set st.jmps in
+      let thisjmptids = Tid.Set.inter rts jmptids in
+      Tid.Set.fold thisjmptids ~init:acc
+        ~f:(fun guards jmpt ->
+          let (guard, target) =
+            match Tid.Map.find st.jmps jmpt with
+            | Some (Clear target) -> (mk_guard ~var ~set:false, target)
+            | Some (Set target) -> (mk_guard ~var ~set:true, target)
+            | None -> raise GuardPointNoJmpTid
+          in
+          match Tid.Map.find guards target with
+          | Some otherguards ->
+            otherguards := guard :: !otherguards;
+            guards
+          | None ->
+            let gs = ref [guard] in
+            Tid.Map.set guards ~key:target ~data:gs))
+
+  let default () : t = {
+    bt_tids = Tid.Map.empty;
+    jmps = Tid.Map.empty;
+    clear_jmp = None;
+  }
+
+  let onphi pt st = st
+    
+  let ondef dt st =
+    let rshift_bits width = Word.of_int ~width 0x3c in
+    let is_cf_assn d =
+      String.Caseless.equal "cf" @@ Var.name @@ Def.lhs d
+    in
+    let is_bt_3c = function
+      | Bil.Cast (Bil.LOW, 1, (Bil.BinOp (Bil.RSHIFT, Bil.Var v, Bil.Int w))) ->
+        let width = Word.bitwidth w in
+        if Word.equal (rshift_bits width) w
+        then Some (Var.name v)
+        else None
+      | _ -> None
+    in
+    let st = { st with clear_jmp = None } in
+    let rhs = Def.rhs dt in
+    if is_cf_assn dt
+    then match is_bt_3c rhs with
+      | Some varname ->
+        let tid = Term.tid dt in
+        { st with
+          bt_tids = Tid.Map.set st.bt_tids
+                      ~key:tid
+                      ~data:varname }
+      | None -> st
+    else st
+
+  type exn += SetBrNoTarget | ClrBrNoTarget
+  let onjmp jt st =
+    let is_cf v = String.Caseless.equal "cf" @@ Var.name v in
+    let is_cf_check = function
+      | Bil.UnOp (_, (Bil.Var v)) when is_cf v -> true
+      | _ -> false
+    in
+    let get_jmp_target jt =
+      match Jmp.kind jt with
+      | Goto (Direct tid) -> Some tid
+      | _ -> None
+    in
+    if is_cf_check @@ Jmp.cond jt 
+    then
+      let key = Term.tid jt in
+      match get_jmp_target jt with
+      | Some tid ->
+        let data = Clear tid in
+        { st with
+          clear_jmp = Some key;
+          jmps = Tid.Map.set st.jmps ~key ~data }
+      | None ->
+        L.error "Clr jmp branch with no target";
+        raise ClrBrNoTarget
+    else match st.clear_jmp with
+      | Some clearjmptid ->
+        let key = Term.tid jt in
+        begin match get_jmp_target jt with
+        | Some tid ->
+          let data = Set tid in
+          { st with
+            clear_jmp = None;
+            jmps = Tid.Map.set st.jmps ~key ~data }
+        | None -> L.error "Set jmp branch with no target";
+          raise SetBrNoTarget
+        end
+      | None -> st
+end
