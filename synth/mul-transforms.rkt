@@ -44,7 +44,12 @@
    ; remove mask
    (shl-r/m64-imm8 r10 (bv 63 8))
    (shl-r/m64-imm8 r11 (bv 63 8))
+   (mov-r/m8-r8 r11b al)
+   (mov-r/m8-imm8 al (bv 1 8))
+   (mov-r/m8-imm8 r10b (bv 1 8))
    (sub-r/m64-r64 rax r10)
+   (mov-r/m8-r8 al r11b)
+   (mov-r/m8-imm8 r11b (bv 0 8))
    (sub-r/m64-r64 rax r11)
    ; compare full product against lower product for CF
    (mov-r/m8-r8 r10b al)
@@ -290,9 +295,6 @@
    (sub-r/m64-r64 rax rcx)
    (sub-r/m64-r64 rax r12)
    (mov-r/m8-r8 al r13b)
-
-   ; save result - use PUSH
-   (mov-r/m64-r64 r8 rax)
 
    ; restore rcx
    (mov-r/m64-r64 rcx r10)

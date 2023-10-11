@@ -35,7 +35,8 @@
                                    (cons attempt-mul64-p5 spec-mul64-p5))]
 
     [("IMUL32rr" "IMUL32rm") (list (cons attempt-imul32-rr spec-imul32-rr) 
-                                   (cons attempt-imul32-rr-cf spec-imul32-rr))]
+                                  ;  (cons attempt-imul32-rr-cf spec-imul32-rr
+                                   )]
     [("IMUL32rri8")          (list (cons attempt-imul32-rri8))]
     [("IMUL64rr" "IMUL64rm") (list (cons attempt-imul64-rr-p1 spec-imul64-rr-p1)
                                    (cons attempt-imul64-rr-p2 spec-imul64-rr-p2)
