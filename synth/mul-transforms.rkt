@@ -423,24 +423,7 @@
    (sub-r/m64-imm8 r12 (bv 1 8))
    (shl-r/m64-imm8 r12 (bv 1 8))
    (sub-r/m64-r64 rax r12)
-   (sbb-r/m64-r64 rdx r13)
-
-   (mov-r64-imm64 r11 (bv (expt 2 63) 64))
-   (mov-r/m8-r8 r11b al)
-   (add-r/m64-imm8 r11 (bv 1 8))
-   (mov-r64-imm64 r13 (bv (expt 2 63) 64))
-   (sub-r/m64-r64 r11 r13)
-   (mov-r/m8-r8 r13b r11b)
-   (mov-r/m8-imm8 r11b (bv 1 8))
-   (mov-r/m8-imm8 al (bv 1 8))
-   (add-r/m64-r64 rax r11)
-   (mov-r/m8-r8 al r13b)
-   (adc-r/m64-imm8 rdx (bv 0 8))
-
-   ; restore rcx
-   (mov-r/m64-r64 rcx r10)
-   (shr-r/m64-imm8 rcx (bv 32 8))
-   (shl-r/m64-imm8 rcx (bv 32 8))
+   (sbb-r/m64-r64 rdx r11)
    ))
 
 (define spec-imul64-rr-p4
@@ -453,6 +436,7 @@
 
 (define attempt-imul64-rr-p5
   (list
+   (mov-r/m64-r64 r10 rcx)
    ; rdx:rax contain results of 4th term
    ; recombine 3rd term
    (mov-r/m64-r64 r12 r15) ; POP
@@ -488,11 +472,13 @@
    (mov-r/m8-imm8 r12b (bv 1 8))
    (mov-r/m8-imm8 dl (bv 1 8))
    (cmp-r/m64-r64 rdx r12)
+   (mov-r/m8-r8 dl cl)
    (mov-r/m16-imm16 r12w (bv (expt 2 15) 16))
    (set-ne-r8 r12b)
 
    (or-r/m16-r16 r12w r11w)
    (bt-r/m64-imm8 r12 (bv 0 8))
+   (mov-r/m64-r64 rcx r10)
   ))
 
 (define spec-imul64-rr-p5
@@ -622,16 +608,16 @@
 
    ; restore rcx
    (mov-r/m64-r64 rcx r10)
-   (shr-r/m64-imm8 rcx (bv 32 8))
-   (shl-r/m64-imm8 rcx (bv 32 8))
   ))
 
 (define spec-imul64-rri8-p2
   (list
+   (mov-r/m64-r64 r10 rcx)
    (shr-r/m64-imm8 rcx (bv 32 8))
    (shl-r/m64-imm8 rcx (bv 32 8))
    (imul-r64-r/m64-imm8 rax rcx (comp-simp:imm8))
-   (add-r/m64-r64 rax r11)))
+   (add-r/m64-r64 rax r11)
+   (mov-r/m64-r64 rcx r10)))
 
 (define spec-imul64-rri32
   (list (imul-r64-r/m64-imm32 rax rcx (comp-simp:imm32))))
@@ -1638,6 +1624,7 @@
 
    ; restore rcx
    (mov-r/m64-r64 rcx r10)
+   (mov-r/m8-imm8 cl (bv 1 8))
    (shr-r/m64-imm8 rcx (bv 32 8))
    (mov-r/m32-imm32 edx (bv 0 32))
   ))
@@ -1683,6 +1670,7 @@
 
    ; restore rcx
    (mov-r/m64-r64 rcx r10)
+   (mov-r/m8-imm8 cl (bv 1 8))
    (shr-r/m64-imm8 rcx (bv 32 8))
    (mov-r/m32-imm32 edx (bv 0 32))
   ))
@@ -1749,14 +1737,16 @@
    (mov-r/m64-r64 rax r13)
 
    (mov-r/m64-r64 r11 r15)
+   (mov-r/m64-r64 r10 r15)
    (shr-r/m64-imm8 r11 (bv 32 8))
-   (shl-r/m64-imm8 r15 (bv 32 8))
-   (add-r/m64-r64 rax r15)
+   (shl-r/m64-imm8 r10 (bv 32 8))
+   (add-r/m64-r64 rax r10)
    (adc-r/m64-r64 rdx r11)
 
    (mov-r/m64-r64 r11 r14)
+   (mov-r/m64-r64 r10 r14)
    (shr-r/m64-imm8 r11 (bv 32 8))
-   (shl-r/m64-imm8 r14 (bv 32 8))
-   (add-r/m64-r64 rax r14)
+   (shl-r/m64-imm8 r10 (bv 32 8))
+   (add-r/m64-r64 rax r10)
    (adc-r/m64-r64 rdx r11)
   ))
