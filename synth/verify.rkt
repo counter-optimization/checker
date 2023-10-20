@@ -4,6 +4,7 @@
   racket/cmdline
   rosette/lib/synthax
   rosette/lib/match
+  rosette/solver/smt/boolector
   "../serval/serval/x86.rkt"
   "transform-list.rkt"
   "arith-transforms.rkt"
@@ -18,7 +19,7 @@
   (comp-simp:assume-all-regs-equiv spec-cpu attempt-cpu)
   (comp-simp:assume-all-flags-equiv spec-cpu attempt-cpu)
 
-  (comp-simp:run-x86-64-impl #:insns attempt #:cpu attempt-cpu #:assert-cs true
+  (comp-simp:run-x86-64-impl #:insns attempt #:cpu attempt-cpu #:assert-cs false
                              #:verbose (print-verbose))
   (comp-simp:run-x86-64-impl #:insns spec #:cpu spec-cpu)
 
@@ -70,6 +71,8 @@
    insns))
 
 (module+ main
+  (current-solver (boolector))
+  (displayln (current-solver))
   ; (define cex (verify (comp-simp-verify attempt-mul16-p12 spec-mul16-p12 (list ax cx))))
   (define results
     (for/list ([insn insns-to-transform])

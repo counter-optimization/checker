@@ -599,13 +599,6 @@
    (shl-r/m64-1 r12)
    (sub-r/m64-r64 rax r12)
 
-   ; safely add 1st term from r11
-   (mov-r/m8-r8 cl r11b)
-   (mov-r/m8-imm8 r11b (bv 1 8))
-   (mov-r/m8-imm8 al (bv 1 8))
-   (add-r/m64-r64 rax r11)
-   (mov-r/m8-r8 al cl)
-
    ; restore rcx
    (mov-r/m64-r64 rcx r10)
   ))
@@ -616,8 +609,34 @@
    (shr-r/m64-imm8 rcx (bv 32 8))
    (shl-r/m64-imm8 rcx (bv 32 8))
    (imul-r64-r/m64-imm8 rax rcx (comp-simp:imm8))
-   (add-r/m64-r64 rax r11)
    (mov-r/m64-r64 rcx r10)))
+
+(define attempt-imul64-rri8-p3
+  (list
+   ; enforce assumption that lower bits of rax are 0;
+   ; omitted from full transform
+   (mov-r/m8-imm8 al (bv 1 8))
+   (shr-r/m64-imm8 rax (bv 32 8))
+   (mov-r64-imm64 r13 (bv (expt 2 63) 64))
+   (sub-r/m64-r64 rax r13)
+   (shl-r/m64-imm8 rax (bv 32 8))
+   (mov-r/m64-r64 r10 rcx)
+
+   ; expect 1st and 2nd terms in rax, r11
+   ; safely add 1st term from r11
+   (mov-r/m8-r8 cl r11b)
+   (mov-r/m8-imm8 r11b (bv 1 8))
+   (mov-r/m8-imm8 al (bv 1 8))
+   (add-r/m64-r64 rax r11)
+   (mov-r/m8-r8 al cl)
+
+   (mov-r/m64-r64 rcx r10)))
+  
+(define spec-imul64-rri8-p3
+  (list
+   (shr-r/m64-imm8 rax (bv 32 8))
+   (shl-r/m64-imm8 rax (bv 32 8))
+   (add-r/m64-r64 rax r11)))
 
 (define spec-imul64-rri32
   (list (imul-r64-r/m64-imm32 rax rcx (comp-simp:imm32))))
