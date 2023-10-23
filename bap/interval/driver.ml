@@ -256,13 +256,12 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let env_with_rsp_set = match E.set_rsp stack_addr env_with_df_set with
       | Ok env' -> env'
       | Error e -> failwith @@ Error.to_string_hum e in
-    let env_with_img_set = E.set_img env_with_rsp_set img in
     (* e.g., filter out bap's 'mem' var and the result var
        commonly used in prog analysis *)
     let true_args = List.append argnames freenames
                     |> List.filter ~f:ABI.var_name_is_arg in
     let final_env = List.fold true_args
-                      ~init:env_with_img_set
+                      ~init:env_with_rsp_set
                       ~f:(fun mem argname ->
                         E.init_arg ~name:argname config sub mem) in
     

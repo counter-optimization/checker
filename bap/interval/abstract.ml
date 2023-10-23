@@ -40,10 +40,6 @@ sig
 
   val set_rbp : int -> t -> t err
 
-  val set_img : t -> Image.t -> t
-
-  val get_img : t -> Image.t option
-
   val set_stack_canary : t -> t
 
   val holds_ptr : string -> t -> bool
@@ -57,8 +53,6 @@ sig
   val load_of_bil_exp : Bil.exp -> v -> Size.t -> t -> (v * t) err
 
   val store_of_bil_exp : Bil.exp -> offs:v -> data:v -> size:Size.t -> t -> t err
-
-  val store_global : addr:addr -> data:word -> valtype:Common.CellType.t -> t -> t err
 
   val havoc_on_call : t -> t
 
@@ -123,10 +117,6 @@ module NumericEnv(ValueDom : NumericDomain)
 
   let set_rbp offs env = Ok (set "RBP" (ValueDom.of_int offs) env)
 
-  let set_img env img = env
-
-  let get_img _ = None
-
   let setptr ~name ~regions ~offs ~width env = env
 
   let set_stack_canary env = env
@@ -138,8 +128,6 @@ module NumericEnv(ValueDom : NumericDomain)
   let load_of_bil_exp (e : Bil.exp) _offs _sz env = Ok (ValueDom.top, env)
 
   let store_of_bil_exp (e : Bil.exp) ~offs ~data ~size env = Ok env
-
-  let store_global ~addr ~data ~valtype env = Ok env
 
   let havoc_on_call env = env
 

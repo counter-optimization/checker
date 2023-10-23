@@ -23,11 +23,11 @@ let set : type a. a Key.k -> t -> a -> t = fun k other replace ->
   | Eq -> replace
   | Neq -> other
 
-let stack = Bases.singleton MBase.Stack
+let stacks = Bases.singleton MBase.Stack
 
-let global = Bases.singleton MBase.Global
+let globals = Bases.singleton MBase.Global
 
-let heap = Bases.singleton MBase.Heap
+let heaps = Bases.singleton MBase.Heap
 
 let bot = Bases.empty
 

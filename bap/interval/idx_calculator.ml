@@ -6,6 +6,13 @@ module Cfg = Bap.Std.Graphs.Cfg
 module IrCfg = Bap.Std.Graphs.Ir
 module KB = Bap_knowledge.Knowledge
 
+(** Logging *)
+let log_prefix = sprintf "%s.idx_calculator" Common.package
+module L = struct
+  include Dolog.Log
+  let () = set_prefix log_prefix
+end
+
 module T = struct
   type state = {
     idxs : Tid.Set.t;
@@ -23,6 +30,8 @@ module Pass = struct
   type t = {
     mutable st : state;
     mutable intids : Tid.Set.t;
+    mutable last_idx : int option;
+    mutable idx_map : int Tid.Map.t;
   }
 
   type _ Uc_single_shot_pass.key +=
@@ -39,6 +48,8 @@ module Pass = struct
   let default () = {
     st = Int.Map.empty;
     intids = Tid.Set.empty;
+    last_idx = None;
+    idx_map = Tid.Map.empty;
   }
 
   let try_get_idx dt =
@@ -71,12 +82,17 @@ module Pass = struct
         get_ir_tids dt >>= fun tids ->
         Some (idx, tids)
       in
-      match res with
-      | Some (idx, tids) ->
+      match res, env.last_idx with
+      | Some (idx, tids), _ ->
         env.st <- Int.Map.set st ~key:idx ~data:tids;
         env.intids <- tids;
+        env.last_idx <- Some idx;
         env
-      | None ->
+      | None, Some idx ->
+        env.idx_map <- Tid.Map.set env.idx_map ~key:tid ~data:idx;
+        env.intids <- Tid.Set.empty;
+        env
+      | None, None ->
         env.intids <- Tid.Set.empty;
         env
 
@@ -90,14 +106,10 @@ module Pass = struct
     List.fold succs ~init:Tid.Map.empty ~f:(fun m succ ->
       Tid.Map.set m ~key:succ ~data:idx)
 
-  let get_state ~succ {st} : T.t =
-    let init = Tid.Map.empty in
+  let get_state ~succ {st;idx_map;_} : T.t =
     let idxs = Int.Map.data st |>
-               List.fold ~init:Tid.Set.empty ~f:Tid.Set.union
-    in
-    let st = Int.Map.fold st ~init ~f:(fun ~key ~data m ->
-      set key data ~succ)
-    in
+               List.fold ~init:Tid.Set.empty ~f:Tid.Set.union in
+    let st = idx_map in
     {idxs;st}
 end
 

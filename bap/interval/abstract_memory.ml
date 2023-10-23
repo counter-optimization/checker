@@ -172,8 +172,6 @@ module Make(N : NumericDomain)
       cells: cellset;
       env: env;
       bases: basemap;
-      img: Image.t option;
-      globals_read : cellset
     }
 
     type regions = Region.Set.t
@@ -295,32 +293,28 @@ module Make(N : NumericDomain)
 
   let is_empty_env m : bool = Env.equal m.env Env.empty
 
-  let pp {cells; env; bases; globals_read; img}  =
+  let pp {cells; env; bases}  =
     let print_bases_map ~key ~data =
       let region_set_str = Set.to_list data |> List.to_string ~f:Region.to_string in
-      Format.printf "\t%s --> %s\n%!" key region_set_str in
+      Format.printf "\t%s --> %s\n%!" key region_set_str
+    in
     printf "* Ptr->Cells map is:\n%!";
     Set.iter cells ~f:C.pp;
     Env.pp env;
     printf "* Var->Bases map is:\n%!";
-    Map.iteri bases ~f:print_bases_map;
-    printf "* Loaded globals are:\n%!";
-    Set.iter globals_read ~f:C.pp;
-    printf "* Has img loaded?: %B\n%!" @@ Option.is_some img
+    Map.iteri bases ~f:print_bases_map
 
-  let empty : t = { cells = C.Set.empty;
-                    env = Env.empty;
-                    bases = BaseSetMap.empty;
-                    globals_read = C.Set.empty;
-                    img = None }
+  let empty = {
+    cells = C.Set.empty;
+    env = Env.empty;
+    bases = BaseSetMap.empty;
+  }
 
-  let is_empty { cells; env; bases; globals_read; img } : bool =
+  let is_empty { cells; env; bases } : bool =
     Env.is_empty env &&
     C.Set.is_empty cells &&
-    BaseSetMap.is_empty bases &&
-    C.Set.is_empty globals_read &&
-    Option.is_none img
-
+    BaseSetMap.is_empty bases
+      
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with
     | Some f -> f
@@ -353,11 +347,6 @@ module Make(N : NumericDomain)
   let set_based (prod : N.t) (typ : Bases_domain.t) : N.t =
     N.set Bases_domain.key prod typ
 
-  let set_img (mem : t) (img : Image.t) : t =
-    { mem with img = Some img }
-
-  let get_img (mem : t) : Image.t option = mem.img
-
   let bap_size_to_int = function
     | `r8 -> 8
     | `r16 -> 16
@@ -386,12 +375,11 @@ module Make(N : NumericDomain)
     let tainted_top = N.top in
     { mem with env = Env.set arg_name tainted_top mem.env }
 
-  let equal {cells=cells1; env=env1; bases=bases1; globals_read=globals_read1; _}
-        {cells=cells2; env=env2; bases=bases2; globals_read=globals_read2; _} =
+  let equal {cells=cells1; env=env1; bases=bases1 }
+        {cells=cells2; env=env2; bases=bases2 } =
     Env.equal env1 env2 &&
     Set.equal cells1 cells2 &&
-    Map.equal (Set.equal) bases1 bases2 &&
-    Set.equal globals_read1 globals_read2
+    Map.equal (Set.equal) bases1 bases2
 
   let setptr ~(name:string) ~regions ~offs ~width m =
     let env = Env.set name offs m.env in
@@ -439,7 +427,7 @@ module Make(N : NumericDomain)
         else ABI.gpr_arg_width in
       let init_bases = if is_vector_arg
         then Bases_domain.bot
-        else Bases_domain.join Bases_domain.heap Bases_domain.stack in
+        else Bases_domain.join Bases_domain.heaps Bases_domain.stacks in
       let signed = false in
       let init_val = N.make_top init_val_width signed in
       let init_w_bases_set = set_based init_val init_bases in
@@ -464,52 +452,6 @@ module Make(N : NumericDomain)
   let get_overlapping_cells (cell : C.t) (mem : t) : C.Set.t =
     Set.filter mem.cells ~f:(C.overlaps cell)
 
-  let load_global (offs : Wrapping_interval.t) (sz : size) (m : t) : N.t err =
-    L.debug "loading global sz %d at offset %s\n%!"
-      (bap_size_to_int sz)
-      (Wrapping_interval.to_string offs);
-    match m.img with
-    | None -> Or_error.error_string "load_global: memory's image should be set before load"
-    | Some img ->
-      let segs = Image.segments img in
-      match Wrapping_interval.to_int offs with
-      | Error e ->
-        let offs_s = Wrapping_interval.to_string offs in
-        let () = printf
-                   "load_global: couldn't convert offs %s to address for image: %s\n%!"
-                   offs_s (Error.to_string_hum e) in
-        Ok N.top
-      | Ok addr ->
-        let addr_w = Word.of_int ~width:64 addr in
-        let target_seg = Table.find_addr segs addr_w in
-        match target_seg with
-        | None ->
-          (* probably a read or write to bss. i see in the knowledge base
-             that there are entries for bounds of .bss and .tbss
-             TODO: use those boundries to tell abstract_memory state about
-             bss. in the mean time, if there is a load or store of a constant
-             pointer that is not already allocated/present in the binary ELF
-             image, then return untainted 0 as if it were an initial load from
-             zero'd out bss. *)
-          let () = Format.printf "load_global: couldn't find addr %a in image\n%!"
-                     Word.pp addr_w in
-          Ok (N.of_int ~width:(bap_size_to_int sz) 0
-              |> set_untaint)
-        | Some (mem, seg) ->
-          match Memory.get ~addr:addr_w ~scale:sz mem with
-          | Error e ->
-            let segname = Image.Segment.name seg in
-            let addr_s = Word.to_string addr_w in
-            let err_s = Error.to_string_hum e in
-            Or_error.error_string @@
-            sprintf "load_global: Error reading address %s from seg %s: %s"
-              addr_s segname err_s
-          | Ok data ->
-            let res = N.of_word data in
-            (* let res_s = N.to_string res in *)
-            (* let () = printf "in load_global, loaded data was %s\n%!" res_s in *)
-            Ok res
-
   let set_cell_to_top (c : C.t) ?(secret : bool = false) (mem : t) : t =
     let top = if secret then set_taint N.top else set_untaint N.top in
     { mem with env = Env.set (C.name c) top mem.env }
@@ -525,24 +467,12 @@ module Make(N : NumericDomain)
     let cel = C.make ~region ~offs ~width ~valtype in
     let celname = C.name cel in
     let overlap = get_overlapping_cells cel mem in
-    let mem' = Set.fold overlap ~init:mem ~f:(fun mem' c -> remove_cell c mem') in
+    let mem' = Set.fold overlap ~init:mem
+                 ~f:(fun mem' c -> remove_cell c mem') in
     let old_env = mem'.env in
     let old_cells = mem'.cells in
     Ok { mem' with env = Env.set celname data old_env;
                    cells = Set.add old_cells cel }
-
-  let store_global ~(addr : addr) ~(data : word) ~valtype mem : t err =
-    let open Or_error.Monad_infix in
-    let addr_wi = Wrapping_interval.of_word addr in
-    let data_wi = N.of_word data in
-    let width = Wrapping_interval.of_int 64 in
-    let region = Region.Global in
-    store ~offs:addr_wi ~region ~width ~data:data_wi ~valtype mem
-
-  let global_already_read ~(cell : C.t) ~(mem : t) : bool =
-    match Set.find mem.cells ~f:(C.same_cell cell) with
-    | Some _ -> true
-    | None -> false
 
   let cell_exists ~(cell : C.t) ~(mem : t) : bool =
     match Set.find mem.cells ~f:(C.same_cell cell) with
@@ -552,21 +482,7 @@ module Make(N : NumericDomain)
   let load ~(offs : Wrapping_interval.t) ~(width : Wrapping_interval.t)
         ~(size : size) ~(region : Region.t) ~(mem : t) : (N.t * t) err =
     let open Or_error.Monad_infix in
-    let is_global : Region.t -> bool = function
-      | Global -> true
-      | _ -> false in
     let cell = C.make ~offs ~width ~region ~valtype:CellType.Unknown in
-    if is_global region && not (global_already_read ~cell ~mem)
-    then
-      load_global offs size mem >>= fun data ->
-      let valtype = CellType.Unknown in
-      store ~offs ~region ~width ~data ~valtype mem >>= fun mem' ->
-      L.debug "loaded global at offs %s, width %s, size: %d\n%!"
-        (Wrapping_interval.to_string offs)
-        (Wrapping_interval.to_string width)
-        (bap_size_to_int size);
-      Ok (data, { mem' with globals_read = Set.add mem'.globals_read cell })
-    else
     if cell_exists ~cell ~mem
     then
       let data = lookup (C.name cell) mem in
@@ -586,19 +502,13 @@ module Make(N : NumericDomain)
       else
         Ok (top, mem)
 
-  (* on first load of global, load from the image into the abstract
-     memory environment, then do the load a usual. this is unsound force
-     general programs in the case of a previous overlapping store,
-     but the cryptographic libs shouldn't do this, so ignoring
-     overlap/nonalignment for now
-  *)
-  let load_of_bil_exp (e : Bil.exp) (idx_res : N.t)
-        (size : Size.t) (m : t) : (N.t * t) err =
+  let load_of_bil_exp (e : Bil.exp) (idx_res : N.t) (size : Size.t) (m : t)
+    : (N.t * t) err =
     let open Or_error.Monad_infix in
-    let regions : Region.Set.t = get_bases idx_res in
+    let regions = get_bases idx_res in
     let offs = get_intvl idx_res in
-    let offs_type = get_typd idx_res in
-    let offs_is_scalar = CellType.is_scalar offs_type in
+    (* let offs_type = get_typd idx_res in *)
+    (* let offs_is_scalar = CellType.is_scalar offs_type in *)
     let width = bap_size_to_absdom size in
     let offs_size = match Wrapping_interval.size offs with
       | Some offs_size -> offs_size
@@ -606,18 +516,12 @@ module Make(N : NumericDomain)
         failwith @@
         sprintf "in load_of_bil_exp, couldn't convert offs %s to Z.t"
           (Wrapping_interval.to_string offs) in
+    let is_stack_load = Bases_domain.Bases.equal regions Bases_domain.stacks in
     let max_ptd_to_elts = Z.of_int 64 in
-    if Z.gt offs_size max_ptd_to_elts
+    if is_stack_load && Z.lt offs_size max_ptd_to_elts
     then
-      let numbits = bap_size_to_int size in
-      let signed = false in
-      Ok (N.make_top numbits signed, m)
-    else
-      let is_scalar_ptr = offs_is_scalar && Set.is_empty regions in
-      let regions = if is_scalar_ptr
-        then Set.add regions Region.Global
-        else regions in
-      let regions = Set.to_list regions in
+      (* load from stack *)
+      let regions = Region.Set.to_list regions in
       Wrapping_interval.to_list offs >>= fun all_offsets ->
       let regions_and_offsets = List.cartesian_product regions all_offsets in
       List.fold regions_and_offsets
@@ -626,6 +530,11 @@ module Make(N : NumericDomain)
           state >>= fun (data_acc, mem) ->
           load ~offs ~region ~width ~size ~mem >>= fun (loaded_val, mem') ->
           Ok (N.join data_acc loaded_val, mem'))
+    else
+      (* else, return top *)
+      let numbits = bap_size_to_int size in
+      let signed = false in
+      Ok (N.make_top numbits signed, m)      
 
   (* don't let pointers point to too many locations. right now,
      this will error if the pointer points to more than 8 members
@@ -687,21 +596,16 @@ module Make(N : NumericDomain)
 
   let set_stack_canary (mem : t) : t =
     let fs_base = 0x0000_4000 in
-
     let fs_ptr = set_typd (N.of_int fs_base) CellType.Ptr in
-    let fs_ptr = set_based (fs_ptr) Bases_domain.heap in
-
+    let fs_ptr = set_based (fs_ptr) Bases_domain.heaps in
     let stack_canary_width = Wrapping_interval.of_int 8 in
-
     let stack_canary_value = N.of_int 0x123456 in
-
     let with_fs_base_set = setptr
                              ~name:"FS_BASE"
-                             ~regions:Bases_domain.heap
+                             ~regions:Bases_domain.heaps
                              ~offs:fs_ptr
                              ~width:stack_canary_width
                              empty in
-
     let env_with_canary_set = store
                                 ~offs:(Wrapping_interval.of_int (fs_base + 0x28))
                                 ~region:Region.Heap
@@ -709,7 +613,6 @@ module Make(N : NumericDomain)
                                 ~data:stack_canary_value
                                 ~valtype:CellType.Scalar
                                 with_fs_base_set in
-
     match env_with_canary_set with
     | Ok env' -> env'
     | Error e ->
@@ -720,42 +623,22 @@ module Make(N : NumericDomain)
     : t err =
     match e with
     | Bil.Store (_mem, idx, v, _endian, size) ->
-      (* let () = printf "in store_of_bil_exp, getting var names\n%!" in *)
       let vars = Var_name_collector.run idx in
-
-      (* let () = printf "in store_of_bil_exp, getting width\n%!" in *)
       let width = bap_size_to_absdom size in
-
-      (* let () = printf "in store_of_bil_exp, getting bases_to_load_from\n%!" in *)
       let bases_to_load_from = BaseSetMap.bases_of_vars vars m.bases in
-
-      (* let () = printf "in store_of_bil_exp, getting bases_to_load_from final\n%!" in *)
       let bases_to_load_from = (if Set.is_empty bases_to_load_from
                                 then Region.Set.from_region Region.Global
                                 else bases_to_load_from)
                                |> Region.Set.to_list in
-
       let valtype = get_typd data in
-
-      (* let () = printf "in store_of_bil_exp, getting intvl offs\n%!" in *)
       let offs = get_intvl offs in
-
       (match ensure_offs_range_is_ok ~offs ~width with
-       | Error err ->
-         (* let () = printf "in store_of_bil_exp, denote of exp %s, offs: %s : %s\n%!" *)
-         (*                 (Exp.to_string e) *)
-         (*                 (Wrapping_interval.to_string offs) *)
-         (*                 (Error.to_string_hum err) in *)
-         Ok m
+       | Error err -> Ok m
        | Ok _ ->
          let all_offs = get_all_offs ~offs ~width in
-
          Or_error.bind all_offs ~f:(fun all_offs ->
-
-
-
-           let base_offs_pairs = List.cartesian_product bases_to_load_from all_offs in
-
+           let base_offs_pairs = List.cartesian_product
+                                   bases_to_load_from all_offs in
            List.fold base_offs_pairs ~init:(Ok m) ~f:(fun env (base, offs) ->
              Or_error.bind env ~f:(fun env ->
                store ~offs ~region:base ~width ~data ~valtype env))))
@@ -807,7 +690,7 @@ module Make(N : NumericDomain)
   let set_rsp (offs : int) (mem : t) : t err =
     let offs = N.of_int ~width:64 offs in
     let offs_as_ptr = set_typd offs CellType.Ptr in
-    let offs_with_base = set_based offs_as_ptr Bases_domain.stack in
+    let offs_with_base = set_based offs_as_ptr Bases_domain.stacks in
     setptr mem
       ~name:"RSP"
       ~regions:(BaseSet.singleton Region.Stack)
@@ -818,7 +701,7 @@ module Make(N : NumericDomain)
   let set_rbp (offs : int) (mem : t) : t err =
     let offs = N.of_int ~width:64 offs in
     let offs_as_ptr = set_typd offs CellType.Ptr in
-    let offs_with_base = set_based offs_as_ptr Bases_domain.stack in
+    let offs_with_base = set_based offs_as_ptr Bases_domain.stacks in
     Ok (setptr mem
           ~name:"RBP"
           ~regions:(BaseSet.singleton Region.Stack)
@@ -834,18 +717,14 @@ module Make(N : NumericDomain)
 
   (* TODO: type consistency in cell merging *)
   let merge mem1 mem2 : t =
-    let {cells=cells1; env=env1; bases=bases1; img=img1; globals_read=gr1} = mem1 in
-    let {cells=cells2; env=env2; bases=bases2; img=img2; globals_read=gr2} = mem2 in
-    let merged_globals_read = Set.inter gr1 gr2 in
-    let merged_img = merge_images img1 img2 in
+    let {cells=cells1; env=env1; bases=bases1} = mem1 in
+    let {cells=cells2; env=env2; bases=bases2} = mem2 in
     let merged_cells = Set.inter cells1 cells2 in
     let merged_env = Env.merge env1 env2 in
     let merged_bases = BaseSetMap.merge bases1 bases2 in
     { cells=merged_cells;
       env=merged_env;
-      bases=merged_bases;
-      img=merged_img;
-      globals_read=merged_globals_read }
+      bases=merged_bases; }
 
   let widen_threshold = Common.ai_widen_threshold
 
@@ -862,19 +741,19 @@ module Make(N : NumericDomain)
      it that much with how globals are guessed at/handled. *)
   let widen_with_step steps n prev next : t =
     let widen_cell_map {cells=prev; _} {cells=next; _} : C.Set.t =
-      Set.inter prev next in
+      Set.inter prev next
+    in
     let widen_bases_map {bases=prev; _} {bases=next; _} : basemap =
-      BaseSetMap.merge prev next in
+      BaseSetMap.merge prev next
+    in
     let widen_env steps n {env=prev; _} {env=next; _} : Env.t =
-      Env.widen_with_step steps n prev next in
-    let widen_globals_read {globals_read=prev; _} {globals_read=next; _} : C.Set.t =
-      Set.inter prev next in
+      Env.widen_with_step steps n prev next
+    in
     let widen steps n mem1 mem2 =
       {cells = widen_cell_map prev next;
        env = widen_env steps n prev next;
-       bases = widen_bases_map prev next;
-       img = merge_images prev.img next.img;
-       globals_read = widen_globals_read prev next }in
+       bases = widen_bases_map prev next }
+    in
     let merger = if steps < widen_threshold then merge else (widen steps n) in
     merger prev next
 
@@ -883,10 +762,19 @@ module Make(N : NumericDomain)
       let same = Set.inter s1 s2 in
       Set.union (Set.diff s1 same) (Set.diff s2 same)
       |> Set.to_list
-      |> List.map ~f:to_s in
+      |> List.map ~f:to_s
+    in
     let cell_diff = set_differ m1.cells m2.cells C.to_string in
     let base_diff = Common.map_diff m1.bases m2.bases ~equal:BaseSet.equal in
-    let globals_diff = set_differ m1.globals_read m2.globals_read C.to_string in
     let env_diff = Env.differs m1.env m2.env in
-    base_diff @ globals_diff @ env_diff @ cell_diff
+    base_diff @ env_diff @ cell_diff
 end
+
+(** new memory domain:
+    - intraprocedural
+      - don't actually track globals
+      - if the memory hasn't been initialized yet, then it is TOP and tainted
+      - on widening, forget all memory cells
+      - it might be a pointer to stack, really for now, just focus on handling the
+        stack well
+  *)
