@@ -26,7 +26,8 @@ type event = Edgebuilding
            | NewDependenceAnalysis
            | LahfSahfAnalysis
            | DmpGuardPointAnalysis
-           | None
+           | GroupedSingleShotAnalyses
+           | Default
 [@@deriving equal]
 
 val string_of_event : event -> string
@@ -36,5 +37,7 @@ val record_start_time : unit -> t
 val record_stop_time : t -> t
 
 val record_duration_for : funcname -> event -> t -> unit
+
+val timed : 'a. funcname -> event -> (unit -> 'a) -> 'a
 
 val print_all_times : unit -> unit

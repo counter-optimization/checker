@@ -94,7 +94,6 @@ let denote_elt elt defs =
     |> gen varname tid
   | `Jmp j -> defs
 
-
 let init_sol (type g d) (module G : Graph with type t = g and type node = Calling_context.t) sub cfg_firstnode =
   let default_of_var var = (None, Var.name var) in
   let init_defs = Sub.free_vars sub
@@ -116,27 +115,26 @@ let get_uses_and_users sol tidmap flagowners : t =
       | Some uses -> uses
       | None ->
         let newuses = ref Tidset.empty in
-        let () = term_uses := Tid_map.set !term_uses
-                                ~key:attid ~data:newuses in
-        newuses in
-    let () = uses := Tidset.add !uses used in
+        term_uses := Tid_map.set !term_uses
+                       ~key:attid ~data:newuses;
+        newuses
+    in
+    uses := Tidset.add !uses used;
     let users = match Tid_map.find !users_of used with
       | Some users -> users
       | None ->
         let newusers = ref Tidset.empty in
-        let () = users_of := Tid_map.set !users_of
-                               ~key:used ~data:newusers in
-        newusers in
+        users_of := Tid_map.set !users_of
+                      ~key:used ~data:newusers;
+        newusers
+    in
     users := Tidset.add !users attid
   in
   let set_flags ~attid =
-    match Tid_map.find flagowners attid with
-    | None -> ()
-    | Some flagtids ->
-      Set.iter flagtids ~f:(fun ft ->
-        (* this feels reversed because we are at the
-           main tid, but the later flag tid uses this tid *)
-        add_to_uses_and_users ~attid:ft ~used:attid)
+    let flagtids = Flag_ownership.get_flags_of_def_tid
+                  flagowners attid in
+    Set.iter flagtids ~f:(fun ft ->
+      add_to_uses_and_users ~attid:ft ~used:attid)
   in
   let rhs tid =
     match Tid_map.find tidmap tid with
@@ -151,10 +149,10 @@ let get_uses_and_users sol tidmap flagowners : t =
     let uses_tids = select_tids ~defset:defs ~select:rhs in
     List.iter uses_tids ~f:(fun used ->
       add_to_uses_and_users ~attid:tid ~used;
-      set_flags~attid:tid)
+      set_flags ~attid:tid)
   in
-  let () = Solution.enum sol
-           |> Seq.iter ~f:process_sol_node in
+  (Solution.enum sol
+   |> Seq.iter ~f:process_sol_node);
   { rd = sol;
     term_uses = !term_uses;
     users_of = !users_of }

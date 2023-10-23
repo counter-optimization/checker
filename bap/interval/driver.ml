@@ -31,13 +31,15 @@ module TraceDir = Trace.Directives(FinalDomain)(E)
 module TraceEnv = Trace.Env(FinalDomain)(E)
 
 (** Single shot pass runner *)
-module GroupedAnalyses = Uc_single_shot_pass.GroupRunner(struct let n = 2 end)
+module GroupedAnalyses = Uc_single_shot_pass.GroupRunner(struct let n = 3 end)
     
 let () =
   GroupedAnalyses.register_runner
     (module Dmp_helpers.FindSafePtrBitTestPass);
   GroupedAnalyses.register_runner
-    (module Idx_calculator.Pass)
+    (module Idx_calculator.Pass);
+  GroupedAnalyses.register_runner
+    (module Flag_ownership.Pass)
 
 (** Logging *)
 let log_prefix = sprintf "%s.driver" Common.package
@@ -150,10 +152,11 @@ let run_analyses sub img proj ~(is_toplevel : bool)
       ~(config : Config.t)
       ~(do_ss_checks : bool)
       ~(do_cs_checks : bool)
-      ~(flagownership : Flag_ownership.t)
       ctxt : analysis_result =
   let subname = Sub.name sub in
   let subtid = Term.tid sub in
+
+  let open Analysis_profiling in
   
   L.info "Analyzing %s" subname;
   Uc_stats.AnalysisInfo.record_analyzed_sub subname subtid;
@@ -166,30 +169,30 @@ let run_analyses sub img proj ~(is_toplevel : bool)
   let tid_graph = Sub.to_graph sub in
                                      
   let irg = Sub.to_cfg sub in
-  let irg_rpo = Graphlib.reverse_postorder_traverse
-                  (module IrCfg)
-                  irg
+  let irg_rpo = Graphlib.reverse_postorder_traverse (module IrCfg) irg
                 |> Seq.map ~f:IrCfg.Node.label
   in
-  let succ = fun t -> Graphs.Tid.Node.succs t tid_graph in
+  let succ t = Graphs.Tid.Node.succs t tid_graph in
 
   GroupedAnalyses.run irg_rpo;
   let idx_st = GroupedAnalyses.get_final_state
                  (module Idx_calculator.Pass)
   in
+  let idx_st = Idx_calculator.Pass.get_state ~succ idx_st in
   let dmp_st = GroupedAnalyses.get_final_state
                  (module Dmp_helpers.FindSafePtrBitTestPass)
   in
+  let flagownership = GroupedAnalyses.get_final_state
+                        (module Flag_ownership.Pass)
+  in
 
-  let idx_st = Idx_calculator.Pass.get_state ~succ idx_st in
-  let start = Analysis_profiling.record_start_time () in
-  let edges, tidmap = Edge_builder.run_one sub proj idx_st in
-  let stop = Analysis_profiling.record_stop_time start in
-  let () = Analysis_profiling.record_duration_for subname Edgebuilding stop in
+  let edges, tidmap = timed subname Edgebuilding @@ fun () ->
+    Edge_builder.run_one sub proj idx_st
+  in
   
   match should_skip_analysis edges tidmap sub prog with
   | Some res ->
-    printf "[Driver] Skipping analysis of single jmp subroutine %s\n%!" subname;
+    L.info "Skipping analysis of single jmp subroutine %s\n%!" subname;
     res
   | None ->
     (* CFG *)
@@ -197,45 +200,37 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let do_ss = Extension.Configuration.get ctxt Common.do_ss_checks_param in
     let do_dmp = Extension.Configuration.get ctxt Common.do_dmp_checks_param in
 
-    let start = Analysis_profiling.record_start_time () in          
-    let edges = List.map edges ~f:(Edge_builder.to_cc_edge) in
     let module G = Graphlib.Make(Calling_context)(Bool) in
-    let cfg = Graphlib.create (module G) ~edges () in
-    let stop = Analysis_profiling.record_stop_time start in
-    Analysis_profiling.record_duration_for subname CfgCreation stop;
+    let edges, cfg = timed subname CfgCreation @@ fun () ->
+      let edges = List.map edges ~f:(Edge_builder.to_cc_edge) in    
+      let cfg = Graphlib.create (module G) ~edges () in
+      edges, cfg
+    in
 
     (* here, liveness means classical dataflow liveness *)
     L.info "Running classical dataflow liveness 1";
-    let start = Analysis_profiling.record_start_time () in
-    let dataflow_liveness = Liveness.run_on_cfg (module G) cfg tidmap in
-    let stop = Analysis_profiling.record_stop_time start in
-    Analysis_profiling.record_duration_for subname ClassicLivenessOne stop;
+    let dataflow_liveness = timed subname CfgCreation @@ fun () ->
+      Liveness.run_on_cfg (module G) cfg tidmap
+    in
     L.info "Done running classical dataflow liveness 1";
 
-    let start = Analysis_profiling.record_start_time () in
-    let dead_defs = Liveness.get_dead_defs dataflow_liveness tidmap in
-    let edges = Edge_builder.remove_dead_defs edges dead_defs in
-    let cfg = Graphlib.create (module G) ~edges () in
-    let stop = Analysis_profiling.record_stop_time start in
-    Analysis_profiling.record_duration_for subname RemoveDeadFlagDefs stop;
+    let dead_defs, edges, cfg = timed subname RemoveDeadFlagDefs @@ fun () ->
+      let dead_defs = Liveness.get_dead_defs dataflow_liveness tidmap in
+      let edges = Edge_builder.remove_dead_defs edges dead_defs in
+      let cfg = Graphlib.create (module G) ~edges () in
+      dead_defs, edges, cfg
+    in
 
     L.info "Running classical dataflow liveness 2";
-    let start = Analysis_profiling.record_start_time () in
-    let dataflow_liveness = Liveness.run_on_cfg (module G) cfg tidmap in
-    let stop = Analysis_profiling.record_stop_time start in
-    Analysis_profiling.record_duration_for subname ClassicLivenessTwo stop;
-    L.info "Done running classical dataflow liveness 1";
+    let dataflow_liveness = timed subname ClassicLivenessTwo @@ fun () ->
+      Liveness.run_on_cfg (module G) cfg tidmap
+    in
+    L.info "Done running classical dataflow liveness 2";
 
     (* dmp checker specific *)
-    let start = Analysis_profiling.record_start_time () in
-    (* let irg_rpo = Graphlib.reverse_postorder_traverse (module IrCfg) irg in *)
-    let lahf_sahf = Lahf_and_sahf.run_on_cfg (module G) cfg tidmap in
-    let stop = Analysis_profiling.record_stop_time start in
-    Analysis_profiling.record_duration_for
-      subname
-      Analysis_profiling.LahfSahfAnalysis
-      stop;
-
+    let lahf_sahf = timed subname LahfSahfAnalysis @@ fun () ->
+      Lahf_and_sahf.run_on_cfg (module G) cfg tidmap
+    in
     Lahf_and_sahf.print lahf_sahf;
 
     do_ ~if_:do_dmp ~default:() (fun () ->
@@ -243,8 +238,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
       Dmp_helpers.print_smalloc_addrs ());
 
     (* set up initial solution *)
-    let start = Analysis_profiling.record_start_time () in
     L.info "setting up initial solution";
+    let start = Analysis_profiling.record_start_time () in
     let empty = E.empty in
     let stack_addr = 0x7fff_fff0 in
 
@@ -280,23 +275,17 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     Analysis_profiling.record_duration_for subname InitEnvSetup stop;
 
     L.info "running reaching defs";
-    let start = Analysis_profiling.record_start_time () in
-    let reachingdefs = Reachingdefs.run_on_cfg (module G) cfg sub tidmap flagownership first_node in
-    let stop = Analysis_profiling.record_stop_time start in
-    Analysis_profiling.record_duration_for subname ReachingDefs stop;
+    let reachingdefs = timed subname ReachingDefs @@ fun () ->
+      Reachingdefs.run_on_cfg (module G) cfg sub tidmap flagownership first_node
+    in
     L.info "done running reaching defs";
 
-    let start = Analysis_profiling.record_start_time () in
-    let dmp_bt_guards = Dmp_helpers.FindSafePtrBitTestPass.get_guard_points
-                          dmp_st
-                          reachingdefs
-                          Reachingdefs.users_transitive_closure
+    let dmp_bt_guards = timed subname DmpGuardPointAnalysis @@ fun () ->
+      Dmp_helpers.FindSafePtrBitTestPass.get_guard_points
+        dmp_st
+        reachingdefs
+        Reachingdefs.users_transitive_closure
     in
-    let stop = Analysis_profiling.record_stop_time start in
-    Analysis_profiling.record_duration_for
-      subname
-      Analysis_profiling.DmpGuardPointAnalysis
-      stop;
     
     let dmp_bt_set tid (st : TraceEnv.t) : TraceEnv.t =
       let open Abstract_bitvector in
@@ -318,13 +307,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
       { tree }
     in
 
-    let stop = Analysis_profiling.record_stop_time start in
-    Analysis_profiling.record_duration_for
-      subname
-      NewDependenceAnalysis
-      stop;
-    L.info "Done running dependency analysis";
-
     L.info "running trace part pre-analysis";
     let cond_scrape_st = Trace.ConditionFinder.init
                            ~rpo_traversal
@@ -342,10 +324,11 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                           cond_extractor_st lf split_dir in
       match combine_dir with
       | None ->
-        let () = printf "[Drive] live flag <%a, %s> couldn't get both split and combine directives\n%!" Tid.ppo (fst lf) (snd lf) in
+        L.warn "live flag <%a, %s> couldn't get both split and combine directives"
+          Tid.ppo (fst lf) (snd lf);
         dirs
-      | Some combine_dir ->
-        split_dir :: combine_dir :: dirs) in
+      | Some combine_dir -> split_dir :: combine_dir :: dirs)
+    in
     L.debug "trace part directives are:";
     List.iter dirs ~f:(fun td ->
       L.debug "\t%s" @@ TraceDir.to_string td);
@@ -419,49 +402,43 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     let emp = Alert.Set.empty in
 
     L.info "Running checkers";
-    let start = Analysis_profiling.record_start_time () in
-    let all_alerts = List.fold edges ~init:emp ~f:(fun alerts (_, to_cc, _) ->
-      let to_tid = Calling_context.to_insn_tid to_cc in
-      let elt = elt_of_tid to_tid in
-      let cs_chkr_res = do_ ~if_:do_cs ~default:emp (fun () ->
-        CompSimpChecker.check_elt subname to_tid elt)
-      in
-      let ss_chkr_res = do_ ~if_:do_ss ~default:emp (fun () ->
-        SSChecker.check_elt use_symex sub to_tid idx_st
-          defs symex_profiling_out_file reachingdefs tidmap elt) 
-      in
-      let dmp_chkr_res = do_ ~if_:do_dmp ~default:emp (fun () ->
-        DmpChecker.check_elt sub to_tid lahf_sahf elt)
-      in
-      Set.union alerts cs_chkr_res
-      |> Set.union ss_chkr_res
-      |> Set.union dmp_chkr_res)
+    let all_alerts = timed subname CsChecking @@ fun () ->
+      List.fold edges ~init:emp ~f:(fun alerts (_, to_cc, _) ->
+        let to_tid = Calling_context.to_insn_tid to_cc in
+        let elt = elt_of_tid to_tid in
+        let cs_chkr_res = do_ ~if_:do_cs ~default:emp (fun () ->
+          CompSimpChecker.check_elt subname to_tid elt)
+        in
+        let ss_chkr_res = do_ ~if_:do_ss ~default:emp (fun () ->
+          SSChecker.check_elt use_symex sub to_tid idx_st
+            defs symex_profiling_out_file reachingdefs tidmap elt) 
+        in
+        let dmp_chkr_res = do_ ~if_:do_dmp ~default:emp (fun () ->
+          DmpChecker.check_elt sub to_tid lahf_sahf elt)
+        in
+        Set.union alerts cs_chkr_res
+        |> Set.union ss_chkr_res
+        |> Set.union dmp_chkr_res)
     in
-    let stop = Analysis_profiling.record_stop_time start in
-    Analysis_profiling.record_duration_for subname CsChecking stop;
     L.info "Done running checkers";
     
     L.info "Running insn idx filler";
-    let start = Analysis_profiling.record_start_time () in
-    let all_alerts = Alert.InsnIdxFiller.set_for_alert_set idx_st all_alerts in
-    let stop = Analysis_profiling.record_stop_time start in
-    Analysis_profiling.record_duration_for subname AlertIdxFilling stop;
+    let all_alerts = timed subname AlertIdxFilling @@ fun () ->
+      Alert.InsnIdxFiller.set_for_alert_set idx_st all_alerts
+    in
     L.info "Done running insn idx filler";
 
     (* this is really dependency analysis info, not liveness info *)
     L.info "Running flags live out filler";
-    let start = Analysis_profiling.record_start_time () in
-    let all_alerts = Alert.FlagsLiveOutFiller.set_for_alert_set tidmap flagownership reachingdefs all_alerts in
-    let stop = Analysis_profiling.record_stop_time start in
-    Analysis_profiling.record_duration_for subname AlertDependencyFilling stop;
+    let all_alerts = timed subname AlertDependencyFilling @@ fun () ->
+      Alert.FlagsLiveOutFiller.set_for_alert_set tidmap flagownership reachingdefs all_alerts
+    in
     L.info "done running flags live out filler";
 
     L.info "Setting dataflow liveness in alerts";
-    let start = Analysis_profiling.record_start_time () in
-    let all_alerts = Alert.DataflowLivenessFiller.set_for_alert_set all_alerts dataflow_liveness
+    let all_alerts = timed subname AlertLivenessFilling @@ fun () ->
+      Alert.DataflowLivenessFiller.set_for_alert_set all_alerts dataflow_liveness
     in
-    let stop = Analysis_profiling.record_stop_time start in
-    Analysis_profiling.record_duration_for subname AlertLivenessFilling stop;
     L.info "Done setting dataflow liveness in alerts";
 
     L.info "Getting callees for analysis";
@@ -487,10 +464,6 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     { alerts = all_alerts;
       callees = callees; }
     
-(* this fn needs to have return type unit b/c BAP passes
-   should have type (Project.t -> unit). here, this function
-   gets curried until it has this type.
-*)
 let check_config config img ctxt proj : unit =
   Random.self_init ();
   let target_fns = Config.get_target_fns_exn config proj in
@@ -503,16 +476,12 @@ let check_config config img ctxt proj : unit =
   List.iter global_store_data ~f:(fun { data; addr } ->
     L.debug "mem[%a] <- %a" Word.ppo addr Word.ppo data);
 
-  L.info "Computing flag ownership:";
-  let flagownership = Flag_ownership.run () in
-  L.info "Done";
-
-  let do_ss_checks = Extension.Configuration.get ctxt Common.do_ss_checks_param in
-  let do_cs_checks = Extension.Configuration.get ctxt Common.do_cs_checks_param in
-
   let should_dump_kb = Extension.Configuration.get ctxt Common.debug_dump in
   do_ ~if_:(should_dump_kb) ~default:() (fun () ->
     Format.printf "%a\n%!" KB.pp_state @@ Toplevel.current ());
+
+  let do_ss_checks = Extension.Configuration.get ctxt Common.do_ss_checks_param in
+  let do_cs_checks = Extension.Configuration.get ctxt Common.do_cs_checks_param in
 
   let rec loop ~(worklist : SubSet.t)
             ~(processed : SubSet.t)
@@ -546,7 +515,7 @@ let check_config config img ctxt proj : unit =
                             ~do_cs_checks
                             ~do_ss_checks
                             ~config
-                            ~flagownership in
+        in
         let callee_subs = CRS.to_list current_res.callees
                           |> List.map ~f:(fun (r : CR.t) -> sub_of_tid_exn r.callee proj)
                           |> SubSet.of_list in

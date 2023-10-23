@@ -32,7 +32,8 @@ type event = Edgebuilding
            | NewDependenceAnalysis
            | LahfSahfAnalysis
            | DmpGuardPointAnalysis
-           | None
+           | GroupedSingleShotAnalyses
+           | Default
 [@@deriving equal]
 
 let string_of_event = function
@@ -54,7 +55,8 @@ let string_of_event = function
   | NewDependenceAnalysis -> "NewDependenceAnalysis"
   | LahfSahfAnalysis -> "LahfSahfAnalysis"
   | DmpGuardPointAnalysis -> "DmpGuardPointAnalysis"
-  | None -> "None"
+  | GroupedSingleShotAnalyses -> "GroupedSingleShotAnalyses"
+  | Default -> "Default"
 
 let cls : (t, unit) KB.Class.t = KB.Class.declare
                                    ~package:Common.package
@@ -62,7 +64,7 @@ let cls : (t, unit) KB.Class.t = KB.Class.declare
                                    ()
 
 let event_dom = KB.Domain.flat
-                  ~empty:None
+                  ~empty:Default
                   ~equal:equal_event
                   "event dom"
 
@@ -116,6 +118,13 @@ let record_duration_for (funcname : funcname)
                    KB.provide stop_slot obj r.stop;
                    KB.provide duration_slot obj r.duration;
                  ])
+
+let timed (type a) subname event thunk : a =
+  let start = record_start_time () in
+  let res : a = thunk () in
+  let stop = record_stop_time start in
+  record_duration_for subname event stop;
+  res
 
 let print_prof_event (event : t KB.obj) : unit =
   Toplevel.exec begin

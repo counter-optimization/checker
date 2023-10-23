@@ -428,14 +428,14 @@ module FlagsLiveOutFiller = struct
       | _ -> failwith "FlagLiveOutFiller set_for_alert error"
     in
     let tid = Option.value_exn alert.tid in
-    let flags = Tid_map.find flagownership tid in
-    let flags_live = match flags with
-      | None -> SS.empty
-      | Some flags ->
-        Core_kernel.Set.fold flags ~init:SS.empty ~f:(fun liveflags flagdeftid ->
-          if Reachingdefs.has_users rd flagdeftid
-          then SS.add liveflags @@ flagname flagdeftid
-          else liveflags) in
+    let flags = Flag_ownership.get_flags_of_def_tid
+                  flagownership tid
+    in
+    let flags_live =
+      Tid.Set.filter flags ~f:(Reachingdefs.has_users rd)
+      |> Tid.Set.fold ~init:String.Set.empty
+           ~f:(fun names t -> SS.add names @@ flagname t)
+    in
     { alert with flags_live }
 
   let set_for_alert_set tidmap flagownership depanalysis alerts : Set.t =

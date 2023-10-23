@@ -161,12 +161,18 @@ end = struct
   type t = {
     bt_tids : varname Tid.Map.t;
     jmps : c_or_s Tid.Map.t;
+    fallthrough : tid Tid.Map.t;
     clear_jmp : tid option;
   }
 
   type _ Uc_single_shot_pass.key += Key : t Uc_single_shot_pass.key
 
-  type exn += GuardPointNoJmpTid
+  let get_fallthrough st clearjmptid : c_or_s option =
+    let open Option.Monad_infix in
+    Tid.Map.find st.fallthrough clearjmptid >>= fun fallthroughtid ->
+    Tid.Map.find st.jmps fallthroughtid
+
+  type exn += GuardPointNoJmpTid | NoReachingJmpTid
   let get_guard_points (type a) (st : t) (rds : a) (getrts : a -> tid -> Tid.Set.t) : guard_map =
     let init : guard_map = Tid.Map.empty in
     Tid.Map.fold st.bt_tids ~init ~f:(fun ~key ~data acc ->
@@ -174,25 +180,46 @@ end = struct
       let rts = getrts rds key in
       let jmptids = Tid.Map.key_set st.jmps in
       let thisjmptids = Tid.Set.inter rts jmptids in
+      (if Tid.Set.is_empty thisjmptids
+       then L.error "bittest at %a has no rts jumptids"
+              Tid.ppo key
+       else Tid.Set.iter thisjmptids
+              ~f:(L.info "bittest %a has jmptid %a"
+                    Tid.ppo key Tid.ppo));
+      (if Tid.Set.is_empty thisjmptids
+       then raise NoReachingJmpTid);
       Tid.Set.fold thisjmptids ~init:acc
         ~f:(fun guards jmpt ->
-          let (guard, target) =
-            match Tid.Map.find st.jmps jmpt with
+          let (guard, target) = match Tid.Map.find st.jmps jmpt with
             | Some (Clear target) -> (mk_guard ~var ~set:false, target)
             | Some (Set target) -> (mk_guard ~var ~set:true, target)
             | None -> raise GuardPointNoJmpTid
           in
-          match Tid.Map.find guards target with
+          let (ftguard, fttarget) = match get_fallthrough st jmpt with
+            | Some (Clear target) -> (mk_guard ~var ~set:false, target)
+            | Some (Set target) -> (mk_guard ~var ~set:true, target)
+            | None -> raise GuardPointNoJmpTid
+          in
+          let guards = match Tid.Map.find guards target with
+            | Some otherguards ->
+              otherguards := guard :: !otherguards;
+              guards
+            | None ->
+              let gs = ref [guard] in
+              Tid.Map.set guards ~key:target ~data:gs
+          in
+          match Tid.Map.find guards fttarget with
           | Some otherguards ->
-            otherguards := guard :: !otherguards;
+            otherguards := ftguard :: !otherguards;
             guards
           | None ->
-            let gs = ref [guard] in
-            Tid.Map.set guards ~key:target ~data:gs))
+            let gs = ref [ftguard] in
+            Tid.Map.set guards ~key:fttarget ~data:gs))
 
   let default () : t = {
     bt_tids = Tid.Map.empty;
     jmps = Tid.Map.empty;
+    fallthrough = Tid.Map.empty;
     clear_jmp = None;
   }
 
@@ -256,6 +283,8 @@ end = struct
           let data = Set tid in
           { st with
             clear_jmp = None;
+            fallthrough = Tid.Map.set st.fallthrough
+                            ~key:clearjmptid ~data:key;
             jmps = Tid.Map.set st.jmps ~key ~data }
         | None -> L.error "Set jmp branch with no target";
           raise SetBrNoTarget
