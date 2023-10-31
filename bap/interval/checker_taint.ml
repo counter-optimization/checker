@@ -116,4 +116,18 @@ module Analysis = struct
   let of_word _ = Notaint
   let of_z ?(width : int = 64) _ = Notaint
   let bitwidth x = -1
+
+  let of_prod (type n) (get : t Domain_key.DomainKey.k -> (n -> t) option)
+        (prod : n) : t =
+  match get key with
+  | Some f -> f prod
+  | None -> failwith "Couldn't extract taint out of product domain"
+
+  let set_in_prod (type a) (set : t Domain_key.DomainKey.k -> a -> t -> a)
+        (prod : a) (bv : t) : a =
+  set key prod bv
+end
+
+module Cmp = struct
+  include Comparator.Make(Analysis)
 end

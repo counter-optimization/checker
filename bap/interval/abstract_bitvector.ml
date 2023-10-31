@@ -281,14 +281,6 @@ let set : type a. a Key.k -> t -> a -> t = fun k other replace ->
   | Eq -> replace
   | Neq -> other
 
-(* let of_prod (type a) (module N : Numeric_domain.Sig with type t = a) prod : t = *)
-(*   match N.get key with *)
-(*   | Some f -> f prod *)
-(*   | None -> failwith "[Abstract_bitvector] Couldn't extract abs bitvector out of product domain" *)
-
-(* let set_in_prod (type a) (module N : Numeric_domain.Sig with type t = a) prod bv : a = *)
-(*   N.set key prod bv *)
-
 let of_prod (type n) (get : t Domain_key.DomainKey.k -> (n -> t) option) (prod : n) : t =
   match get key with
   | Some f -> f prod

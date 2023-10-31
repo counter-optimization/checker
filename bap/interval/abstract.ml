@@ -492,7 +492,8 @@ module AbstractInterpreter(N: NumericDomain)
         let smalloc_return = Abstract_bitvector.set_in_prod N.set N.top bv in
         E.havoc_on_call st |>
         E.set Common.ABI.return_reg smalloc_return
-      | _ -> E.havoc_on_call st in
+      | _ -> E.havoc_on_call st
+    in
     match Jmp.kind j with
     | Call c ->
       (match Call.target c with

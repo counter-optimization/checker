@@ -122,6 +122,8 @@ type guard_map = gmentry Tid.Map.t
 
 let mk_guard ~var ~set : guard = { var;set }
 
+let default_gmap : guard_map = Tid.Map.empty
+
 let guard_to_string {var;set;location} =
   let set = if set then "1" else "0" in
   let tid = Tid.to_string location in

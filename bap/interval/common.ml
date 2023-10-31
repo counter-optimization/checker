@@ -165,7 +165,6 @@ let tids_of_blk (blk : blk term) : Tid.Set.t =
 let tids_of_blks (blks : blk term list) : Tid.Set.t =
   List.fold blks ~init:Tid.Set.empty ~f:(fun tids blk ->
     Tid.Set.union (tids_of_blk blk) tids)
-  
 
 module CalleeRel = struct
   module T = struct
@@ -426,8 +425,6 @@ let rec exp_to_string (e : Bil.exp) : string =
      sprintf "extract<%d.%d.%s>" hi lo (exp_to_string exp)
    | Bil.Concat (left, right) ->
      sprintf "<%s@@%s>" (exp_to_string left) (exp_to_string right))
-
-
 
 (* technically, this way is not fully correct.
    calling jmp_is_return on a return will always

@@ -15,11 +15,13 @@ module L = struct
   let () = set_prefix log_prefix
 end
 
+let default = Tid.Set.empty
+
 let tid_part_of_transform = Tidset.mem
 
 let lahf_insn_var_names =
   ["RAX"; "SF"; "ZF"; "AF"; "PF"; "CF"]
-  |> Common.SS.of_list
+  |> String.Set.of_list
 
 let run_on_cfg (type g) (module G : Graph with type t = g and type node = Calling_context.t) g tidmap =
   let is_rax_load = function
@@ -44,7 +46,7 @@ let run_on_cfg (type g) (module G : Graph with type t = g and type node = Callin
       then
         let rhs = Def.rhs d in
         let rhs_var_names = Var_name_collector.run rhs in
-        Common.SS.equal rhs_var_names lahf_insn_var_names
+        String.Set.equal rhs_var_names lahf_insn_var_names
       else false
     | _ -> false
   in
@@ -68,10 +70,7 @@ let run_on_cfg (type g) (module G : Graph with type t = g and type node = Callin
       delay_tid := Some tid; InsideMaybeSahf
     | InsideMaybeSahf ->
       (if Option.is_some !delay_tid
-       then tween_tids := Set.add
-                            !tween_tids
-                            (Option.value_exn !delay_tid)
-       else ());
+       then tween_tids := Set.add !tween_tids (Option.value_exn !delay_tid));
       Inside
     | Inside ->
       tween_tids := Set.add !tween_tids tid;

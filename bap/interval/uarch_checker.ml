@@ -47,6 +47,8 @@ module UarchCheckerExtension = struct
       Common.global_log_level_param
     |> Uc_log.init
 
+  let init_sym_resolution : Project.t -> unit = Uc_sub.Resolve.init 
+
   let put_addrs_in_sema () =
     let open KB.Syntax in
     Toplevel.exec begin
@@ -63,30 +65,17 @@ module UarchCheckerExtension = struct
 
   let pass ctxt proj =
     init_logging ctxt;
-    let target_obj_name = get_target_file_name proj in
+    init_sym_resolution proj;
     let out_csv_file_name = Extension.Configuration.get ctxt
                               Common.output_csv_file_param in
     test_output_csv_file out_csv_file_name;
-    
-    let i = Image.create ~backend:"llvm" target_obj_name in
-    let img_and_errs = match i with
-      | Ok i -> i
-      | Error e ->
-        failwith @@
-        sprintf "In Uarch_checker.pass, couldn't build image for %s"
-          target_obj_name
-    in
-    let img = fst img_and_errs in
-    
     let config_path = Extension.Configuration.get ctxt
                         Common.config_file_path_param in
     let config = Config.Parser.parse_config_file
                    ~path:config_path in
-
     L.info "%s" "Configured\n";
-    
     put_addrs_in_sema ();
-    Driver.check_config config img ctxt proj
+    Driver.check_config config ctxt proj
 
   let register_passes ctxt =
     Project.register_pass' (pass ctxt);

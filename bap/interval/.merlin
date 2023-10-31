@@ -44,6 +44,7 @@ S sema_addrs.ml
 S numeric_domain.ml
 S uc_log.ml
 S uc_stats.ml
+S uc_sub.ml
 
 B _build
 

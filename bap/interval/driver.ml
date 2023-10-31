@@ -61,10 +61,6 @@ let emp_analysis_result = {
   alerts = Alert.Set.empty
 }
 
-module SubSet = struct
-  include Set.Make_binable_using_comparator(Sub)
-end
-
 let insns_of_node n = Blk.elts @@ Graphs.Ir.Node.label n
 let first_insn_of_blk b =
   let insns = Blk.elts b in
@@ -147,12 +143,9 @@ let first_insn_cc sub =
 let do_ (type a) ~(if_ : bool) ~(default : a) (f : unit -> a) : a =
     if if_ then f () else default
 
-let run_analyses sub img proj ~(is_toplevel : bool)
+let run_analyses sub proj ~(is_toplevel : bool)
       ~(bss_init_stores : Global_function_pointers.global_const_store list)
-      ~(config : Config.t)
-      ~(do_ss_checks : bool)
-      ~(do_cs_checks : bool)
-      ctxt : analysis_result =
+      ~(config : Config.t) ctxt : analysis_result =
   let subname = Sub.name sub in
   let subtid = Term.tid sub in
 
@@ -214,7 +207,7 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     in
     L.info "Done running classical dataflow liveness 1";
 
-    let dead_defs, edges, cfg = timed subname RemoveDeadFlagDefs @@ fun () ->
+    let _, edges, cfg = timed subname RemoveDeadFlagDefs @@ fun () ->
       let dead_defs = Liveness.get_dead_defs dataflow_liveness tidmap in
       let edges = Edge_builder.remove_dead_defs edges dead_defs in
       let cfg = Graphlib.create (module G) ~edges () in
@@ -228,10 +221,13 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     L.info "Done running classical dataflow liveness 2";
 
     (* dmp checker specific *)
-    let lahf_sahf = timed subname LahfSahfAnalysis @@ fun () ->
-      Lahf_and_sahf.run_on_cfg (module G) cfg tidmap
+    let lahf_sahf = do_ ~if_:do_dmp ~default:Lahf_and_sahf.default @@ fun () ->
+      L.info "Running lahf sahf analysis";
+      timed subname LahfSahfAnalysis @@ fun () ->
+      let res = Lahf_and_sahf.run_on_cfg (module G) cfg tidmap in
+      L.info "Done running lahf sahf analysis";
+      res
     in
-    Lahf_and_sahf.print lahf_sahf;
 
     do_ ~if_:do_dmp ~default:() (fun () ->
       Dmp_helpers.find_smalloc proj;
@@ -279,7 +275,9 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     in
     L.info "done running reaching defs";
 
-    let dmp_bt_guards = timed subname DmpGuardPointAnalysis @@ fun () ->
+    let dmp_bt_guards = do_ ~if_:do_dmp ~default:Dmp_helpers.default_gmap @@ fun () ->
+      
+      timed subname DmpGuardPointAnalysis @@ fun () ->
       Dmp_helpers.FindSafePtrBitTestPass.get_guard_points
         dmp_st
         reachingdefs
@@ -361,7 +359,8 @@ let run_analyses sub img proj ~(is_toplevel : bool)
                                    failwith @@
                                    sprintf
                                      "in calculating analysis_results, couldn't find tid %a in tidmap"
-                                     Tid.pps tid in
+                                     Tid.pps tid
+                               in
                                let st = dmp_bt_set tid st in
                                L.debug "denoting elt %a" Tid.ppo tid;
                                TraceAbsInt.denote_elt subname directive_map elt st)
@@ -463,33 +462,30 @@ let run_analyses sub img proj ~(is_toplevel : bool)
     { alerts = all_alerts;
       callees = callees; }
     
-let check_config config img ctxt proj : unit =
+let check_config config ctxt proj : unit =
   Random.self_init ();
   let target_fns = Config.get_target_fns_exn config proj in
-  let worklist = SubSet.of_list @@ Sequence.to_list target_fns in
-  let processed = SubSet.empty in
+  let worklist = Sub.Set.of_list @@ Sequence.to_list target_fns in
+  let processed = Sub.Set.empty in
   let init_res = Alert.Set.empty in
   
   let global_store_data = Global_function_pointers.Libsodium.Analysis.get_all_init_fn_ptr_data ctxt proj in
   L.debug "Global stores are:";
-  List.iter global_store_data ~f:(fun { data; addr } ->
+  List.iter global_store_data ~f:(fun {data;addr} ->
     L.debug "mem[%a] <- %a" Word.ppo addr Word.ppo data);
 
   let should_dump_kb = Extension.Configuration.get ctxt Common.debug_dump in
-  do_ ~if_:(should_dump_kb) ~default:() (fun () ->
+  do_ ~if_:should_dump_kb ~default:() (fun () ->
     Format.printf "%a\n%!" KB.pp_state @@ Toplevel.current ());
 
-  let do_ss_checks = Extension.Configuration.get ctxt Common.do_ss_checks_param in
-  let do_cs_checks = Extension.Configuration.get ctxt Common.do_cs_checks_param in
-
-  let rec loop ~(worklist : SubSet.t)
-            ~(processed : SubSet.t)
+  let rec loop ~(worklist : Sub.Set.t)
+            ~(processed : Sub.Set.t)
             ~(res : Alert.Set.t)
             ~(callees : CRS.t)
             ~(is_toplevel : bool)
             ~(config : Config.t) : analysis_result =
     let worklist_wo_procd = Set.diff worklist processed in
-    if SubSet.is_empty worklist_wo_procd
+    if Sub.Set.is_empty worklist_wo_procd
     then { alerts = res; callees } 
     else
       let sub = Set.min_elt_exn worklist_wo_procd in
@@ -508,19 +504,17 @@ let check_config config img ctxt proj : unit =
           ~config
       end
       else
-        let current_res = run_analyses sub img proj ctxt
+        let current_res = run_analyses sub proj ctxt
                             ~is_toplevel
                             ~bss_init_stores:global_store_data
-                            ~do_cs_checks
-                            ~do_ss_checks
                             ~config
         in
         let callee_subs = CRS.to_list current_res.callees
                           |> List.map ~f:(fun (r : CR.t) -> sub_of_tid_exn r.callee proj)
-                          |> SubSet.of_list in
-        SubSet.iter callee_subs ~f:(fun callee ->
+                          |> Sub.Set.of_list in
+        Sub.Set.iter callee_subs ~f:(fun callee ->
           L.info "CallOf: (%s, %s)\n%!" (Sub.name sub) (Sub.name callee));
-        let next_worklist = SubSet.union worklist_wo_procd_wo_sub callee_subs in
+        let next_worklist = Sub.Set.union worklist_wo_procd_wo_sub callee_subs in
         let all_alerts = Alert.Set.union res current_res.alerts in
         loop ~worklist:next_worklist
           ~processed:next_processed
