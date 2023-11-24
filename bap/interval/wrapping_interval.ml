@@ -314,10 +314,6 @@ let type_shift_binop op left right : range = range_for_promote left
     and no padding bits for signed integer types tho one sign
     bit as the MSB like normal two's complement *)
 let binop ?(signed : bool = false) opname op left right : t =
-  (* let warn_width_mismatch newwidth = *)
-  (*   printf "[WI] binop width mismatch (%s), left: %s, right: %s, adjusting to %d\n" *)
-  (*     opname (to_string left) (to_string right) newwidth *)
-  (* in *)
   match left, right with
   | Interval {lo=lo1; hi=hi1; width=width1; signed=signed1},
     Interval {lo=lo2; hi=hi2; width=width2; signed=signed2} ->
@@ -400,7 +396,11 @@ let unop op intvl =
     Interval { lo; hi; width = r.width; signed = false }
   | Bot -> Bot
 
-let shift_wrapper op x y = op x (Z.to_int y)
+(* TODO: is this x86 specific? *)
+let shift_wrapper op x y =
+  let masked = Z.logand y @@ Z.of_int 63 in
+  let masked_int = Z.to_int masked in
+  op x masked_int
 
 let add = binop "add" Z.add
 let sub = binop "sub" Z.sub

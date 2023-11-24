@@ -14,6 +14,12 @@ let s = CellType.Scalar
 let u = CellType.Unknown
 let n = CellType.Undef
 
+let to_string = function
+  | CellType.Ptr -> "PtrT"
+  | CellType.Scalar -> "ScalarT"
+  | CellType.Undef -> "UndefT"
+  | CellType.Unknown -> "UnknownT"
+
 let key : t Key.k = Key.create "type_domain"
 
 let get : type a. a Key.k -> (t -> a) option = fun k ->
@@ -56,7 +62,10 @@ let meet x y =
   | CellType.Scalar, CellType.Scalar -> s
   | _, CellType.Unknown -> x
   | CellType.Unknown, _ -> y
-  | _, _ -> failwith "no meet in type domain for that combo"
+  | _, _ ->
+    printf "no meet in type domain for comb (%s, %s)\n"
+      (to_string x) (to_string y);
+    CellType.Unknown
 
 let contains x y =
   let c = compare x y in

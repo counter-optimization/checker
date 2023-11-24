@@ -1,0 +1,233 @@
+open Core_kernel
+open Bap.Std
+open Monads.Std
+
+module BapG = Graphlib.Std
+module OcamlG = Graph
+
+module T = Bap_core_theory.Theory
+module KB = Bap_core_theory.KB
+
+let log_prefix = sprintf "%s.uc_graph_builder" Common.package
+module L = struct
+  include Dolog.Log
+  let () = set_prefix log_prefix
+end
+
+type cedge = (tid * Exp.t option * tid) [@@deriving compare, sexp]
+
+type cedges = cedge list
+
+type ucjmp_kind = DCall of tid
+                | ICall of Exp.t
+                | DJmp of tid
+                | IJmp of Exp.t
+                | DRet of tid
+                | IRet of Exp.t
+                | Interrupt
+[@@deriving compare, sexp]
+
+type exn += BadCfg of string
+
+let false_node = Tid.create ()
+let false_node_cc = Calling_context.of_tid false_node
+  
+let false_def =
+  let v = Var.create "RAX" (Bil.Types.Imm 64) in
+  let exp = Bil.Var v in
+  Def.create ~tid:false_node v exp
+
+let () = 
+  L.debug "False, top node is at: %a" Tid.ppo false_node;
+  L.debug "False, top node has def: %a" Def.ppo false_def
+
+module UcBapG = struct
+  type 'a edge = (Calling_context.t * Calling_context.t * 'a)
+
+  type 'a edges = 'a edge list
+
+  let of_cedge (from_, label, to_) =
+    (Calling_context.of_tid from_,
+     Calling_context.of_tid to_,
+     label)
+end
+
+module ExpOpt = struct
+  type t = Exp.t option [@@deriving compare, sexp]
+end
+
+module UcOcamlG = struct
+  module MExp = struct
+    include Exp
+    type t = Exp.t option [@@deriving compare, sexp]
+    let default = None
+    let s e = Some e
+  end
+
+  module T = OcamlG.Imperative.Graph.ConcreteLabeled(Tid)(MExp)
+
+  type edge = T.E.t 
+
+  let of_bapg (type g n e) (module G : BapG.Graph with type t = g and type node = n and type edge = e) (bapg : g) (edge_to_tuple : e -> _ UcBapG.edge) : T.t =
+    let cc_to_tid = Calling_context.to_insn_tid in
+    let convert_edge (from_, to_, label) : edge =
+      T.E.create (cc_to_tid from_) None (cc_to_tid to_)
+    in
+    let add_edge = T.add_edge_e in
+    let nnodes = G.number_of_nodes bapg in
+    let g = T.create ~size:nnodes () in
+    let update_edges es = 
+      Seq.iter es ~f:(fun e ->
+        add_edge g @@ convert_edge @@ edge_to_tuple e);
+    in
+    let edges = G.edges bapg in
+    update_edges edges;
+    g
+end
+
+let nonjmpedge from_ to_ = (from_, None, to_)
+let jmpedge from_ to_ cnd = (from_, cnd, to_)
+
+let string_of_cedge e = sexp_of_cedge e |> Sexp.to_string_hum
+let string_of_bapedge (from_, to_, l) =
+  let l = match l with
+    | None -> "None"
+    | Some exp -> Exp.to_string exp in
+  let from_ = Tid.to_string @@ Calling_context.to_insn_tid from_ in
+  let to_ = Tid.to_string @@ Calling_context.to_insn_tid to_ in
+  sprintf "(%s, %s, %s)" from_ to_ l
+
+(* jmp_never_taken and jmp_always_taken
+   only check for unconditionally never or always
+   taken jumps based on bools, not trivial expressions
+   like: 'jmp to addrA if x == x' *)
+let jmp_never_taken cnd =
+  match cnd with
+  | Bil.Int x ->
+    let w = Word.bitwidth x in
+    Word.equal x @@ Word.zero w
+  | _ -> true
+
+let jmp_always_taken cnd =
+  match cnd with
+  | Bil.Int x -> 
+    let w = Word.bitwidth x in
+    Word.equal x @@ Word.one w
+  | _ -> false
+
+let jmp_type j =
+  match Jmp.kind j with
+  | Call c ->
+    begin match Call.target c with
+    | Direct t -> DCall t
+    | Indirect e -> ICall e
+    end
+  | Goto (Direct t) -> DJmp t
+  | Goto (Indirect e) -> IJmp e
+  | Ret (Direct t) -> DRet t
+  | Ret (Indirect e) -> IRet e
+  | Int (_, _) -> Interrupt
+
+let build_blk_map blks =
+  let m : Blk.elt Tid.Map.t = Tid.Map.empty in
+  Seq.fold blks ~init:m ~f:(fun m b ->
+    let blktid = Term.tid b in
+    match Seq.hd @@ Blk.elts b with
+    | Some e -> Tid.Map.set m ~key:blktid ~data:e
+    | None -> m)
+
+let build_tid_map blks =
+  let m = Tid.Map.empty in
+  Seq.fold blks ~init:m ~f:(fun m b ->
+    Seq.fold (Blk.elts b) ~init:m ~f:(fun m e ->
+      let t = Common.elt_to_tid e in
+      Tid.Map.set m ~key:t ~data:e))
+
+let rec build_jmp_edge blkmap from_ jmp : cedge option =
+  let find = Tid.Map.find in
+  let cnd = Jmp.cond jmp in
+  if jmp_never_taken cnd
+  then None
+  else
+    let cnd = if jmp_always_taken cnd then None else Some cnd in
+    match jmp_type jmp with
+    | DJmp t ->
+      begin
+        match find blkmap t with
+        | Some (`Jmp j) -> build_jmp_edge blkmap from_ j
+        | Some (`Def d) -> Some (from_, cnd, Term.tid d)
+        | Some (`Phi p) -> raise @@ BadCfg "ssa not allowed"
+        | None -> raise @@ BadCfg "jmp to empty bb"
+      end
+    | IJmp e -> Some (from_, cnd, false_node)
+    | DCall t -> Some (from_, cnd, false_node)
+    | ICall e -> Some (from_, cnd, false_node)
+    | DRet t -> None
+    | IRet e -> None
+    | Interrupt -> None
+
+let rec of_defs
+          ?(idxst : Idx_calculator.t option = None)
+          ?(total = []) = function
+  | f :: (s :: xs as nxt) ->
+    let fst = Term.tid f in
+    let snd = Term.tid s in
+    begin
+      match idxst with
+      | Some idxst ->
+        if Idx_calculator.is_part_of_idx_insn idxst fst
+        then of_defs ~total nxt
+        else if Idx_calculator.is_part_of_idx_insn idxst snd
+        then of_defs ~total (f :: xs)
+        else of_defs ~total:(nonjmpedge fst snd :: total) nxt
+      | None -> of_defs ~total:(nonjmpedge fst snd :: total) nxt
+    end
+  | _ -> total
+
+let of_blk ?(idxst : Idx_calculator.t option = None) blkmap b =
+  let defs = Term.enum def_t b |> Seq.to_list in
+  let def_edges = of_defs ~idxst defs in
+  let last_def = List.last defs in
+  (* last_def is None <=> def_edges is [] <=> the basic block is empty of defs *)
+  let rec build_jmps ?(es = []) dt = function
+    | [] -> es
+    | j :: js ->
+      let es = match build_jmp_edge blkmap dt j with
+        | Some cedge -> cedge :: es
+        | None -> es in
+      let cnd = Jmp.cond j in
+      if jmp_always_taken cnd
+      then es
+      else build_jmps ~es dt js
+  in
+  match last_def with
+  | None -> []
+  | Some d ->
+    let dt = Term.tid d in
+    let jmps = Term.enum jmp_t b |> Seq.to_list in
+    build_jmps dt jmps @ def_edges
+
+module IntraNoResolve = struct
+  let log_prefix = sprintf "%s.IntraNoResolve" log_prefix
+  module L = struct
+    include Dolog.Log
+    let () = set_prefix log_prefix
+  end
+
+  let of_sub ?(idxst : Idx_calculator.t option = None) s =
+    let blks = Term.enum blk_t s in
+    let blkmap = build_blk_map blks in
+    let tidmap = build_tid_map blks
+               |> Tid.Map.set ~key:false_node ~data:(`Def false_def) in
+    let edges = Seq.map blks ~f:(of_blk ~idxst blkmap)
+                |> Seq.to_list
+                |> List.join in
+    edges, tidmap
+
+  let of_sub_to_bapedges ?(idxst : Idx_calculator.t option = None) s =
+    let edges, tidmap = of_sub ~idxst s in
+    List.map edges ~f:UcBapG.of_cedge, tidmap
+end
+
+module Inter = struct
+end

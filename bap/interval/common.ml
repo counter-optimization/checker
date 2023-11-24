@@ -72,6 +72,11 @@ let is_double_check = Extension.Configuration.flag
                         ~doc:"Is this a double-checking run?"
                         "double-check"
 
+let do_memtrace =
+  Extension.Configuration.flag
+    ~doc:"Enable memtrace for a memtrace run"
+    "memtrace"
+
 let elt_to_tid (e : Blk.elt) : tid =
   match e with
   | `Jmp j -> Term.tid j
@@ -445,7 +450,7 @@ let jmp_is_return (j : jmp term) : bool =
   | Call c -> Option.is_none @@ Call.return c
   | _ -> false
 
-let ai_widen_threshold = 4
+let ai_widen_threshold = 3
 
 module type CheckerInterp = sig
   type t

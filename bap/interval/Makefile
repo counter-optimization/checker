@@ -24,7 +24,7 @@ release: bap-plugin
 debug: bap-plugin
 
 bap-plugin: *.ml
-	 bapbuild -pkg dolog -pkg z3 -j $(BAPBUILD_JOB_SLOTS) $(PLUGIN_NAME)
+	 bapbuild -pkg ocamlgraph -pkg memtrace -pkg dolog -pkg z3 -j $(BAPBUILD_JOB_SLOTS) $(PLUGIN_NAME)
 
 global_check: debug
 	# --uarch-checker-no-symex

@@ -45,6 +45,8 @@ S numeric_domain.ml
 S uc_log.ml
 S uc_stats.ml
 S uc_sub.ml
+S uc_graph_builder.ml
+S uc_fixpoint.ml
 
 B _build
 
@@ -58,3 +60,5 @@ PKG monads
 PKG z3
 PKG lwt
 PKG dolog
+PKG memtrace
+PKG ocamlgraph

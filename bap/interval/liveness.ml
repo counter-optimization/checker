@@ -38,7 +38,7 @@ let assn_of_def (dt : def term) : string =
   Var.name @@ Def.lhs dt
 
 let get_dead_defs ?(flagsonly : bool = true)
-      (sol : t) (tidmap : Edge_builder.tidmap)
+      (sol : t) (tidmap : Blk.elt Tid.Map.t)
   : Tidset.t =
   let t = Calling_context.to_insn_tid in
   let is_flag = Common.AMD64SystemVABI.var_name_is_flag in

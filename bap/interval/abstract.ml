@@ -6,6 +6,12 @@ open Monads.Std
 module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 
+let log_prefix = sprintf "%s.abstract" Common.package
+module L = struct
+  include Dolog.Log
+  let () = set_prefix log_prefix
+end
+
 module type NumericDomain = Numeric_domain.Sig
 
 module type MemoryT =
@@ -60,7 +66,7 @@ sig
 
   val widen_threshold : int
 
-  val widen_with_step : int -> 'a -> t -> t -> t
+  val widen_with_step : int -> (Graphlib.Make(Calling_context)(Bool).Node.t) -> t -> t -> t
 
   val pp : t -> unit
 
@@ -147,30 +153,33 @@ module NumericEnv(ValueDom : NumericDomain)
       printf "\t%s\n%!" entry_str)
 
   let merge env1 env2 : t =
-    (* let merge_helper ~key ~data prev = *)
-    (*   if M.mem prev key *)
-    (*   then *)
-    (*     let last = M.find_exn prev key in *)
-    (*     let merged = ValueDom.join last data in *)
-    (*     M.set prev ~key ~data:merged *)
-    (*   else M.set prev ~key ~data in *)
-    (* M.fold env2 ~init:env1 ~f:merge_helper *)
-    Map.merge_skewed env1 env2 ~combine:(fun ~key -> ValueDom.join)
+    Map.merge_skewed env1 env2
+      ~combine:(fun ~key -> ValueDom.join)
 
   let widen_threshold = Common.ai_widen_threshold
 
-  let widen_with_step steps n prev_state new_state : t =
-    let get_differing_keys prev_state new_state =
-      M.fold prev_state ~init:Seq.empty ~f:(fun ~key ~data acc ->
-        let next = M.find_exn new_state key in
-        if ValueDom.equal data next
-        then acc
-        else Seq.cons key acc) in
-    let widen_state prev_state new_state =
-      let changed_keys = get_differing_keys prev_state new_state in
-      Seq.fold changed_keys ~init:prev_state ~f:(fun prev changed ->
-        set changed ValueDom.top prev) in
-    let f = if steps < widen_threshold then merge else widen_state in
+  let widen_with_step steps (node : Graphlib.Make(Calling_context)(Bool).Node.t) prev_state new_state : t =
+    let module G = Graphlib.Make(Calling_context)(Bool) in
+    let widen = fun p n ->
+      let open Core_kernel.Map.Symmetric_diff_element in
+      M.fold_symmetric_diff p n
+        ~data_equal:ValueDom.equal
+        ~init:n
+        ~f:(fun newenv (key, change) ->
+          match change with
+          | `Right v
+          | `Left v -> Map.set newenv ~key ~data:v
+          | `Unequal (preval, nextval) ->
+            Map.set newenv ~key ~data:ValueDom.top)
+    in
+    let f = if steps < widen_threshold
+      then merge
+      else if steps = widen_threshold
+      then widen
+      else if steps = 1 + widen_threshold
+      then Map.merge_skewed ~combine:(fun ~key -> ValueDom.meet)
+      else Map.merge_skewed ~combine:(fun ~key _prev next -> next)
+    in
     f prev_state new_state
 
   let differs = Common.map_diff ~equal:ValueDom.equal
@@ -455,7 +464,7 @@ module AbstractInterpreter(N: NumericDomain)
       in
       failwith err
 
-  let denote_def (subname : string) (d : def term) (st : E.t) : E.t  =
+  let denote_def (d : def term) (st : E.t) : E.t  =
     let var = Def.lhs d in
     let varname = Var.name var in
     let rhs = Def.rhs d in
@@ -472,16 +481,10 @@ module AbstractInterpreter(N: NumericDomain)
     in
     E.set varname denoted_rhs st
 
-  let denote_phi (subname : string) (p : phi term) (st : E.t) : E.t =
+  let denote_phi (p : phi term) (st : E.t) : E.t =
     failwith "denote_phi not implemented yet"
 
-  let denote_jmp (subname : string) (j : jmp term) (st : E.t) : E.t =
-    (* match Jmp.kind j with *)
-    (* | Call c -> E.havoc_on_call st *)
-    (* | Goto (Indirect exp) -> st *)
-    (* | Goto _ -> st *)
-    (* | Ret _ -> st *)
-    (* | Int _ -> st *)
+  let denote_jmp (j : jmp term) (st : E.t) : E.t =
     let set_smalloc_return exp =
       let res, st' = denote_exp exp st in
       let target = get_intvl res in
@@ -504,9 +507,9 @@ module AbstractInterpreter(N: NumericDomain)
     | Ret _ -> st
     | Int _ -> st
 
-  let denote_elt (subname : string) (e : Blk.elt) (st : E.t) : E.t =
+  let denote_elt (e : Blk.elt) (st : E.t) : E.t =
     match e with
-    | `Def d -> denote_def subname d st
-    | `Jmp j -> denote_jmp subname j st
-    | `Phi p -> denote_phi subname p st
+    | `Def d -> denote_def d st
+    | `Jmp j -> denote_jmp j st
+    | `Phi p -> denote_phi p st
 end

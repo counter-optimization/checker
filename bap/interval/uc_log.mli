@@ -7,3 +7,5 @@ val init : L.log_level -> unit
 val set_global_level : L.log_level -> unit
 
 val bap_cl_arg_enum : (string * L.log_level) list
+
+val is_dbg : L.log_level -> bool

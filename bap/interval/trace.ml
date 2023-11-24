@@ -4,6 +4,12 @@ open Graphlib.Std
 
 module SS = Common.SS
 
+let log_prefix = sprintf "%s.trace" Common.package
+module L = struct
+  include Dolog.Log
+  let () = set_prefix log_prefix
+end
+
 module Directives(N : Abstract.NumericDomain)
     (E : Abstract.MemoryT with type v := N.t
                            and type region := Common.Region.t
@@ -830,7 +836,7 @@ end
 module ConditionFinder = struct
   type rpo_traversal = Calling_context.t Seq.t
 
-  type tidmap = Edge_builder.tidmap
+  type tidmap = Blk.elt Tid.Map.t
 
   type prereqs = {
     rpo_traversal : rpo_traversal;
@@ -932,37 +938,37 @@ module AbsInt = struct
       let base_denote_exp = fun env -> BaseInt.denote_exp exp env |> fst in
       Tree.map_list base_denote_exp st.tree
 
-    let denote_def (subname : string) (dmap : Directives.directive_map)
+    let denote_def (dmap : Directives.directive_map)
           (d : def term) (st : env) : env =
       let tid = Term.tid d in
-      let st : env = if Directives.tid_has_directive dmap tid
+      let st : env =
+        if Directives.tid_has_directive dmap tid
         then
-          (* let () = printf "[Trace] doing split at %a\n%!" Tid.ppo tid in *)
+          (L.debug "doing split at %a" Tid.ppo tid;
           let tdir = Directives.get_tdirective dmap tid in
-          { tree = Tree.apply_directive st.tree tdir }
+          { tree = Tree.apply_directive st.tree tdir })
         else st in
-      let tree = Tree.map ~f:(BaseInt.denote_def subname d) st.tree in
+      let tree = Tree.map ~f:(BaseInt.denote_def d) st.tree in
       { tree }
 
-    let denote_phi (subname : string) (dmap : Directives.directive_map)
+    let denote_phi (dmap : Directives.directive_map)
           (p : phi term) (st : env) : env =
-      let tree = Tree.map ~f:(BaseInt.denote_phi subname p) st.tree in
+      let tree = Tree.map ~f:(BaseInt.denote_phi p) st.tree in
       { tree }
 
-    let denote_jmp (subname : string) (dmap : Directives.directive_map)
+    let denote_jmp (dmap : Directives.directive_map)
           (j : jmp term) (st : env) : env =
-      let tree = Tree.map ~f:(BaseInt.denote_jmp subname j) st.tree in
+      let tree = Tree.map ~f:(BaseInt.denote_jmp j) st.tree in
       { tree }
 
-    let denote_elt (subname : string) (dmap : Directives.directive_map)
+    let denote_elt (dmap : Directives.directive_map)
           (e : Blk.elt) (st : env) : env =
-      let () = if 5 <= TreeEnv.num_leaves st
-        then printf "[Trace] env at %a of sub %s has >=5 splits\n%!"
-               Tid.ppo (Common.elt_to_tid e) subname
-        else () in
+      if 5 <= TreeEnv.num_leaves st
+      then L.warn "env at %a has >=5 splits"
+             Tid.ppo @@ Common.elt_to_tid e;
       match e with
-      | `Def d -> denote_def subname dmap d st
-      | `Jmp j -> denote_jmp subname dmap j st
-      | `Phi p -> denote_phi subname dmap p st
+      | `Def d -> denote_def dmap d st
+      | `Jmp j -> denote_jmp dmap j st
+      | `Phi p -> denote_phi dmap p st
   end
 end

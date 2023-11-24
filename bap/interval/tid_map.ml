@@ -2,8 +2,7 @@ open Core_kernel
 open Bap.Std
 open Graphlib.Std
 
-module M = Map.Make_binable_using_comparator(Tid)
-include M
+include Tid.Map
 
 let tid_of_elt = function
   | `Def x -> Term.tid x
@@ -36,14 +35,19 @@ let t_of_sub sub =
   let insns_of_node = fun n -> Blk.elts @@ Graphs.Ir.Node.label n in
   t_of_sub_nodes nodes insns_of_node
 
-let merge tm1 tm2 =
-  fold tm2 ~init:tm1
-    ~f:(fun ~key ~(data : Blk.elt) cur ->
-      if mem cur key && not (elt_same data (find_exn cur key))
-      then
-        begin
-          let tid_s = Tid.to_string key in
-          failwith @@ sprintf "tid %s already present in tidmap with different insns" tid_s
-        end
-      else
-        set cur ~key ~data)
+let merge : Blk.elt t -> Blk.elt t -> Blk.elt t =
+  Tid.Map.merge ~f:(fun ~key -> function
+  | `Both (l, r) -> Some l
+  | `Left l -> Some l 
+  | `Right r -> Some r)
+(* let merge tm1 tm2 = *)
+(*   fold tm2 ~init:tm1 *)
+(*     ~f:(fun ~key ~(data : Blk.elt) cur -> *)
+(*       if mem cur key && not (elt_same data (find_exn cur key)) *)
+(*       then *)
+(*         begin *)
+(*           let tid_s = Tid.to_string key in *)
+(*           failwith @@ sprintf "tid %s already present in tidmap with different insns" tid_s *)
+(*         end *)
+(*       else *)
+(*         set cur ~key ~data) *)

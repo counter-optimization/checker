@@ -11,11 +11,11 @@ module IrCfg = Bap.Std.Graphs.Ir
 
 module CC = Calling_context
 
-type edge = (Tid.t * Tid.t * bool)
+type edge = (Tid.t * Tid.t * Exp.t option)
 
 type edges = edge list
 
-type cc_edge = (CC.t * CC.t * bool)
+type cc_edge = (CC.t * CC.t * Exp.t option)
 
 type cc_edges = cc_edge list
 
@@ -185,7 +185,7 @@ let edges_of_jump j sub nodes proj idx_st : edges ST.t =
       | Goto (Direct totid) ->
         let first_insn = first_insn_of_blk_tid totid sub in
         let first_insns_tid = Tid_map.tid_of_elt first_insn in
-        ST.return [(fromtid, first_insns_tid, false)]
+        ST.return [(fromtid, first_insns_tid, None)]
       | Goto _ when Tid.equal fromtid ret_insn_tid ->
         ST.return []
       | Goto (Indirect _expr) ->

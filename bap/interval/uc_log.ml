@@ -24,4 +24,8 @@ let init global_lvl =
   L.color_on ();
   L.set_output stdout;
   L.info "%s" "logging initialized"
+
+let is_dbg = function
+  | L.DEBUG -> true
+  | _ -> false
   

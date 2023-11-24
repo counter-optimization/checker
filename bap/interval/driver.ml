@@ -17,8 +17,8 @@ module ABI = Common.AMD64SystemVABI
 
 module ProdIntvlxTaint = DomainProduct(Wrapping_interval)(Checker_taint.Analysis)
 module WithTypes = DomainProduct(ProdIntvlxTaint)(Type_domain)
-module WithBitvectors = DomainProduct(WithTypes)(Abstract_bitvector)
-module FinalDomain : Numeric_domain.Sig = DomainProduct(WithBitvectors)(Bases_domain)
+(* module WithBitvectors = DomainProduct(WithTypes)(Abstract_bitvector) *)
+module FinalDomain : Numeric_domain.Sig = DomainProduct(WithTypes)(Bases_domain)
 
 module E = Abstract_memory.Make(FinalDomain)
 module R = Region
@@ -29,6 +29,42 @@ module AbsInt = AbstractInterpreter(FinalDomain)(R)(Rt)(Vt)(E)
 module TraceAbsInt = Trace.AbsInt.Make(FinalDomain)(E)
 module TraceDir = Trace.Directives(FinalDomain)(E)
 module TraceEnv = Trace.Env(FinalDomain)(E)
+
+module OcData(Args : sig
+    val dmap : TraceDir.directive_map
+    val tidmap : Blk.elt Tid.Map.t
+    val firstnode : Calling_context.t
+  end) : sig
+  type t = TraceEnv.t
+  type edge = Uc_graph_builder.UcOcamlG.T.E.t
+  val join : t -> t -> t
+  val equal : t -> t -> bool
+  val analyze : edge -> t -> t
+  val widening : t -> t -> t
+end = struct
+  type t = TraceEnv.t
+             
+  type edge = Uc_graph_builder.UcOcamlG.T.E.t
+
+  let join = TraceEnv.merge
+
+  let equal = TraceEnv.equal
+
+  let analyze ((from_, cnd, to_) : edge) oldst =
+    let elt = match Tid.Map.find Args.tidmap to_ with
+      | Some elt -> elt
+      | None -> failwith "tid not found" in
+    TraceAbsInt.denote_elt Args.dmap elt oldst
+
+  let widening oldst newst =
+    (* to keep old stuff compatible with new stuff, 
+       reuse all 
+         val widening_with_step : int -> 'n -> t -> t -> t
+       with the step counter set past the widening delay
+       since the OcamlGraph lib should only calling this
+       `widening' function after the delay *)
+    TraceEnv.widen_with_step Common.ai_widen_threshold Args.firstnode oldst newst
+end
 
 (** Single shot pass runner *)
 module GroupedAnalyses = Uc_single_shot_pass.GroupRunner(struct let n = 3 end)
@@ -93,7 +129,7 @@ let sub_of_tid_exn tid proj : sub Term.t =
    this is really messy atm, but can be cleaned up later if
    separating callee getting of indirect and direct branches
 *)
-let should_skip_analysis (edges : Edge_builder.edges)
+let should_skip_analysis (edges : Exp.t option Uc_graph_builder.UcBapG.edges)
       (tidmap : Blk.elt Tid_map.t)
       (sub : sub term)
       (prog : Program.t) : analysis_result option =
@@ -132,13 +168,14 @@ let should_skip_analysis (edges : Edge_builder.edges)
   else None
 
 let first_insn_cc sub =
-  
+  let open Option.Monad_infix in
   let bbs = Term.enum blk_t sub in
-  Option.bind (Seq.hd bbs) ~f:(fun first_bb ->
-    let first_elt = Edge_builder.first_insn_of_blk first_bb in
-    let first_tid = Common.elt_to_tid first_elt in
-    let first_cc = Calling_context.of_tid first_tid in
-    Some first_cc)
+  Seq.hd bbs >>= fun bb ->
+  let elts = Blk.elts bb in
+  Seq.hd elts >>= fun first_elt ->
+  Option.some @@
+  Calling_context.of_tid @@
+  Common.elt_to_tid first_elt
 
 let do_ (type a) ~(if_ : bool) ~(default : a) (f : unit -> a) : a =
     if if_ then f () else default
@@ -180,8 +217,13 @@ let run_analyses sub proj ~(is_toplevel : bool)
   in
 
   let edges, tidmap = timed subname Edgebuilding @@ fun () ->
-    Edge_builder.run_one sub proj idx_st
+    (* Edge_builder.run_one sub proj idx_st *)
+    Uc_graph_builder.IntraNoResolve.of_sub_to_bapedges ~idxst:(Some idx_st) sub
   in
+
+  L.debug "Edges are:";
+  List.iter edges ~f:(fun e ->
+    printf "\t%s\n" @@ Uc_graph_builder.string_of_bapedge e);
   
   match should_skip_analysis edges tidmap sub prog with
   | Some res ->
@@ -192,13 +234,18 @@ let run_analyses sub proj ~(is_toplevel : bool)
     let do_cs = Extension.Configuration.get ctxt Common.do_cs_checks_param in
     let do_ss = Extension.Configuration.get ctxt Common.do_ss_checks_param in
     let do_dmp = Extension.Configuration.get ctxt Common.do_dmp_checks_param in
+    let is_dbg = Uc_log.is_dbg @@
+      Extension.Configuration.get ctxt Common.global_log_level_param in
 
-    let module G = Graphlib.Make(Calling_context)(Bool) in
-    let edges, cfg = timed subname CfgCreation @@ fun () ->
-      let edges = List.map edges ~f:(Edge_builder.to_cc_edge) in    
-      let cfg = Graphlib.create (module G) ~edges () in
-      edges, cfg
+    let module G = Graphlib.Make(Calling_context)(Uc_graph_builder.ExpOpt) in
+    let cfg = timed subname CfgCreation @@ fun () ->
+      Graphlib.create (module G) ~edges ()
     in
+
+    (* let oc_graph = Uc_graph_builder.UcOcamlG.of_bapg *)
+    (*                  (module G) *)
+    (*                  cfg *)
+    (*                  (fun e -> (G.Edge.src e, G.Edge.dst e, G.Edge.label e)) in *)
 
     (* here, liveness means classical dataflow liveness *)
     L.info "Running classical dataflow liveness 1";
@@ -209,7 +256,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
 
     let _, edges, cfg = timed subname RemoveDeadFlagDefs @@ fun () ->
       let dead_defs = Liveness.get_dead_defs dataflow_liveness tidmap in
-      let edges = Edge_builder.remove_dead_defs edges dead_defs in
+      (* let edges = Edge_builder.remove_dead_defs edges dead_defs in *)
       let cfg = Graphlib.create (module G) ~edges () in
       dead_defs, edges, cfg
     in
@@ -313,6 +360,10 @@ let run_analyses sub proj ~(is_toplevel : bool)
                        cond_scrape_st in
     let cmov_cnd_flags = List.filter live_flags ~f:(fun lf ->
       Trace.ConditionFinder.FlagScraper.flag_used_in_cmov lf cond_scrape_st) in
+
+    do_ ~if_:is_dbg ~default:() (fun () ->
+    List.iter cmov_cnd_flags ~f:(fun (tid, name) ->
+      L.debug "cmov_cnd_flag: %s (%a)" name Tid.ppo tid));
   
     let cond_extractor_st = TraceDir.Extractor.init tidmap reachingdefs in
     let dirs = List.fold cmov_cnd_flags ~init:[] ~f:(fun dirs lf ->
@@ -336,13 +387,38 @@ let run_analyses sub proj ~(is_toplevel : bool)
     L.info "running trace part abstract interpreter";
     let start = Analysis_profiling.record_start_time () in
 
-    let init_trace_env = TraceEnv.default_with_env final_env in
+    let top_env = String.Set.fold ABI.callee_clobbered_regs
+                    ~init:E.empty
+                    ~f:(fun env reg ->
+                      match ABI.size_of_var_name reg with
+                      | Some sz ->
+                        let top = FinalDomain.make_top sz false in
+                        E.set reg top env
+                      | None -> E.set reg FinalDomain.top env)
+                  |> TraceEnv.default_with_env in
 
+    let init_trace_env = TraceEnv.default_with_env final_env in
     let init_mapping = G.Node.Map.set
                          G.Node.Map.empty
                          ~key:first_node
-                         ~data:init_trace_env in
+                         ~data:init_trace_env
+                       |> G.Node.Map.set
+                            ~key:Uc_graph_builder.false_node_cc
+                            ~data:top_env in
     let init_sol = Solution.create init_mapping TraceEnv.empty in
+
+    (* let module Data = OcData(struct *)
+    (*                     let firstnode = first_node *)
+    (*                     let dmap = directive_map *)
+    (*                     let tidmap = tidmap end) in *)
+    (* let module CI = Uc_fixpoint.Chaotic(Data) in *)
+    (* let wto = CI.get_wto oc_graph @@ Calling_context.to_insn_tid first_node in *)
+    (* let analysis_results = CI.compute *)
+    (*                          oc_graph *)
+    (*                          wto *)
+    (*                          (fun _ -> TraceEnv.empty) *)
+    (*                          Uc_fixpoint.OcamlG.ChaoticIteration.FromWto *)
+    (*                          Common.ai_widen_threshold in *)
     
     let analysis_results = Graphlib.fixpoint
                              (module G)
@@ -362,8 +438,13 @@ let run_analyses sub proj ~(is_toplevel : bool)
                                      Tid.pps tid
                                in
                                let st = dmp_bt_set tid st in
-                               L.debug "denoting elt %a" Tid.ppo tid;
-                               TraceAbsInt.denote_elt subname directive_map elt st)
+                               let is_target = Format.sprintf "%a" Tid.pps tid
+                                               |> String.Caseless.is_substring
+                                                    ~substring:"90f849" in
+                               do_ ~if_:is_target ~default:() (fun () ->
+                                 L.debug "denoting elt %a with inenv:" Tid.ppo tid;
+                                 TraceEnv.pp st);
+                               TraceAbsInt.denote_elt directive_map elt st)
     in
 
     L.info "done running trace part abstract interpreter\n%!";
@@ -379,6 +460,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
     struct
       let denote_exp (tid : tid) (exp : Bil.exp) : FinalDomain.t list =
         let cc = Calling_context.of_tid tid in
+        (* let in_state = CI.Chao.M.find tid analysis_results in *)
         let in_state = Solution.get analysis_results cc in
         (* let in_state = Map.find_exn !tid_level_data tid in *)
         TraceAbsInt.nondet_denote_exp exp in_state
@@ -446,6 +528,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
     let eval_indirect_exp : tid -> Bil.exp -> FinalDomain.t list = fun tid exp ->
       let cc = Calling_context.of_tid tid in
       let env = Solution.get analysis_results cc in
+      (* let env = CI.Chao.M.find tid analysis_results in *)
       (* let env = Map.find_exn !tid_level_data tid in  *)
       TraceAbsInt.nondet_denote_exp exp env
     in

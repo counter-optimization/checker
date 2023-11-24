@@ -47,7 +47,11 @@ module UarchCheckerExtension = struct
       Common.global_log_level_param
     |> Uc_log.init
 
-  let init_sym_resolution : Project.t -> unit = Uc_sub.Resolve.init 
+  let init_sym_resolution : Project.t -> unit = Uc_sub.Resolve.init
+
+  let init_memtrace ctxt : unit =
+    let do_memtrace = Extension.Configuration.get ctxt Common.do_memtrace in
+    if do_memtrace then Memtrace.trace_if_requested ()
 
   let put_addrs_in_sema () =
     let open KB.Syntax in
@@ -66,6 +70,7 @@ module UarchCheckerExtension = struct
   let pass ctxt proj =
     init_logging ctxt;
     init_sym_resolution proj;
+    init_memtrace ctxt;
     let out_csv_file_name = Extension.Configuration.get ctxt
                               Common.output_csv_file_param in
     test_output_csv_file out_csv_file_name;

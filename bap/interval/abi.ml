@@ -3,16 +3,23 @@ open Bap.Std
 
 module type ABIDef = sig
   val stack_reg : string
+    
   val frame_reg : string
 
-  val flag_names : Set.M(String).t
+  val callee_saved_regs : String.Set.t
+
+  val flag_names : String.Set.t
+
+  val callee_clobbered_regs : String.Set.t
 
   val gpr_arg_names : string list
+                        
   val gpr_names : string list
 
   val vector_arg_names : string list
 
   val vector_arg_width : int
+    
   val gpr_arg_width : int
 
   val return_reg : string
@@ -25,8 +32,11 @@ module AMD64SystemVABI = struct
 
   let return_reg = "RAX"
 
-  let flag_names = Set.of_list (module String) ["CF"; "PF"; "AF"; "ZF"; "SF";
-                                                "TF"; "IF"; "DF"; "OF"]
+  let callee_saved_regs = String.Set.of_list ["RBX"; "RSP"; "RBP";
+                                              "R12"; "R13"; "R14"; "R15"]
+
+  let flag_names = String.Set.of_list ["CF"; "PF"; "AF"; "ZF"; "SF";
+                                       "TF"; "IF"; "DF"; "OF"]
 
   let gpr_arg_names = ["RDI"; "RSI"; "RDX"; "RCX"; "R8"; "R9"]
 
@@ -42,6 +52,12 @@ module AMD64SystemVABI = struct
   let vectorreg_arg_names_unaliased = ["YMM0"; "YMM1"; "YMM2"; "YMM3"; "YMM4";
                                        "YMM5"; "YMM6"; "YMM7"]
 
+  let callee_clobbered_regs =
+    let all = String.Set.union flag_names @@ String.Set.of_list gpr_names
+              |> String.Set.union (String.Set.of_list vectorreg_arg_names_unaliased)
+    in
+    String.Set.diff all callee_saved_regs
+
   let vector_arg_names = List.append vectorreg_arg_names_unaliased vectorreg_arg_names_aliased
 
   let vector_arg_width = 256
@@ -50,7 +66,7 @@ module AMD64SystemVABI = struct
 
   let gpr_arg_width = 64
 
-  let var_name_is_flag : string -> bool = Set.mem flag_names
+  let var_name_is_flag : string -> bool = String.Set.mem flag_names
 
   let var_name_is_arg : string -> bool = List.mem arg_names ~equal:String.equal
 
@@ -66,7 +82,7 @@ module AMD64SystemVABI = struct
     then Some 128
     else if List.mem gpr_names name ~equal
     then Some 64
-    else if Set.mem flag_names name
+    else if String.Set.mem flag_names name
     then Some 1
     else None
 end
