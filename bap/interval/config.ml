@@ -49,6 +49,8 @@ module T = struct
 
   let empty_secret_map = Map.empty (module String)
 
+  let get_secret_args (c : t) : secret_map = c.secret_args
+
   let get_taint_arg_indices subname config : int list option =
     let secret_args = config.secret_args in
     match Map.find secret_args subname with
@@ -170,10 +172,6 @@ module Parser = struct
         else () in
       let target_fn_sym_name = List.hd_exn line_as_list in
       let secret_idx = List.hd_exn @@ List.tl_exn line_as_list in
-      (* let secret_idx = String.drop_prefix line (comma_idx + 1) in *)
-      (* let target_fn_sym_name = String.drop_suffix line (comma_idx + 1) in *)
-      (* let () = printf "Target fn line: secret idx is %s, target_fn is %s\n%!" *)
-      (*            secret_idx target_fn_sym_name in *)
       TargetFn (target_fn_sym_name, secret_idx)
 
   let set_target_fns targets (config : T.t) : T.t =

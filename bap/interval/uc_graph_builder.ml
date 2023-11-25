@@ -18,8 +18,11 @@ type cedge = (tid * Exp.t option * tid) [@@deriving compare, sexp]
 
 type cedges = cedge list
 
-type ucjmp_kind = DCall of tid
-                | ICall of Exp.t
+type ucret_kind = DRetTo of tid | IRetTo of Exp.t | NoRet
+                  [@@deriving compare, sexp]
+
+type ucjmp_kind = DCall of tid * ucret_kind
+                | ICall of Exp.t * ucret_kind
                 | DJmp of tid
                 | IJmp of Exp.t
                 | DRet of tid
@@ -106,7 +109,7 @@ let jmp_never_taken cnd =
   | Bil.Int x ->
     let w = Word.bitwidth x in
     Word.equal x @@ Word.zero w
-  | _ -> true
+  | _ -> false
 
 let jmp_always_taken cnd =
   match cnd with
@@ -118,9 +121,13 @@ let jmp_always_taken cnd =
 let jmp_type j =
   match Jmp.kind j with
   | Call c ->
+    let retto = match Call.return c with
+      | Some (Direct t) -> DRetTo t
+      | Some (Indirect e) -> IRetTo e
+      | None -> NoRet in
     begin match Call.target c with
-    | Direct t -> DCall t
-    | Indirect e -> ICall e
+    | Direct t -> DCall (t, retto)
+    | Indirect e -> ICall (e, retto)
     end
   | Goto (Direct t) -> DJmp t
   | Goto (Indirect e) -> IJmp e
@@ -143,28 +150,39 @@ let build_tid_map blks =
       let t = Common.elt_to_tid e in
       Tid.Map.set m ~key:t ~data:e))
 
-let rec build_jmp_edge blkmap from_ jmp : cedge option =
+let rec build_jmp_edge ?(interproc = false) blkmap proj from_ jmp : cedge list =
   let find = Tid.Map.find in
   let cnd = Jmp.cond jmp in
+  let jmptarget t cnd from_ = match find blkmap t with
+    | Some (`Jmp j) -> build_jmp_edge blkmap proj from_ j
+    | Some (`Def d) -> [(from_, cnd, Term.tid d)]
+    | Some (`Phi p) -> raise @@ BadCfg "ssa not allowed"
+    | None -> raise @@ BadCfg "jmp to empty bb"
+  in
+  let get_ret_edge = function
+    | DRetTo t -> jmptarget t None false_node
+    | IRetTo e -> raise @@ BadCfg "Indirect rets not handled"
+    | NoRet -> []
+  in
   if jmp_never_taken cnd
-  then None
+  then []
   else
-    let cnd = if jmp_always_taken cnd then None else Some cnd in
+    let cnd =
+      if jmp_always_taken cnd
+      then None
+      else Some cnd in
     match jmp_type jmp with
-    | DJmp t ->
-      begin
-        match find blkmap t with
-        | Some (`Jmp j) -> build_jmp_edge blkmap from_ j
-        | Some (`Def d) -> Some (from_, cnd, Term.tid d)
-        | Some (`Phi p) -> raise @@ BadCfg "ssa not allowed"
-        | None -> raise @@ BadCfg "jmp to empty bb"
-      end
-    | IJmp e -> Some (from_, cnd, false_node)
-    | DCall t -> Some (from_, cnd, false_node)
-    | ICall e -> Some (from_, cnd, false_node)
-    | DRet t -> None
-    | IRet e -> None
-    | Interrupt -> None
+    | DJmp t -> jmptarget t cnd from_
+    | IJmp e -> [(from_, cnd, false_node)]
+    | DCall (t, retto) ->
+      if interproc
+      then [] (* todo *)
+      else get_ret_edge retto @ [(from_, cnd, false_node)]
+    | ICall (e, retto) ->
+      get_ret_edge retto @ [(from_, cnd, false_node)]
+    | DRet t -> [] (* todo *)
+    | IRet e -> [] (* todo *)
+    | Interrupt -> []
 
 let rec of_defs
           ?(idxst : Idx_calculator.t option = None)
@@ -184,7 +202,7 @@ let rec of_defs
     end
   | _ -> total
 
-let of_blk ?(idxst : Idx_calculator.t option = None) blkmap b =
+let of_blk ?(idxst : Idx_calculator.t option = None) ?(interproc = false) blkmap proj b =
   let defs = Term.enum def_t b |> Seq.to_list in
   let def_edges = of_defs ~idxst defs in
   let last_def = List.last defs in
@@ -192,9 +210,7 @@ let of_blk ?(idxst : Idx_calculator.t option = None) blkmap b =
   let rec build_jmps ?(es = []) dt = function
     | [] -> es
     | j :: js ->
-      let es = match build_jmp_edge blkmap dt j with
-        | Some cedge -> cedge :: es
-        | None -> es in
+      let es = build_jmp_edge blkmap proj dt j @ es in
       let cnd = Jmp.cond j in
       if jmp_always_taken cnd
       then es
@@ -207,27 +223,60 @@ let of_blk ?(idxst : Idx_calculator.t option = None) blkmap b =
     let jmps = Term.enum jmp_t b |> Seq.to_list in
     build_jmps dt jmps @ def_edges
 
-module IntraNoResolve = struct
+module IntraNoResolve : sig
+  val of_sub : ?idxst:Idx_calculator.t option -> Project.t -> sub term -> cedge list * Blk.elt Tid.Map.t
+  val of_sub_to_bapedges : ?idxst:Idx_calculator.t option -> Project.t -> sub term -> ExpOpt.t UcBapG.edges * Blk.elt Tid.Map.t
+end = struct
   let log_prefix = sprintf "%s.IntraNoResolve" log_prefix
   module L = struct
     include Dolog.Log
     let () = set_prefix log_prefix
   end
 
-  let of_sub ?(idxst : Idx_calculator.t option = None) s =
+  let of_sub ?(idxst : Idx_calculator.t option = None) proj s =
     let blks = Term.enum blk_t s in
     let blkmap = build_blk_map blks in
     let tidmap = build_tid_map blks
                |> Tid.Map.set ~key:false_node ~data:(`Def false_def) in
-    let edges = Seq.map blks ~f:(of_blk ~idxst blkmap)
+    let edges = Seq.map blks ~f:(of_blk ~idxst blkmap proj)
                 |> Seq.to_list
                 |> List.join in
     edges, tidmap
 
-  let of_sub_to_bapedges ?(idxst : Idx_calculator.t option = None) s =
-    let edges, tidmap = of_sub ~idxst s in
+  let of_sub_to_bapedges ?(idxst : Idx_calculator.t option = None) proj s =
+    let edges, tidmap = of_sub ~idxst proj s in
     List.map edges ~f:UcBapG.of_cedge, tidmap
 end
 
-module Inter = struct
+module Inter : sig
+  type t
+    
+  val of_sub : ?idxst:Idx_calculator.t option -> Project.t -> sub term -> unit
+end = struct
+  
+  type t = {
+    interedges : cedge list;
+    edges : cedge list;
+    callrets : cedge list;
+    subs : string list;
+    tidmap : Blk.elt Tid.Map.t
+  }
+    
+  let log_prefix = sprintf "%s.Inter" log_prefix
+  module L = struct
+    include Dolog.Log
+    let () = set_prefix log_prefix
+  end
+
+  let emp : t = {
+    interedges = [];
+    edges = [];
+    callrets = [];
+    subs = [];
+    tidmap = Tid.Map.empty;
+  }
+
+  let edges_for_iter st = st.interedges @ st.edges
+  
+  let of_sub ?(idxst : Idx_calculator.t option = None) proj s = ()
 end

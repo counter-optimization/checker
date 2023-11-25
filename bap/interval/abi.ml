@@ -23,6 +23,9 @@ module type ABIDef = sig
   val gpr_arg_width : int
 
   val return_reg : string
+
+  (* for now, option if arg idx is not a reg *)
+  val arg_from_idx : int -> string option
 end
 
 module AMD64SystemVABI = struct
@@ -85,4 +88,13 @@ module AMD64SystemVABI = struct
     else if String.Set.mem flag_names name
     then Some 1
     else None
+
+  let arg_from_idx = function
+    | 0 -> Some "RDI"
+    | 1 -> Some "RSI"
+    | 2 -> Some "RDX"
+    | 3 -> Some "RCX"
+    | 4 -> Some "R8"
+    | 5 -> Some "R9"
+    | _ -> None
 end

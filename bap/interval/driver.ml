@@ -178,16 +178,20 @@ let first_insn_cc sub =
   Common.elt_to_tid first_elt
 
 let do_ (type a) ~(if_ : bool) ~(default : a) (f : unit -> a) : a =
-    if if_ then f () else default
+  if if_ then f () else default
+
+let set_taint (prod : FinalDomain.t) : FinalDomain.t =
+  FinalDomain.set Checker_taint.Analysis.key prod Checker_taint.Analysis.Taint
+
+let unset_taint (prod : FinalDomain.t) : FinalDomain.t =
+  FinalDomain.set Checker_taint.Analysis.key prod Checker_taint.Analysis.Notaint
 
 let run_analyses sub proj ~(is_toplevel : bool)
       ~(bss_init_stores : Global_function_pointers.global_const_store list)
       ~(config : Config.t) ctxt : analysis_result =
   let subname = Sub.name sub in
   let subtid = Term.tid sub in
-
-  let open Analysis_profiling in
-  
+  let open Analysis_profiling in  
   L.info "Analyzing %s" subname;
   Uc_stats.AnalysisInfo.record_analyzed_sub subname subtid;
   
@@ -218,7 +222,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
 
   let edges, tidmap = timed subname Edgebuilding @@ fun () ->
     (* Edge_builder.run_one sub proj idx_st *)
-    Uc_graph_builder.IntraNoResolve.of_sub_to_bapedges ~idxst:(Some idx_st) sub
+    Uc_graph_builder.IntraNoResolve.of_sub_to_bapedges ~idxst:(Some idx_st) proj sub
   in
 
   L.debug "Edges are:";
@@ -285,16 +289,15 @@ let run_analyses sub proj ~(is_toplevel : bool)
     let start = Analysis_profiling.record_start_time () in
     let empty = E.empty in
     let stack_addr = 0x7fff_fff0 in
-
     let free_vars = Sub.free_vars sub in
-    let freenames = Set.to_list free_vars |> List.map ~f:Var.name in
-
+    let freenames = Set.to_list free_vars
+                    |> List.map ~f:Var.name in
     let args = Term.enum arg_t sub in
-    let argnames = Seq.map args ~f:(fun a -> Arg.var a |> T.Var.name)
+    let argnames = Seq.map args
+                     ~f:(fun a -> Arg.var a |> T.Var.name)
                    |> Seq.to_list in
-
+    let taintedregs = Uc_inargs.TaintInState.get subname in
     let with_canary_set = E.set_stack_canary empty in
-
     let env_with_df_set = E.set "DF" FinalDomain.b0 with_canary_set in
     let env_with_rsp_set = match E.set_rsp stack_addr env_with_df_set with
       | Ok env' -> env'
@@ -303,10 +306,24 @@ let run_analyses sub proj ~(is_toplevel : bool)
        commonly used in prog analysis *)
     let true_args = List.append argnames freenames
                     |> List.filter ~f:ABI.var_name_is_arg in
-    let final_env = List.fold true_args
+    let args_initd = List.fold true_args
                       ~init:env_with_rsp_set
                       ~f:(fun mem argname ->
                         E.init_arg ~name:argname config sub mem) in
+    let true_args = String.Set.of_list true_args in
+    let untaintregs = String.Set.diff true_args taintedregs in
+    let final_env = String.Set.fold untaintregs
+                      ~init:args_initd
+                      ~f:(fun env reg ->
+                        let v' = E.lookup reg env
+                                 |> unset_taint in
+                        E.set reg v' env) in
+    let final_env = String.Set.fold taintedregs
+                      ~init:final_env
+                      ~f:(fun env reg ->
+                        let v' = E.lookup reg env
+                                 |> set_taint in
+                        E.set reg v' env) in
     
     let rpo_traversal = Graphlib.reverse_postorder_traverse (module G) cfg in
     let first_node = match first_insn_cc sub with
@@ -548,6 +565,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
 let check_config config ctxt proj : unit =
   Random.self_init ();
   let target_fns = Config.get_target_fns_exn config proj in
+  Uc_inargs.TaintInState.config (module ABI) config;
   let worklist = Sub.Set.of_list @@ Sequence.to_list target_fns in
   let processed = Sub.Set.empty in
   let init_res = Alert.Set.empty in

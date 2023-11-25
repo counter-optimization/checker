@@ -62,10 +62,13 @@ let meet x y =
   | CellType.Scalar, CellType.Scalar -> s
   | _, CellType.Unknown -> x
   | CellType.Unknown, _ -> y
-  | _, _ ->
-    printf "no meet in type domain for comb (%s, %s)\n"
-      (to_string x) (to_string y);
-    CellType.Unknown
+  | _, _ -> if equal x y
+    then x
+    else begin
+      printf "no meet in type domain for comb (%s, %s)\n"
+        (to_string x) (to_string y);
+      CellType.Unknown
+    end
 
 let contains x y =
   let c = compare x y in
