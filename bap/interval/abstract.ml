@@ -62,11 +62,11 @@ sig
 
   val havoc_on_call : t -> t
 
-  val merge : t -> t -> t
+  val merge : ?meet:bool -> t -> t -> t
 
   val widen_threshold : int
 
-  val widen_with_step : int -> (Graphlib.Make(Calling_context)(Bool).Node.t) -> t -> t -> t
+  val widen_with_step : ?meet:bool -> int -> (Graphlib.Make(Calling_context)(Bool).Node.t) -> t -> t -> t
 
   val pp : t -> unit
 
@@ -152,13 +152,14 @@ module NumericEnv(ValueDom : NumericDomain)
       let entry_str = env_entry_to_string ~key ~data in
       printf "\t%s\n%!" entry_str)
 
-  let merge env1 env2 : t =
+  let merge ?(meet = false) env1 env2 : t =
+    let f = if meet then ValueDom.meet else ValueDom.join in
     Map.merge_skewed env1 env2
-      ~combine:(fun ~key -> ValueDom.join)
+      ~combine:(fun ~key -> f)
 
   let widen_threshold = Common.ai_widen_threshold
 
-  let widen_with_step steps (node : Graphlib.Make(Calling_context)(Bool).Node.t) prev_state new_state : t =
+  let widen_with_step ?(meet = false) steps (node : Graphlib.Make(Calling_context)(Bool).Node.t) prev_state new_state : t =
     let module G = Graphlib.Make(Calling_context)(Bool) in
     let widen = fun p n ->
       let open Core_kernel.Map.Symmetric_diff_element in
@@ -170,10 +171,12 @@ module NumericEnv(ValueDom : NumericDomain)
           | `Right v
           | `Left v -> Map.set newenv ~key ~data:v
           | `Unequal (preval, nextval) ->
+            (* Map.set newenv ~key ~data:(ValueDom.join preval nextval)) *)
             Map.set newenv ~key ~data:ValueDom.top)
     in
-    let f = if steps < widen_threshold
-      then merge
+    let f = if
+      steps < widen_threshold
+      then merge ~meet
       else if steps = widen_threshold
       then widen
       else if steps = 1 + widen_threshold

@@ -30,6 +30,8 @@ module TraceAbsInt = Trace.AbsInt.Make(FinalDomain)(E)
 module TraceDir = Trace.Directives(FinalDomain)(E)
 module TraceEnv = Trace.Env(FinalDomain)(E)
 
+module Narrower = Uc_fixpoint.SingleShotRoundRobinNarrow(FinalDomain)
+
 module OcData(Args : sig
     val dmap : TraceDir.directive_map
     val tidmap : Blk.elt Tid.Map.t
@@ -46,7 +48,7 @@ end = struct
              
   type edge = Uc_graph_builder.UcOcamlG.T.E.t
 
-  let join = TraceEnv.merge
+  let join = TraceEnv.merge ~meet:false
 
   let equal = TraceEnv.equal
 
@@ -188,7 +190,7 @@ let unset_taint (prod : FinalDomain.t) : FinalDomain.t =
 
 let run_analyses sub proj ~(is_toplevel : bool)
       ~(bss_init_stores : Global_function_pointers.global_const_store list)
-      ~(config : Config.t) ctxt : analysis_result =
+      ~(config : Config.t) ctxt dbgtids : analysis_result =
   let subname = Sub.name sub in
   let subtid = Term.tid sub in
   let open Analysis_profiling in  
@@ -221,8 +223,18 @@ let run_analyses sub proj ~(is_toplevel : bool)
   in
 
   let edges, tidmap = timed subname Edgebuilding @@ fun () ->
-    (* Edge_builder.run_one sub proj idx_st *)
-    Uc_graph_builder.IntraNoResolve.of_sub_to_bapedges ~idxst:(Some idx_st) proj sub
+    (* let other_edges, other_tidmap = Edge_builder.run_one sub proj idx_st in *)
+    let edges, tidmap = Uc_graph_builder.IntraNoResolve.of_sub_to_bapedges ~idxst:(Some idx_st) proj sub in
+    (* List.iter other_edges ~f:(fun (ofrom, oto, _) -> *)
+    (*   let found = List.find edges ~f:(fun (from_, to_, _) -> *)
+    (*     let from_ = Calling_context.to_insn_tid from_ in *)
+    (*     let to_ = Calling_context.to_insn_tid to_ in *)
+    (*     Tid.equal from_ ofrom && Tid.equal to_ oto) *)
+    (*   in *)
+    (*   match found with *)
+    (*   | Some e -> () *)
+    (*   | None -> L.warn "No matching new edge for (%a, %a, _)" Tid.ppo ofrom Tid.ppo oto); *)
+    edges, tidmap
   in
 
   L.debug "Edges are:";
@@ -260,7 +272,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
 
     let _, edges, cfg = timed subname RemoveDeadFlagDefs @@ fun () ->
       let dead_defs = Liveness.get_dead_defs dataflow_liveness tidmap in
-      (* let edges = Edge_builder.remove_dead_defs edges dead_defs in *)
+      let edges = Edge_builder.remove_dead_defs edges dead_defs in
       let cfg = Graphlib.create (module G) ~edges () in
       dead_defs, edges, cfg
     in
@@ -436,6 +448,26 @@ let run_analyses sub proj ~(is_toplevel : bool)
     (*                          (fun _ -> TraceEnv.empty) *)
     (*                          Uc_fixpoint.OcamlG.ChaoticIteration.FromWto *)
     (*                          Common.ai_widen_threshold in *)
+
+    let interp =
+      fun cc st ->
+        let tid = Calling_context.to_insn_tid cc in
+        let elt = match Tid_map.find tidmap tid with
+          | Some elt -> elt
+          | None ->
+            failwith @@
+            sprintf
+              "in calculating analysis_results, couldn't find tid %a in tidmap"
+              Tid.pps tid
+        in
+        let st = dmp_bt_set tid st in
+        let tidstr = Format.sprintf "%a" Tid.pps tid in
+        let is_target = String.Set.mem dbgtids tidstr in
+        do_ ~if_:is_target ~default:() (fun () ->
+          L.debug "denoting elt %a with inenv:" Tid.ppo tid;
+          TraceEnv.pp st);
+        TraceAbsInt.denote_elt directive_map elt st
+    in
     
     let analysis_results = Graphlib.fixpoint
                              (module G)
@@ -444,25 +476,20 @@ let run_analyses sub proj ~(is_toplevel : bool)
                              ~init:init_sol
                              ~equal:TraceEnv.equal
                              ~merge:TraceEnv.merge
-                             ~f:(fun cc st ->
-                               let tid = Calling_context.to_insn_tid cc in
-                               let elt = match Tid_map.find tidmap tid with
-                                 | Some elt -> elt
-                                 | None ->
-                                   failwith @@
-                                   sprintf
-                                     "in calculating analysis_results, couldn't find tid %a in tidmap"
-                                     Tid.pps tid
-                               in
-                               let st = dmp_bt_set tid st in
-                               let is_target = Format.sprintf "%a" Tid.pps tid
-                                               |> String.Caseless.is_substring
-                                                    ~substring:"90f849" in
-                               do_ ~if_:is_target ~default:() (fun () ->
-                                 L.debug "denoting elt %a with inenv:" Tid.ppo tid;
-                                 TraceEnv.pp st);
-                               TraceAbsInt.denote_elt directive_map elt st)
+                             ~start:first_node
+                             ~f:interp
     in
+
+    let analysis_results = Narrower.compute
+                             (module G)
+                             cfg
+                             ~initsol:analysis_results
+                             ~tidmap
+                             ~start:first_node
+                             ~f:interp
+                             ~merge:(TraceEnv.merge ~meet:true)
+                             ~default:TraceEnv.empty
+                             ~d_equal:TraceEnv.equal in
 
     L.info "done running trace part abstract interpreter\n%!";
     let stop = Analysis_profiling.record_stop_time start in
@@ -569,6 +596,13 @@ let check_config config ctxt proj : unit =
   let worklist = Sub.Set.of_list @@ Sequence.to_list target_fns in
   let processed = Sub.Set.empty in
   let init_res = Alert.Set.empty in
+
+  let debugtids = match Extension.Configuration.get ctxt Common.debug_tids_param with
+    | Some file ->
+      let ch = In_channel.create file in
+      In_channel.input_lines ch
+      |> String.Set.of_list
+    | None -> String.Set.empty in
   
   let global_store_data = Global_function_pointers.Libsodium.Analysis.get_all_init_fn_ptr_data ctxt proj in
   L.debug "Global stores are:";
@@ -605,7 +639,7 @@ let check_config config ctxt proj : unit =
           ~config
       end
       else
-        let current_res = run_analyses sub proj ctxt
+        let current_res = run_analyses sub proj ctxt debugtids
                             ~is_toplevel
                             ~bss_init_stores:global_store_data
                             ~config

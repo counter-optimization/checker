@@ -647,11 +647,11 @@ module Tree(N : Abstract.NumericDomain)
     | _ ->
       failwith "[Trace] remove_directives_prefix, ~prefix not prefix of ~of_"
 
-  let isomorphic_merge (left : t) (right : t) : t =
+  let isomorphic_merge ?(meet = false) (left : t) (right : t) : t =
     let open Or_error.Monad_infix in
     let rec loop (left : t) (right : t) k : t Or_error.t =
       match left, right with
-      | Leaf left, Leaf right -> k (Ok (Leaf (E.merge left right)))
+      | Leaf left, Leaf right -> k (Ok (Leaf (E.merge ~meet left right)))
       | Parent left, Parent right ->
         if not @@ Directives.equal left.directive right.directive
         then
@@ -672,8 +672,11 @@ module Tree(N : Abstract.NumericDomain)
                  (to_string right) in
       failwith @@ Error.to_string_hum e
 
-  let normalize_prefixed_trees ~(do_merge : bool) ~(suffix : Directives.t list)
-        ~(target : t) ~(other : t) : t =
+  let normalize_prefixed_trees ?(meet = false)
+        ~(do_merge : bool)
+        ~(suffix : Directives.t list)
+        ~(target : t)
+        ~(other : t) : t =
     let split tree tdir = if directive_already_applied tree tdir
       then tree
       else do_directive_split tree tdir in
@@ -681,10 +684,10 @@ module Tree(N : Abstract.NumericDomain)
                            ~init:target
                            ~f:split in
     if do_merge
-    then isomorphic_merge refined_target other
+    then isomorphic_merge ~meet refined_target other
     else refined_target
 
-  let merge (left : t) (right : t) : t =
+  let merge ?(meet = false) (left : t) (right : t) : t =
     let pick_nonempty = match is_empty left, is_empty right with
       | true, true -> Some left
       | true, false -> Some right
@@ -701,6 +704,7 @@ module Tree(N : Abstract.NumericDomain)
                                  ~prefix:left_tdirs
                                  ~of_:right_tdirs in
         normalize_prefixed_trees
+          ~meet
           ~do_merge:true
           ~suffix:remaining_suffix
           ~target:left
@@ -712,6 +716,7 @@ module Tree(N : Abstract.NumericDomain)
                                  ~prefix:right_tdirs
                                  ~of_:left_tdirs in
         normalize_prefixed_trees
+          ~meet
           ~do_merge:true
           ~suffix:remaining_suffix
           ~target:right
@@ -720,6 +725,7 @@ module Tree(N : Abstract.NumericDomain)
         (* neither refine each other, so pick (mid : t) s.t. 
            mid refines both left and right *)
         normalize_prefixed_trees
+          ~meet
           ~do_merge:false
           ~suffix:right_tdirs
           ~target:left
@@ -817,17 +823,17 @@ module Env(N : Abstract.NumericDomain)
   let equal (l : t) (r : t) : bool =
     Tree.equal l.tree r.tree
 
-  let merge (l : t) (r : t) : t =
-    { tree = Tree.merge l.tree r.tree }
+  let merge ?(meet = false) (l : t) (r : t) : t =
+    { tree = Tree.merge ~meet l.tree r.tree }
 
   let num_leaves (env : t) : int = Tree.num_leaves env.tree
 
-  let widen_with_step (n : int) (node : 'a) (l : t) (r : t) : t =
+  let widen_with_step ?(meet = false) (n : int) (node : 'a) (l : t) (r : t) : t =
     if n < Common.ai_widen_threshold
-    then merge l r
+    then merge ~meet l r
     else if Tree.directives_equal l.tree r.tree
     then
-      let tree = Tree.map2 l.tree r.tree ~f:(E.widen_with_step n node) in
+      let tree = Tree.map2 l.tree r.tree ~f:(E.widen_with_step ~meet n node) in
       { tree }
     else
       failwith "[Trace] infinite loop stuck in widen_with_step"

@@ -716,11 +716,11 @@ module Make(N : NumericDomain)
     else None
 
   (* TODO: type consistency in cell merging *)
-  let merge mem1 mem2 : t =
+  let merge ?(meet = false) mem1 mem2 : t =
     let {cells=cells1; env=env1; bases=bases1} = mem1 in
     let {cells=cells2; env=env2; bases=bases2} = mem2 in
     let merged_cells = Set.inter cells1 cells2 in
-    let merged_env = Env.merge env1 env2 in
+    let merged_env = Env.merge ~meet env1 env2 in
     let merged_bases = BaseSetMap.merge bases1 bases2 in
     { cells=merged_cells;
       env=merged_env;
@@ -739,22 +739,21 @@ module Make(N : NumericDomain)
 
      also do this for globals_read. i think this is sound, but haven't thought through
      it that much with how globals are guessed at/handled. *)
-  let widen_with_step steps n prev next : t =
+  let widen_with_step ?(meet = false) steps n prev next : t =
     let widen_cell_map {cells=prev; _} {cells=next; _} : C.Set.t =
-      Set.inter prev next
-    in
+      Set.inter prev next in
     let widen_bases_map {bases=prev; _} {bases=next; _} : basemap =
-      BaseSetMap.merge prev next
-    in
+      BaseSetMap.merge prev next in
     let widen_env steps n {env=prev; _} {env=next; _} : Env.t =
-      Env.widen_with_step steps n prev next
-    in
+      Env.widen_with_step ~meet steps n prev next in
     let widen steps n mem1 mem2 =
-      {cells = widen_cell_map prev next;
-       env = widen_env steps n prev next;
-       bases = widen_bases_map prev next }
-    in
-    let merger = if steps < widen_threshold then merge else (widen steps n) in
+      { cells = widen_cell_map prev next;
+        env = widen_env steps n prev next;
+        bases = widen_bases_map prev next } in
+    let merger =
+      if steps < widen_threshold
+      then (merge ~meet)
+      else (widen steps n) in
     merger prev next
 
   let differs (m1 : t) (m2 : t) : string list =

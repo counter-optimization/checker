@@ -150,11 +150,37 @@ let build_tid_map blks =
       let t = Common.elt_to_tid e in
       Tid.Map.set m ~key:t ~data:e))
 
-let rec build_jmp_edge ?(interproc = false) blkmap proj from_ jmp : cedge list =
+let build_tidtoblkelts_map blks =
+  let m : Blk.elt Seq.t Tid.Map.t = Tid.Map.empty in
+  Seq.fold blks ~init:m ~f:(fun m b ->
+    let blktid = Term.tid b in
+    let elts = Blk.elts b in 
+    Tid.Map.set m ~key:blktid ~data:elts)
+
+let rec build_jmp_edge ?(interproc = false) ?(prevcnd = None) blkmap tidtoeltsmap proj from_ jmp : cedge list =
   let find = Tid.Map.find in
   let cnd = Jmp.cond jmp in
   let jmptarget t cnd from_ = match find blkmap t with
-    | Some (`Jmp j) -> build_jmp_edge blkmap proj from_ j
+    | Some (`Jmp _) -> begin match find tidtoeltsmap t with
+      | Some elts -> (* then elts is a seq of jmp terms only *)
+        Seq.to_list elts 
+        |> List.fold ~init:([], cnd, true)
+             ~f:(fun ((es, cnds, continue) as acc) -> function
+               | `Jmp j ->
+                 if not continue
+                 then acc
+                 else
+                   let nextcnd = Jmp.cond j in
+                   let nextjmps = build_jmp_edge ~interproc ~prevcnd:cnds blkmap tidtoeltsmap proj from_ j in
+                   let cnds_so_far = match cnds with
+                     | Some cs -> Bil.BinOp (Bil.AND, cs, (Bil.UnOp (Bil.NOT, nextcnd)))
+                     | None -> Bil.UnOp (Bil.NOT, nextcnd) in
+                   (nextjmps :: es, Some cnds_so_far, not @@ jmp_always_taken nextcnd)
+               | _ -> failwith "malformed function in handling fallthrough jumps")
+        |> (fun (a, _, _) -> a)
+        |> List.join
+      | None -> []
+      end
     | Some (`Def d) -> [(from_, cnd, Term.tid d)]
     | Some (`Phi p) -> raise @@ BadCfg "ssa not allowed"
     | None -> raise @@ BadCfg "jmp to empty bb"
@@ -167,10 +193,11 @@ let rec build_jmp_edge ?(interproc = false) blkmap proj from_ jmp : cedge list =
   if jmp_never_taken cnd
   then []
   else
-    let cnd =
-      if jmp_always_taken cnd
-      then None
-      else Some cnd in
+    let always_taken = jmp_always_taken cnd in
+    let cnd = match prevcnd with
+      | Some prevcnd -> Some (Bil.BinOp (Bil.AND, prevcnd, cnd))
+      | None when always_taken -> None
+      | None -> Some cnd in
     match jmp_type jmp with
     | DJmp t -> jmptarget t cnd from_
     | IJmp e -> [(from_, cnd, false_node)]
@@ -202,7 +229,7 @@ let rec of_defs
     end
   | _ -> total
 
-let of_blk ?(idxst : Idx_calculator.t option = None) ?(interproc = false) blkmap proj b =
+let of_blk ?(idxst : Idx_calculator.t option = None) ?(interproc = false) blkmap tidtoeltsmap proj b =
   let defs = Term.enum def_t b |> Seq.to_list in
   let def_edges = of_defs ~idxst defs in
   let last_def = List.last defs in
@@ -210,7 +237,7 @@ let of_blk ?(idxst : Idx_calculator.t option = None) ?(interproc = false) blkmap
   let rec build_jmps ?(es = []) dt = function
     | [] -> es
     | j :: js ->
-      let es = build_jmp_edge blkmap proj dt j @ es in
+      let es = build_jmp_edge blkmap tidtoeltsmap proj dt j @ es in
       let cnd = Jmp.cond j in
       if jmp_always_taken cnd
       then es
@@ -237,8 +264,9 @@ end = struct
     let blks = Term.enum blk_t s in
     let blkmap = build_blk_map blks in
     let tidmap = build_tid_map blks
-               |> Tid.Map.set ~key:false_node ~data:(`Def false_def) in
-    let edges = Seq.map blks ~f:(of_blk ~idxst blkmap proj)
+                 |> Tid.Map.set ~key:false_node ~data:(`Def false_def) in
+    let tidtoeltsmap = build_tidtoblkelts_map blks in
+    let edges = Seq.map blks ~f:(of_blk ~idxst blkmap tidtoeltsmap proj)
                 |> Seq.to_list
                 |> List.join in
     edges, tidmap

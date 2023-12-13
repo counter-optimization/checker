@@ -39,6 +39,11 @@ let config_file_path_param = Extension.Configuration.parameter
                                Extension.Type.string
                                "config-file"
 
+let debug_tids_param = Extension.Configuration.parameter
+                         ~doc:"Path to targeted tids file"
+                         (Extension.Type.some Extension.Type.non_dir_file)
+                         "debug-tids"
+
 let global_log_level_param = Extension.Configuration.parameter
                                ~doc:"Global log level"
                                ~aliases:["log"]

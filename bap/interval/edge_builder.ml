@@ -199,7 +199,7 @@ let edges_of_jump j sub nodes proj idx_st : edges ST.t =
               let callee = sub_of_tid totid proj in
               add_callee callee >>= fun () ->
               let actual_totid = first_insn_tid_of_sub callee in
-              ST.return [(fromtid, actual_totid, true)] >>= fun es ->
+              ST.return [(fromtid, actual_totid, None)] >>= fun es ->
               let last_elt = last_insn_of_sub callee idx_st in
               let last_elt_tid = Tid_map.tid_of_elt last_elt in
               let return_tid = match Call.return c with
@@ -211,7 +211,7 @@ let edges_of_jump j sub nodes proj idx_st : edges ST.t =
                 | Some (Indirect _exp) -> failwith "in interproc edge building, can't handle indirect label..."
                 | None -> failwith "in interproc edge building, call doesn't return"
               in
-              ST.return @@ List.cons (last_elt_tid, return_tid, true) es 
+              ST.return @@ List.cons (last_elt_tid, return_tid, None) es 
             end
           | Indirect _expr when Tid.equal fromtid ret_insn_tid ->
             ST.return []
@@ -231,7 +231,7 @@ let edges_of_jump_intraproc j sub nodes proj : edges ST.t =
     | Goto (Direct totid) ->
       let first_insn = first_insn_of_blk_tid totid sub in
       let first_insns_tid = Tid_map.tid_of_elt first_insn in
-      ST.return [(fromtid, first_insns_tid, false)]
+      ST.return [(fromtid, first_insns_tid, None)]
     | Call target ->
       let retlabel = Call.return target in
       begin
@@ -239,7 +239,7 @@ let edges_of_jump_intraproc j sub nodes proj : edges ST.t =
         | Some (Direct totid) ->
           let first_insn_of_ret_blk = first_insn_of_blk_tid totid sub in
           let first_insns_tid = Tid_map.tid_of_elt first_insn_of_ret_blk in
-          ST.return [(fromtid, first_insns_tid, false)]
+          ST.return [(fromtid, first_insns_tid, None)]
         | _ -> ST.return []
       end
     | Goto _ -> ST.return []
@@ -265,7 +265,7 @@ let edges_of_insns insns sub nodes proj : edges ST.t =
                             |> Seq.to_list
                             |> Tidset.of_list in
   let adjacent_tids, _ = List.zip_with_remainder tid_list (List.tl_exn tid_list) in
-  let fallthroughs = List.map adjacent_tids ~f:(fun (from, t) -> (from, t, false)) in
+  let fallthroughs = List.map adjacent_tids ~f:(fun (from, t) -> (from, t, None)) in
   let fallthroughs = List.filter fallthroughs ~f:(keep_edge no_fallthrough_jmps) in
   get_jmp_edges insns sub nodes proj >>= fun jmp_edges ->
   ST.return @@ List.append jmp_edges fallthroughs
