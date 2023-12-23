@@ -14,15 +14,22 @@ module L = struct
   let () = set_prefix log_prefix
 end
 
-module Chaotic(Data : OcamlG.ChaoticIteration.Data with type edge = Uc_graph_builder.UcOcamlG.T.E.t) = struct
+module WidenSet = struct
   module G = Uc_graph_builder.UcOcamlG.T
   module WTO = OcamlG.WeakTopological.Make(G)
-  module Chao = OcamlG.ChaoticIteration.Make(G)(Data)
 
-  let get_wto g start_node = WTO.recursive_scc g start_node
+  let get_wto g start_node =
+    WTO.recursive_scc g start_node
 
-  let compute g wto f_init wideset widethresh =
-    Chao.recurse g wto f_init wideset widethresh
+  let compute_wto g start_node =
+    let wto = get_wto g start_node in
+    let init = Tid.Set.empty in
+    let aggregate = fun widenset -> function
+      | OcamlG.WeakTopological.Component (hd, rst) ->
+        Tid.Set.add widenset hd
+      | _ -> widenset
+    in
+    OcamlG.WeakTopological.fold_left aggregate init wto
 end
 
 module SingleShotRoundRobinNarrow (Dom : Abstract.NumericDomain) : sig

@@ -34,11 +34,13 @@ type exn += BadCfg of string
 
 let false_node = Tid.create ()
 let false_node_cc = Calling_context.of_tid false_node
-  
 let false_def =
   let v = Var.create "RAX" (Bil.Types.Imm 64) in
   let exp = Bil.Var v in
   Def.create ~tid:false_node v exp
+    
+let havoc_cnd = Bil.Var (Var.create ~fresh:true "HAVOC" (Bil.Types.Imm 64))
+let is_havoc_cnd v = Var.name v |> String.equal "HAVOC"
 
 let () = 
   L.debug "False, top node is at: %a" Tid.ppo false_node;
@@ -86,6 +88,37 @@ module UcOcamlG = struct
     let edges = G.edges bapg in
     update_edges edges;
     g
+end
+
+module OcamlGraphWriter = struct
+  module T = struct 
+    include UcOcamlG.T
+
+    let tid_to_vertex_name t =
+      let tid_str = Tid.to_string t
+                    |> String.filter ~f:(function
+                      | '%' -> false
+                      | _ -> true) in
+      "node_" ^ tid_str
+
+    let edge_attributes _ = []
+
+    let default_edge_attributes _ = []
+
+    let get_subgraph _ = None
+
+    let vertex_attributes _ = []
+      (* let tids = Tid.to_string n in *)
+      (* OcamlG.Graphviz.DotAttributes.([`Label tids]) *)
+
+    let vertex_name = tid_to_vertex_name
+
+    let default_vertex_attributes _ = []
+
+    let graph_attributes _ = []
+  end
+
+  include OcamlG.Graphviz.Dot(T)
 end
 
 let nonjmpedge from_ to_ = (from_, None, to_)
@@ -186,27 +219,26 @@ let rec build_jmp_edge ?(interproc = false) ?(prevcnd = None) blkmap tidtoeltsma
     | None -> raise @@ BadCfg "jmp to empty bb"
   in
   let get_ret_edge = function
-    | DRetTo t -> jmptarget t None false_node
+    | DRetTo t -> jmptarget t (Some havoc_cnd) from_
     | IRetTo e -> raise @@ BadCfg "Indirect rets not handled"
     | NoRet -> []
   in
   if jmp_never_taken cnd
   then []
   else
-    let always_taken = jmp_always_taken cnd in
     let cnd = match prevcnd with
       | Some prevcnd -> Some (Bil.BinOp (Bil.AND, prevcnd, cnd))
-      | None when always_taken -> None
+      | None when jmp_always_taken cnd -> None
       | None -> Some cnd in
     match jmp_type jmp with
     | DJmp t -> jmptarget t cnd from_
     | IJmp e -> [(from_, cnd, false_node)]
-    | DCall (t, retto) ->
-      if interproc
-      then [] (* todo *)
-      else get_ret_edge retto @ [(from_, cnd, false_node)]
-    | ICall (e, retto) ->
-      get_ret_edge retto @ [(from_, cnd, false_node)]
+    | DCall (_t, _retto) when interproc -> [] (* todo *)
+    | DCall (t, retto) -> get_ret_edge retto 
+    (* get_ret_edge retto @ [(from_, cnd, false_node)] *)
+    | ICall (_e, _retto) when interproc -> [] (* todo *)
+    | ICall (e, retto) -> get_ret_edge retto
+    (* get_ret_edge retto @ [(from_, cnd, false_node)] *)
     | DRet t -> [] (* todo *)
     | IRet e -> [] (* todo *)
     | Interrupt -> []
@@ -237,7 +269,7 @@ let of_blk ?(idxst : Idx_calculator.t option = None) ?(interproc = false) blkmap
   let rec build_jmps ?(es = []) dt = function
     | [] -> es
     | j :: js ->
-      let es = build_jmp_edge blkmap tidtoeltsmap proj dt j @ es in
+      let es = build_jmp_edge ~interproc blkmap tidtoeltsmap proj dt j @ es in
       let cnd = Jmp.cond j in
       if jmp_always_taken cnd
       then es
@@ -281,13 +313,15 @@ module Inter : sig
     
   val of_sub : ?idxst:Idx_calculator.t option -> Project.t -> sub term -> unit
 end = struct
+
+  type edges = cedge list [@@deriving sexp, compare]
   
   type t = {
-    interedges : cedge list;
-    edges : cedge list;
-    callrets : cedge list;
-    subs : string list;
-    tidmap : Blk.elt Tid.Map.t
+    mutable interedges : edges;
+    mutable edges : edges;
+    mutable callrets : edges;
+    mutable subs : string list;
+    mutable tidmap : Blk.elt Tid.Map.t
   }
     
   let log_prefix = sprintf "%s.Inter" log_prefix
@@ -306,5 +340,7 @@ end = struct
 
   let edges_for_iter st = st.interedges @ st.edges
   
-  let of_sub ?(idxst : Idx_calculator.t option = None) proj s = ()
+  let of_sub ?(idxst : Idx_calculator.t option = None) proj s =
+    ()
+
 end

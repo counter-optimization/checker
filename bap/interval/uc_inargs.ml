@@ -85,3 +85,147 @@ module TaintInState = struct
     String.Map.iteri config_secs ~f:(fun ~key ~data ->
       Toplevel.exec @@ build_sub_taint key data)
 end
+
+module TaintContext = struct
+  module M = struct
+    type t = {
+      subname : String.t;
+      argvals : String.Set.t;
+    } [@@deriving sexp, compare]
+  end
+
+  module Cmp = struct
+    include M
+    include Comparator.Make(M)
+  end
+
+  include M
+
+  module Set = Set.Make_using_comparator(Cmp)
+  module Map = Map.Make_using_comparator(Cmp)
+
+  open KB.Monad_infix
+
+  let get_all () : Set.t =
+    let all = ref Set.empty in
+    Toplevel.exec begin
+      KB.objects T.cls >>= fun objs ->
+      KB.Seq.iter objs ~f:(fun inarg ->
+        KB.collect T.name inarg >>= fun subname ->
+        KB.collect TaintInState.tainted_regs inarg >>= fun argvals ->
+        all := Set.add !all {subname;argvals};
+        KB.return ()
+      )
+    end;
+    !all
+
+  let compare ~left ~right =
+    if not @@ String.equal left.subname right.subname
+    then KB.Order.NC
+    else
+      let l = left.argvals in
+      let r = right.argvals in
+      if String.Set.equal l r
+      then KB.Order.EQ
+      else if String.Set.is_subset l ~of_:r
+      then KB.Order.LT
+      else if String.Set.is_subset r ~of_: l
+      then KB.Order.GT
+      else KB.Order.NC
+end
+
+module TaintSummary = struct
+  module MT = struct
+    type t = {
+      input : String.Set.t;
+      output : String.Set.t;
+    } [@@deriving sexp, compare]
+  end
+
+  include MT
+
+  let make ~input ~output = { input; output }
+
+  let output_subsumed left ~by =
+    let l = left.output in
+    let r = by.output in
+    if String.Set.equal l r
+    then KB.Order.EQ
+    else if String.Set.is_subset l ~of_:r
+    then KB.Order.LT
+    else if String.Set.is_subset r ~of_: l
+    then KB.Order.GT
+    else KB.Order.NC
+
+  let update_output ({input;_} : t) ~output = {input; output}
+
+  let output ({output;_} : t) = output
+  let input ({input;_} : t) = input
+end
+
+module InterprocTaintpreter = struct
+  module T = Checker_taint.Analysis
+  module ST = String.Set
+
+  type state = ST.t
+               
+  let denote_binop (op : binop) : T.t -> T.t -> T.t =
+    match op with
+    | Bil.PLUS -> T.add
+    | Bil.MINUS -> T.sub
+    | Bil.TIMES -> T.mul
+    | Bil.DIVIDE -> T.div
+    | Bil.SDIVIDE -> T.sdiv
+    | Bil.MOD -> T.umod
+    | Bil.SMOD -> T.smod
+    | Bil.LSHIFT -> T.lshift
+    | Bil.RSHIFT -> T.rshift
+    | Bil.ARSHIFT -> T.arshift
+    | Bil.AND -> T.logand
+    | Bil.OR -> T.logor
+    | Bil.XOR -> T.logxor
+    | Bil.EQ -> T.booleq
+    | Bil.NEQ -> T.boolneq
+    | Bil.LT -> T.boollt
+    | Bil.LE -> T.boolle
+    | Bil.SLT -> T.boolslt
+    | Bil.SLE -> T.boolsle
+
+  let denote_cast (c : cast) : int -> T.t -> T.t =
+    match c with
+    | Bil.UNSIGNED -> T.unsigned
+    | Bil.SIGNED -> T.signed
+    | Bil.HIGH -> T.high
+    | Bil.LOW -> T.low
+
+  let denote_unop (op : unop) : T.t -> T.t =
+    match op with
+    | Bil.NEG -> T.neg
+    | Bil.NOT -> T.lnot
+
+  let rec denote_exp (e : Bil.exp) (st : state) : (T.t * state) =
+    match e with
+    | Bil.Load (_, _, _, _) -> (T.Taint, st)
+    | Bil.Store (_, _, _, _, _) -> (T.Untaint, st)
+    | Bil.BinOp (bop, l, r) ->
+      let bop = denote_binop bop in
+      let (lt, st) = denote_exp l st in
+      let (rt, st) = denote_exp r st in
+      (bop lt rt, st)
+    | Bil.UnOp (uop, l) ->
+      let uop = denote_unop uop in
+      let (lt, st) = denote_exp l st in
+      (uop lt, st)
+    | Bil.Var v ->
+      let name = Var.name v in
+      (if String.Set.mem st name
+       then T.Taint
+       else T.Untaint, st)
+    | Bil.Int _ -> _
+    | Bil.Cast (_, _, _) -> _
+    | Bil.Let (_, _, _) -> _
+    | Bil.Unknown (_, _) -> _
+    | Bil.Ite (_, _, _) -> _
+    | Bil.Extract (_, _, _) -> _
+    | Bil.Concat (_, _) -> _
+end
