@@ -206,7 +206,7 @@ module InterprocTaintpreter = struct
   let rec denote_exp (e : Bil.exp) (st : state) : (T.t * state) =
     match e with
     | Bil.Load (_, _, _, _) -> (T.Taint, st)
-    | Bil.Store (_, _, _, _, _) -> (T.Untaint, st)
+    | Bil.Store (_, _, _, _, _) -> (T.Notaint, st)
     | Bil.BinOp (bop, l, r) ->
       let bop = denote_binop bop in
       let (lt, st) = denote_exp l st in
@@ -218,14 +218,64 @@ module InterprocTaintpreter = struct
       (uop lt, st)
     | Bil.Var v ->
       let name = Var.name v in
-      (if String.Set.mem st name
-       then T.Taint
-       else T.Untaint, st)
-    | Bil.Int _ -> _
-    | Bil.Cast (_, _, _) -> _
-    | Bil.Let (_, _, _) -> _
-    | Bil.Unknown (_, _) -> _
-    | Bil.Ite (_, _, _) -> _
-    | Bil.Extract (_, _, _) -> _
-    | Bil.Concat (_, _) -> _
+      if String.Set.mem st name
+      then T.Taint, st
+      else T.Notaint, st
+    | Bil.Int _ -> T.Notaint, st
+    | Bil.Cast (c, s, e) ->
+      let (et, st) = denote_exp e st in
+      let c = denote_cast c in
+      (c s et, st)
+    | Bil.Let (v, bindexp, body) ->
+      let bindexp, st = denote_exp bindexp st in
+      let vname = Var.name v in
+      let st' = if T.is_tainted bindexp
+        then String.Set.add st vname
+        else st in
+      let (res, _) = denote_exp body st' in
+      (res, st)
+    | Bil.Unknown (_, _) -> T.Taint, st
+    | Bil.Ite (_, then_, else_) ->
+      let (then_, st) = denote_exp then_ st in
+      let (else_, st) = denote_exp else_ st in
+      T.join then_ else_, st
+    | Bil.Extract (_, _, e) -> denote_exp e st
+    | Bil.Concat (l, r) ->
+      let (lt, st) = denote_exp l st in
+      let (rt, st) = denote_exp r st in
+      (T.join lt rt, st)
+
+  let denote_def (proj : Project.t) (d : def term) (st : state) : state =
+    let var = Def.lhs d in
+    let varname = Var.name var in
+    let rhs = Def.rhs d in
+    let result, st = denote_exp rhs st in
+    if T.is_tainted result
+    then String.Set.add st varname
+    else st
+
+  let denote_phi (proj : Project.t) (p : phi term) (st : state) : state =
+    failwith "denote_phi not implemented yet InterprocTaintpreter"
+
+  let denote_jmp (proj : Project.t) (j : jmp term) (st : state) : state =
+    match Jmp.kind j with
+    | Call c -> begin match Call.target c with
+      | Direct calleetid ->
+        L.debug "Trying to find callee sub with tid: %a" Tid.ppo calleetid;
+        let prog = Project.program proj in
+        (match Term.find sub_t prog calleetid with
+         | Some sub ->
+           L.debug "Found callee sub: (%a, %s)"
+             Tid.ppo calleetid @@ Sub.name sub;
+           st
+         | None -> st)
+      | Indirect exp -> st
+    end
+    | _ -> st
+
+  let denote_elt (proj : Project.t) (e : Blk.elt) (st : state) : state =
+    match e with
+    | `Def d -> denote_def proj d st
+    | `Jmp j -> denote_jmp proj j st
+    | `Phi p -> denote_phi proj p st
 end
