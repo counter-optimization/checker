@@ -17,6 +17,8 @@ end
 
 type subname = string
 
+module ABI = Abi.AMD64SystemVABI
+
 module T = struct
   type t
 
@@ -106,6 +108,8 @@ module TaintContext = struct
 
   open KB.Monad_infix
 
+  let make ~subname ~argvals : t = {subname;argvals}
+
   let get_all () : Set.t =
     let all = ref Set.empty in
     Toplevel.exec begin
@@ -132,6 +136,23 @@ module TaintContext = struct
       else if String.Set.is_subset r ~of_: l
       then KB.Order.GT
       else KB.Order.NC
+
+  let of_state (name : string) (env : String.Set.t) : t =
+    let args = ABI.gpr_arg_names |> String.Set.of_list in
+    let argvals = String.Set.inter env args in
+    make ~subname:name ~argvals
+
+  type exn += SubNotFound of string
+      
+  let sub (proj : Project.t) (ctxt : t) : sub term =
+    let prog = Project.program proj in
+    let matches = Term.enum sub_t prog
+                  |> Seq.filter ~f:(fun sub ->
+                    let cur_name = Sub.name sub in
+                    String.Caseless.equal ctxt.subname cur_name) in
+    if Seq.is_empty matches
+    then raise (SubNotFound ctxt.subname)
+    else Seq.hd_exn matches
 end
 
 module TaintSummary = struct
@@ -140,35 +161,137 @@ module TaintSummary = struct
       input : String.Set.t;
       output : String.Set.t;
     } [@@deriving sexp, compare]
+
+    let equal (x : t) (y : t) : bool =
+      compare x y = 0
   end
 
   include MT
 
   let make ~input ~output = { input; output }
 
+  let default =
+    let top_input = ABI.gpr_arg_names |> String.Set.of_list in
+    let empty = String.Set.empty in
+    make ~input:top_input ~output:empty
+
   let output_subsumed left ~by =
     let l = left.output in
     let r = by.output in
-    if String.Set.equal l r
-    then KB.Order.EQ
-    else if String.Set.is_subset l ~of_:r
-    then KB.Order.LT
-    else if String.Set.is_subset r ~of_: l
-    then KB.Order.GT
-    else KB.Order.NC
+    String.Set.equal l r || String.Set.is_subset l ~of_:r
+    (* if String.Set.equal l r  *)
+    (* then KB.Order.EQ *)
+    (* else if String.Set.is_subset l ~of_:r *)
+    (* then KB.Order.LT *)
+    (* else if String.Set.is_subset r ~of_: l *)
+    (* then KB.Order.GT *)
+    (* else KB.Order.NC *)
 
   let update_output ({input;_} : t) ~output = {input; output}
 
   let output ({output;_} : t) = output
   let input ({input;_} : t) = input
+
+  let merge_summaries ~(old_ : t) ~(new_ : t) : t =
+    let join = String.Set.union in
+    { new_ with output = join old_.output new_.output }
+
+  let dom = KB.Domain.flat
+                ~inspect:MT.sexp_of_t
+                ~equal:MT.equal
+                ~empty:(make ~input:String.Set.empty
+                          ~output:String.Set.empty)
+                "flat-interproc-analysis-summary-dom"
+end
+
+module InterprocState = struct
+  type t = {
+    worklist : TaintContext.Set.t;
+    analyzing : TaintContext.Set.t;
+    results : TaintSummary.t TaintContext.Map.t;
+    callers : TaintContext.Set.t TaintContext.Map.t;
+  } [@@deriving sexp, compare]
+
+  let empty () = {
+    worklist = TaintContext.get_all ();
+    analyzing = TaintContext.Set.empty;
+    results = TaintContext.Map.empty;
+    callers = TaintContext.Map.empty;
+  }
+
+  let init (st : t) : t =
+    let results = TaintContext.Set.fold st.worklist
+                    ~init:st.results
+                    ~f:(fun results ctxt ->
+                      TaintContext.Map.set results
+                        ~key:ctxt
+                        ~data:TaintSummary.default) in
+    { st with results }
+end
+
+module Analyzer = struct
+  
+      
+  let rec analyze_ctxt
+            (proj : Project.t)
+            (st : InterprocState.t)
+            (ctxt : TaintContext.t)
+    : TaintSummary.t * InterprocState.t =
+    let get_result (st : InterprocState.t) ctxt = match TaintContext.Map.find st.results ctxt with
+      | Some summary -> summary
+      | None -> TaintSummary.default
+    in
+    let add_analyzing (st : InterprocState.t) ctxt
+      : InterprocState.t =
+      { st with
+        analyzing = TaintContext.Set.add st.analyzing ctxt }
+    in
+    let remove_analyzing (st : InterprocState.t) ctxt
+      : InterprocState.t =
+      { st with
+        analyzing = TaintContext.Set.remove st.analyzing ctxt }
+    in
+    let set_result (st : InterprocState.t) ctxt summary =
+      {st with results = TaintContext.Map.set st.results
+                           ~key:ctxt
+                           ~data:summary }
+    in
+    let update_worklist (st : InterprocState.t) ctxt =
+      let join = TaintContext.Set.union in
+      let callers = match TaintContext.Map.find st.callers ctxt with
+        | Some callers -> callers
+        
+        | None -> TaintContext.Set.empty in      
+      { st with
+        worklist = join st.worklist callers }
+    in
+    let prev_output = get_result st ctxt in
+    let st = add_analyzing st ctxt in
+    let sub = TaintContext.sub proj ctxt in
+    let new_output, st = intraproc_propagate proj st sub in
+    let st = remove_analyzing st ctxt in
+    let res_subsumed = TaintSummary.output_subsumed new_output ~by:prev_output in
+    if res_subsumed
+    then new_output, st
+    else
+      let result' = TaintSummary.merge_summaries
+                      ~old_:prev_output
+                      ~new_:new_output in
+      let st = set_result st ctxt result' in
+      let st = update_worklist st ctxt in
+      result', st
+  and intraproc_propagate
+        (proj : Project.t)
+        (st : InterprocState.t)
+        (sub : sub term) : TaintSummary.t * InterprocState.t =
 end
 
 module InterprocTaintpreter = struct
   module T = Checker_taint.Analysis
   module ST = String.Set
 
-  type state = ST.t
-               
+  type env = ST.t [@@deriving sexp, compare, equal]
+
   let denote_binop (op : binop) : T.t -> T.t -> T.t =
     match op with
     | Bil.PLUS -> T.add
@@ -203,7 +326,7 @@ module InterprocTaintpreter = struct
     | Bil.NEG -> T.neg
     | Bil.NOT -> T.lnot
 
-  let rec denote_exp (e : Bil.exp) (st : state) : (T.t * state) =
+  let rec denote_exp (e : Bil.exp) (st : env) : (T.t * env) =
     match e with
     | Bil.Load (_, _, _, _) -> (T.Taint, st)
     | Bil.Store (_, _, _, _, _) -> (T.Notaint, st)
@@ -245,37 +368,56 @@ module InterprocTaintpreter = struct
       let (rt, st) = denote_exp r st in
       (T.join lt rt, st)
 
-  let denote_def (proj : Project.t) (d : def term) (st : state) : state =
+  let denote_def (proj : Project.t) (st : InterprocState.t) (ctxt : TaintContext.t) (d : def term) (env : env)
+    : env * InterprocState.t =
     let var = Def.lhs d in
     let varname = Var.name var in
     let rhs = Def.rhs d in
-    let result, st = denote_exp rhs st in
+    let result, env' = denote_exp rhs env in
     if T.is_tainted result
-    then String.Set.add st varname
-    else st
+    then String.Set.add env' varname, st
+    else env, st
 
-  let denote_phi (proj : Project.t) (p : phi term) (st : state) : state =
-    failwith "denote_phi not implemented yet InterprocTaintpreter"
+  let denote_phi (proj : Project.t) (st : InterprocState.t) (ctxt : TaintContext.t) (p : phi term) (env : env)
+    : env * InterprocState.t =
+    L.error "denote_phi not implemented yet InterprocTaintpreter";
+    env, st
 
-  let denote_jmp (proj : Project.t) (j : jmp term) (st : state) : state =
+  type exn += CalleeNotFound of Tid.t
+  let denote_jmp (proj : Project.t) (st : InterprocState.t) (curctxt : TaintContext.t) (j : jmp term) (env : env) : env * InterprocState.t =
+    let add_caller (st : InterprocState.t) (callee_ctxt : TaintContext.t) : InterprocState.t =
+      let cur_callers = match TaintContext.Map.find st.callers callee_ctxt with
+        | Some cs -> cs
+        | None -> TaintContext.Set.empty in
+      let with_call = TaintContext.Set.add cur_callers curctxt in
+      let callers = TaintContext.Map.set st.callers
+                      ~key:callee_ctxt
+                      ~data:with_call in
+      { st with callers }
+    in
     match Jmp.kind j with
     | Call c -> begin match Call.target c with
       | Direct calleetid ->
         L.debug "Trying to find callee sub with tid: %a" Tid.ppo calleetid;
-        let prog = Project.program proj in
-        (match Term.find sub_t prog calleetid with
-         | Some sub ->
-           L.debug "Found callee sub: (%a, %s)"
-             Tid.ppo calleetid @@ Sub.name sub;
-           st
-         | None -> st)
-      | Indirect exp -> st
+        let callee_sub = match Common.sub_of_tid proj calleetid with
+          | Some calleesub -> calleesub
+          | None -> raise (CalleeNotFound calleetid)
+        in
+        let callee_name = Sub.name callee_sub in
+        let callee_ctxt = TaintContext.of_state callee_name env in
+        let prev_res = match TaintContext.Map.find st.results callee_ctxt with
+          | Some res -> res
+          | None -> TaintSummary.default in
+        let st = add_caller st callee_ctxt in
+        let env' = String.Set.union prev_res.output env in
+        env', st
+      | Indirect exp -> env, st
     end
-    | _ -> st
+    | _ -> env, st
 
-  let denote_elt (proj : Project.t) (e : Blk.elt) (st : state) : state =
+  let denote_elt (proj : Project.t) (st : InterprocState.t) (ctxt : TaintContext.t) (e : Blk.elt) (env : env) : env * InterprocState.t =
     match e with
-    | `Def d -> denote_def proj d st
-    | `Jmp j -> denote_jmp proj j st
-    | `Phi p -> denote_phi proj p st
+    | `Def d -> denote_def proj st ctxt d env
+    | `Jmp j -> denote_jmp proj st ctxt j env
+    | `Phi p -> denote_phi proj st ctxt p env
 end

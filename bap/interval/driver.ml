@@ -225,62 +225,23 @@ let inter_taint_analyze sub proj = ()
 
 let propagate_taint config projctxt proj : unit =
   let open Uc_inargs in
-  let worklist = TaintContext.get_all () in
-  let analyzing = String.Set.empty in
-  let results = TaintContext.Map.empty in
-  let callers = TaintContext.Map.empty in
-  
-  let top_input = ABI.gpr_arg_names |> String.Set.of_list in
-  let empty_sset = String.Set.empty in
-  let init_summary = TaintSummary.make ~input:top_input
-                       ~output:empty_sset in
-  let join = String.Set.union
-               
-  let init_results =
-    TaintContext.Set.fold worklist
-      ~init:results
-      ~f:(fun results ctxt ->
-        TaintContext.Map.set results
-          ~key:ctxt
-          ~data:init_summary)
+  let popwl (st : InterprocState.t)
+    : TaintContext.t option * InterprocState.t =
+    match TaintContext.Set.min_elt st.worklist with
+    | (Some ctxt) as next ->
+      next, {st with
+             worklist = TaintContext.Set.remove st.worklist ctxt }
+    | None -> None, st
   in
-  let rec analyze_one ctxt results callers analyzing =
-    let prev_out = match TaintContext.Map.find results ctxt with
-      | Some output -> output
-      | None -> init_summary in
-    let analyzing = TaintContext.Set.add analyzing ctxt in
-    (* todo, intraprocedural analysis here *)
-    let new_out = init_summary in
-    let analyzing = TaintContext.Set.remove analyzing ctxt in
-    let result_subsumed = TaintSummary.output_subsumed new_out ~by:prev_out in
-    let final_result, results, worklist = if not result_subsumed
-      then
-        let merged = join
-                       (TaintSummary.output new_out)
-                       (TaintSummary.output prev_out) in
-        let updated_summary = TaintSummary.update_output new_out
-                                ~output:merged in
-        let results = TaintContext.Map.set results
-                        ~key:ctxt
-                        ~data:updated_summary in
-        let callers_to_update =
-          match TaintContext.Map.find callers ctxt with
-          | Some cs -> TaintContext.Set.union cs worklist
-          | None -> worklist in
-        (merged, results, callers_to_update)
-      else (new_out, results, worklist) in
-    (final_result, results, callers, analyzing)
+  let rec loop st =
+    match popwl st with
+    | Some ctxt, st -> 
+      let _output, st = Analyzer.analyze_ctxt proj st ctxt in
+      loop st
+    | None -> st.results
   in
-  let rec loop worklist results callers analyzing =
-    match TaintContext.Set.min_elt worklist with
-    | Some ctxt ->
-      let worklist = TaintContext.Set.remove worklist ctxt in
-      let _final_result, results, callers, analyzing =
-        analyze_one ctxt results callers analyzing in
-      loop worklist results callers analyzing
-    | None -> results
-  in
-  ()
+  let init_st = InterprocState.init InterprocState.empty in
+  loop init_st
 
 let run_analyses sub proj ~(is_toplevel : bool)
       ~(bss_init_stores : Global_function_pointers.global_const_store list)
