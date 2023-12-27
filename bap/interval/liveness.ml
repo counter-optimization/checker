@@ -4,21 +4,30 @@ open Graphlib.Std
 open Common
 
 module Env = struct
-  type t = SS.t
+  type t = String.Set.t [@@deriving sexp, compare, equal]
 
-  let empty = SS.empty
+  let empty = String.Set.empty
 
-  let merge = SS.union
+  let merge = String.Set.union
 
-  let equal = SS.equal
+  let equal = String.Set.equal
 
   let widen_with_step _numiter _node old_st new_st =
     merge old_st new_st
 end
 
-type env = Env.t
+type env = Env.t [@@deriving sexp,compare,equal]
 
 type t = (Calling_context.t, Env.t) Solution.t
+
+let sexp_of_t sol = Solution.enum sol
+                    |> Seq.map ~f:(fun (cc, env) ->
+                      Sexp.List [Calling_context.sexp_of_t cc;
+                                 Env.sexp_of_t env])
+                    |> Seq.to_list
+                    |> fun x -> Sexp.List x
+
+let equal = Solution.equal ~equal:Env.equal
 
 let enum = Solution.enum
 
@@ -28,11 +37,11 @@ let liveness_at_tid (sol : t) (tid : tid) : Env.t =
 
 let var_live_at_tid sol tid varname =
   let liveness = liveness_at_tid sol tid in
-  SS.mem liveness varname
+  String.Set.mem liveness varname
 
 let phi_values_to_vars vals =
-  Seq.fold vals ~init:SS.empty ~f:(fun all_vars (_, exp) ->
-    SS.union all_vars @@ Var_name_collector.run exp)
+  Seq.fold vals ~init:String.Set.empty ~f:(fun all_vars (_, exp) ->
+    String.Set.union all_vars @@ Var_name_collector.run exp)
 
 let assn_of_def (dt : def term) : string =
   Var.name @@ Def.lhs dt
@@ -52,7 +61,7 @@ let get_dead_defs ?(flagsonly : bool = true)
     | None -> (true, false)
     | Some elt ->
       begin match assn_of_elt elt with
-      | Some v -> (SS.mem lives v, is_flag v)
+      | Some v -> (String.Set.mem lives v, is_flag v)
       | None -> (true, false)
       end
   in
@@ -68,18 +77,18 @@ let get_dead_defs ?(flagsonly : bool = true)
 let denote_elt (elt : Blk.elt) (prev_env : env) =
   match elt with
   | `Def d ->
-    let kill = SS.singleton @@ assn_of_def d in
+    let kill = String.Set.singleton @@ assn_of_def d in
     let gen = Var_name_collector.run @@ Def.rhs d in
-    SS.diff prev_env kill
-    |> SS.union gen
+    String.Set.diff prev_env kill
+    |> String.Set.union gen
   | `Jmp j ->
     let gen = Var_name_collector.run @@ Jmp.cond j in
-    SS.union prev_env gen
+    String.Set.union prev_env gen
   | `Phi p ->
-    let kill = SS.singleton @@ Var.name @@ Phi.lhs p in
+    let kill = String.Set.singleton @@ Var.name @@ Phi.lhs p in
     let gen = Phi.values p |> phi_values_to_vars in
-    SS.diff prev_env kill
-    |> SS.union gen
+    String.Set.diff prev_env kill
+    |> String.Set.union gen
 
 let run_on_cfg (type g d) (module G : Graph with type t = g and type node = Calling_context.t) g tidmap : t =
   let interp_node cc =

@@ -8,6 +8,8 @@ module KB = Bap_knowledge.Knowledge
 module Cfg = Bap.Std.Graphs.Cfg
 module IrCfg = Bap.Std.Graphs.Ir
 
+module G = Graphlib.Make(Calling_context)(Uc_graph_builder.ExpOpt)
+
 (** Logging *)
 let log_prefix = sprintf "%s.uc_preanalyses" Common.package
 module L = struct
@@ -134,6 +136,19 @@ let final_edges_slot = KB.Class.property ~public ~package
                          cls "final-edges"
                          edges_dom
 
+let liveness_dom = KB.Domain.optional
+                     ~inspect:Liveness.sexp_of_t
+                     ~equal:Liveness.equal
+                     "liveness-solution-dom"
+
+let dfa_liveness_1_slot = KB.Class.property ~public ~package
+                            cls "dfa-liveness-1"
+                            liveness_dom
+
+let dfa_liveness_2_slot = KB.Class.property ~public ~package
+                            cls "dfa-liveness-2"
+                            liveness_dom
+
 let elt_to_sexp e =
   let l x = Sexp.List x in
   let a x = Sexp.Atom x in
@@ -167,6 +182,25 @@ let of_ (subname : string) : t KB.obj Bap_knowledge.knowledge =
     subname
     cls
 
+let get_final_edges (subname : string)
+  : Uc_graph_builder.ExpOpt.t Uc_graph_builder.UcBapG.edges =
+  Toplevel.eval final_edges_slot @@ of_ subname
+
+let get_init_edges (subname : string)
+  : Uc_graph_builder.ExpOpt.t Uc_graph_builder.UcBapG.edges =
+  Toplevel.eval init_edges_slot @@ of_ subname
+
+let get_cfg ?(init : bool = false) (subname : string)
+  : G.t =
+  let edges = if init
+    then get_init_edges subname
+    else get_final_edges subname in
+  Graphlib.create (module G) ~edges ()
+
+let get_tidmap (subname : string)
+  : Blk.elt Tid.Map.t =
+  Toplevel.eval tidmap_slot @@ of_ subname
+
 let put_name (subname : string) : unit =
   Toplevel.exec begin
     of_ subname >>= fun obj ->
@@ -182,6 +216,7 @@ let put_sub (subname : string) (sub : sub term) : unit =
 let fill_single_shot_passes _proj =
   KB.observe subslot @@ fun obj sub ->
   KB.collect nameslot obj >>= fun subname ->
+  L.debug "Filling idx_st,dmp_st,flagownership for %s" subname;
   let sub = match sub with
     | Some s -> s
     | None -> failwith "sub slot not filled in fill_single_shot_passes" in
@@ -208,6 +243,7 @@ let fill_edges proj =
   KB.observe idx_st_slot @@ fun obj idx_st ->
   KB.collect subslot obj >>= fun sub ->
   KB.collect nameslot obj >>= fun subname ->
+  L.debug "Filling init edge and tidmap slots for %s" subname;
   let sub = match sub with
     | Some s -> s
     | None -> failwith "Sub not filled in fill_edges" in

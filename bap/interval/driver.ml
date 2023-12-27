@@ -269,6 +269,9 @@ let run_analyses sub proj ~(is_toplevel : bool)
   (* removed edge and tidmap building from here for:
      edges
      tidmap *)
+
+  let edges = Uc_preanalyses.get_init_edges subname in
+  let tidmap = Uc_preanalyses.get_tidmap subname in
   
   match should_skip_analysis edges tidmap sub prog with
   | Some res ->
@@ -283,9 +286,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
       Extension.Configuration.get ctxt Common.global_log_level_param in
 
     let module G = Graphlib.Make(Calling_context)(Uc_graph_builder.ExpOpt) in
-    let cfg = timed subname CfgCreation @@ fun () ->
-      Graphlib.create (module G) ~edges ()
-    in
+    let cfg = Uc_preanalyses.get_cfg ~init:true subname in
 
     (* here, liveness means classical dataflow liveness *)
     L.info "Running classical dataflow liveness 1";
