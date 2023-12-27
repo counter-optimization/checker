@@ -16,6 +16,7 @@ module L = struct
 end
 
 open KB.Syntax
+open Analysis_profiling
 
 let public = true
 let package = Common.package
@@ -111,13 +112,53 @@ let dmp_helper_dom = KB.Domain.flat
                        ~join:(fun l r -> Ok r)
                        ~inspect:Dmp_helpers.FindSafePtrBitTestPass.sexp_of_t
                        ~equal:Dmp_helpers.FindSafePtrBitTestPass.equal
+                       ~empty:Dmp_helpers.FindSafePtrBitTestPass.empty
                        "dmp_helper_st_dom"
 
 let dmp_helper_slot = KB.Class.property ~public ~package
                         cls "dmp_helper-result"
                         dmp_helper_dom
-                       
+
+let edges_dom = KB.Domain.flat
+                  ~join:(fun l r -> Ok r)
+                  ~inspect:(Uc_graph_builder.UcBapG.sexp_of_edges Uc_graph_builder.ExpOpt.sexp_of_t)
+                  ~empty:[]
+                  ~equal:(Uc_graph_builder.UcBapG.equal_edges Uc_graph_builder.ExpOpt.equal)
+                  "edges-dom"
                   
+let init_edges_slot = KB.Class.property ~public ~package
+                        cls "init-edges"
+                        edges_dom
+
+let final_edges_slot = KB.Class.property ~public ~package
+                         cls "final-edges"
+                         edges_dom
+
+let elt_to_sexp e =
+  let l x = Sexp.List x in
+  let a x = Sexp.Atom x in
+  match e with
+  | `Def d -> l [a "Def"; Def.sexp_of_t d]
+  | `Phi p -> l [a "Phi"; Phi.sexp_of_t p]
+  | `Jmp j -> l [a "Jmp"; Jmp.sexp_of_t j]
+
+let elt_equal x y =
+  match x, y with
+  | `Def d1, `Def d2 -> Def.equal d1 d2
+  | `Phi p1, `Phi p2 -> Phi.equal p1 p2
+  | `Jmp j1, `Jmp j2 -> Jmp.equal j1 j2
+  | _, _ -> false
+
+let tidmap_dom = KB.Domain.flat
+                   ~join:(fun l r -> Ok r)
+                   ~inspect:(Tid.Map.sexp_of_t elt_to_sexp)
+                   ~equal:(Tid.Map.equal elt_equal)
+                   ~empty:Tid.Map.empty
+                   "tidmap-dom"
+
+let tidmap_slot = KB.Class.property ~public ~package
+                    cls "tidmap"
+                    tidmap_dom
 
 let of_ (subname : string) : t KB.obj Bap_knowledge.knowledge =
   KB.Symbol.intern
@@ -138,29 +179,47 @@ let put_sub (subname : string) (sub : sub term) : unit =
     KB.provide subslot obj (Some sub)
   end
 
-let fill_single_shot_passes () =
+let fill_single_shot_passes _proj =
   KB.observe subslot @@ fun obj sub ->
+  KB.collect nameslot obj >>= fun subname ->
   let sub = match sub with
     | Some s -> s
     | None -> failwith "sub slot not filled in fill_single_shot_passes" in
-  let tid_graph = Sub.to_graph sub in
-  let irg = Sub.to_cfg sub in
-  let irg_rpo = Graphlib.reverse_postorder_traverse
-                  (module IrCfg) irg
-                |> Seq.map ~f:IrCfg.Node.label in
-  let succ t = Graphs.Tid.Node.succs t tid_graph in
-  Uc_single_shot_pass.GroupedAnalyses.run irg_rpo;
-  let idx_st = Uc_single_shot_pass.GroupedAnalyses.get_final_state
-                 (module Idx_calculator.Pass)
-             |> Idx_calculator.Pass.get_state ~succ in
-  let dmp_st = Uc_single_shot_pass.GroupedAnalyses.get_final_state (module Dmp_helpers.FindSafePtrBitTestPass) in
-  let flagownership = Uc_single_shot_pass.GroupedAnalyses.get_final_state (module Flag_ownership.Pass) in
+  let idx_st, dmp_st, flagownership = timed subname GroupedSingleShotAnalyses @@ fun () ->
+    let tid_graph = Sub.to_graph sub in
+    let irg = Sub.to_cfg sub in
+    let irg_rpo = Graphlib.reverse_postorder_traverse
+                    (module IrCfg) irg
+                  |> Seq.map ~f:IrCfg.Node.label in
+    let succ t = Graphs.Tid.Node.succs t tid_graph in
+    Uc_single_shot_pass.GroupedAnalyses.run irg_rpo;
+    let idx_st = Uc_single_shot_pass.GroupedAnalyses.get_final_state
+                   (module Idx_calculator.Pass)
+                 |> Idx_calculator.Pass.get_state ~succ in
+    let dmp_st = Uc_single_shot_pass.GroupedAnalyses.get_final_state (module Dmp_helpers.FindSafePtrBitTestPass) in
+    let flagownership = Uc_single_shot_pass.GroupedAnalyses.get_final_state (module Flag_ownership.Pass) in
+    idx_st, dmp_st, flagownership
+  in
   KB.provide flag_ownership_slot obj flagownership >>= fun () ->
   KB.provide idx_st_slot obj idx_st >>= fun () ->
   KB.provide dmp_helper_slot obj dmp_st
 
-let () =
-  fill_single_shot_passes ()
+let fill_edges proj =
+  KB.observe idx_st_slot @@ fun obj idx_st ->
+  KB.collect subslot obj >>= fun sub ->
+  KB.collect nameslot obj >>= fun subname ->
+  let sub = match sub with
+    | Some s -> s
+    | None -> failwith "Sub not filled in fill_edges" in
+  let edges, tidmap = timed subname Edgebuilding @@ fun () ->
+    Uc_graph_builder.IntraNoResolve.of_sub_to_bapedges ~idxst:(Some idx_st) proj sub
+  in
+  KB.provide init_edges_slot obj edges >>= fun () ->
+  KB.provide tidmap_slot obj tidmap 
+  
+let register_preanalyses proj =
+  fill_single_shot_passes proj;
+  fill_edges proj
   
       
 

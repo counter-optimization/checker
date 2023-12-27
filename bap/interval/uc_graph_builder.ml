@@ -16,7 +16,7 @@ end
 
 type cedge = (tid * Exp.t option * tid) [@@deriving compare, sexp]
 
-type cedges = cedge list
+type cedges = cedge list [@@deriving compare, sexp]
 
 type ucret_kind = DRetTo of tid | IRetTo of Exp.t | NoRet
                   [@@deriving compare, sexp]
@@ -47,9 +47,9 @@ let () =
   L.debug "False, top node has def: %a" Def.ppo false_def
 
 module UcBapG = struct
-  type 'a edge = (Calling_context.t * Calling_context.t * 'a)
+  type 'a edge = (Calling_context.t * Calling_context.t * 'a) [@@deriving sexp, compare, equal]
 
-  type 'a edges = 'a edge list
+  type 'a edges = 'a edge list [@@deriving sexp, compare, equal]
 
   let of_cedge (from_, label, to_) =
     (Calling_context.of_tid from_,
@@ -58,13 +58,13 @@ module UcBapG = struct
 end
 
 module ExpOpt = struct
-  type t = Exp.t option [@@deriving compare, sexp]
+  type t = Exp.t option [@@deriving compare, sexp, equal]
 end
 
 module UcOcamlG = struct
   module MExp = struct
     include Exp
-    type t = Exp.t option [@@deriving compare, sexp]
+    type t = Exp.t option [@@deriving compare, sexp, equal]
     let default = None
     let s e = Some e
   end

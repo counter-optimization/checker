@@ -256,10 +256,20 @@ let run_analyses sub proj ~(is_toplevel : bool)
   in
   let succ t = Graphs.Tid.Node.succs t tid_graph in
 
-  let edges, tidmap = timed subname Edgebuilding @@ fun () ->
-    let edges, tidmap = Uc_graph_builder.IntraNoResolve.of_sub_to_bapedges ~idxst:(Some idx_st) proj sub in
-    edges, tidmap
-  in
+  (* removed group analyses from here for:
+     idx_st
+     dmp_st
+     flagownership *)
+
+  (* let edges, tidmap = timed subname Edgebuilding @@ fun () -> *)
+  (*   let edges, tidmap = Uc_graph_builder.IntraNoResolve.of_sub_to_bapedges ~idxst:(Some idx_st) proj sub in *)
+  (*   edges, tidmap *)
+  (* in *)
+
+  (* removed edge and tidmap building from here for:
+     edges
+     tidmap *)
+  
   match should_skip_analysis edges tidmap sub prog with
   | Some res ->
     L.info "Skipping analysis of single jmp subroutine %s\n%!" subname;

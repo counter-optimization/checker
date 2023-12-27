@@ -157,6 +157,8 @@ module FindSafePtrBitTestPass : sig
 
   val sexp_of_t : t -> Sexp.t
 
+  val empty : t
+
 end = struct
   type varname = string [@@deriving equal, compare, sexp]
     
@@ -172,6 +174,13 @@ end = struct
     fallthrough : Tid.t Tid.Map.t;
     clear_jmp : Tid.t option;
   } [@@deriving equal, compare, sexp]
+
+  let empty : t = {
+    bt_tids = Tid.Map.empty;
+    jmps = Tid.Map.empty;
+    fallthrough = Tid.Map.empty;
+    clear_jmp = None
+  }
 
   type _ Uc_single_shot_pass.key += Key : t Uc_single_shot_pass.key
 
