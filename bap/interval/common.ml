@@ -461,3 +461,8 @@ module type CheckerInterp = sig
   type t
   val denote_exp : tid -> Bil.exp -> t list
 end
+
+let sub_of_tid (proj : Project.t) (t : Tid.t)
+  : sub term option =
+  let prog = Project.program proj in
+  Term.find sub_t prog t

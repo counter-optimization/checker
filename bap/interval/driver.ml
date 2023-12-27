@@ -102,15 +102,6 @@ end = struct
 end
 
 (** Single shot pass runner *)
-module GroupedAnalyses = Uc_single_shot_pass.GroupRunner(struct let n = 3 end)
-    
-let () =
-  GroupedAnalyses.register_runner
-    (module Dmp_helpers.FindSafePtrBitTestPass);
-  GroupedAnalyses.register_runner
-    (module Idx_calculator.Pass);
-  GroupedAnalyses.register_runner
-    (module Flag_ownership.Pass)
 
 (** Logging *)
 let log_prefix = sprintf "%s.driver" Common.package
@@ -265,36 +256,9 @@ let run_analyses sub proj ~(is_toplevel : bool)
   in
   let succ t = Graphs.Tid.Node.succs t tid_graph in
 
-  GroupedAnalyses.run irg_rpo;
-  let idx_st = GroupedAnalyses.get_final_state
-                 (module Idx_calculator.Pass)
-  in
-  let idx_st = Idx_calculator.Pass.get_state ~succ idx_st in
-  let dmp_st = GroupedAnalyses.get_final_state
-                 (module Dmp_helpers.FindSafePtrBitTestPass)
-  in
-  let flagownership = GroupedAnalyses.get_final_state
-                        (module Flag_ownership.Pass)
-  in
-
   let edges, tidmap = timed subname Edgebuilding @@ fun () ->
-    (* let other_edges, other_tidmap = Edge_builder.run_one sub proj idx_st in *)
-    (* let other_edges = List.map other_edges ~f:(fun (from_, to_, cnd) -> *)
-    (*   (Calling_context.of_tid from_, *)
-    (*    Calling_context.of_tid to_, *)
-    (*    cnd)) in *)
     let edges, tidmap = Uc_graph_builder.IntraNoResolve.of_sub_to_bapedges ~idxst:(Some idx_st) proj sub in
-    (* List.iter other_edges ~f:(fun (ofrom, oto, _) -> *)
-    (*   let found = List.find edges ~f:(fun (from_, to_, _) -> *)
-    (*     let from_ = Calling_context.to_insn_tid from_ in *)
-    (*     let to_ = Calling_context.to_insn_tid to_ in *)
-    (*     Tid.equal from_ ofrom && Tid.equal to_ oto) *)
-    (*   in *)
-    (*   match found with *)
-    (*   | Some e -> () *)
-    (*   | None -> L.warn "No matching new edge for (%a, %a, _)" Tid.ppo ofrom Tid.ppo oto); *)
     edges, tidmap
-    (* other_edges, other_tidmap *)
   in
   match should_skip_analysis edges tidmap sub prog with
   | Some res ->
@@ -357,9 +321,9 @@ let run_analyses sub proj ~(is_toplevel : bool)
                      cfg
                      (fun e -> (G.Edge.src e, G.Edge.dst e, G.Edge.label e)) in
 
-    let graphviz_fname = subname ^ ".dot" in
-    Out_channel.with_file graphviz_fname ~f:(fun outchnl ->
-      Uc_graph_builder.OcamlGraphWriter.output_graph outchnl oc_graph);
+    (* let graphviz_fname = subname ^ ".dot" in *)
+    (* Out_channel.with_file graphviz_fname ~f:(fun outchnl -> *)
+    (*   Uc_graph_builder.OcamlGraphWriter.output_graph outchnl oc_graph); *)
 
     L.info "Running classical dataflow liveness 2";
     let dataflow_liveness = timed subname ClassicLivenessTwo @@ fun () ->
@@ -713,6 +677,12 @@ let check_config config ctxt proj : unit =
   let worklist = Sub.Set.of_list @@ Sequence.to_list target_fns in
   let processed = Sub.Set.empty in
   let init_res = Alert.Set.empty in
+
+  let open KB.Monad_infix in
+  Sub.Set.iter worklist ~f:(fun s ->
+    let name = Sub.name s in
+    Uc_preanalyses.put_name name;
+    Uc_preanalyses.put_sub name s);
 
   let debugtids = match Extension.Configuration.get ctxt Common.debug_tids_param with
     | Some file ->

@@ -7,10 +7,16 @@ module KB = Bap_knowledge.Knowledge
 module ABI = Common.AMD64SystemVABI
 
 module TT = struct
-  type t = Tid.Set.t Tid_map.t
+  type t = Tid.Set.t Tid_map.t [@@deriving sexp, compare, equal]
 end
 
 include TT
+
+let equal = TT.equal
+
+let sexp_of_t = TT.sexp_of_t
+
+let empty = Tid_map.empty
 
 let is_def_of_flag defterm =
   let lhs = Var.name @@ Def.lhs defterm in
@@ -70,3 +76,5 @@ end = struct
   let onjmp dt st = st
   let onphi dt st = st
 end
+
+let () = Uc_single_shot_pass.GroupedAnalyses.register_runner (module Pass)

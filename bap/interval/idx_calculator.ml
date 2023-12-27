@@ -17,10 +17,28 @@ module T = struct
   type state = {
     idxs : Tid.Set.t;
     st : int Tid.Map.t;
-  }
+  } [@@deriving sexp, equal, compare]
 
-  type t = state
+  type t = state [@@deriving sexp, equal, compare]
 end
+
+let equal = T.equal
+
+let sexp_of_t = T.sexp_of_t
+
+let join (l : T.t) (r : T.t) : T.t =
+  { idxs = Tid.Set.union l.idxs r.idxs;
+    st = Tid.Map.merge l.st r.st ~f:(fun ~key -> function
+      | `Both (l, r) -> if l = r
+        then Some l
+        else failwith "Unequal keys idxst join"
+      | `Left l -> Some l
+      | `Right r -> Some r) }
+
+let empty : T.t = {
+  idxs = Tid.Set.empty;
+  st = Tid.Map.empty;
+}
 
 module Pass = struct
   open Option.Monad_infix
@@ -112,6 +130,8 @@ module Pass = struct
     let st = idx_map in
     {idxs;st}
 end
+
+let () = Uc_single_shot_pass.GroupedAnalyses.register_runner (module Pass)
 
 (**
    VAR CASE:

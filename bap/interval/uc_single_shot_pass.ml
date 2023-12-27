@@ -117,5 +117,15 @@ let run_single (type st) (module Pass : PASS with type t = st) (blks : Blk.t Seq
       | `Def d -> Pass.ondef d st
       | `Jmp j -> Pass.onjmp j st
       | `Phi p -> Pass.onphi p st))
-    
+                     
+module GroupedAnalyses = GroupRunner(struct
+    let n = 3
+  end)
 
+let () =
+  GroupedAnalyses.register_runner
+    (module Dmp_helpers.FindSafePtrBitTestPass);
+  GroupedAnalyses.register_runner
+    (module Idx_calculator.Pass);
+  GroupedAnalyses.register_runner
+    (module Flag_ownership.Pass)

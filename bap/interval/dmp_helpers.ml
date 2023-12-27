@@ -152,20 +152,26 @@ module FindSafePtrBitTestPass : sig
   include Uc_single_shot_pass.PASS
             
   val get_guard_points : 'a. t -> 'a -> ('a -> tid -> Tid.Set.t) -> guard_map
-    
+
+  val equal : t -> t -> bool
+
+  val sexp_of_t : t -> Sexp.t
+
 end = struct
-  type varname = string
+  type varname = string [@@deriving equal, compare, sexp]
     
-  type jmp_target = tid
+  type jmp_target = Tid.t [@@deriving equal, compare, sexp]
     
-  type c_or_s = Clear of jmp_target | Set of jmp_target
+  type c_or_s = Clear of jmp_target
+              | Set of jmp_target
+  [@@deriving equal, compare, sexp]
                   
   type t = {
     bt_tids : varname Tid.Map.t;
     jmps : c_or_s Tid.Map.t;
-    fallthrough : tid Tid.Map.t;
-    clear_jmp : tid option;
-  }
+    fallthrough : Tid.t Tid.Map.t;
+    clear_jmp : Tid.t option;
+  } [@@deriving equal, compare, sexp]
 
   type _ Uc_single_shot_pass.key += Key : t Uc_single_shot_pass.key
 
@@ -293,3 +299,5 @@ end = struct
         end
       | None -> st
 end
+
+let () = Uc_single_shot_pass.GroupedAnalyses.register_runner (module FindSafePtrBitTestPass)

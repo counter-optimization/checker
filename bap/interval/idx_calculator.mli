@@ -14,6 +14,14 @@ module Pass : sig
   val get_state : succ:(tid -> tid Seq.t) -> t -> T.t
 end
 
+val equal : t -> t -> bool
+
+val join : t -> t -> t
+
+val empty : t 
+
+val sexp_of_t : t -> Sexp.t
+
 (* val build : sub term -> t *)
 
 val contains_tid : tid -> t -> bool

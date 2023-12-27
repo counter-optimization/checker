@@ -47,6 +47,7 @@ S uc_stats.ml
 S uc_sub.ml
 S uc_graph_builder.ml
 S uc_fixpoint.ml
+S uc_preanalyses.ml
 
 B _build
 

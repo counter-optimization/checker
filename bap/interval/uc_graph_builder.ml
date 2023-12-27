@@ -342,5 +342,4 @@ end = struct
   
   let of_sub ?(idxst : Idx_calculator.t option = None) proj s =
     ()
-
 end
