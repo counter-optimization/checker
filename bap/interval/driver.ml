@@ -229,10 +229,11 @@ let propagate_taint config projctxt proj : unit =
     | Some ctxt, st -> 
       let _output, st = Analyzer.analyze_ctxt proj st ctxt in
       loop st
-    | None -> st.results
+    | None, st -> st.results
   in
-  let init_st = InterprocState.init InterprocState.empty in
-  loop init_st
+  let init_st = InterprocState.init @@ InterprocState.empty () in
+  let ctxts = loop init_st in
+  ()
 
 let run_analyses sub proj ~(is_toplevel : bool)
       ~(bss_init_stores : Global_function_pointers.global_const_store list)
@@ -286,41 +287,46 @@ let run_analyses sub proj ~(is_toplevel : bool)
       Extension.Configuration.get ctxt Common.global_log_level_param in
 
     let module G = Graphlib.Make(Calling_context)(Uc_graph_builder.ExpOpt) in
-    let cfg = Uc_preanalyses.get_cfg ~init:true subname in
+    (* let cfg = Uc_preanalyses.get_cfg ~init:true subname in *)
 
     (* here, liveness means classical dataflow liveness *)
-    L.info "Running classical dataflow liveness 1";
-    let dataflow_liveness = timed subname CfgCreation @@ fun () ->
-      Liveness.run_on_cfg (module G) cfg tidmap
-    in
-    L.info "Done running classical dataflow liveness 1";
+    (* L.info "Running classical dataflow liveness 1"; *)
+    (* let dataflow_liveness = timed subname CfgCreation @@ fun () -> *)
+    (*   Liveness.run_on_cfg (module G) cfg tidmap *)
+    (* in *)
+    (* L.info "Done running classical dataflow liveness 1"; *)
 
-    let first_node = match first_insn_cc sub with
-        | Some n -> n
-        | None -> failwith "[Driver] cfg building init sol, couldn't get first node" in
+    let first_node = Uc_preanalyses.get_first_node_cc subname in
 
-    let _, edges, cfg = timed subname RemoveDeadFlagDefs @@ fun () ->
-      let dead_defs = Liveness.get_dead_defs dataflow_liveness tidmap in
-      let edges = Edge_builder.remove_dead_defs edges dead_defs in
-      let cfg = Graphlib.create (module G) ~edges () in
+    (* let first_node = match first_insn_cc sub with *)
+    (*     | Some n -> n *)
+    (*     | None -> failwith "[Driver] cfg building init sol, couldn't get first node" in *)
+
+    (* let _, edges, cfg = timed subname RemoveDeadFlagDefs @@ fun () -> *)
+    (*   let dead_defs = Liveness.get_dead_defs dataflow_liveness tidmap in *)
+    (*   let edges = Edge_builder.remove_dead_defs edges dead_defs in *)
+    (*   let cfg = Graphlib.create (module G) ~edges () in *)
 
       
-      let orphaned_nodes = G.nodes cfg
-                           |> Seq.filter ~f:(fun n ->
-                             let no_preds = G.Node.preds n cfg
-                                            |> Seq.is_empty in
-                             let is_start = Calling_context.equal n first_node in
-                             no_preds && not is_start) in
-      Seq.iter orphaned_nodes ~f:(fun cc ->
-        let tid = Calling_context.to_insn_tid cc in
-        L.warn "tid %a is orphaned" Tid.ppo tid);
-      let orphaned_nodes = Seq.fold orphaned_nodes ~init:Calling_context.Set.empty
-                             ~f:(fun all n -> Calling_context.Set.add all n) in
-      let edges = List.filter edges ~f:(fun (from_, _, _) ->
-        not @@ Calling_context.Set.mem orphaned_nodes from_) in
-      let cfg = Graphlib.create (module G) ~edges () in
-      dead_defs, edges, cfg
-    in
+    (*   let orphaned_nodes = G.nodes cfg *)
+    (*                        |> Seq.filter ~f:(fun n -> *)
+    (*                          let no_preds = G.Node.preds n cfg *)
+    (*                                         |> Seq.is_empty in *)
+    (*                          let is_start = Calling_context.equal n first_node in *)
+    (*                          no_preds && not is_start) in *)
+    (*   Seq.iter orphaned_nodes ~f:(fun cc -> *)
+    (*     let tid = Calling_context.to_insn_tid cc in *)
+    (*     L.warn "tid %a is orphaned" Tid.ppo tid); *)
+    (*   let orphaned_nodes = Seq.fold orphaned_nodes ~init:Calling_context.Set.empty *)
+    (*                          ~f:(fun all n -> Calling_context.Set.add all n) in *)
+    (*   let edges = List.filter edges ~f:(fun (from_, _, _) -> *)
+    (*     not @@ Calling_context.Set.mem orphaned_nodes from_) in *)
+    (*   let cfg = Graphlib.create (module G) ~edges () in *)
+    (*   dead_defs, edges, cfg *)
+    (* in *)
+
+    let edges = Uc_preanalyses.get_final_edges subname in
+    let cfg = Graphlib.create (module G) ~edges () in
 
     L.debug "Edges are:";
     List.iter edges ~f:(fun e ->
@@ -336,11 +342,13 @@ let run_analyses sub proj ~(is_toplevel : bool)
     (* Out_channel.with_file graphviz_fname ~f:(fun outchnl -> *)
     (*   Uc_graph_builder.OcamlGraphWriter.output_graph outchnl oc_graph); *)
 
-    L.info "Running classical dataflow liveness 2";
-    let dataflow_liveness = timed subname ClassicLivenessTwo @@ fun () ->
-      Liveness.run_on_cfg (module G) cfg tidmap
-    in
-    L.info "Done running classical dataflow liveness 2";
+    (* L.info "Running classical dataflow liveness 2"; *)
+    (* let dataflow_liveness = timed subname ClassicLivenessTwo @@ fun () -> *)
+    (*   Liveness.run_on_cfg (module G) cfg tidmap *)
+    (* in *)
+    (* L.info "Done running classical dataflow liveness 2"; *)
+
+    let dataflow_liveness = Uc_preanalyses.get_liveness ~init:false subname in
 
     (* dmp checker specific *)
     let lahf_sahf = do_ ~if_:do_dmp ~default:Lahf_and_sahf.default @@ fun () ->
@@ -401,11 +409,15 @@ let run_analyses sub proj ~(is_toplevel : bool)
     let stop = Analysis_profiling.record_stop_time start in
     Analysis_profiling.record_duration_for subname InitEnvSetup stop;
 
+    let flagownership = Uc_preanalyses.get_flagownership subname in
+
     L.info "running reaching defs";
     let reachingdefs = timed subname ReachingDefs @@ fun () ->
       Reachingdefs.run_on_cfg (module G) cfg sub tidmap flagownership first_node
     in
     L.info "done running reaching defs";
+
+    let dmp_st = Uc_preanalyses.get_dmpst subname in
 
     let dmp_bt_guards = do_ ~if_:do_dmp ~default:Dmp_helpers.default_gmap @@ fun () ->
       
@@ -615,6 +627,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
 
     let defs = ref None in
     let emp = Alert.Set.empty in
+    let idx_st = Uc_preanalyses.get_idxst subname in
 
     L.info "Running checkers";
     let all_alerts = timed subname CsChecking @@ fun () ->

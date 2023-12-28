@@ -15,6 +15,12 @@ module type PASS = sig
   val onphi : phi term -> t -> t
 end
 
+module type GroupedAnalysesS = sig
+  val register_runner : 'st. (module PASS with type t = 'st) -> unit
+  val run : Blk.t Seq.t -> unit
+  val get_final_state : 'a. (module PASS with type t='a) -> 'a
+end
+
 type runner =
     Runner : (module PASS with type t = 'a) * 'a -> runner
 
@@ -122,10 +128,10 @@ module GroupedAnalyses = GroupRunner(struct
     let n = 3
   end)
 
-let () =
-  GroupedAnalyses.register_runner
-    (module Dmp_helpers.FindSafePtrBitTestPass);
-  GroupedAnalyses.register_runner
-    (module Idx_calculator.Pass);
-  GroupedAnalyses.register_runner
-    (module Flag_ownership.Pass)
+(* let () = *)
+(*   GroupedAnalyses.register_runner *)
+(*     (module Dmp_helpers.FindSafePtrBitTestPass); *)
+(*   GroupedAnalyses.register_runner *)
+(*     (module Idx_calculator.Pass); *)
+(*   GroupedAnalyses.register_runner *)
+(*     (module Flag_ownership.Pass) *)

@@ -1,12 +1,12 @@
 open Core_kernel
 open Bap.Std
+open Graphlib.Std
 
 module Theory = Bap_core_theory.Theory
 module KB = Bap_knowledge.Knowledge
+open KB.Syntax
 module Taint = Checker_taint.Analysis
 
-open KB.Syntax
-       
 let package = Common.package
 
 let log_prefix = sprintf "%s.uc_inargs" package
@@ -229,63 +229,6 @@ module InterprocState = struct
     { st with results }
 end
 
-module Analyzer = struct
-  
-      
-  let rec analyze_ctxt
-            (proj : Project.t)
-            (st : InterprocState.t)
-            (ctxt : TaintContext.t)
-    : TaintSummary.t * InterprocState.t =
-    let get_result (st : InterprocState.t) ctxt = match TaintContext.Map.find st.results ctxt with
-      | Some summary -> summary
-      | None -> TaintSummary.default
-    in
-    let add_analyzing (st : InterprocState.t) ctxt
-      : InterprocState.t =
-      { st with
-        analyzing = TaintContext.Set.add st.analyzing ctxt }
-    in
-    let remove_analyzing (st : InterprocState.t) ctxt
-      : InterprocState.t =
-      { st with
-        analyzing = TaintContext.Set.remove st.analyzing ctxt }
-    in
-    let set_result (st : InterprocState.t) ctxt summary =
-      {st with results = TaintContext.Map.set st.results
-                           ~key:ctxt
-                           ~data:summary }
-    in
-    let update_worklist (st : InterprocState.t) ctxt =
-      let join = TaintContext.Set.union in
-      let callers = match TaintContext.Map.find st.callers ctxt with
-        | Some callers -> callers
-        
-        | None -> TaintContext.Set.empty in      
-      { st with
-        worklist = join st.worklist callers }
-    in
-    let prev_output = get_result st ctxt in
-    let st = add_analyzing st ctxt in
-    let sub = TaintContext.sub proj ctxt in
-    let new_output, st = intraproc_propagate proj st sub in
-    let st = remove_analyzing st ctxt in
-    let res_subsumed = TaintSummary.output_subsumed new_output ~by:prev_output in
-    if res_subsumed
-    then new_output, st
-    else
-      let result' = TaintSummary.merge_summaries
-                      ~old_:prev_output
-                      ~new_:new_output in
-      let st = set_result st ctxt result' in
-      let st = update_worklist st ctxt in
-      result', st
-  and intraproc_propagate
-        (proj : Project.t)
-        (st : InterprocState.t)
-        (sub : sub term) : TaintSummary.t * InterprocState.t =
-end
-
 module InterprocTaintpreter = struct
   module T = Checker_taint.Analysis
   module ST = String.Set
@@ -421,3 +364,164 @@ module InterprocTaintpreter = struct
     | `Jmp j -> denote_jmp proj st ctxt j env
     | `Phi p -> denote_phi proj st ctxt p env
 end
+
+module Analyzer = struct
+  module G = Graphlib.Make(Calling_context)(Uc_graph_builder.ExpOpt)
+      
+  let rec analyze_ctxt
+            (proj : Project.t)
+            (st : InterprocState.t)
+            (ctxt : TaintContext.t)
+    : TaintSummary.t * InterprocState.t =
+    let get_result (st : InterprocState.t) ctxt = match TaintContext.Map.find st.results ctxt with
+      | Some summary -> summary
+      | None -> TaintSummary.default
+    in
+    let add_analyzing (st : InterprocState.t) ctxt
+      : InterprocState.t =
+      { st with
+        analyzing = TaintContext.Set.add st.analyzing ctxt }
+    in
+    let remove_analyzing (st : InterprocState.t) ctxt
+      : InterprocState.t =
+      { st with
+        analyzing = TaintContext.Set.remove st.analyzing ctxt }
+    in
+    let set_result (st : InterprocState.t) ctxt summary =
+      {st with results = TaintContext.Map.set st.results
+                           ~key:ctxt
+                           ~data:summary }
+    in
+    let update_worklist (st : InterprocState.t) ctxt =
+      let join = TaintContext.Set.union in
+      let callers = match TaintContext.Map.find st.callers ctxt with
+        | Some callers -> callers
+        
+        | None -> TaintContext.Set.empty in      
+      { st with
+        worklist = join st.worklist callers }
+    in
+    let prev_output = get_result st ctxt in
+    let st = add_analyzing st ctxt in
+    let sub = TaintContext.sub proj ctxt in
+    let new_output, st = results_for proj st ctxt sub in
+    let st = remove_analyzing st ctxt in
+    let res_subsumed = TaintSummary.output_subsumed new_output ~by:prev_output in
+    if res_subsumed
+    then new_output, st
+    else
+      let result' = TaintSummary.merge_summaries
+                      ~old_:prev_output
+                      ~new_:new_output in
+      let st = set_result st ctxt result' in
+      let st = update_worklist st ctxt in
+      result', st
+  and results_for
+        (proj : Project.t)
+        (st : InterprocState.t)
+        (ctxt : TaintContext.t)
+        (sub : sub term) : TaintSummary.t * InterprocState.t =
+    let find_sub_result
+          (st : InterprocState.t)
+          (ctxt : TaintContext.t)
+      : (TaintContext.t * TaintSummary.t) option =
+      TaintContext.Map.fold st.results ~init:None
+        ~f:(fun ~key ~data res ->
+          match res with
+          | (Some r) as res -> res
+          | None ->
+            if String.equal ctxt.subname key.subname
+            then Some (key, data)
+            else res)
+    in
+    let prev_res_subsumes_cur_ctxt
+          (res : TaintSummary.t)
+          (ctxt : TaintContext.t) : bool =
+      let last_in_env = res.input in
+      let this_in_env = ctxt.argvals in
+      String.Set.is_subset this_in_env ~of_:last_in_env
+    in
+    let currently_analyzing_sub
+          (st : InterprocState.t)
+          (ctxt : TaintContext.t) : bool =
+      TaintContext.Set.exists st.analyzing
+        ~f:(fun analyzing_ctxt ->
+          String.equal analyzing_ctxt.subname ctxt.subname)
+    in
+    let prev_res = find_sub_result st ctxt in
+    let output, results = match prev_res with
+      | Some (prevctxt, summ) when prev_res_subsumes_cur_ctxt summ ctxt ->
+        Some summ.output, st.results
+      | Some (prevctxt, summ) ->
+        let new_input = String.Set.union summ.input ctxt.argvals in
+        let new_res = { summ with input = new_input } in
+        None, TaintContext.Map.set st.results
+                ~key:prevctxt
+                ~data:new_res
+      | None ->
+        let new_res = TaintSummary.make
+                        ~input:ctxt.argvals
+                        ~output:String.Set.empty in
+        None, TaintContext.Map.set st.results
+                ~key:ctxt
+                ~data:new_res
+    in
+    let st = { st with results } in
+    match output with
+    | Some prev_output ->
+      let prev_res = TaintSummary.make
+                       ~input:ctxt.argvals
+                       ~output:prev_output in
+      (prev_res, st)
+    | None when currently_analyzing_sub st ctxt ->
+      begin match find_sub_result st ctxt with
+      | Some (other_ctxt, res) -> (res, st)
+      | None -> failwith "shouldn't happen"
+      end
+    | None -> intraproc_propagate proj st ctxt sub
+  and intraproc_propagate
+        (proj : Project.t)
+        (st : InterprocState.t)
+        (ctxt : TaintContext.t)
+        (sub : sub term) : TaintSummary.t * InterprocState.t =
+    let subname = Sub.name sub in
+    let first_node = Uc_preanalyses.get_first_node_cc subname in
+    let cfg = Uc_preanalyses.get_cfg ~init:false subname in
+    let tidmap = Uc_preanalyses.get_tidmap subname in
+    let init_map = Calling_context.Map.empty
+                   |> Calling_context.Map.set
+                        ~key:first_node
+                        ~data:ctxt.argvals in
+    let init_sol = Solution.create init_map String.Set.empty in
+    let st : InterprocState.t ref = ref st in
+    let analysis_results = Graphlib.fixpoint
+                             (module G)
+                             cfg
+                             ~init:init_sol
+                             ~equal:String.Set.equal
+                             ~start:first_node
+                             ~merge:String.Set.union
+                             ~f:(fun cc env ->
+                               let tid = Calling_context.to_insn_tid cc in
+                               let elt = match Tid.Map.find tidmap tid with
+                                 | Some e -> e
+                                 | None -> failwith @@
+                                   sprintf "Couldn't find elt for tid %a" Tid.pps tid in
+                               
+                               let env', st' = InterprocTaintpreter.denote_elt proj !st ctxt elt env in
+                               st := st';
+                               env')
+    in
+    let exit_nodes = Uc_preanalyses.get_exit_nodes subname in
+    let final_state = Tid.Set.fold exit_nodes
+                        ~init:String.Set.empty
+                        ~f:(fun env exittid ->
+                          let cc = Calling_context.of_tid exittid in
+                          let exitres = Solution.get analysis_results cc in
+                          String.Set.union exitres env) in
+    let result = TaintSummary.make
+                   ~input:ctxt.argvals
+                   ~output:final_state in
+    result, !st
+end
+
