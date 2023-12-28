@@ -53,7 +53,8 @@ module TaintInState = struct
       ~inspect:String.sexp_of_t "taint-in-state-dom"
 
   let tainted_regs : (T.t, t) KB.slot =
-    KB.Class.property ~package cls "taint-map" taintdom
+    KB.Class.property ~public:true ~package
+      cls "tainted-regs" taintdom
 
   let get subname : String.Set.t =
     let args = ref String.Set.empty in
@@ -230,6 +231,12 @@ module InterprocState = struct
 end
 
 module InterprocTaintpreter = struct
+  
+end
+
+module Analyzer = struct
+  module G = Graphlib.Make(Calling_context)(Uc_graph_builder.ExpOpt)
+
   module T = Checker_taint.Analysis
   module ST = String.Set
 
@@ -327,46 +334,7 @@ module InterprocTaintpreter = struct
     env, st
 
   type exn += CalleeNotFound of Tid.t
-  let denote_jmp (proj : Project.t) (st : InterprocState.t) (curctxt : TaintContext.t) (j : jmp term) (env : env) : env * InterprocState.t =
-    let add_caller (st : InterprocState.t) (callee_ctxt : TaintContext.t) : InterprocState.t =
-      let cur_callers = match TaintContext.Map.find st.callers callee_ctxt with
-        | Some cs -> cs
-        | None -> TaintContext.Set.empty in
-      let with_call = TaintContext.Set.add cur_callers curctxt in
-      let callers = TaintContext.Map.set st.callers
-                      ~key:callee_ctxt
-                      ~data:with_call in
-      { st with callers }
-    in
-    match Jmp.kind j with
-    | Call c -> begin match Call.target c with
-      | Direct calleetid ->
-        L.debug "Trying to find callee sub with tid: %a" Tid.ppo calleetid;
-        let callee_sub = match Common.sub_of_tid proj calleetid with
-          | Some calleesub -> calleesub
-          | None -> raise (CalleeNotFound calleetid)
-        in
-        let callee_name = Sub.name callee_sub in
-        let callee_ctxt = TaintContext.of_state callee_name env in
-        let prev_res = match TaintContext.Map.find st.results callee_ctxt with
-          | Some res -> res
-          | None -> TaintSummary.default in
-        let st = add_caller st callee_ctxt in
-        let env' = String.Set.union prev_res.output env in
-        env', st
-      | Indirect exp -> env, st
-    end
-    | _ -> env, st
-
-  let denote_elt (proj : Project.t) (st : InterprocState.t) (ctxt : TaintContext.t) (e : Blk.elt) (env : env) : env * InterprocState.t =
-    match e with
-    | `Def d -> denote_def proj st ctxt d env
-    | `Jmp j -> denote_jmp proj st ctxt j env
-    | `Phi p -> denote_phi proj st ctxt p env
-end
-
-module Analyzer = struct
-  module G = Graphlib.Make(Calling_context)(Uc_graph_builder.ExpOpt)
+  
       
   let rec analyze_ctxt
             (proj : Project.t)
@@ -404,7 +372,7 @@ module Analyzer = struct
     let prev_output = get_result st ctxt in
     let st = add_analyzing st ctxt in
     let sub = TaintContext.sub proj ctxt in
-    let new_output, st = results_for proj st ctxt sub in
+    let new_output, st = intraproc_propagate proj st ctxt sub in
     let st = remove_analyzing st ctxt in
     let res_subsumed = TaintSummary.output_subsumed new_output ~by:prev_output in
     if res_subsumed
@@ -508,7 +476,7 @@ module Analyzer = struct
                                  | None -> failwith @@
                                    sprintf "Couldn't find elt for tid %a" Tid.pps tid in
                                
-                               let env', st' = InterprocTaintpreter.denote_elt proj !st ctxt elt env in
+                               let env', st' = denote_elt proj !st ctxt elt env in
                                st := st';
                                env')
     in
@@ -523,5 +491,54 @@ module Analyzer = struct
                    ~input:ctxt.argvals
                    ~output:final_state in
     result, !st
+  and denote_jmp
+        (proj : Project.t)
+        (st : InterprocState.t)
+        (curctxt : TaintContext.t)
+        (j : jmp term)
+        (env : env) : env * InterprocState.t =
+    let add_caller
+          (st : InterprocState.t)
+          (callee_ctxt : TaintContext.t) : InterprocState.t =
+      let cur_callers = match TaintContext.Map.find st.callers callee_ctxt with
+        | Some cs -> cs
+        | None -> TaintContext.Set.empty in
+      let with_call = TaintContext.Set.add cur_callers curctxt in
+      let callers = TaintContext.Map.set st.callers
+                      ~key:callee_ctxt
+                      ~data:with_call in
+      { st with callers }
+    in
+    match Jmp.kind j with
+    | Call c -> begin match Call.target c with
+      | Direct calleetid ->
+        L.debug "Trying to find callee sub with tid: %a" Tid.ppo calleetid;
+        let callee_sub = match Common.sub_of_tid proj calleetid with
+          | Some calleesub -> calleesub
+          | None -> raise (CalleeNotFound calleetid)
+        in
+        let callee_name = Sub.name callee_sub in
+        let callee_ctxt = TaintContext.of_state callee_name env in
+        let prev_res = match TaintContext.Map.find st.results callee_ctxt with
+          | Some res -> res
+          | None -> TaintSummary.default in
+        let cur_res, st = results_for proj st callee_ctxt callee_sub in
+        let st = add_caller st callee_ctxt in
+        let env' = String.Set.union prev_res.output cur_res.output
+                 |> String.Set.union env in
+        env', st
+      | Indirect exp -> env, st
+    end
+    | _ -> env, st
+  and denote_elt
+        (proj : Project.t)
+        (st : InterprocState.t)
+        (ctxt : TaintContext.t)
+        (e : Blk.elt)
+        (env : env) : env * InterprocState.t =
+    match e with
+    | `Def d -> denote_def proj st ctxt d env
+    | `Jmp j -> denote_jmp proj st ctxt j env
+    | `Phi p -> denote_phi proj st ctxt p env
 end
 

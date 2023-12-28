@@ -216,6 +216,7 @@ let inter_taint_analyze sub proj = ()
 
 let propagate_taint config projctxt proj : unit =
   let open Uc_inargs in
+  let open Analysis_profiling in  
   let popwl (st : InterprocState.t)
     : TaintContext.t option * InterprocState.t =
     match TaintContext.Set.min_elt st.worklist with
@@ -226,13 +227,20 @@ let propagate_taint config projctxt proj : unit =
   in
   let rec loop st =
     match popwl st with
-    | Some ctxt, st -> 
-      let _output, st = Analyzer.analyze_ctxt proj st ctxt in
+    | Some ctxt, st ->
+      L.info "Propagating taint for %s" ctxt.subname;
+      let _, st = Analyzer.analyze_ctxt proj st ctxt in
+      L.info "Done propagating taint to %s's callers" ctxt.subname;
       loop st
     | None, st -> st.results
   in
-  let init_st = InterprocState.init @@ InterprocState.empty () in
-  let ctxts = loop init_st in
+  L.info "Starting interproc taint propagation";
+  let ctxts = timed "InterprocTaint" InterprocTaintPropagation @@ fun () ->
+    let init_st = InterprocState.init @@ InterprocState.empty () in
+    let ctxts = loop init_st in
+    ctxts
+  in
+  L.info "Finished interproc taint propagation";
   ()
 
 let run_analyses sub proj ~(is_toplevel : bool)
@@ -696,6 +704,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
     
 let check_config config ctxt proj : unit =
   Random.self_init ();
+  Uc_preanalyses.register_preanalyses proj;
   let target_fns = Config.get_target_fns_exn config proj in
   Uc_inargs.TaintInState.config (module ABI) config;
   let worklist = Sub.Set.of_list @@ Sequence.to_list target_fns in
@@ -707,6 +716,8 @@ let check_config config ctxt proj : unit =
     let name = Sub.name s in
     Uc_preanalyses.put_name name;
     Uc_preanalyses.put_sub name s);
+  
+  propagate_taint config ctxt proj;
 
   let debugtids = match Extension.Configuration.get ctxt Common.debug_tids_param with
     | Some file ->
@@ -720,9 +731,9 @@ let check_config config ctxt proj : unit =
   List.iter global_store_data ~f:(fun {data;addr} ->
     L.debug "mem[%a] <- %a" Word.ppo addr Word.ppo data);
 
-  let should_dump_kb = Extension.Configuration.get ctxt Common.debug_dump in
-  do_ ~if_:should_dump_kb ~default:() (fun () ->
-    Format.printf "%a\n%!" KB.pp_state @@ Toplevel.current ());
+  (* let should_dump_kb = Extension.Configuration.get ctxt Common.debug_dump in *)
+  (* do_ ~if_:should_dump_kb ~default:() (fun () -> *)
+  (*   Format.printf "%a\n%!" KB.pp_state @@ Toplevel.current ()); *)
 
   let rec loop ~(worklist : Sub.Set.t)
             ~(processed : Sub.Set.t)

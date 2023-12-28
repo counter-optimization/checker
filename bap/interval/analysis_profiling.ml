@@ -33,6 +33,7 @@ type event = Edgebuilding
            | LahfSahfAnalysis
            | DmpGuardPointAnalysis
            | GroupedSingleShotAnalyses
+           | InterprocTaintPropagation
            | Default
 [@@deriving equal]
 
@@ -56,6 +57,7 @@ let string_of_event = function
   | LahfSahfAnalysis -> "LahfSahfAnalysis"
   | DmpGuardPointAnalysis -> "DmpGuardPointAnalysis"
   | GroupedSingleShotAnalyses -> "GroupedSingleShotAnalyses"
+  | InterprocTaintPropagation -> "InterprocTaintPropagation"
   | Default -> "Default"
 
 let cls : (t, unit) KB.Class.t = KB.Class.declare

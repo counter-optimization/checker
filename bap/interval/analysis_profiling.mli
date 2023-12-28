@@ -27,6 +27,7 @@ type event = Edgebuilding
            | LahfSahfAnalysis
            | DmpGuardPointAnalysis
            | GroupedSingleShotAnalyses
+           | InterprocTaintPropagation
            | Default
 [@@deriving equal]
 
