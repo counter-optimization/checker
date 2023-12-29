@@ -403,9 +403,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
     let argnames = Seq.map args
                      ~f:(fun a -> Arg.var a |> T.Var.name)
                    |> Seq.to_list in
-    let taintedregs = Uc_inargs.TaintInState.get subname in
-    let interproc_taintedregs = Uc_preanalyses.get_tainted_args subname in
-    let taintedregs = String.Set.union taintedregs interproc_taintedregs in
+    let taintedregs = Uc_preanalyses.get_tainted_args subname in
     let with_canary_set = E.set_stack_canary empty in
     let env_with_df_set = E.set "DF" FinalDomain.b0 with_canary_set in
     let env_with_rsp_set = match E.set_rsp stack_addr env_with_df_set with
@@ -778,7 +776,8 @@ let check_config config ctxt proj : unit =
           ~is_toplevel:false
           ~config
       end
-      else
+      else begin
+        Uc_preanalyses.init sub;
         let current_res = run_analyses sub proj ctxt debugtids
                             ~is_toplevel
                             ~bss_init_stores:global_store_data
@@ -797,6 +796,7 @@ let check_config config ctxt proj : unit =
           ~callees:current_res.callees
           ~config
           ~is_toplevel:false
+      end
   in
   (* Run the analyses and checkers *)
   let analysis_results = loop ~worklist
