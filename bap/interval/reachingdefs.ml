@@ -22,7 +22,7 @@ type def = Def.t
 
 type defset = DefSet.t
 
-type sol = (Calling_context.t, defset) Solution.t
+type sol = (Tid.t, defset) Solution.t
 
 (** rd is reaching def analysis result 
     users_of takes a tid, t, and returns a set of tids identifying
@@ -94,7 +94,7 @@ let denote_elt elt defs =
     |> gen varname tid
   | `Jmp j -> defs
 
-let init_sol (type g d) (module G : Graph with type t = g and type node = Calling_context.t) sub cfg_firstnode =
+let init_sol (type g d) (module G : Graph with type t = g and type node = Tid.t) sub cfg_firstnode =
   let default_of_var var = (None, Var.name var) in
   let init_defs = Sub.free_vars sub
                   |> Set.to_list
@@ -109,7 +109,6 @@ let init_sol (type g d) (module G : Graph with type t = g and type node = Callin
 let get_uses_and_users sol tidmap flagowners : t =
   let term_uses : Tidset.t ref Tid_map.t ref = ref Tid_map.empty in
   let users_of : Tidset.t ref Tid_map.t ref = ref Tid_map.empty in
-  let t = Calling_context.to_insn_tid in
   let add_to_uses_and_users ~attid ~used =
     let uses = match Tid_map.find !term_uses attid with
       | Some uses -> uses
@@ -143,8 +142,7 @@ let get_uses_and_users sol tidmap flagowners : t =
       Format.sprintf "[Rdefs] couldn't find tid %a in tidmap" Tid.pps tid
       |> failwith
   in
-  let process_sol_node (cc, defs) =
-    let tid = t cc in
+  let process_sol_node (tid, defs) =
     let rhs = rhs tid in
     let uses_tids = select_tids ~defset:defs ~select:rhs in
     List.iter uses_tids ~f:(fun used ->
@@ -157,9 +155,8 @@ let get_uses_and_users sol tidmap flagowners : t =
     term_uses = !term_uses;
     users_of = !users_of }
 
-let run_on_cfg (type g) (module G : Graph with type t = g and type node = Calling_context.t) g sub tidmap flagownership cfg_firstnode =
-  let interp_node cc =
-    let tid = Calling_context.to_insn_tid cc in
+let run_on_cfg (type g) (module G : Graph with type t = g and type node = Tid.t) g sub tidmap flagownership cfg_firstnode =
+  let interp_node tid =
     let elt = match Tid_map.find tidmap tid with
       | Some elt -> elt
       | None -> failwith @@
@@ -184,8 +181,7 @@ let run_on_cfg (type g) (module G : Graph with type t = g and type node = Callin
   full_result
 
 let get_last_defs st ~attid ~forvar =
-  let atcc = Calling_context.of_tid attid in
-  let reachingdefs = Solution.get st.rd atcc in
+  let reachingdefs = Solution.get st.rd attid in
   let forvar_def = select_tids
                      ~defset:reachingdefs
                      ~select:(Common.SS.singleton forvar) in

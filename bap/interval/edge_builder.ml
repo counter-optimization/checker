@@ -9,15 +9,9 @@ module KB = Bap_knowledge.Knowledge
 module Cfg = Bap.Std.Graphs.Cfg
 module IrCfg = Bap.Std.Graphs.Ir
 
-module CC = Calling_context
-
 type edge = (Tid.t * Tid.t * Exp.t option)
 
 type edges = edge list
-
-type cc_edge = (CC.t * CC.t * Exp.t option)
-
-type cc_edges = cc_edge list
 
 type tidmap = Blk.elt Tid_map.t
 
@@ -45,10 +39,6 @@ let from_ : edge -> Tid.t = function
 
 let to_ : edge -> Tid.t = function
   | (from', to', _is_interproc) -> to'
-
-let to_cc_edge ((from', to', is_interproc) : edge) : cc_edge =
-  let c = Calling_context.of_tid in
-  (c from', c to', is_interproc)
 
 let print_edge (from', to', is_interproc) : unit =
   let from_s = Tid.to_string from' in
@@ -285,10 +275,8 @@ let edges_of_insns insns sub nodes proj : edges ST.t =
     and remove all ins and outs from the edges
 
 *)
-let remove_dead_defs (edges : cc_edges) (dead : Tidset.t)
-  : cc_edges =
-  let t = Calling_context.to_insn_tid in
-  let c = Calling_context.of_tid in
+let remove_dead_defs (edges : edges) (dead : Tidset.t)
+  : edges =
   let id : 'a. 'a -> 'a = fun x -> x in
   let eq = Tid.equal in
   let edge_eq (f1, t1, _) (f2, t2, _) = eq f1 f2 && eq t1 t2 in
@@ -320,18 +308,14 @@ let remove_dead_defs (edges : cc_edges) (dead : Tidset.t)
       List.map ins ~f:(fun (from_, _, b) ->
         (from_, newto, b))
   in
-  let cc_to_tid_edge (from_, to_, b) = (t from_, t to_, b) in
-  let tid_edges = List.map edges ~f:cc_to_tid_edge in
   let deadseq = Tidset.to_sequence dead in
-  Seq.fold deadseq ~init:tid_edges ~f:(fun es d ->
+  Seq.fold deadseq ~init:edges ~f:(fun es d ->
     let out = get_out es d in
     let ins = get_ins es d id in
     let ins_and_outs = List.append out ins in
     let es = remove_edges es ins_and_outs in
     let newedges = get_new_edges ins out in
     List.append newedges es)
-  |> List.map ~f:(fun (from_, to_, b) ->
-    (c from_, c to_, b))
 
 let get_builder_for_sub sub proj idx_st : edges ST.t =
   let irg = Sub.to_cfg sub in

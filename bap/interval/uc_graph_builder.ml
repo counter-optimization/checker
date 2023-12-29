@@ -33,7 +33,6 @@ type ucjmp_kind = DCall of tid * ucret_kind
 type exn += BadCfg of string
 
 let false_node = Tid.create ()
-let false_node_cc = Calling_context.of_tid false_node
 let false_def =
   let v = Var.create "RAX" (Bil.Types.Imm 64) in
   let exp = Bil.Var v in
@@ -47,14 +46,11 @@ let () =
   L.debug "False, top node has def: %a" Def.ppo false_def
 
 module UcBapG = struct
-  type 'a edge = (Calling_context.t * Calling_context.t * 'a) [@@deriving sexp, compare, equal]
+  type 'a edge = (Tid.t * Tid.t * 'a) [@@deriving sexp, compare, equal]
 
   type 'a edges = 'a edge list [@@deriving sexp, compare, equal]
 
-  let of_cedge (from_, label, to_) =
-    (Calling_context.of_tid from_,
-     Calling_context.of_tid to_,
-     label)
+  let of_cedge (from_, label, to_) = (from_, to_, label)
 end
 
 module ExpOpt = struct
@@ -74,9 +70,8 @@ module UcOcamlG = struct
   type edge = T.E.t 
 
   let of_bapg (type g n e) (module G : BapG.Graph with type t = g and type node = n and type edge = e) (bapg : g) (edge_to_tuple : e -> _ UcBapG.edge) : T.t =
-    let cc_to_tid = Calling_context.to_insn_tid in
     let convert_edge (from_, to_, label) : edge =
-      T.E.create (cc_to_tid from_) None (cc_to_tid to_)
+      T.E.create from_ None to_
     in
     let add_edge = T.add_edge_e in
     let nnodes = G.number_of_nodes bapg in
@@ -129,8 +124,8 @@ let string_of_bapedge (from_, to_, l) =
   let l = match l with
     | None -> "None"
     | Some exp -> Exp.to_string exp in
-  let from_ = Tid.to_string @@ Calling_context.to_insn_tid from_ in
-  let to_ = Tid.to_string @@ Calling_context.to_insn_tid to_ in
+  let from_ = Tid.to_string from_ in
+  let to_ = Tid.to_string to_ in
   sprintf "(%s, %s, %s)" from_ to_ l
 
 (* jmp_never_taken and jmp_always_taken
@@ -306,40 +301,4 @@ end = struct
   let of_sub_to_bapedges ?(idxst : Idx_calculator.t option = None) proj s =
     let edges, tidmap = of_sub ~idxst proj s in
     List.map edges ~f:UcBapG.of_cedge, tidmap
-end
-
-module Inter : sig
-  type t
-    
-  val of_sub : ?idxst:Idx_calculator.t option -> Project.t -> sub term -> unit
-end = struct
-
-  type edges = cedge list [@@deriving sexp, compare]
-  
-  type t = {
-    mutable interedges : edges;
-    mutable edges : edges;
-    mutable callrets : edges;
-    mutable subs : string list;
-    mutable tidmap : Blk.elt Tid.Map.t
-  }
-    
-  let log_prefix = sprintf "%s.Inter" log_prefix
-  module L = struct
-    include Dolog.Log
-    let () = set_prefix log_prefix
-  end
-
-  let emp : t = {
-    interedges = [];
-    edges = [];
-    callrets = [];
-    subs = [];
-    tidmap = Tid.Map.empty;
-  }
-
-  let edges_for_iter st = st.interedges @ st.edges
-  
-  let of_sub ?(idxst : Idx_calculator.t option = None) proj s =
-    ()
 end

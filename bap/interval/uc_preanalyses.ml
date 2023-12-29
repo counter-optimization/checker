@@ -7,7 +7,7 @@ module T = Bap_core_theory.Theory
 module KB = Bap_knowledge.Knowledge
 module Cfg = Bap.Std.Graphs.Cfg
 module IrCfg = Bap.Std.Graphs.Ir
-module G = Graphlib.Make(Calling_context)(Uc_graph_builder.ExpOpt)
+module G = Graphlib.Make(Tid)(Uc_graph_builder.ExpOpt)
 module ABI = Abi.AMD64SystemVABI
 
 (** Logging *)
@@ -268,9 +268,9 @@ let get_flagownership (subname : string) : Flag_ownership.t =
 let get_dmpst (subname : string) : Dmp_helpers.FindSafePtrBitTestPass.t =
   Toplevel.eval dmp_helper_slot @@ of_ subname
 
-let get_first_node_cc (subname : string) : Calling_context.t =
+let get_first_node_cc (subname : string) : Tid.t =
   match Toplevel.eval first_node_slot @@ of_ subname with
-  | Some fn -> Calling_context.of_tid fn
+  | Some fn -> fn
   | None ->
     failwith @@
     sprintf "First node not computed yet for %s" subname
@@ -463,7 +463,7 @@ let fill_final_edges proj =
   (* let first_node = get_first_node_cc subname in *)
   obj-->first_node_slot >>= fun first_node ->
   let first_node = match first_node with
-    | Some fn -> Calling_context.of_tid fn
+    | Some fn -> fn
     | None -> failwith "first_node not computed yet" in
   let finaledges, exit_nodes = timed subname RemoveDeadFlagDefs @@ fun () ->
     let dead_defs = Liveness.get_dead_defs initliveness tidmap in
@@ -474,24 +474,22 @@ let fill_final_edges proj =
                            |> Seq.filter ~f:(fun n ->
                              let no_preds = G.Node.preds n cfg
                                             |> Seq.is_empty in
-                             let is_start = Calling_context.equal n first_node in
+                             let is_start = Tid.equal n first_node in
                              no_preds && not is_start) in
     let exit_nodes = G.nodes cfg
                      |> Seq.filter ~f:(fun n ->
                        G.Node.succs n cfg |> Seq.is_empty) in
-    Seq.iter orphaned_nodes ~f:(fun cc ->
-      let tid = Calling_context.to_insn_tid cc in
-      L.warn "tid %a is orphaned" Tid.ppo tid);
-    let orphaned_nodes = Seq.fold orphaned_nodes ~init:Calling_context.Set.empty
-                           ~f:(fun all n -> Calling_context.Set.add all n) in
+    Seq.iter orphaned_nodes ~f:(
+      L.warn "tid %a is orphaned" Tid.ppo
+    );
+    let orphaned_nodes = Seq.fold orphaned_nodes ~init:Tid.Set.empty
+                           ~f:(fun all n -> Tid.Set.add all n) in
     let edges = List.filter edges ~f:(fun (from_, _, _) ->
-      not @@ Calling_context.Set.mem orphaned_nodes from_) in
+      not @@ Tid.Set.mem orphaned_nodes from_) in
     edges, exit_nodes
   in
   let exit_nodes = Seq.to_list exit_nodes
-                   |> List.map ~f:(fun n ->
-                     let cc = G.Node.label n in
-                     Calling_context.to_insn_tid cc)
+                   |> List.map ~f:G.Node.label
                    |> Tid.Set.of_list in
   L.debug "setting exit nodes slot";
   KB.provide exit_nodes_slot obj exit_nodes >>= fun () ->

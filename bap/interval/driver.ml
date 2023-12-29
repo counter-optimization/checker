@@ -36,7 +36,7 @@ module WidenSetCompute = Uc_fixpoint.WidenSet
 module OcData(Args : sig
     val dmap : TraceDir.directive_map
     val tidmap : Blk.elt Tid.Map.t
-    val firstnode : Calling_context.t
+    val firstnode : Tid.t
     val widenset : Tid.Set.t
   end) : sig
   type data = TraceEnv.t
@@ -84,7 +84,7 @@ end = struct
         | None -> 0
         | Some n -> n in
       let oldst = if cnt >= Common.ai_widen_threshold
-        then TraceEnv.widen (Calling_context.of_tid from_) oldst
+        then TraceEnv.widen from_ oldst
         else oldst in
       counts := Tid.Map.set !counts ~key:from_ ~data:1;
       TraceAbsInt.denote_elt Args.dmap elt oldst
@@ -193,14 +193,13 @@ let should_skip_analysis (edges : Exp.t option Uc_graph_builder.UcBapG.edges)
     | _ -> failwith "in should_skip_analysis, subroutine is single instruction but non jump instruction. this case is not yet handled." 
   else None
 
-let first_insn_cc sub =
+let first_insn sub =
   let open Option.Monad_infix in
   let bbs = Term.enum blk_t sub in
   Seq.hd bbs >>= fun bb ->
   let elts = Blk.elts bb in
   Seq.hd elts >>= fun first_elt ->
   Option.some @@
-  Calling_context.of_tid @@
   Common.elt_to_tid first_elt
 
 let do_ (type a) ~(if_ : bool) ~(default : a) (f : unit -> a) : a =
@@ -229,6 +228,7 @@ let propagate_taint config projctxt proj : unit =
     String.Map.iteri finalres ~f:(fun ~key ~data ->
       let subname = key in
       let tainted_args = data in
+      L.debug "Sub %s has tainted args: %s" subname (String.Set.to_list tainted_args |> List.to_string ~f:Fn.id);
       Uc_preanalyses.set_tainted_args subname tainted_args)
   in
   let popwl (st : InterprocState.t)
@@ -314,7 +314,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
     let is_dbg = Uc_log.is_dbg @@
       Extension.Configuration.get ctxt Common.global_log_level_param in
 
-    let module G = Graphlib.Make(Calling_context)(Uc_graph_builder.ExpOpt) in
+    let module G = Graphlib.Make(Tid)(Uc_graph_builder.ExpOpt) in
     (* let cfg = Uc_preanalyses.get_cfg ~init:true subname in *)
 
     (* here, liveness means classical dataflow liveness *)
@@ -528,7 +528,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
                          ~key:first_node
                          ~data:init_trace_env
                        |> G.Node.Map.set
-                            ~key:Uc_graph_builder.false_node_cc
+                            ~key:Uc_graph_builder.false_node
                             ~data:top_env in
     let init_sol = Solution.create init_mapping TraceEnv.empty in
 
@@ -546,8 +546,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
       (* let doms = domsf from_ in *)
       
       if Graphlib.is_reachable (module G) cfg to_ from_
-      then Abstract.widen_set := Tid.Set.add !Abstract.widen_set @@
-          Calling_context.to_insn_tid to_
+      then Abstract.widen_set := Tid.Set.add !Abstract.widen_set to_
     );
     
     (* Abstract.widen_set := WidenSetCompute.compute_wto oc_graph @@ *)
@@ -579,8 +578,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
     (*                          Common.ai_widen_threshold in *)
 
     let interp =
-      fun cc st ->
-        let tid = Calling_context.to_insn_tid cc in
+      fun tid st ->
         let elt = match Tid_map.find tidmap tid with
           | Some elt -> elt
           | None ->
@@ -592,6 +590,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
         let st = dmp_bt_set tid st in
         let tidstr = Format.sprintf "%a" Tid.pps tid in
         let is_target = String.Set.mem dbgtids tidstr in
+        let is_target = true in
         do_ ~if_:is_target ~default:() (fun () ->
           L.debug "denoting elt %a with inenv:" Tid.ppo tid;
           TraceEnv.pp st);
@@ -632,10 +631,9 @@ let run_analyses sub proj ~(is_toplevel : bool)
       : Common.CheckerInterp with type t := FinalDomain.t =
     struct
       let denote_exp (tid : tid) (exp : Bil.exp) : FinalDomain.t list =
-        let cc = Calling_context.of_tid tid in
         (* let in_state = CI.Chao.M.find tid analysis_results in *)
         (* let in_state = analysis_results tid in *)
-        let in_state = Solution.get analysis_results cc in
+        let in_state = Solution.get analysis_results tid in
         (* let in_state = Map.find_exn !tid_level_data tid in *)
         TraceAbsInt.nondet_denote_exp exp in_state
     end
@@ -658,8 +656,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
 
     L.info "Running checkers";
     let all_alerts = timed subname CsChecking @@ fun () ->
-      List.fold edges ~init:emp ~f:(fun alerts (_, to_cc, _) ->
-        let to_tid = Calling_context.to_insn_tid to_cc in
+      List.fold edges ~init:emp ~f:(fun alerts (_, to_tid, _) ->
         let elt = elt_of_tid to_tid in
         let cs_chkr_res = do_ ~if_:do_cs ~default:emp (fun () ->
           CompSimpChecker.check_elt subname to_tid elt)
@@ -701,8 +698,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
 
     let module GetCallees = Callees.Getter(FinalDomain) in
     let eval_indirect_exp : tid -> Bil.exp -> FinalDomain.t list = fun tid exp ->
-      let cc = Calling_context.of_tid tid in
-      let env = Solution.get analysis_results cc in
+      let env = Solution.get analysis_results tid in
       (* let env = analysis_results tid in *)
       (* let env = CI.Chao.M.find tid analysis_results in *)
       (* let env = Map.find_exn !tid_level_data tid in  *)

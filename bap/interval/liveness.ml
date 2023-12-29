@@ -18,11 +18,11 @@ end
 
 type env = Env.t [@@deriving sexp,compare,equal]
 
-type t = (Calling_context.t, Env.t) Solution.t
+type t = (Tid.t, Env.t) Solution.t
 
 let sexp_of_t sol = Solution.enum sol
                     |> Seq.map ~f:(fun (cc, env) ->
-                      Sexp.List [Calling_context.sexp_of_t cc;
+                      Sexp.List [Tid.sexp_of_t cc;
                                  Env.sexp_of_t env])
                     |> Seq.to_list
                     |> fun x -> Sexp.List x
@@ -31,9 +31,7 @@ let equal = Solution.equal ~equal:Env.equal
 
 let enum = Solution.enum
 
-let liveness_at_tid (sol : t) (tid : tid) : Env.t =
-  let cc = Calling_context.of_tid tid in
-  Solution.get sol cc
+let liveness_at_tid : t -> tid -> Env.t = Solution.get 
 
 let var_live_at_tid sol tid varname =
   let liveness = liveness_at_tid sol tid in
@@ -49,14 +47,12 @@ let assn_of_def (dt : def term) : string =
 let get_dead_defs ?(flagsonly : bool = true)
       (sol : t) (tidmap : Blk.elt Tid.Map.t)
   : Tidset.t =
-  let t = Calling_context.to_insn_tid in
   let is_flag = Common.AMD64SystemVABI.var_name_is_flag in
   let assn_of_elt = function
     | `Def d -> Some (Var.name (Def.lhs d))
     | _ -> None
   in
-  let get_info cc lives =
-    let tid = t cc in
+  let get_info tid lives =
     match Tid_map.find tidmap tid with
     | None -> (true, false)
     | Some elt ->
@@ -66,11 +62,11 @@ let get_dead_defs ?(flagsonly : bool = true)
       end
   in
   enum sol
-  |> Seq.fold ~init:Tidset.empty ~f:(fun dead (cc, lives) ->
-    let (is_live, is_flag) = get_info cc lives in
+  |> Seq.fold ~init:Tidset.empty ~f:(fun dead (tid, lives) ->
+    let (is_live, is_flag) = get_info tid lives in
     let is_dead = not is_live in
     if is_dead && ((not flagsonly) || is_flag)
-    then Tidset.add dead (t cc)
+    then Tidset.add dead tid
     else dead)
 
 
@@ -90,9 +86,8 @@ let denote_elt (elt : Blk.elt) (prev_env : env) =
     String.Set.diff prev_env kill
     |> String.Set.union gen
 
-let run_on_cfg (type g d) (module G : Graph with type t = g and type node = Calling_context.t) g tidmap : t =
-  let interp_node cc =
-    let tid = Calling_context.to_insn_tid cc in
+let run_on_cfg (type g d) (module G : Graph with type t = g and type node = Tid.t) g tidmap : t =
+  let interp_node tid =
     let elt = match Tid_map.find tidmap tid with
       | Some elt -> elt
       | None -> failwith @@

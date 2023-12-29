@@ -235,7 +235,7 @@ module InterprocTaintpreter = struct
 end
 
 module Analyzer = struct
-  module G = Graphlib.Make(Calling_context)(Uc_graph_builder.ExpOpt)
+  module G = Graphlib.Make(Tid)(Uc_graph_builder.ExpOpt)
 
   module T = Checker_taint.Analysis
   module ST = String.Set
@@ -457,8 +457,8 @@ module Analyzer = struct
     let cfg = Uc_preanalyses.get_final_edges subname
               |> Uc_preanalyses.cfg_of_edges in
     let tidmap = Uc_preanalyses.get_tidmap subname in
-    let init_map = Calling_context.Map.empty
-                   |> Calling_context.Map.set
+    let init_map = Tid.Map.empty
+                   |> Tid.Map.set
                         ~key:first_node
                         ~data:ctxt.argvals in
     let init_sol = Solution.create init_map String.Set.empty in
@@ -470,8 +470,7 @@ module Analyzer = struct
                              ~equal:String.Set.equal
                              ~start:first_node
                              ~merge:String.Set.union
-                             ~f:(fun cc env ->
-                               let tid = Calling_context.to_insn_tid cc in
+                             ~f:(fun tid env ->
                                let elt = match Tid.Map.find tidmap tid with
                                  | Some e -> e
                                  | None -> failwith @@
@@ -485,8 +484,7 @@ module Analyzer = struct
     let final_state = Tid.Set.fold exit_nodes
                         ~init:String.Set.empty
                         ~f:(fun env exittid ->
-                          let cc = Calling_context.of_tid exittid in
-                          let exitres = Solution.get analysis_results cc in
+                          let exitres = Solution.get analysis_results exittid in
                           String.Set.union exitres env) in
     let result = TaintSummary.make
                    ~input:ctxt.argvals

@@ -33,14 +33,14 @@ module WidenSet = struct
 end
 
 module SingleShotRoundRobinNarrow (Dom : Abstract.NumericDomain) : sig
-  val compute : 'a 'd. (module BapG.Graph with type t = 'a and type node = Calling_context.t) -> 'a -> initsol:(Calling_context.t, 'd) BapG.Solution.t -> tidmap:Blk.elt Tid.Map.t -> start:Calling_context.t -> f:(Calling_context.t -> 'd -> 'd) -> merge:('d -> 'd -> 'd) -> default:'d -> d_equal:('d -> 'd -> bool) -> (Calling_context.t, 'd) BapG.Solution.t
+  val compute : 'a 'd. (module BapG.Graph with type t = 'a and type node = Tid.t) -> 'a -> initsol:(Tid.t, 'd) BapG.Solution.t -> tidmap:Blk.elt Tid.Map.t -> start:Tid.t -> f:(Tid.t -> 'd -> 'd) -> merge:('d -> 'd -> 'd) -> default:'d -> d_equal:('d -> 'd -> bool) -> (Tid.t, 'd) BapG.Solution.t
 end = struct
-  type 'd compute_result = Done of 'd Calling_context.Map.t
-                      | Continue of (Int.Set.t * 'd Calling_context.Map.t)
+  type 'd compute_result = Done of 'd Tid.Map.t
+                      | Continue of (Int.Set.t * 'd Tid.Map.t)
 
   let continue x = Continue x 
   
-  let compute (type a d) (module G : BapG.Graph with type t = a and type node = Calling_context.t) g ~initsol ~tidmap ~start ~f ~merge ~default ~d_equal =
+  let compute (type a d) (module G : BapG.Graph with type t = a and type node = Tid.t) g ~initsol ~tidmap ~start ~f ~merge ~default ~d_equal =
     let nodes =
       BapG.Graphlib.reverse_postorder_traverse (module G) ~start g |>
       Sequence.to_array in
@@ -56,7 +56,7 @@ end = struct
     let visited = Array.init (Array.length nodes) ~f:(fun _ -> false) in
     let visit n = Array.set visited n true in
     let seen n = Array.get visited n in
-    let get approx n = match Calling_context.Map.find approx n with
+    let get approx n = match Tid.Map.find approx n with
       | Some v -> v
       | None -> default
     in
@@ -82,7 +82,7 @@ end = struct
                else
                  let key = nodes.(n) in
                  (Int.Set.add works n,
-                  Calling_context.Map.set approx ~key ~data:ap'))
+                  Tid.Map.set approx ~key ~data:ap'))
         |> continue
     in
     let rec loop works approx =
@@ -93,7 +93,7 @@ end = struct
     let worklist = List.init (Array.length nodes) ~f:Fn.id
                    |> Int.Set.of_list in
     let initsol = BapG.Solution.enum initsol
-                  |> Calling_context.Map.of_sequence_exn in
+                  |> Tid.Map.of_sequence_exn in
     loop worklist initsol
     |> (fun m -> BapG.Solution.create m default)
 end

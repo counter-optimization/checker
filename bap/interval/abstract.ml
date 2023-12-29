@@ -68,7 +68,7 @@ sig
 
   val widen_threshold : int
 
-  val widen_with_step : int -> (Graphlib.Make(Calling_context)(Bool).Node.t) -> t -> t -> t
+  val widen_with_step : int -> (Graphlib.Make(Tid)(Bool).Node.t) -> t -> t -> t
 
   val pp : t -> unit
 
@@ -160,8 +160,8 @@ module NumericEnv(ValueDom : NumericDomain)
 
   let widen_threshold = Common.ai_widen_threshold
 
-  let widen_with_step steps (node : Graphlib.Make(Calling_context)(Uc_graph_builder.ExpOpt).Node.t) prev_state new_state : t =
-    let module G = Graphlib.Make(Calling_context)(Bool) in
+  let widen_with_step steps (node : Graphlib.Make(Tid)(Uc_graph_builder.ExpOpt).Node.t) prev_state new_state : t =
+    let module G = Graphlib.Make(Tid)(Bool) in
     let widen = fun p n ->
       let open Core_kernel.Map.Symmetric_diff_element in
       M.fold_symmetric_diff p n
@@ -175,9 +175,12 @@ module NumericEnv(ValueDom : NumericDomain)
             (* Map.set newenv ~key ~data:(ValueDom.join preval nextval)) *)
             Map.set newenv ~key ~data:ValueDom.top)
     in
-    let tid = Calling_context.to_insn_tid node in
+    let tid = node in
     let is_widen_node = Tid.Set.mem !widen_set tid in
-    let merge_fn = if not is_widen_node || steps < widen_threshold
+    (* not is_widen_node --> merge
+       is_widen_node && steps < widen_threshold --> merge
+       is_widen_node && steps >= widen_threshold --> widen *)
+    let merge_fn = if not is_widen_node || (is_widen_node && steps < widen_threshold)
       then merge
       else widen in
     merge_fn prev_state new_state

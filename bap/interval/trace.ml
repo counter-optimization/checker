@@ -841,7 +841,7 @@ module Env(N : Abstract.NumericDomain)
 end
 
 module ConditionFinder = struct
-  type rpo_traversal = Calling_context.t Seq.t
+  type rpo_traversal = Tid.t Seq.t
 
   type tidmap = Blk.elt Tid.Map.t
 
@@ -908,8 +908,7 @@ module ConditionFinder = struct
       used_in_cmov_ever all_users
 
     let get_live_flags (prereqs : prereqs) : live_flag list =
-      let get_live_flags cc =
-        let tid = Calling_context.to_insn_tid cc in
+      let get_live_flags tid =
         match Tid_map.find prereqs.tidmap tid with
         | Some (`Def d) ->
           let defines = Var.name @@ Def.lhs d in

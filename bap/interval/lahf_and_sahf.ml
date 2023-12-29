@@ -23,7 +23,7 @@ let lahf_insn_var_names =
   ["RAX"; "SF"; "ZF"; "AF"; "PF"; "CF"]
   |> String.Set.of_list
 
-let run_on_cfg (type g) (module G : Graph with type t = g and type node = Calling_context.t) g tidmap =
+let run_on_cfg (type g) (module G : Graph with type t = g and type node = Tid.t) g tidmap =
   let is_rax_load = function
     | `Def d ->
       begin match Def.rhs d with
@@ -52,8 +52,7 @@ let run_on_cfg (type g) (module G : Graph with type t = g and type node = Callin
   in
   let tween_tids = ref Tid.Set.empty in
   let delay_tid : tid option ref = ref None in
-  let interp_node cc (st : state) =
-    let tid = Calling_context.to_insn_tid cc in
+  let interp_node tid (st : state) =
     let elt = match Tid_map.find tidmap tid with
       | Some elt -> elt
       | None ->
