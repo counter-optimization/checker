@@ -2,13 +2,13 @@ open Core_kernel
 open Bap_main
 open Bap.Std
 open Graphlib.Std
+       
 module T = Bap_core_theory.Theory
 module KB = Bap_knowledge.Knowledge
-
 module Cfg = Bap.Std.Graphs.Cfg
 module IrCfg = Bap.Std.Graphs.Ir
-
 module G = Graphlib.Make(Calling_context)(Uc_graph_builder.ExpOpt)
+module ABI = Abi.AMD64SystemVABI
 
 (** Logging *)
 let log_prefix = sprintf "%s.uc_preanalyses" Common.package
@@ -156,9 +156,9 @@ let bool_dom = KB.Domain.total
                  ~order:Bool.compare
                  "bool-domain"
 
-(* let should_analyze_slot = KB.Class.property ~public ~package *)
-(*                             cls "should-analyze?" *)
-(*                             bool_dom *)
+let should_analyze_slot = KB.Class.property ~public ~package
+                            cls "should-analyze?"
+                            bool_dom
 
 let first_node_slot = KB.Class.property ~public ~package
                         cls "first-node"
@@ -173,6 +173,22 @@ let tid_pset_dom = KB.Domain.powerset
 let exit_nodes_slot = KB.Class.property ~public ~package
                         cls "exit-nodes"
                         tid_pset_dom
+
+let tainted_args_dom = KB.Domain.total
+                         ~inspect:String.Set.sexp_of_t
+                         ~join:(fun l r ->
+                           Ok (String.Set.inter l r))
+                         ~empty:(ABI.gpr_arg_names
+                                 |> String.Set.of_list)
+                         ~order:(fun l r ->
+                           match String.Set.compare l r with
+                           | -1 -> 1
+                           | 1 -> -1
+                           | x -> x)
+                         "inverse-string-pset-dom"
+
+let tainted_args = KB.Class.property ~public ~package
+                     cls "tainted-args" tainted_args_dom
        
 let elt_to_sexp e =
   let l x = Sexp.List x in
@@ -215,24 +231,36 @@ let get_init_edges (subname : string)
   : Uc_graph_builder.ExpOpt.t Uc_graph_builder.UcBapG.edges =
   Toplevel.eval init_edges_slot @@ of_ subname
 
-let get_cfg ?(init : bool = false) (subname : string)
-  : G.t =
-  let edges = if init
-    then get_init_edges subname
-    else get_final_edges subname in
+let cfg_of_edges edges : G.t =
   Graphlib.create (module G) ~edges ()
 
-let get_liveness ?(init : bool = false) (subname : string)
-  : Liveness.t =
-  let slot = if init
-    then dfa_liveness_1_slot
-    else dfa_liveness_2_slot in
-  match Toplevel.eval slot @@ of_ subname with
-  | Some ln -> ln
+let get_init_liveness (subname : string) : Liveness.t =
+  let l = Toplevel.eval dfa_liveness_1_slot @@ of_ subname in
+  match l with
+  | Some l -> l
   | None ->
-    let which = if init then 1 else 2 in
     failwith @@
-    sprintf "Liveness %d not computed yet for %s" which subname
+    sprintf "Init liveness not computed yet for %s" subname
+
+let get_final_liveness (subname : string) : Liveness.t =
+  let l = Toplevel.eval dfa_liveness_2_slot @@ of_ subname in
+  match l with
+  | Some l -> l
+  | None ->
+    failwith @@
+    sprintf "Final liveness not computed yet for %s" subname
+
+(* let get_liveness ?(init : bool = false) (subname : string) *)
+(*   : Liveness.t = *)
+(*   let slot = if init *)
+(*     then dfa_liveness_1_slot *)
+(*     else dfa_liveness_2_slot in *)
+(*   match Toplevel.eval slot @@ of_ subname with *)
+(*   | Some ln -> ln *)
+(*   | None -> *)
+(*     let which = if init then 1 else 2 in *)
+(*     failwith @@ *)
+(*     sprintf "Liveness %d not computed yet for %s" which subname *)
 
 let get_flagownership (subname : string) : Flag_ownership.t =
   Toplevel.eval flag_ownership_slot @@ of_ subname
@@ -263,16 +291,26 @@ let get_tidmap (subname : string) : Blk.elt Tid.Map.t =
 let get_idxst (subname : string) : Idx_calculator.t =
   Toplevel.eval idx_st_slot @@ of_ subname
 
-let put_name (subname : string) : unit =
-  KB.promise nameslot @@ fun _ ->
-  KB.return subname
-
-let put_sub (subname : string) (sub : sub term) : unit =
-  KB.promise subslot @@ fun _ ->
-  KB.return (Some sub)
+let init (sub : sub term) : unit =
+  let name = Sub.name sub in
+  let register_sub = of_ name >>= fun obj ->
+    KB.provide subslot obj (Some sub) >>= fun () ->
+    KB.provide nameslot obj name in
+  Toplevel.exec register_sub
 
 let get_sub (subname : string) =
   KB.Symbol.intern ~public ~package subname cls
+
+let set_tainted_args
+      (subname : string)
+      (targs : String.Set.t) : unit =
+  let provide_args = 
+    let* obj = of_ subname in
+    KB.provide tainted_args obj targs in
+  Toplevel.exec provide_args
+
+let get_tainted_args (subname : string) : String.Set.t =
+  Toplevel.eval tainted_args @@ of_ subname
 
 let fill_first_node proj =
   let first_insn_tid sub =
@@ -286,6 +324,7 @@ let fill_first_node proj =
   KB.promise first_node_slot @@ fun obj ->
   let* subname = obj-->nameslot in
   L.info "Filling first node for %s" subname;
+  L.debug "getting sub";
   let* sub = obj-->subslot in
   match sub with
   | None -> failwith "subslot not filled for fill_first_node"
@@ -296,9 +335,11 @@ let fill_first_node proj =
 
 let fill_single_shot_passes _proj =
   KB.promise idx_st_slot @@ fun obj ->
+  L.info "getting sub";
   let* sub = obj-->subslot in
+  L.debug "getting subname";
   let* subname = obj-->nameslot in
-  L.info "Filling idx_st,dmp_st,flagownership for %s" subname;
+  L.debug "Filling idx_st,dmp_st,flagownership for %s" subname;
   let sub = match sub with
     | Some s -> s
     | None -> failwith "sub slot not filled in fill_single_shot_passes" in
@@ -317,16 +358,32 @@ let fill_single_shot_passes _proj =
     let flagownership = Uc_single_shot_pass.GroupedAnalyses.get_final_state (module Flag_ownership.Pass) in
     idx_st, dmp_st, flagownership
   in
+  L.debug "filling flag ownership";
   KB.provide flag_ownership_slot obj flagownership >>= fun () ->
+  L.debug "filling dmp helper slot";
   KB.provide dmp_helper_slot obj dmp_st >>= fun () ->
   L.info "Done filling idx_st,dmp_st,flagownership";
   KB.return idx_st
+
+let fill_dmp_st _proj =
+  KB.promise dmp_helper_slot @@ fun obj ->
+  let* _ = obj-->idx_st_slot in
+  let* dmp_st = obj-->dmp_helper_slot in
+  KB.return dmp_st
+
+let fill_flagownership _proj =
+  KB.promise flag_ownership_slot @@ fun obj ->
+  let* _ = obj-->idx_st_slot in
+  let* flagownership = obj-->flag_ownership_slot in
+  KB.return flagownership
 
 let fill_edges proj =
   KB.promise init_edges_slot @@ fun obj ->
   let* subname = obj-->nameslot in
   L.info "Filling init edge and tidmap slots for %s" subname;
+  L.debug "getting sub";
   let* sub = obj-->subslot in
+  L.debug "getting idx st";
   let* idx_st = obj-->idx_st_slot in
   let sub = match sub with
     | Some s -> s
@@ -334,49 +391,57 @@ let fill_edges proj =
   let edges, tidmap = timed subname Edgebuilding @@ fun () ->
     Uc_graph_builder.IntraNoResolve.of_sub_to_bapedges ~idxst:(Some idx_st) proj sub
   in
+  L.debug "filling tidmap";
   KB.provide tidmap_slot obj tidmap >>= fun () ->
   L.info "Done filling init edges";
   KB.return edges
 
-(* let fill_should_analyze proj = *)
-(*   KB.promise should_analyze_slot @@ fun obj -> *)
-(*   let* subname = obj-->nameslot in *)
-(*   L.info "Filling should_analyze slot for %s" subname; *)
-(*   let* tidmap = obj-->tidmap_slot in *)
-(*   let* es = obj-->init_edges_slot in *)
-(*   let has_no_edges = List.is_empty es in *)
-(*   let insns = Map.data tidmap in *)
-(*   let has_one_insn =  insns |> List.length |> Int.equal 1 in *)
-(*   if has_no_edges && has_one_insn *)
-(*   then begin *)
-(*     (match List.hd_exn insns with *)
-(*      | `Jmp j -> (match Jmp.dst j with *)
-(*        | None -> () *)
-(*        | Some dst -> (match Jmp.resolve dst with *)
-(*          | First tid -> (match Common.sub_of_tid proj tid with *)
-(*            | Some sub -> *)
-(*              let name = Sub.name sub in *)
-(*              put_name name; *)
-(*              put_sub name sub *)
-(*            | None -> ()) *)
-(*          | _ -> ())) *)
-(*      | _ -> ()); *)
-(*     L.info "Done filling should analyze"; *)
-(*     KB.return false *)
-(*   end *)
-(*   else *)
-(*     (L.info "Done filling should analyze"; *)
-(*      KB.return true) *)
+(** This registers the dependency that init edges computation
+    also fills the tidmap slot *)
+let fill_tidmap proj =
+  KB.promise tidmap_slot @@ fun obj ->
+    let* _ = obj-->init_edges_slot in
+    let* tidmap = obj-->tidmap_slot in
+    KB.return tidmap
+
+let fill_should_analyze proj =
+  KB.promise should_analyze_slot @@ fun obj ->
+  let* subname = obj-->nameslot in
+  L.info "Filling should_analyze slot for %s" subname;
+  let* tidmap = obj-->tidmap_slot in
+  let* es = obj-->init_edges_slot in
+  let has_no_edges = List.is_empty es in
+  let insns = Map.data tidmap in
+  let has_one_insn =  insns |> List.length |> Int.equal 1 in
+  if has_no_edges && has_one_insn
+  then begin
+    (match List.hd_exn insns with
+     | `Jmp j -> (match Jmp.dst j with
+       | None -> ()
+       | Some dst -> (match Jmp.resolve dst with
+         | First tid -> (match Common.sub_of_tid proj tid with
+           | Some sub -> init sub
+           | None -> ())
+         | _ -> ()))
+     | _ -> ());
+    L.info "Done filling should analyze";
+    KB.return false
+  end
+  else
+    (L.info "Done filling should analyze";
+     KB.return true)
 
 let fill_init_liveness proj =
   KB.promise dfa_liveness_1_slot @@ fun obj ->
   let* subname = obj-->nameslot in
   L.info "Filling init liveness for %s" subname;
+  L.debug "getting tidmap";
   let* tidmap = obj-->tidmap_slot in
-  let cfg = get_cfg ~init:true subname in
+  L.debug "getting init edges";
+  let* edges = obj-->init_edges_slot in
+  let cfg = cfg_of_edges edges in
   let liveness = timed subname ClassicLivenessOne @@ fun () ->
-    Liveness.run_on_cfg (module G) cfg tidmap
-  in
+    Liveness.run_on_cfg (module G) cfg tidmap in
   L.info "Done filling DFA init liveness";
   KB.return (Some liveness)
 
@@ -384,10 +449,22 @@ let fill_final_edges proj =
   KB.promise final_edges_slot @@ fun obj ->
   let* subname = obj-->nameslot in
   L.info "Filling final edges for %s" subname;
-  let initliveness = get_liveness ~init:true subname in
+  L.debug "getting init liveness";
+  obj-->dfa_liveness_1_slot >>= fun initliveness ->
+  let initliveness = match initliveness with
+    | Some l -> l
+    | None -> failwith "init liveness not computed yet" in
+  (* let initliveness = get_init_liveness subname in *)
+  L.debug "getting init edges";
   let* initedges = obj-->init_edges_slot in
+  L.debug "getting tidmap";
   let* tidmap = obj-->tidmap_slot in
-  let first_node = get_first_node_cc subname in
+  L.debug "getting first node";
+  (* let first_node = get_first_node_cc subname in *)
+  obj-->first_node_slot >>= fun first_node ->
+  let first_node = match first_node with
+    | Some fn -> Calling_context.of_tid fn
+    | None -> failwith "first_node not computed yet" in
   let finaledges, exit_nodes = timed subname RemoveDeadFlagDefs @@ fun () ->
     let dead_defs = Liveness.get_dead_defs initliveness tidmap in
     let edges = Edge_builder.remove_dead_defs initedges dead_defs in
@@ -416,6 +493,7 @@ let fill_final_edges proj =
                      let cc = G.Node.label n in
                      Calling_context.to_insn_tid cc)
                    |> Tid.Set.of_list in
+  L.debug "setting exit nodes slot";
   KB.provide exit_nodes_slot obj exit_nodes >>= fun () ->
   L.info "Done filling final edges";
   KB.return finaledges
@@ -424,20 +502,25 @@ let fill_final_liveness proj =
   KB.promise dfa_liveness_2_slot @@ fun obj ->
   let* subname = obj-->nameslot in
   L.info "Filling final DFA liveness analysis for %s" subname;
+  L.debug "getting tidmap";
   let* tidmap = obj-->tidmap_slot in
+  L.debug "getting final edges";
   let* edges = obj-->final_edges_slot in
-  let cfg = Graphlib.create (module G) ~edges () in
-  (* let cfg = get_cfg ~init:false subname in *)
+  let cfg = cfg_of_edges edges in
   let liveness2 = timed subname ClassicLivenessTwo @@ fun () ->
-    Liveness.run_on_cfg (module G) cfg tidmap in
+    Liveness.run_on_cfg (module G) cfg tidmap
+  in
   L.info "Done filling final DFA liveness analysis";
   KB.return (Some liveness2)
   
 let register_preanalyses (proj : Project.t) : unit =
   fill_single_shot_passes proj;
+  fill_dmp_st proj;
+  fill_flagownership proj;
   fill_first_node proj;
   fill_edges proj;
-  (* fill_should_analyze proj; *)
+  fill_tidmap proj;
+  fill_should_analyze proj;
   fill_init_liveness proj;
   fill_final_edges proj;
   fill_final_liveness proj

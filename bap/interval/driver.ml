@@ -216,7 +216,21 @@ let inter_taint_analyze sub proj = ()
 
 let propagate_taint config projctxt proj : unit =
   let open Uc_inargs in
-  let open Analysis_profiling in  
+  let open Analysis_profiling in
+  let collect_results : TaintSummary.t TaintContext.Map.t -> String.Set.t String.Map.t =
+    TaintContext.Map.fold ~init:String.Map.empty
+      ~f:(fun ~key ~data inargs ->
+        String.Map.update inargs key.subname
+          ~f:(function
+            | None -> key.argvals
+            | Some previnstate -> String.Set.union previnstate key.argvals))
+  in
+  let set_taint (finalres : String.Set.t String.Map.t) : unit =
+    String.Map.iteri finalres ~f:(fun ~key ~data ->
+      let subname = key in
+      let tainted_args = data in
+      Uc_preanalyses.set_tainted_args subname tainted_args)
+  in
   let popwl (st : InterprocState.t)
     : TaintContext.t option * InterprocState.t =
     match TaintContext.Set.min_elt st.worklist with
@@ -228,18 +242,24 @@ let propagate_taint config projctxt proj : unit =
   let rec loop st =
     match popwl st with
     | Some ctxt, st ->
-      L.info "Propagating taint for %s" ctxt.subname;
-      let _, st = Analyzer.analyze_ctxt proj st ctxt in
-      L.info "Done propagating taint to %s's callers" ctxt.subname;
+      
+      let st = timed ctxt.subname InterprocTaintPropagation @@ fun () ->
+        L.info "Propagating taint for %s" ctxt.subname;
+        let _, st = Analyzer.analyze_ctxt proj st ctxt in
+        L.info "Done propagating taint to %s's callers" ctxt.subname;
+          st
+      in
       loop st
     | None, st -> st.results
   in
   L.info "Starting interproc taint propagation";
-  let ctxts = timed "InterprocTaint" InterprocTaintPropagation @@ fun () ->
+  let results = timed "InterprocTaint" InterprocTaintPropagation @@ fun () ->
     let init_st = InterprocState.init @@ InterprocState.empty () in
-    let ctxts = loop init_st in
-    ctxts
+    let results = loop init_st in
+    results
   in
+  let subtaints = collect_results results in
+  set_taint subtaints;
   L.info "Finished interproc taint propagation";
   ()
 
@@ -257,13 +277,13 @@ let run_analyses sub proj ~(is_toplevel : bool)
     L.debug "%a" Sub.ppo sub);
   
   let prog = Project.program proj in
-  let tid_graph = Sub.to_graph sub in
+  (* let tid_graph = Sub.to_graph sub in *)
                                      
-  let irg = Sub.to_cfg sub in
-  let irg_rpo = Graphlib.reverse_postorder_traverse (module IrCfg) irg
-                |> Seq.map ~f:IrCfg.Node.label
-  in
-  let succ t = Graphs.Tid.Node.succs t tid_graph in
+  (* let irg = Sub.to_cfg sub in *)
+  (* let irg_rpo = Graphlib.reverse_postorder_traverse (module IrCfg) irg *)
+  (*               |> Seq.map ~f:IrCfg.Node.label *)
+  (* in *)
+  (* let succ t = Graphs.Tid.Node.succs t tid_graph in *)
 
   (* removed group analyses from here for:
      idx_st
@@ -341,10 +361,10 @@ let run_analyses sub proj ~(is_toplevel : bool)
       printf "\t%s\n" @@ Uc_graph_builder.string_of_bapedge e
     );
 
-    let oc_graph = Uc_graph_builder.UcOcamlG.of_bapg
-                     (module G)
-                     cfg
-                     (fun e -> (G.Edge.src e, G.Edge.dst e, G.Edge.label e)) in
+    (* let oc_graph = Uc_graph_builder.UcOcamlG.of_bapg *)
+    (*                  (module G) *)
+    (*                  cfg *)
+    (*                  (fun e -> (G.Edge.src e, G.Edge.dst e, G.Edge.label e)) in *)
 
     (* let graphviz_fname = subname ^ ".dot" in *)
     (* Out_channel.with_file graphviz_fname ~f:(fun outchnl -> *)
@@ -356,7 +376,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
     (* in *)
     (* L.info "Done running classical dataflow liveness 2"; *)
 
-    let dataflow_liveness = Uc_preanalyses.get_liveness ~init:false subname in
+    let dataflow_liveness = Uc_preanalyses.get_final_liveness subname in
 
     (* dmp checker specific *)
     let lahf_sahf = do_ ~if_:do_dmp ~default:Lahf_and_sahf.default @@ fun () ->
@@ -384,6 +404,8 @@ let run_analyses sub proj ~(is_toplevel : bool)
                      ~f:(fun a -> Arg.var a |> T.Var.name)
                    |> Seq.to_list in
     let taintedregs = Uc_inargs.TaintInState.get subname in
+    let interproc_taintedregs = Uc_preanalyses.get_tainted_args subname in
+    let taintedregs = String.Set.union taintedregs interproc_taintedregs in
     let with_canary_set = E.set_stack_canary empty in
     let env_with_df_set = E.set "DF" FinalDomain.b0 with_canary_set in
     let env_with_rsp_set = match E.set_rsp stack_addr env_with_df_set with
@@ -572,7 +594,6 @@ let run_analyses sub proj ~(is_toplevel : bool)
         let st = dmp_bt_set tid st in
         let tidstr = Format.sprintf "%a" Tid.pps tid in
         let is_target = String.Set.mem dbgtids tidstr in
-        let is_target = true in
         do_ ~if_:is_target ~default:() (fun () ->
           L.debug "denoting elt %a with inenv:" Tid.ppo tid;
           TraceEnv.pp st);
@@ -704,26 +725,23 @@ let run_analyses sub proj ~(is_toplevel : bool)
     
 let check_config config ctxt proj : unit =
   Random.self_init ();
-  Uc_preanalyses.register_preanalyses proj;
+  
   let target_fns = Config.get_target_fns_exn config proj in
   Uc_inargs.TaintInState.config (module ABI) config;
   let worklist = Sub.Set.of_list @@ Sequence.to_list target_fns in
   let processed = Sub.Set.empty in
   let init_res = Alert.Set.empty in
 
-  let open KB.Monad_infix in
-  Sub.Set.iter worklist ~f:(fun s ->
-    let name = Sub.name s in
-    Uc_preanalyses.put_name name;
-    Uc_preanalyses.put_sub name s);
+  Uc_preanalyses.register_preanalyses proj;
+  Sub.Set.iter worklist ~f:Uc_preanalyses.init;
   
   propagate_taint config ctxt proj;
 
   let debugtids = match Extension.Configuration.get ctxt Common.debug_tids_param with
     | Some file ->
-      let ch = In_channel.create file in
-      In_channel.input_lines ch
-      |> String.Set.of_list
+      In_channel.with_file file ~f:(fun ch ->
+        In_channel.input_lines ch
+        |> String.Set.of_list)
     | None -> String.Set.empty in
   
   let global_store_data = Global_function_pointers.Libsodium.Analysis.get_all_init_fn_ptr_data ctxt proj in
