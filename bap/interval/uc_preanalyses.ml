@@ -250,32 +250,13 @@ let get_final_liveness (subname : string) : Liveness.t =
     failwith @@
     sprintf "Final liveness not computed yet for %s" subname
 
-(* let get_liveness ?(init : bool = false) (subname : string) *)
-(*   : Liveness.t = *)
-(*   let slot = if init *)
-(*     then dfa_liveness_1_slot *)
-(*     else dfa_liveness_2_slot in *)
-(*   match Toplevel.eval slot @@ of_ subname with *)
-(*   | Some ln -> ln *)
-(*   | None -> *)
-(*     let which = if init then 1 else 2 in *)
-(*     failwith @@ *)
-(*     sprintf "Liveness %d not computed yet for %s" which subname *)
-
 let get_flagownership (subname : string) : Flag_ownership.t =
   Toplevel.eval flag_ownership_slot @@ of_ subname
 
 let get_dmpst (subname : string) : Dmp_helpers.FindSafePtrBitTestPass.t =
   Toplevel.eval dmp_helper_slot @@ of_ subname
 
-let get_first_node_cc (subname : string) : Tid.t =
-  match Toplevel.eval first_node_slot @@ of_ subname with
-  | Some fn -> fn
-  | None ->
-    failwith @@
-    sprintf "First node not computed yet for %s" subname
-
-let get_first_node_tid (subname : string) : Tid.t =
+let get_first_node (subname : string) : Tid.t =
   match Toplevel.eval first_node_slot @@ of_ subname with
   | Some fn -> fn
   | None ->
@@ -324,7 +305,6 @@ let fill_first_node proj =
   KB.promise first_node_slot @@ fun obj ->
   let* subname = obj-->nameslot in
   L.info "Filling first node for %s" subname;
-  L.debug "getting sub";
   let* sub = obj-->subslot in
   match sub with
   | None -> failwith "subslot not filled for fill_first_node"
@@ -337,9 +317,7 @@ let fill_single_shot_passes _proj =
   KB.promise idx_st_slot @@ fun obj ->
   L.info "getting sub";
   let* sub = obj-->subslot in
-  L.debug "getting subname";
   let* subname = obj-->nameslot in
-  L.debug "Filling idx_st,dmp_st,flagownership for %s" subname;
   let sub = match sub with
     | Some s -> s
     | None -> failwith "sub slot not filled in fill_single_shot_passes" in
@@ -358,9 +336,7 @@ let fill_single_shot_passes _proj =
     let flagownership = Uc_single_shot_pass.GroupedAnalyses.get_final_state (module Flag_ownership.Pass) in
     idx_st, dmp_st, flagownership
   in
-  L.debug "filling flag ownership";
   KB.provide flag_ownership_slot obj flagownership >>= fun () ->
-  L.debug "filling dmp helper slot";
   KB.provide dmp_helper_slot obj dmp_st >>= fun () ->
   L.info "Done filling idx_st,dmp_st,flagownership";
   KB.return idx_st
@@ -383,7 +359,6 @@ let fill_edges proj =
   L.info "Filling init edge and tidmap slots for %s" subname;
   L.debug "getting sub";
   let* sub = obj-->subslot in
-  L.debug "getting idx st";
   let* idx_st = obj-->idx_st_slot in
   let sub = match sub with
     | Some s -> s
@@ -391,7 +366,6 @@ let fill_edges proj =
   let edges, tidmap = timed subname Edgebuilding @@ fun () ->
     Uc_graph_builder.IntraNoResolve.of_sub_to_bapedges ~idxst:(Some idx_st) proj sub
   in
-  L.debug "filling tidmap";
   KB.provide tidmap_slot obj tidmap >>= fun () ->
   L.info "Done filling init edges";
   KB.return edges
@@ -435,9 +409,7 @@ let fill_init_liveness proj =
   KB.promise dfa_liveness_1_slot @@ fun obj ->
   let* subname = obj-->nameslot in
   L.info "Filling init liveness for %s" subname;
-  L.debug "getting tidmap";
   let* tidmap = obj-->tidmap_slot in
-  L.debug "getting init edges";
   let* edges = obj-->init_edges_slot in
   let cfg = cfg_of_edges edges in
   let liveness = timed subname ClassicLivenessOne @@ fun () ->
@@ -449,18 +421,12 @@ let fill_final_edges proj =
   KB.promise final_edges_slot @@ fun obj ->
   let* subname = obj-->nameslot in
   L.info "Filling final edges for %s" subname;
-  L.debug "getting init liveness";
   obj-->dfa_liveness_1_slot >>= fun initliveness ->
   let initliveness = match initliveness with
     | Some l -> l
     | None -> failwith "init liveness not computed yet" in
-  (* let initliveness = get_init_liveness subname in *)
-  L.debug "getting init edges";
   let* initedges = obj-->init_edges_slot in
-  L.debug "getting tidmap";
   let* tidmap = obj-->tidmap_slot in
-  L.debug "getting first node";
-  (* let first_node = get_first_node_cc subname in *)
   obj-->first_node_slot >>= fun first_node ->
   let first_node = match first_node with
     | Some fn -> fn
@@ -491,7 +457,6 @@ let fill_final_edges proj =
   let exit_nodes = Seq.to_list exit_nodes
                    |> List.map ~f:G.Node.label
                    |> Tid.Set.of_list in
-  L.debug "setting exit nodes slot";
   KB.provide exit_nodes_slot obj exit_nodes >>= fun () ->
   L.info "Done filling final edges";
   KB.return finaledges
@@ -500,9 +465,7 @@ let fill_final_liveness proj =
   KB.promise dfa_liveness_2_slot @@ fun obj ->
   let* subname = obj-->nameslot in
   L.info "Filling final DFA liveness analysis for %s" subname;
-  L.debug "getting tidmap";
   let* tidmap = obj-->tidmap_slot in
-  L.debug "getting final edges";
   let* edges = obj-->final_edges_slot in
   let cfg = cfg_of_edges edges in
   let liveness2 = timed subname ClassicLivenessTwo @@ fun () ->

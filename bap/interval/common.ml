@@ -77,6 +77,16 @@ let is_double_check = Extension.Configuration.flag
                         ~doc:"Is this a double-checking run?"
                         "double-check"
 
+let cache_tainted_args = Extension.Configuration.parameter
+                           ~doc:"File to cache tainted args from interpoc taint propagation in"
+                           ~aliases:["taint"]
+                           (Extension.Type.some Extension.Type.non_dir_file)
+                           "taint-cache"
+
+
+let get_taint_cache projctxt : string option =
+  Extension.Configuration.get projctxt cache_tainted_args
+
 let do_memtrace =
   Extension.Configuration.flag
     ~doc:"Enable memtrace for a memtrace run"

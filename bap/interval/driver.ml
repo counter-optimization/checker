@@ -216,6 +216,25 @@ let inter_taint_analyze sub proj = ()
 let propagate_taint config projctxt proj : unit =
   let open Uc_inargs in
   let open Analysis_profiling in
+  let get_cached_taint_results projctxt : String.Set.t String.Map.t option =
+    match Common.get_taint_cache projctxt with
+    | None -> None
+    | Some filename ->
+      try
+        Some (Sexp.load_sexp ~strict:true filename
+              |> String.Map.t_of_sexp String.Set.t_of_sexp)
+      with
+      | e ->
+        L.error "Couldn't parse cached taint results from file %s : %s" filename @@ Exn.to_string e;
+        None
+  in
+  let cache_taint_results projctxt (results : String.Set.t String.Map.t) : unit =
+    match Common.get_taint_cache projctxt with
+    | None -> ()
+    | Some filename ->
+      let sexp = String.Map.sexp_of_t String.Set.sexp_of_t results in
+      Sexp.save_hum filename sexp
+  in
   let collect_results : TaintSummary.t TaintContext.Map.t -> String.Set.t String.Map.t =
     TaintContext.Map.fold ~init:String.Map.empty
       ~f:(fun ~key ~data inargs ->
@@ -252,23 +271,36 @@ let propagate_taint config projctxt proj : unit =
       loop st
     | None, st -> st.results
   in
-  L.info "Starting interproc taint propagation";
-  let results = timed "InterprocTaint" InterprocTaintPropagation @@ fun () ->
-    let init_st = InterprocState.init @@ InterprocState.empty () in
-    let results = loop init_st in
-    results
+  let run_analysis () : String.Set.t String.Map.t =
+    L.info "Starting interproc taint propagation";
+    let results = timed "InterprocTaint" InterprocTaintPropagation @@ fun () ->
+      let init_st = InterprocState.init @@ InterprocState.empty () in
+      let results = loop init_st in
+      results
+    in
+    collect_results results
   in
-  let subtaints = collect_results results in
+  let subtaints = match Common.get_taint_cache projctxt with
+    | None ->
+      let subtaints = run_analysis () in
+      cache_taint_results projctxt subtaints;
+      subtaints
+    | Some _ -> match get_cached_taint_results projctxt with
+      | Some cached_taint -> cached_taint
+      | None ->
+        let subtaints = run_analysis () in
+        cache_taint_results projctxt subtaints;
+        subtaints in
   set_taint subtaints;
-  L.info "Finished interproc taint propagation";
-  ()
+  L.info "Finished interproc taint propagation"
 
 let run_analyses sub proj ~(is_toplevel : bool)
       ~(bss_init_stores : Global_function_pointers.global_const_store list)
       ~(config : Config.t) ctxt dbgtids : analysis_result =
+  let open Analysis_profiling in
+  
   let subname = Sub.name sub in
   let subtid = Term.tid sub in
-  let open Analysis_profiling in  
   L.info "Analyzing %s" subname;
   Uc_stats.AnalysisInfo.record_analyzed_sub subname subtid;
   
@@ -277,27 +309,6 @@ let run_analyses sub proj ~(is_toplevel : bool)
     L.debug "%a" Sub.ppo sub);
   
   let prog = Project.program proj in
-  (* let tid_graph = Sub.to_graph sub in *)
-                                     
-  (* let irg = Sub.to_cfg sub in *)
-  (* let irg_rpo = Graphlib.reverse_postorder_traverse (module IrCfg) irg *)
-  (*               |> Seq.map ~f:IrCfg.Node.label *)
-  (* in *)
-  (* let succ t = Graphs.Tid.Node.succs t tid_graph in *)
-
-  (* removed group analyses from here for:
-     idx_st
-     dmp_st
-     flagownership *)
-
-  (* let edges, tidmap = timed subname Edgebuilding @@ fun () -> *)
-  (*   let edges, tidmap = Uc_graph_builder.IntraNoResolve.of_sub_to_bapedges ~idxst:(Some idx_st) proj sub in *)
-  (*   edges, tidmap *)
-  (* in *)
-
-  (* removed edge and tidmap building from here for:
-     edges
-     tidmap *)
 
   let edges = Uc_preanalyses.get_init_edges subname in
   let tidmap = Uc_preanalyses.get_tidmap subname in
@@ -307,7 +318,6 @@ let run_analyses sub proj ~(is_toplevel : bool)
     L.info "Skipping analysis of single jmp subroutine %s\n%!" subname;
     res
   | None ->
-    (* CFG *)
     let do_cs = Extension.Configuration.get ctxt Common.do_cs_checks_param in
     let do_ss = Extension.Configuration.get ctxt Common.do_ss_checks_param in
     let do_dmp = Extension.Configuration.get ctxt Common.do_dmp_checks_param in
@@ -315,46 +325,9 @@ let run_analyses sub proj ~(is_toplevel : bool)
       Extension.Configuration.get ctxt Common.global_log_level_param in
 
     let module G = Graphlib.Make(Tid)(Uc_graph_builder.ExpOpt) in
-    (* let cfg = Uc_preanalyses.get_cfg ~init:true subname in *)
-
-    (* here, liveness means classical dataflow liveness *)
-    (* L.info "Running classical dataflow liveness 1"; *)
-    (* let dataflow_liveness = timed subname CfgCreation @@ fun () -> *)
-    (*   Liveness.run_on_cfg (module G) cfg tidmap *)
-    (* in *)
-    (* L.info "Done running classical dataflow liveness 1"; *)
-
-    let first_node = Uc_preanalyses.get_first_node_cc subname in
-
-    (* let first_node = match first_insn_cc sub with *)
-    (*     | Some n -> n *)
-    (*     | None -> failwith "[Driver] cfg building init sol, couldn't get first node" in *)
-
-    (* let _, edges, cfg = timed subname RemoveDeadFlagDefs @@ fun () -> *)
-    (*   let dead_defs = Liveness.get_dead_defs dataflow_liveness tidmap in *)
-    (*   let edges = Edge_builder.remove_dead_defs edges dead_defs in *)
-    (*   let cfg = Graphlib.create (module G) ~edges () in *)
-
-      
-    (*   let orphaned_nodes = G.nodes cfg *)
-    (*                        |> Seq.filter ~f:(fun n -> *)
-    (*                          let no_preds = G.Node.preds n cfg *)
-    (*                                         |> Seq.is_empty in *)
-    (*                          let is_start = Calling_context.equal n first_node in *)
-    (*                          no_preds && not is_start) in *)
-    (*   Seq.iter orphaned_nodes ~f:(fun cc -> *)
-    (*     let tid = Calling_context.to_insn_tid cc in *)
-    (*     L.warn "tid %a is orphaned" Tid.ppo tid); *)
-    (*   let orphaned_nodes = Seq.fold orphaned_nodes ~init:Calling_context.Set.empty *)
-    (*                          ~f:(fun all n -> Calling_context.Set.add all n) in *)
-    (*   let edges = List.filter edges ~f:(fun (from_, _, _) -> *)
-    (*     not @@ Calling_context.Set.mem orphaned_nodes from_) in *)
-    (*   let cfg = Graphlib.create (module G) ~edges () in *)
-    (*   dead_defs, edges, cfg *)
-    (* in *)
-
     let edges = Uc_preanalyses.get_final_edges subname in
     let cfg = Graphlib.create (module G) ~edges () in
+    let first_node = Uc_preanalyses.get_first_node subname in
 
     L.debug "Edges are:";
     List.iter edges ~f:(fun e ->
@@ -541,10 +514,6 @@ let run_analyses sub proj ~(is_toplevel : bool)
     (* let domsf = Dominators.idom_to_dominators idomf in *)
     Abstract.widen_set := Tid.Set.empty;
     List.iter edges ~f:(fun (from_, to_, _cnd) ->
-      (* let from_ = Calling_context.to_insn_tid from_ in *)
-      (* let to_ = Calling_context.to_insn_tid to_ in *)
-      (* let doms = domsf from_ in *)
-      
       if Graphlib.is_reachable (module G) cfg to_ from_
       then Abstract.widen_set := Tid.Set.add !Abstract.widen_set to_
     );
@@ -553,29 +522,6 @@ let run_analyses sub proj ~(is_toplevel : bool)
     (*   Calling_context.to_insn_tid first_node; *)
     L.debug "Widening set:";
     Tid.Set.iter !Abstract.widen_set ~f:(L.debug "\t%a" Tid.ppo);
-    
-    (* let module Data = OcData(struct *)
-    (*                     let firstnode = first_node *)
-    (*                     let dmap = directive_map *)
-    (*                     let tidmap = tidmap *)
-    (*                     let widenset = !Abstract.widen_set (\* wto *\) *)
-    (*                   end) in *)
-    (* let module Fixpoint = Uc_fixpoint.OcamlG.Fixpoint.Make *)
-    (*                         (Uc_graph_builder.UcOcamlG.T) *)
-    (*                         (Data) in *)
-    (* let analysis_results = Fixpoint.analyze *)
-    (*                          (fun _ -> TraceEnv.empty) *)
-    (*                          oc_graph in *)
-                             
-                             
-                             
-    (* let wto = Calling_context.Set.map wto ~f:Calling_context.of_tid in *)
-    (* let analysis_results = CI.compute *)
-    (*                          oc_graph *)
-    (*                          wto *)
-    (*                          (fun _ -> TraceEnv.empty) *)
-    (*                          Uc_fixpoint.OcamlG.ChaoticIteration.FromWto *)
-    (*                          Common.ai_widen_threshold in *)
 
     let interp =
       fun tid st ->
@@ -592,8 +538,8 @@ let run_analyses sub proj ~(is_toplevel : bool)
         let is_target = String.Set.mem dbgtids tidstr in
         let is_target = true in
         do_ ~if_:is_target ~default:() (fun () ->
-          L.debug "denoting elt %a with inenv:" Tid.ppo tid;
-          TraceEnv.pp st);
+          L.debug "denoting elt %a" Tid.ppo tid
+          (* TraceEnv.pp st *));
         TraceAbsInt.denote_elt directive_map elt st
     in
     

@@ -453,7 +453,7 @@ module Analyzer = struct
         (ctxt : TaintContext.t)
         (sub : sub term) : TaintSummary.t * InterprocState.t =
     let subname = Sub.name sub in
-    let first_node = Uc_preanalyses.get_first_node_cc subname in
+    let first_node = Uc_preanalyses.get_first_node subname in
     let cfg = Uc_preanalyses.get_final_edges subname
               |> Uc_preanalyses.cfg_of_edges in
     let tidmap = Uc_preanalyses.get_tidmap subname in
