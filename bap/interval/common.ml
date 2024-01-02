@@ -80,11 +80,12 @@ let is_double_check = Extension.Configuration.flag
 let cache_tainted_args = Extension.Configuration.parameter
                            ~doc:"File to cache tainted args from interpoc taint propagation in"
                            ~aliases:["taint"]
-                           (Extension.Type.some Extension.Type.non_dir_file)
+                           (Extension.Type.some Extension.Type.path)
                            "taint-cache"
 
 
-let get_taint_cache projctxt : string option =
+let get_taint_cache
+      (projctxt : Bap_main.ctxt) : string option =
   Extension.Configuration.get projctxt cache_tainted_args
 
 let do_memtrace =

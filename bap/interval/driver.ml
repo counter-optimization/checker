@@ -328,11 +328,18 @@ let run_analyses sub proj ~(is_toplevel : bool)
     let edges = Uc_preanalyses.get_final_edges subname in
     let cfg = Graphlib.create (module G) ~edges () in
     let first_node = Uc_preanalyses.get_first_node subname in
+    L.debug "First node is: %a" Tid.ppo first_node;
 
     L.debug "Edges are:";
     List.iter edges ~f:(fun e ->
       printf "\t%s\n" @@ Uc_graph_builder.string_of_bapedge e
     );
+
+    L.debug "reverse postorder traversal gives:";
+    Graphlib.reverse_postorder_traverse (module G)
+      ~start:first_node cfg
+    |> Seq.iter ~f:(fun n ->
+      L.debug "\t%a" Tid.ppo @@ G.Node.label n);
 
     (* let oc_graph = Uc_graph_builder.UcOcamlG.of_bapg *)
     (*                  (module G) *)
@@ -521,7 +528,8 @@ let run_analyses sub proj ~(is_toplevel : bool)
     (* Abstract.widen_set := WidenSetCompute.compute_wto oc_graph @@ *)
     (*   Calling_context.to_insn_tid first_node; *)
     L.debug "Widening set:";
-    Tid.Set.iter !Abstract.widen_set ~f:(L.debug "\t%a" Tid.ppo);
+    Tid.Set.iter !Abstract.widen_set
+      ~f:(L.debug "\t%a" Tid.ppo);
 
     let interp =
       fun tid st ->
@@ -538,8 +546,8 @@ let run_analyses sub proj ~(is_toplevel : bool)
         let is_target = String.Set.mem dbgtids tidstr in
         let is_target = true in
         do_ ~if_:is_target ~default:() (fun () ->
-          L.debug "denoting elt %a" Tid.ppo tid
-          (* TraceEnv.pp st *));
+          L.debug "denoting elt %a%!" Tid.ppo tid;
+          TraceEnv.pp st);
         TraceAbsInt.denote_elt directive_map elt st
     in
     

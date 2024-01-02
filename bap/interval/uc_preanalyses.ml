@@ -431,27 +431,44 @@ let fill_final_edges proj =
   let first_node = match first_node with
     | Some fn -> fn
     | None -> failwith "first_node not computed yet" in
-  let finaledges, exit_nodes = timed subname RemoveDeadFlagDefs @@ fun () ->
-    let dead_defs = Liveness.get_dead_defs initliveness tidmap in
-    let edges = Edge_builder.remove_dead_defs initedges dead_defs in
+  (* todo: use succ/pred info that is already precomputed *)
+  let remove_orphaned_nodes edges =
     let cfg = Graphlib.create (module G) ~edges () in
-    
     let orphaned_nodes = G.nodes cfg
                            |> Seq.filter ~f:(fun n ->
                              let no_preds = G.Node.preds n cfg
                                             |> Seq.is_empty in
                              let is_start = Tid.equal n first_node in
                              no_preds && not is_start) in
-    let exit_nodes = G.nodes cfg
-                     |> Seq.filter ~f:(fun n ->
-                       G.Node.succs n cfg |> Seq.is_empty) in
     Seq.iter orphaned_nodes ~f:(
       L.warn "tid %a is orphaned" Tid.ppo
     );
     let orphaned_nodes = Seq.fold orphaned_nodes ~init:Tid.Set.empty
                            ~f:(fun all n -> Tid.Set.add all n) in
+    let removed = ref false in
     let edges = List.filter edges ~f:(fun (from_, _, _) ->
-      not @@ Tid.Set.mem orphaned_nodes from_) in
+      let keep = not @@ Tid.Set.mem orphaned_nodes from_ in
+      (if not keep then removed := true);
+      keep) in
+    edges, !removed
+  in
+  let rec remove_all_orphans edges =
+    let edges', changed = remove_orphaned_nodes edges in
+    if changed
+    then remove_all_orphans edges'
+    else edges'
+  in
+  let finaledges, exit_nodes = timed subname RemoveDeadFlagDefs @@ fun () ->
+    let dead_defs = Liveness.get_dead_defs initliveness tidmap in
+    let edges = Edge_builder.remove_dead_defs
+                  initedges
+                  dead_defs
+                |> remove_all_orphans in
+    let cfg = Graphlib.create (module G) ~edges () in
+    let exit_nodes = G.nodes cfg
+                     |> Seq.filter ~f:(fun n ->
+                       G.Node.succs n cfg |> Seq.is_empty) in
+    
     edges, exit_nodes
   in
   let exit_nodes = Seq.to_list exit_nodes

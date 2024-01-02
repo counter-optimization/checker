@@ -113,7 +113,7 @@ module NumericEnv(ValueDom : NumericDomain)
   let lookup name env =
     match M.find env name with
     | Some v -> v
-    | None -> ValueDom.top
+    | None -> ValueDom.bot
 
   let set name v env : t = M.set env ~key:name ~data:v
 
@@ -380,9 +380,12 @@ module AbstractInterpreter(N: NumericDomain)
         match e with
         | Bil.Load (_mem, idx, _endian, size) ->
           let (offs, st) = denote_exp idx st in
-          begin match E.load_of_bil_exp e offs size st with
-          | Ok res -> res
-          | Error msg -> failwith @@ Error.to_string_hum msg
+          let offs_intvl = get_intvl offs in
+          if Wrapping_interval.equal Wrapping_interval.bot offs_intvl
+          then N.bot, st
+          else begin match E.load_of_bil_exp e offs size st with
+            | Ok res -> res
+            | Error msg -> failwith @@ Error.to_string_hum msg
           end
         | Bil.Store (_mem, idx, v, _endian, size) ->
           let offs, st = denote_exp  idx st in
