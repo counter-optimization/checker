@@ -125,24 +125,24 @@ module OcamlGraphAnalyzer(Data : sig
     end)
 end
 
-let run_on_cfg (g : Uc_graph_builder.UcOcamlG.T.t)
-      ~(exits : Tid.Set.t)
-      ~(tidmap : Blk.elt Tid.Map.t) : t =
-  let module Analyzer = OcamlGraphAnalyzer(struct
-                          let tidmap = tidmap
-                        end)
-  in
-  let init_data = fun node -> if Tid.Set.mem exits node
-    then String.Set.singleton ABI.return_reg
-    else String.Set.empty
-  in
-  let result = Analyzer.analyze init_data g in
-  let liveness_map = G.fold_vertex (fun v lm ->
-    let liveness = result v in
-    Tid.Map.set lm ~key:v ~data:liveness)
-    g Tid.Map.empty
-  in
-  Solution.create liveness_map String.Set.empty
+(* let run_on_cfg (g : Uc_graph_builder.UcOcamlG.T.t) *)
+(*       ~(exits : Tid.Set.t) *)
+(*       ~(tidmap : Blk.elt Tid.Map.t) : t = *)
+(*   let module Analyzer = OcamlGraphAnalyzer(struct *)
+(*                           let tidmap = tidmap *)
+(*                         end) *)
+(*   in *)
+(*   let init_data = fun node -> if Tid.Set.mem exits node *)
+(*     then String.Set.singleton ABI.return_reg *)
+(*     else String.Set.empty *)
+(*   in *)
+(*   let result = Analyzer.analyze init_data g in *)
+(*   let liveness_map = G.fold_vertex (fun v lm -> *)
+(*     let liveness = result v in *)
+(*     Tid.Map.set lm ~key:v ~data:liveness) *)
+(*     g Tid.Map.empty *)
+(*   in *)
+(*   Solution.create liveness_map String.Set.empty *)
     
 let run_on_cfg (type g d) 
       (module G : Graph with type t = g and type node = Tid.t)

@@ -243,14 +243,14 @@ let get_init_edges (subname : string)
   : Uc_graph_builder.ExpOpt.t Uc_graph_builder.UcBapG.edges =
   Toplevel.eval init_edges_slot @@ of_ subname
 
-let og_cfg_of_edges ?(rev : bool = false) edges : OG.t =
-  let nedges = List.length edges in
-  let g = OG.create ~size:nedges () in
-  List.iter edges ~f:(fun (from_, to_, cnd) ->
-    if rev
-    then OG.add_edge_e g (to_, cnd, from_)
-    else OG.add_edge_e g (from_, cnd, to_));
-  g
+(* let og_cfg_of_edges ?(rev : bool = false) edges : OG.t = *)
+(*   let nedges = List.length edges in *)
+(*   let g = OG.create ~size:nedges () in *)
+(*   List.iter edges ~f:(fun (from_, to_, cnd) -> *)
+(*     if rev *)
+(*     then OG.add_edge_e g (to_, cnd, from_) *)
+(*     else OG.add_edge_e g (from_, cnd, to_)); *)
+(*   g *)
 
 let edge_values_of_cfg (cfg : G.t) : String.Set.t Tid.Map.t =
   let add_to_live (at : Tid.t)
@@ -473,27 +473,34 @@ let fill_final_edges proj =
   obj-->dfa_liveness_1_slot >>= fun initliveness ->
   let initliveness = match initliveness with
     | Some l -> l
-    | None -> failwith "init liveness not computed yet" in
+    | None -> failwith "init liveness not computed yet"
+  in
   let* initedges = obj-->init_edges_slot in
   let* tidmap = obj-->tidmap_slot in
   obj-->first_node_slot >>= fun first_node ->
   let first_node = match first_node with
     | Some fn -> fn
-    | None -> failwith "first_node not computed yet" in
+    | None -> failwith "first_node not computed yet"
+  in
   (* todo: use succ/pred info that is already precomputed *)
   let remove_orphaned_nodes edges =
     let cfg = Graphlib.create (module G) ~edges () in
-    let orphaned_nodes = G.nodes cfg
-                           |> Seq.filter ~f:(fun n ->
-                             let no_preds = G.Node.preds n cfg
-                                            |> Seq.is_empty in
-                             let is_start = Tid.equal n first_node in
-                             no_preds && not is_start) in
+    let orphaned_nodes =
+      G.nodes cfg
+      |> Seq.filter ~f:(fun n ->
+        let no_preds = G.Node.preds n cfg
+                       |> Seq.is_empty
+        in
+        let is_start = Tid.equal n first_node in
+        no_preds && not is_start)
+    in
     Seq.iter orphaned_nodes ~f:(
       L.warn "tid %a is orphaned" Tid.ppo
     );
-    let orphaned_nodes = Seq.fold orphaned_nodes ~init:Tid.Set.empty
-                           ~f:(fun all n -> Tid.Set.add all n) in
+    let orphaned_nodes = Seq.fold orphaned_nodes
+                           ~init:Tid.Set.empty
+                           ~f:(fun all n -> Tid.Set.add all n)
+    in
     let removed = ref false in
     let edges = List.filter edges ~f:(fun (from_, _, _) ->
       let keep = not @@ Tid.Set.mem orphaned_nodes from_ in
@@ -509,20 +516,31 @@ let fill_final_edges proj =
   in
   let finaledges, exit_nodes = timed subname RemoveDeadFlagDefs @@ fun () ->
     let dead_defs = Liveness.get_dead_defs initliveness tidmap in
+    L.debug "dead defs are:";
+    Tid.Set.iter dead_defs ~f:(fun dt ->
+      L.debug "\t%a" Tid.ppo dt
+    );
     let edges = Edge_builder.remove_dead_defs
                   initedges
                   dead_defs
-                |> remove_all_orphans in
+                |> remove_all_orphans
+    in
     let cfg = Graphlib.create (module G) ~edges () in
     let exit_nodes = G.nodes cfg
                      |> Seq.filter ~f:(fun n ->
-                       G.Node.succs n cfg |> Seq.is_empty) in
+                       G.Node.succs n cfg |> Seq.is_empty)
+    in
     
     edges, exit_nodes
   in
   let exit_nodes = Seq.to_list exit_nodes
                    |> List.map ~f:G.Node.label
-                   |> Tid.Set.of_list in
+                   |> Tid.Set.of_list
+  in
+  L.debug "final edges are:";
+  List.iter finaledges ~f:(fun (from_, to_, _cnd) ->
+    L.debug "\t(%a, %a)" Tid.ppo from_ Tid.ppo to_
+  );
   KB.provide exit_nodes_slot obj exit_nodes >>= fun () ->
   L.info "Done filling final edges";
   KB.return finaledges

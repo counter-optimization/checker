@@ -275,8 +275,8 @@ let edges_of_insns insns sub nodes proj : edges ST.t =
     and remove all ins and outs from the edges
 
 *)
-let remove_dead_defs (edges : edges) (dead : Tidset.t)
-  : edges =
+let remove_dead_defs (edges : edges)
+      (dead : Tidset.t) : edges =
   let id : 'a. 'a -> 'a = fun x -> x in
   let eq = Tid.equal in
   let edge_eq (f1, t1, _) (f2, t2, _) = eq f1 f2 && eq t1 t2 in

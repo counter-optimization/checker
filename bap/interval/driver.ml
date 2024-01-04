@@ -200,8 +200,6 @@ let set_taint (prod : FinalDomain.t) : FinalDomain.t =
 let unset_taint (prod : FinalDomain.t) : FinalDomain.t =
   FinalDomain.set Checker_taint.Analysis.key prod Checker_taint.Analysis.Notaint
 
-let inter_taint_analyze sub proj = ()
-
 let propagate_taint config projctxt proj : unit =
   let open Uc_inargs in
   let open Analysis_profiling in
@@ -332,12 +330,6 @@ let run_analyses sub proj ~(is_toplevel : bool)
     (* let graphviz_fname = subname ^ ".dot" in *)
     (* Out_channel.with_file graphviz_fname ~f:(fun outchnl -> *)
     (*   Uc_graph_builder.OcamlGraphWriter.output_graph outchnl oc_graph); *)
-
-    (* L.info "Running classical dataflow liveness 2"; *)
-    (* let dataflow_liveness = timed subname ClassicLivenessTwo @@ fun () -> *)
-    (*   Liveness.run_on_cfg (module G) cfg tidmap *)
-    (* in *)
-    (* L.info "Done running classical dataflow liveness 2"; *)
 
     L.debug "getting final liveness";
     let dataflow_liveness = Uc_preanalyses.get_final_liveness subname in
