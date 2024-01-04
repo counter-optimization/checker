@@ -40,36 +40,25 @@ module OcData(Args : sig
     val widenset : Tid.Set.t
   end) : sig
   type data = TraceEnv.t
-                
   type edge = Uc_graph_builder.UcOcamlG.T.E.t
-
   type vertex = Tid.t
-
   type g = Uc_graph_builder.UcOcamlG.T.t
 
   val direction : Uc_graph_builder.OcamlG.Fixpoint.direction
-                
   val join : data -> data -> data
   val equal : data -> data -> bool
   val analyze : edge -> data -> data
   (* val widening : t -> t -> t *)
 end = struct
   type data = TraceEnv.t
-             
   type edge = Uc_graph_builder.UcOcamlG.T.E.t
-
   type vertex = Tid.t
-
   type g = Uc_graph_builder.UcOcamlG.T.t
 
   let counts = ref Tid.Map.empty
-
   let direction = Uc_graph_builder.OcamlG.Fixpoint.Forward
-
   let join = TraceEnv.merge
-
   let equal = TraceEnv.equal
-
   let analyze ((from_, cnd, to_) : edge) oldst =
     L.debug "Denoting elt: %a" Tid.ppo from_;
     L.debug "Old state is:";

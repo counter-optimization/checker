@@ -15,6 +15,7 @@ let rec run (e : Bil.exp) : SS.t =
   | Bil.Cast (cast, n, e) -> run e
   | Bil.Ite (cond, then', else') ->
     SS.union (run then') (run else')
+    |> SS.union (run cond)
   | Bil.Unknown (str, _) -> SS.empty
   | Bil.Let (v, exp, body) ->
     SS.union (SS.singleton (Var.name v)) (run exp)

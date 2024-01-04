@@ -8,6 +8,7 @@ module KB = Bap_knowledge.Knowledge
 module Cfg = Bap.Std.Graphs.Cfg
 module IrCfg = Bap.Std.Graphs.Ir
 module G = Graphlib.Make(Tid)(Uc_graph_builder.ExpOpt)
+module OG = Uc_graph_builder.UcOcamlG.T
 module ABI = Abi.AMD64SystemVABI
 
 (** Logging *)
@@ -242,6 +243,35 @@ let get_init_edges (subname : string)
   : Uc_graph_builder.ExpOpt.t Uc_graph_builder.UcBapG.edges =
   Toplevel.eval init_edges_slot @@ of_ subname
 
+let og_cfg_of_edges ?(rev : bool = false) edges : OG.t =
+  let nedges = List.length edges in
+  let g = OG.create ~size:nedges () in
+  List.iter edges ~f:(fun (from_, to_, cnd) ->
+    if rev
+    then OG.add_edge_e g (to_, cnd, from_)
+    else OG.add_edge_e g (from_, cnd, to_));
+  g
+
+let edge_values_of_cfg (cfg : G.t) : String.Set.t Tid.Map.t =
+  let add_to_live (at : Tid.t)
+        (cnd : Exp.t)
+        (m : String.Set.t Tid.Map.t) : String.Set.t Tid.Map.t =
+    let cnd = Var_name_collector.run cnd in
+    Tid.Map.update m at ~f:(function
+      | Some prevexps -> String.Set.union prevexps cnd
+      | None -> cnd)
+  in
+  G.edges cfg
+  |> Seq.fold
+       ~init:Tid.Map.empty
+       ~f:(fun cnd_map ed ->
+         let from_ = G.Edge.src ed in
+         let cnd = G.Edge.label ed in
+         match cnd with
+         | Some cnd ->
+           add_to_live from_ cnd cnd_map
+         | None -> cnd_map)
+
 let cfg_of_edges edges : G.t =
   Graphlib.create (module G) ~edges ()
 
@@ -426,8 +456,13 @@ let fill_init_liveness proj =
   let* tidmap = obj-->tidmap_slot in
   let* edges = obj-->init_edges_slot in
   let cfg = cfg_of_edges edges in
+  let edge_values = edge_values_of_cfg cfg in
   let liveness = timed subname ClassicLivenessOne @@ fun () ->
-    Liveness.run_on_cfg (module G) cfg tidmap in
+    Liveness.run_on_cfg (module G)
+      cfg
+      ~tidmap
+      ~init:edge_values
+  in
   L.info "Done filling DFA init liveness";
   KB.return (Some liveness)
 
@@ -499,8 +534,12 @@ let fill_final_liveness proj =
   let* tidmap = obj-->tidmap_slot in
   let* edges = obj-->final_edges_slot in
   let cfg = cfg_of_edges edges in
+  let edge_values = edge_values_of_cfg cfg in
   let liveness2 = timed subname ClassicLivenessTwo @@ fun () ->
-    Liveness.run_on_cfg (module G) cfg tidmap
+    Liveness.run_on_cfg (module G)
+      cfg
+      ~tidmap
+      ~init:edge_values
   in
   L.info "Done filling final DFA liveness analysis";
   KB.return (Some liveness2)
