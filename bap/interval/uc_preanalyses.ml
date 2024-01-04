@@ -466,6 +466,124 @@ let fill_init_liveness proj =
   L.info "Done filling DFA init liveness";
   KB.return (Some liveness)
 
+
+module ExpOpt = Uc_graph_builder.ExpOpt
+                  
+type edges = (Tid.t * Tid.t * ExpOpt.t) list
+
+module TidAndCond = struct
+  type t = Tid.t * ExpOpt.t
+  [@@deriving compare, sexp, equal]
+end
+
+module TCCmp = struct
+  include TidAndCond
+  include Comparable.Make(TidAndCond)
+end
+
+module TCSet = struct
+  include Set.Make_using_comparator(TCCmp)
+end
+                               
+(* 
+ * a node has 0 or more succesors and 0 or more predecessors
+ *)                               
+let remove_dead_defs (edges : edges)
+      (dead : Tid.Set.t) : edges =
+  let m_succs = Tid.Map.empty in
+  let m_preds = Tid.Map.empty in
+  let add_node (tm : TCSet.t Tid.Map.t)
+        (key : tid)
+        (data : tid)
+        (cnd : ExpOpt.t) : TCSet.t Tid.Map.t =
+    Tid.Map.update tm key ~f:(function
+      | Some prev -> TCSet.add prev (data, cnd)
+      | None -> TCSet.singleton (data, cnd))
+  in
+  let remove_node (tm : TCSet.t Tid.Map.t)
+        (key : tid) ~(other : tid) : TCSet.t Tid.Map.t =
+    Tid.Map.update tm key ~f:(function
+      | Some prev -> TCSet.filter prev ~f:(fun (t,_) ->
+        not @@ Tid.equal t other)
+      | None -> TCSet.empty)
+  in
+  let add_succs_and_preds ~m_succs ~m_preds edges =
+    List.fold edges
+      ~init:(m_succs, m_preds)
+      ~f:(fun (m_succs, m_preds) (from_, to_, cnd) ->
+        (add_node m_succs from_ to_ cnd,
+         add_node m_preds to_ from_ cnd))
+  in
+  let find (tm : TCSet.t Tid.Map.t)
+        (n : tid) : TidAndCond.t list =
+    Tid.Map.find tm n
+    |> Option.value ~default:TCSet.empty
+    |> TCSet.to_list
+  in
+  let combine (c1 : ExpOpt.t) (c2 : ExpOpt.t) : ExpOpt.t =
+    match c1, c2 with
+    | None, None -> None
+    | None, Some x -> Some x
+    | Some x, None -> Some x
+    | Some x, Some y -> Some (Bil.BinOp (Bil.AND, x, y))
+  in
+  let rec cart_prod ~(res : edges)
+            ~(succs : TidAndCond.t list)
+            ~(preds : TidAndCond.t list) : edges =
+    if List.is_empty succs || List.is_empty preds
+    then res
+    else match preds with
+    | [] -> []
+    | (predtid, predcnd) :: rst ->
+      let new_edges =
+        List.map succs
+          ~f:(fun (succtid,succcnd) ->
+            (predtid, succtid, combine predcnd succcnd))
+      in
+      cart_prod ~res:(new_edges @ res) ~succs ~preds:rst
+  in
+  let new_edges (n : tid)
+        (m_succs : TCSet.t Tid.Map.t)
+        (m_preds : TCSet.t Tid.Map.t)
+    : (edges * TCSet.t Tid.Map.t * TCSet.t Tid.Map.t) =
+    let succs = find m_succs n in
+    let preds = find m_preds n in
+    let edges = cart_prod ~res:[] ~succs ~preds in
+    (* remove node n from m_succs and m_preds *)
+    let m_succs = Tid.Map.remove m_succs n in
+    let m_preds = Tid.Map.remove m_preds n in
+    (* update succs and preds with new edge info *)
+    let m_succs, m_preds = add_succs_and_preds edges
+                             ~m_succs ~m_preds
+    in
+    (* remove old succ and pred info of n in m_succs and m_preds *)
+    let m_succs, m_preds =
+      List.fold edges
+        ~init:(m_succs, m_preds)
+        ~f:(fun (m_succs, m_preds) (from_, to_, _) ->
+          (remove_node m_succs from_ ~other:n,
+           remove_node m_preds to_ ~other:n))
+    in
+    (edges, m_succs, m_preds)
+  in
+  let remove_edges (n : tid) : edges -> edges =
+    List.filter ~f:(fun (from_, to_, _) ->
+      not (Tid.equal from_ n || Tid.equal to_ n))
+  in
+  let m_succs, m_preds = add_succs_and_preds edges
+                           ~m_succs ~m_preds
+  in
+  let edges, _m_succs, _m_preds =
+    Tid.Set.fold dead
+      ~init:(edges, m_succs, m_preds)
+      ~f:(fun (edges, m_succs, m_preds) deadtid ->
+        let edges', m_succs, m_preds =
+          new_edges deadtid m_succs m_preds
+        in
+        edges' @ remove_edges deadtid edges, m_succs, m_preds)
+  in
+  edges
+
 let fill_final_edges proj =
   KB.promise final_edges_slot @@ fun obj ->
   let* subname = obj-->nameslot in
@@ -482,6 +600,7 @@ let fill_final_edges proj =
     | Some fn -> fn
     | None -> failwith "first_node not computed yet"
   in
+  L.debug "first_node is: %a" Tid.ppo first_node;
   (* todo: use succ/pred info that is already precomputed *)
   let remove_orphaned_nodes edges =
     let cfg = Graphlib.create (module G) ~edges () in
@@ -520,9 +639,7 @@ let fill_final_edges proj =
     Tid.Set.iter dead_defs ~f:(fun dt ->
       L.debug "\t%a" Tid.ppo dt
     );
-    let edges = Edge_builder.remove_dead_defs
-                  initedges
-                  dead_defs
+    let edges = remove_dead_defs initedges dead_defs
                 |> remove_all_orphans
     in
     let cfg = Graphlib.create (module G) ~edges () in
