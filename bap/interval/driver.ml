@@ -335,12 +335,6 @@ let run_analyses sub proj ~(is_toplevel : bool)
       printf "\t%s\n" @@ Uc_graph_builder.string_of_bapedge e
     );
 
-    L.debug "reverse postorder traversal gives:";
-    Graphlib.reverse_postorder_traverse (module G)
-      ~start:first_node cfg
-    |> Seq.iter ~f:(fun n ->
-      L.debug "\t%a" Tid.ppo @@ G.Node.label n);
-
     (* let oc_graph = Uc_graph_builder.UcOcamlG.of_bapg *)
     (*                  (module G) *)
     (*                  cfg *)
@@ -356,7 +350,9 @@ let run_analyses sub proj ~(is_toplevel : bool)
     (* in *)
     (* L.info "Done running classical dataflow liveness 2"; *)
 
+    L.debug "getting final liveness";
     let dataflow_liveness = Uc_preanalyses.get_final_liveness subname in
+    L.debug "done getting final liveness";
 
     (* dmp checker specific *)
     let lahf_sahf = do_ ~if_:do_dmp ~default:Lahf_and_sahf.default @@ fun () ->
@@ -412,20 +408,21 @@ let run_analyses sub proj ~(is_toplevel : bool)
                                  |> set_taint in
                         E.set reg v' env) in
     
-    let rpo_traversal = Graphlib.reverse_postorder_traverse (module G) cfg in
-
     let stop = Analysis_profiling.record_stop_time start in
     Analysis_profiling.record_duration_for subname InitEnvSetup stop;
+    L.debug "done setting up init env";
 
+    L.debug "getting flag ownership";
     let flagownership = Uc_preanalyses.get_flagownership subname in
+    L.debug "done getting flag ownership";
 
-    L.info "running reaching defs";
-    let reachingdefs = timed subname ReachingDefs @@ fun () ->
-      Reachingdefs.run_on_cfg (module G) cfg sub tidmap flagownership first_node
-    in
-    L.info "done running reaching defs";
+    L.debug "getting reachingdefs";
+    let reachingdefs = Uc_preanalyses.get_reachingdefs subname in
+    L.debug "done getting reachingdefs";
 
+    L.debug "getting dmp_st";
     let dmp_st = Uc_preanalyses.get_dmpst subname in
+    L.debug "done getting dmp_st";
 
     let dmp_bt_guards = do_ ~if_:do_dmp ~default:Dmp_helpers.default_gmap @@ fun () ->
       
@@ -457,6 +454,9 @@ let run_analyses sub proj ~(is_toplevel : bool)
     in
 
     L.info "running trace part pre-analysis";
+    let rpo_traversal = Graphlib.reverse_postorder_traverse
+                          (module G)
+                          cfg in
     let cond_scrape_st = Trace.ConditionFinder.init
                            ~rpo_traversal
                            ~tidmap
@@ -672,6 +672,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
       callees = callees; }
     
 let check_config config ctxt proj : unit =
+  Printexc.record_backtrace true;
   Random.self_init ();
   
   let target_fns = Config.get_target_fns_exn config proj in
@@ -697,9 +698,9 @@ let check_config config ctxt proj : unit =
   List.iter global_store_data ~f:(fun {data;addr} ->
     L.debug "mem[%a] <- %a" Word.ppo addr Word.ppo data);
 
-  (* let should_dump_kb = Extension.Configuration.get ctxt Common.debug_dump in *)
-  (* do_ ~if_:should_dump_kb ~default:() (fun () -> *)
-  (*   Format.printf "%a\n%!" KB.pp_state @@ Toplevel.current ()); *)
+  let should_dump_kb = Extension.Configuration.get ctxt Common.debug_dump in
+  do_ ~if_:should_dump_kb ~default:() (fun () ->
+    Format.printf "%a\n%!" KB.pp_state @@ Toplevel.current ());
 
   let rec loop ~(worklist : Sub.Set.t)
             ~(processed : Sub.Set.t)

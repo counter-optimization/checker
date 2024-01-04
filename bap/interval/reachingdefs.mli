@@ -10,6 +10,18 @@ type sol
 
 type t
 
+val equal : t -> t -> bool
+
+val compare : t -> t -> int
+
+val sexp_of_t : t -> Sexp.t
+
+val t_of_sexp : Sexp.t -> t
+
+val join : t -> t -> t
+
+val empty : t
+
 val run_on_cfg : 'g. (module Graph with type t = 'g and type node = Tid.t) -> 'g -> sub term -> Blk.elt Tid_map.t -> Flag_ownership.t -> Tid.t -> t
 
 val users_transitive_closure : t -> tid -> Tidset.t

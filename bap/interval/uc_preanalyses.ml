@@ -189,7 +189,18 @@ let tainted_args_dom = KB.Domain.total
 
 let tainted_args = KB.Class.property ~public ~package
                      cls "tainted-args" tainted_args_dom
-       
+
+let reachingdefs_dom = Reachingdefs.(KB.Domain.flat
+                                       ~inspect:sexp_of_t
+                                       ~join:(fun l r ->
+                                         Ok (join l r))
+                                           ~empty
+                                           ~equal
+                                           "reachingdefs-dom")
+
+let reachingdefs = KB.Class.property ~public ~package
+                     cls "reaching-defs" reachingdefs_dom
+
 let elt_to_sexp e =
   let l x = Sexp.List x in
   let a x = Sexp.Atom x in
@@ -271,6 +282,9 @@ let get_tidmap (subname : string) : Blk.elt Tid.Map.t =
 
 let get_idxst (subname : string) : Idx_calculator.t =
   Toplevel.eval idx_st_slot @@ of_ subname
+
+let get_reachingdefs (subname : string) : Reachingdefs.t =
+  Toplevel.eval reachingdefs @@ of_ subname
 
 let init (sub : sub term) : unit =
   let name = Sub.name sub in
@@ -490,6 +504,29 @@ let fill_final_liveness proj =
   in
   L.info "Done filling final DFA liveness analysis";
   KB.return (Some liveness2)
+
+let fill_reachingdefs (_proj : Project.t) : unit =
+  KB.promise reachingdefs @@ fun obj ->
+  let* subname = obj-->nameslot in
+  L.info "Filling reaching defs for %s" subname;
+  let* sub = obj-->subslot in
+  let sub = match sub with
+    | Some s -> s
+    | None -> failwith "sub slot not filled" in
+  let* tidmap = obj-->tidmap_slot in
+  let* flagownership = obj-->flag_ownership_slot in
+  let* first_node = obj-->first_node_slot in
+  let first_node = match first_node with
+    | Some fn -> fn
+    | None -> failwith "first_node not filled" in
+  let* final_edges = obj-->final_edges_slot in
+  let cfg = cfg_of_edges final_edges in
+  L.info "Running reaching defs and def-use analysis";
+  let rds = timed subname ReachingDefs @@ fun () ->
+    Reachingdefs.run_on_cfg (module G) cfg sub tidmap flagownership first_node
+  in
+  L.info "Done running reaching defs and def-use analysis";
+  KB.return rds
   
 let register_preanalyses (proj : Project.t) : unit =
   fill_single_shot_passes proj;
@@ -501,4 +538,5 @@ let register_preanalyses (proj : Project.t) : unit =
   fill_should_analyze proj;
   fill_init_liveness proj;
   fill_final_edges proj;
-  fill_final_liveness proj
+  fill_final_liveness proj;
+  fill_reachingdefs proj

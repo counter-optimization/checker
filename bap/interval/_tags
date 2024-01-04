@@ -1,1 +1,2 @@
-<**/*.cmx> or <*.cmx>: ocaml, native, optimize(3)
+<**/*.cmx> or <*.cmx>: debug, ocaml, native, optimize(3)
+true: debug

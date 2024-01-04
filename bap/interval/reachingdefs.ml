@@ -24,6 +24,29 @@ type defset = DefSet.t
 
 type sol = (Tid.t, defset) Solution.t
 
+let tidmap_of_sol (s : sol) : DefSet.t Tid.Map.t =
+  Tid.Map.of_alist_exn @@
+  Seq.to_list @@
+  Solution.enum s
+
+let sol_of_tidmap (tm : DefSet.t Tid.Map.t) : sol =
+  Solution.create tm DefSet.empty
+
+let sexp_of_sol (s : sol) : Sexp.t =
+  Tid.Map.sexp_of_t DefSet.sexp_of_t @@ tidmap_of_sol s
+
+let sol_of_sexp (sexp : Sexp.t) : sol =
+  let m = Tid.Map.t_of_sexp DefSet.t_of_sexp sexp in
+  Solution.create m DefSet.empty
+
+let compare_sol (x : sol) (y : sol) : int =
+  let xm = tidmap_of_sol x in
+  let ym = tidmap_of_sol y in
+  Tid.Map.compare DefSet.compare xm ym
+
+let equal_sol : sol -> sol -> bool =
+  Solution.equal ~equal:DefSet.equal
+
 (** rd is reaching def analysis result 
     users_of takes a tid, t, and returns a set of tids identifying
     terms that use t 
@@ -33,7 +56,34 @@ type t = {
   rd : sol;
   users_of : Tidset.t ref Tid_map.t;
   term_uses : Tidset.t ref Tid_map.t;
-}
+} [@@deriving sexp, compare, equal]
+
+let empty : t =
+  { rd = Solution.create Tid.Map.empty DefSet.empty;
+    users_of = Tid.Map.empty;
+    term_uses = Tid.Map.empty }
+
+let join (left : t) (right : t) : t =
+  let mapjoin (type a)
+        (x : a Tid.Map.t)
+        (y : a Tid.Map.t)
+        ~(join : a -> a -> a) : a Tid.Map.t =
+    Tid.Map.merge x y ~f:(fun ~key -> function
+      | `Left l -> Some l
+      | `Right r -> Some r
+      | `Both (l, r) -> Some (join l r))
+  in
+  let ref_join l r : Tid.Set.t ref =
+    ref (Tid.Set.union !l !r)
+  in
+  let ldefs = tidmap_of_sol left.rd in
+  let rdefs = tidmap_of_sol right.rd in
+  { rd = sol_of_tidmap @@
+      mapjoin ldefs rdefs ~join:DefSet.union;
+    users_of = mapjoin left.users_of right.users_of
+                 ~join:ref_join;
+    term_uses = mapjoin left.term_uses right.term_uses
+                  ~join:ref_join }
 
 let tids_of_defs defset =
   DefSet.to_list defset
