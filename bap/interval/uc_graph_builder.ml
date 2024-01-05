@@ -62,8 +62,39 @@ let exit : def term =
   Def.create ~tid:exittid v exp
 let exit_blk_elt : Blk.elt = Blk.(`Def exit)
 
+(* jmp_never_taken and jmp_always_taken
+   only check for unconditionally never or always
+   taken jumps based on bools, not trivial expressions
+   like: 'jmp to addrA if x == x' *)
+let jmp_never_taken (cnd : Bil.exp) : bool =
+  let is_zero (x : Word.t) : bool =
+    Word.equal x @@ Word.zero @@ Word.bitwidth x
+  in
+  match cnd with
+  | Bil.Int x when is_zero x -> true
+  | _ -> false
+
+let jmp_always_taken (cnd : Bil.exp) : bool =
+  let is_one (x : Word.t) : bool =
+    Word.equal x @@ Word.one @@ Word.bitwidth x
+  in
+  match cnd with
+  | Bil.Int x when is_one x -> true
+  | _ -> false
+
 module ExpOpt = struct
   type t = Exp.t option [@@deriving compare, sexp, equal]
+
+  let add_cnd ~(start : t) ~(add : t) : t =
+    match start with
+    | None -> add
+    | Some start_cnd when jmp_always_taken start_cnd -> add
+    | Some start_cnd when jmp_never_taken start_cnd -> start
+    | Some start_cnd -> match add with
+      | None -> start
+      | Some add_cnd when jmp_always_taken add_cnd -> start
+      | Some add_cnd when jmp_never_taken add_cnd -> add
+      | Some add_cnd -> Some (Bil.BinOp (Bil.AND, start_cnd, add_cnd))
 end
 
 module UcBapG = struct
@@ -148,26 +179,6 @@ let string_of_bapedge (from_, to_, l) =
   let to_ = Tid.to_string to_ in
   sprintf "(%s, %s, %s)" from_ to_ l
 
-(* jmp_never_taken and jmp_always_taken
-   only check for unconditionally never or always
-   taken jumps based on bools, not trivial expressions
-   like: 'jmp to addrA if x == x' *)
-let jmp_never_taken (cnd : Bil.exp) : bool =
-  let is_zero (x : Word.t) : bool =
-    Word.equal x @@ Word.zero @@ Word.bitwidth x
-  in
-  match cnd with
-  | Bil.Int x when is_zero x -> true
-  | _ -> false
-
-let jmp_always_taken (cnd : Bil.exp) : bool =
-  let is_one (x : Word.t) : bool =
-    Word.equal x @@ Word.one @@ Word.bitwidth x
-  in
-  match cnd with
-  | Bil.Int x when is_one x -> true
-  | _ -> false
-
 let jmp_type j =
   match Jmp.kind j with
   | Call c ->
@@ -211,10 +222,19 @@ let rec build_jmp_edge
           ?(prevcnd = None)
           (blkmap : Blk.elt Tid.Map.t)
           (tidtoeltsmap : Blk.elt Seq.t Tid.Map.t)
-          (proj : Project.t)
           (from_ : tid)
           (jmp : jmp term) : UcBapG.edge list =
   let find = Tid.Map.find in
+  (* let rec dfs_jmp_trace ~(target : Tid.t) *)
+  (*           ~(from_ : Tid.t) *)
+  (*           ~(cnd : ExpOpt.t) : UcBapG.edges = *)
+  (*   match find blkmap target with *)
+  (*   | Some (`Def d) -> [(from_, Term.tid d, cnd)] *)
+  (*   | Some (`Phi p) -> raise (BadCfg "phi not supported") *)
+  (*   | Some (`Jmp j) -> *)
+  (*     let target_cnd = Jmp.cond j in *)
+  (*   | None -> raise (BadCfg "jump to empty block/tidmap not filled out") *)
+  (* in *)
   let jmptarget (target : Tid.t)
         (cnd : ExpOpt.t)
         (from_ : Tid.t) : UcBapG.edges =
@@ -231,11 +251,14 @@ let rec build_jmp_edge
                  then acc
                  else
                    let nextcnd = Jmp.cond j in
-                   let nextjmps = build_jmp_edge ~prevcnd:cnds blkmap tidtoeltsmap proj from_ j in
-                   let cnds_so_far = match cnds with
-                     | Some cs -> Bil.BinOp (Bil.AND, cs, (Bil.UnOp (Bil.NOT, nextcnd)))
-                     | None -> Bil.UnOp (Bil.NOT, nextcnd) in
-                   (nextjmps :: es, Some cnds_so_far, not @@ jmp_always_taken nextcnd)
+                   let nextjmps = build_jmp_edge ~prevcnd:cnds blkmap tidtoeltsmap from_ j in
+                   let not_nextcnd = Bil.UnOp (Bil.NOT, nextcnd) in
+                   let cnds_so_far = ExpOpt.add_cnd ~start:cnds ~add:(Some not_nextcnd) in
+                   (* let cnds_so_far = match cnds with *)
+                   (*   | Some cs -> Bil.BinOp (Bil.AND, cs, (Bil.UnOp (Bil.NOT, nextcnd))) *)
+                   (*   | None -> Bil.UnOp (Bil.NOT, nextcnd) *)
+                   (* in *)
+                   (nextjmps :: es, cnds_so_far, not @@ jmp_always_taken nextcnd)
                | _ -> failwith "malformed function in handling fallthrough jumps")
         |> (fun (a, _, _) -> a)
         |> List.join
@@ -243,79 +266,34 @@ let rec build_jmp_edge
       end
     | Some (`Def d) -> [(from_, Term.tid d, cnd)]
     | Some (`Phi p) -> raise @@ BadCfg "ssa not allowed"
-    | None -> raise @@ BadCfg "jmp to empty bb"
+    | None -> raise (BadCfg "jmp to empty bb")
   in
-  let get_ret_edge = function
+  let get_ret_edge : ucret_kind -> UcBapG.edges = function
     | DRetTo t -> jmptarget t (Some havoc_cnd) from_
-    | IRetTo e -> raise @@ BadCfg "Indirect rets not handled"
+    | IRetTo e -> raise (BadCfg "Indirect rets not handled")
     | NoRet -> []
   in
   let cnd = Jmp.cond jmp in
   if jmp_never_taken cnd
   then []
   else
-    let cnd = match prevcnd with
-      | Some prevcnd -> Some (Bil.BinOp (Bil.AND, prevcnd, cnd))
-      | None when jmp_always_taken cnd -> None
-      | None -> Some cnd
-    in
+    let cnd = ExpOpt.add_cnd ~start:prevcnd ~add:(Some cnd) in
+    (* let cnd = match prevcnd with *)
+    (*   | Some prevcnd -> Some (Bil.BinOp (Bil.AND, prevcnd, cnd)) *)
+    (*   | None when jmp_always_taken cnd -> None *)
+    (*   | None -> Some cnd *)
+    (* in *)
     match jmp_type jmp with
     | DJmp t -> jmptarget t cnd from_
     | IJmp e -> [(from_, false_node, cnd)]
-    | DCall (t, retto) -> get_ret_edge retto 
-    (* get_ret_edge retto @ [(from_, cnd, false_node)] *)
-    | ICall (e, retto) -> get_ret_edge retto
-    (* get_ret_edge retto @ [(from_, cnd, false_node)] *)
+    | DCall (t, retto) -> (* get_ret_edge retto  *)
+    get_ret_edge retto @ [(from_, false_node, cnd)]
+    | ICall (e, retto) -> (* get_ret_edge retto *)
+    get_ret_edge retto @ [(from_, false_node, cnd)]
     | DRet t -> [] (* todo *)
     | IRet e -> [] (* todo *)
     | Interrupt -> []
 
-(*
- with the following, 
- 0022de07: #12532222 := 0
- 0022de0b: #12532221 := R11
- 0022de11: R11 := #12532221 - #12532222 + pad:64[CF]
- 0022de18: OF := high:1[(#12532222 ^ #12532221) & (#12532221 ^ R11)]
- 0022de21: CF := #12532221 < #12532222 + pad:64[CF] | #12532222 + pad:64[CF] <
-           #12532222
- 0022de27: AF := 0x10 = (0x10 & (R11 ^ #12532222 ^ #12532221))
- 0022de2c: PF :=
-           ~low:1[let $0 = R11 >> 4 ^ R11 in
-                  let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
- 0022de30: SF := high:1[R11]
- 0022de34: ZF := 0 = R11
- 0022de42: #12532219 := RBP
- 0022de46: RSP := RSP - 8
- 0022de4c: mem := mem with [RSP, el]:u64 <- #12532219
- 0022de6f: #12532218 := 1
- 0022de73: #12532217 := R11
- 0022de79: R11 := #12532217 - #12532218 + pad:64[CF]
- 0022de80: OF := high:1[(#12532218 ^ #12532217) & (#12532217 ^ R11)]
- 0022de89: CF := #12532217 < #12532218 + pad:64[CF] | #12532218 + pad:64[CF] <
-           #12532218
- 0022de8f: AF := 0x10 = (0x10 & (R11 ^ #12532218 ^ #12532217))
- 0022de94: PF :=
-           ~low:1[let $0 = R11 >> 4 ^ R11 in
-                  let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
- 0022de98: SF := high:1[R11]
- 0022de9c: ZF := 0 = R11
- 0022deaa: #12532215 := R14
- 0022deae: RSP := RSP - 8
- 0022deb4: mem := mem with [RSP, el]:u64 <- #12532215
- 0022ded7: #12532214 := 2
- 0022dedb: #12532213 := R11
- 0022dee1: R11 := #12532213 - #12532214 + pad:64[CF]
- 0022dee8: OF := high:1[(#12532214 ^ #12532213) & (#12532213 ^ R11)]
- 0022def1: CF := #12532213 < #12532214 + pad:64[CF] | #12532214 + pad:64[CF] <
-           #12532214
- 0022def7: AF := 0x10 = (0x10 & (R11 ^ #12532214 ^ #12532213))
- 0022defc: PF :=
-           ~low:1[let $0 = R11 >> 4 ^ R11 in
-                  let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
- 0022df00: SF := high:1[R11]
- 0022df04: ZF := 0 = R11
- 0022df12: #12532211 := RBX
- *)
 let rec of_defs ?(idxst : Idx_calculator.t option = None)
           ?(total = []) : def term list -> UcBapG.edge list =
   function
@@ -340,21 +318,18 @@ let of_blk ?(idxst : Idx_calculator.t option = None)
            | _ -> jmps)
   in
   let rec build_jmps ?(es : UcBapG.edges = [])
+            ?(prev_cnds : ExpOpt.t)
             (dt : Tid.t) : jmp term list -> UcBapG.edges =
     function
     | [] -> es
     | j :: js ->
-      let es = build_jmp_edge
-                 blkmap
-                 tidtoeltsmap
-                 proj
-                 dt
-                 j @ es
-      in
+      let es' = (build_jmp_edge blkmap tidtoeltsmap dt j) @ es in
       let cnd = Jmp.cond j in
       if jmp_always_taken cnd
-      then es
-      else build_jmps ~es dt js
+      then es'
+      else if jmp_never_taken cnd
+      then build_jmps ~es dt js
+      else build_jmps ~es:es' dt js
   in
   let defs = Term.enum def_t b |> Seq.to_list in
   let def_edges = of_defs ~idxst defs in
