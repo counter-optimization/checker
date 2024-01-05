@@ -319,7 +319,10 @@ let remove_dead_defs (edges : edges)
 
 let get_builder_for_sub sub proj idx_st : edges ST.t =
   let irg = Sub.to_cfg sub in
-  let nodes = Graphlib.reverse_postorder_traverse (module Graphs.Ir) irg in
+  let nodes = Graphlib.reverse_postorder_traverse
+                (module Graphs.Ir)
+                irg
+  in
   let lead_tidmap = Tid_map.t_of_sub sub in
   let init_state = ST.put (init lead_tidmap) >>= fun () ->
     ST.return [] in

@@ -32,6 +32,7 @@ type ucjmp_kind = DCall of tid * ucret_kind
 
 type exn += BadCfg of string
 
+(* TODO: ABI composition *)   
 let false_node = Tid.create ()
 let false_def =
   let v = Var.create "RAX" (Bil.Types.Imm 64) in
@@ -45,16 +46,35 @@ let () =
   L.debug "False, top node is at: %a" Tid.ppo false_node;
   L.debug "False, top node has def: %a" Def.ppo false_def
 
-module UcBapG = struct
-  type 'a edge = (Tid.t * Tid.t * 'a) [@@deriving sexp, compare, equal]
+(* TODO: ABI composition *)   
+let entrytid : Tid.t = Tid.create () 
+let entry : def term =
+  let v = Var.create "RDI" (Bil.Types.Imm 64) in
+  let exp = Bil.Var v in
+  Def.create ~tid:entrytid v exp
+let entry_blk_elt : Blk.elt = Blk.(`Def entry)
 
-  type 'a edges = 'a edge list [@@deriving sexp, compare, equal]
-
-  let of_cedge (from_, label, to_) = (from_, to_, label)
-end
+(* TODO: ABI composition *)   
+let exittid : Tid.t = Tid.create ()
+let exit : def term =
+  let v = Var.create "RAX" (Bil.Types.Imm 64) in
+  let exp = Bil.Var v in
+  Def.create ~tid:exittid v exp
+let exit_blk_elt : Blk.elt = Blk.(`Def exit)
 
 module ExpOpt = struct
   type t = Exp.t option [@@deriving compare, sexp, equal]
+end
+
+module UcBapG = struct
+  type edge = (Tid.t * Tid.t * ExpOpt.t) [@@deriving sexp, compare, equal]
+
+  type edges = edge list [@@deriving sexp, compare, equal]
+
+  let of_cedge (from_, label, to_) : edge = (from_, to_, label)
+
+  let create ~(from_ : Tid.t) ~(to_ : Tid.t) : edge =
+    (from_, to_, None)
 end
 
 module UcOcamlG = struct
@@ -69,7 +89,7 @@ module UcOcamlG = struct
 
   type edge = T.E.t 
 
-  let of_bapg (type g n e) (module G : BapG.Graph with type t = g and type node = n and type edge = e) (bapg : g) (edge_to_tuple : e -> _ UcBapG.edge) : T.t =
+  let of_bapg (type g n e) (module G : BapG.Graph with type t = g and type node = n and type edge = e) (bapg : g) (edge_to_tuple : e -> UcBapG.edge) : T.t =
     let convert_edge (from_, to_, label) : edge =
       T.E.create from_ None to_
     in
@@ -116,8 +136,8 @@ module OcamlGraphWriter = struct
   include OcamlG.Graphviz.Dot(T)
 end
 
-let nonjmpedge from_ to_ = (from_, None, to_)
-let jmpedge from_ to_ cnd = (from_, cnd, to_)
+let nonjmpedge from_ to_ = (from_, to_, None)
+let jmpedge from_ to_ cnd = (from_, to_, cnd)
 
 let string_of_cedge e = sexp_of_cedge e |> Sexp.to_string_hum
 let string_of_bapedge (from_, to_, l) =
@@ -132,18 +152,20 @@ let string_of_bapedge (from_, to_, l) =
    only check for unconditionally never or always
    taken jumps based on bools, not trivial expressions
    like: 'jmp to addrA if x == x' *)
-let jmp_never_taken cnd =
+let jmp_never_taken (cnd : Bil.exp) : bool =
+  let is_zero (x : Word.t) : bool =
+    Word.equal x @@ Word.zero @@ Word.bitwidth x
+  in
   match cnd with
-  | Bil.Int x ->
-    let w = Word.bitwidth x in
-    Word.equal x @@ Word.zero w
+  | Bil.Int x when is_zero x -> true
   | _ -> false
 
-let jmp_always_taken cnd =
+let jmp_always_taken (cnd : Bil.exp) : bool =
+  let is_one (x : Word.t) : bool =
+    Word.equal x @@ Word.one @@ Word.bitwidth x
+  in
   match cnd with
-  | Bil.Int x -> 
-    let w = Word.bitwidth x in
-    Word.equal x @@ Word.one w
+  | Bil.Int x when is_one x -> true
   | _ -> false
 
 let jmp_type j =
@@ -163,15 +185,15 @@ let jmp_type j =
   | Ret (Indirect e) -> IRet e
   | Int (_, _) -> Interrupt
 
-let build_blk_map blks =
+let build_blk_map (blks : blk term Seq.t) : Blk.elt Tid.Map.t =
   let m : Blk.elt Tid.Map.t = Tid.Map.empty in
   Seq.fold blks ~init:m ~f:(fun m b ->
     let blktid = Term.tid b in
     match Seq.hd @@ Blk.elts b with
     | Some e -> Tid.Map.set m ~key:blktid ~data:e
-    | None -> m)
+    | _ -> m)
 
-let build_tid_map blks =
+let build_tid_map (blks : blk term Seq.t) : Blk.elt Tid.Map.t =
   let m = Tid.Map.empty in
   Seq.fold blks ~init:m ~f:(fun m b ->
     Seq.fold (Blk.elts b) ~init:m ~f:(fun m e ->
@@ -185,12 +207,22 @@ let build_tidtoblkelts_map blks =
     let elts = Blk.elts b in 
     Tid.Map.set m ~key:blktid ~data:elts)
 
-let rec build_jmp_edge ?(interproc = false) ?(prevcnd = None) blkmap tidtoeltsmap proj from_ jmp : cedge list =
+let rec build_jmp_edge
+          ?(prevcnd = None)
+          (blkmap : Blk.elt Tid.Map.t)
+          (tidtoeltsmap : Blk.elt Seq.t Tid.Map.t)
+          (proj : Project.t)
+          (from_ : tid)
+          (jmp : jmp term) : UcBapG.edge list =
   let find = Tid.Map.find in
-  let cnd = Jmp.cond jmp in
-  let jmptarget t cnd from_ = match find blkmap t with
-    | Some (`Jmp _) -> begin match find tidtoeltsmap t with
-      | Some elts -> (* then elts is a seq of jmp terms only *)
+  let jmptarget (target : Tid.t)
+        (cnd : ExpOpt.t)
+        (from_ : Tid.t) : UcBapG.edges =
+    match find blkmap target with
+    | Some (`Jmp _) ->
+      begin match find tidtoeltsmap target with
+      | Some elts ->
+        (* then elts is a seq of jmp terms only *)
         Seq.to_list elts 
         |> List.fold ~init:([], cnd, true)
              ~f:(fun ((es, cnds, continue) as acc) -> function
@@ -199,7 +231,7 @@ let rec build_jmp_edge ?(interproc = false) ?(prevcnd = None) blkmap tidtoeltsma
                  then acc
                  else
                    let nextcnd = Jmp.cond j in
-                   let nextjmps = build_jmp_edge ~interproc ~prevcnd:cnds blkmap tidtoeltsmap proj from_ j in
+                   let nextjmps = build_jmp_edge ~prevcnd:cnds blkmap tidtoeltsmap proj from_ j in
                    let cnds_so_far = match cnds with
                      | Some cs -> Bil.BinOp (Bil.AND, cs, (Bil.UnOp (Bil.NOT, nextcnd)))
                      | None -> Bil.UnOp (Bil.NOT, nextcnd) in
@@ -209,7 +241,7 @@ let rec build_jmp_edge ?(interproc = false) ?(prevcnd = None) blkmap tidtoeltsma
         |> List.join
       | None -> []
       end
-    | Some (`Def d) -> [(from_, cnd, Term.tid d)]
+    | Some (`Def d) -> [(from_, Term.tid d, cnd)]
     | Some (`Phi p) -> raise @@ BadCfg "ssa not allowed"
     | None -> raise @@ BadCfg "jmp to empty bb"
   in
@@ -218,68 +250,240 @@ let rec build_jmp_edge ?(interproc = false) ?(prevcnd = None) blkmap tidtoeltsma
     | IRetTo e -> raise @@ BadCfg "Indirect rets not handled"
     | NoRet -> []
   in
+  let cnd = Jmp.cond jmp in
   if jmp_never_taken cnd
   then []
   else
     let cnd = match prevcnd with
       | Some prevcnd -> Some (Bil.BinOp (Bil.AND, prevcnd, cnd))
       | None when jmp_always_taken cnd -> None
-      | None -> Some cnd in
+      | None -> Some cnd
+    in
     match jmp_type jmp with
     | DJmp t -> jmptarget t cnd from_
-    | IJmp e -> [(from_, cnd, false_node)]
-    | DCall (_t, _retto) when interproc -> [] (* todo *)
+    | IJmp e -> [(from_, false_node, cnd)]
     | DCall (t, retto) -> get_ret_edge retto 
     (* get_ret_edge retto @ [(from_, cnd, false_node)] *)
-    | ICall (_e, _retto) when interproc -> [] (* todo *)
     | ICall (e, retto) -> get_ret_edge retto
     (* get_ret_edge retto @ [(from_, cnd, false_node)] *)
     | DRet t -> [] (* todo *)
     | IRet e -> [] (* todo *)
     | Interrupt -> []
 
-let rec of_defs
-          ?(idxst : Idx_calculator.t option = None)
-          ?(total = []) = function
+(*
+ with the following, 
+ 0022de07: #12532222 := 0
+ 0022de0b: #12532221 := R11
+ 0022de11: R11 := #12532221 - #12532222 + pad:64[CF]
+ 0022de18: OF := high:1[(#12532222 ^ #12532221) & (#12532221 ^ R11)]
+ 0022de21: CF := #12532221 < #12532222 + pad:64[CF] | #12532222 + pad:64[CF] <
+           #12532222
+ 0022de27: AF := 0x10 = (0x10 & (R11 ^ #12532222 ^ #12532221))
+ 0022de2c: PF :=
+           ~low:1[let $0 = R11 >> 4 ^ R11 in
+                  let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+ 0022de30: SF := high:1[R11]
+ 0022de34: ZF := 0 = R11
+ 0022de42: #12532219 := RBP
+ 0022de46: RSP := RSP - 8
+ 0022de4c: mem := mem with [RSP, el]:u64 <- #12532219
+ 0022de6f: #12532218 := 1
+ 0022de73: #12532217 := R11
+ 0022de79: R11 := #12532217 - #12532218 + pad:64[CF]
+ 0022de80: OF := high:1[(#12532218 ^ #12532217) & (#12532217 ^ R11)]
+ 0022de89: CF := #12532217 < #12532218 + pad:64[CF] | #12532218 + pad:64[CF] <
+           #12532218
+ 0022de8f: AF := 0x10 = (0x10 & (R11 ^ #12532218 ^ #12532217))
+ 0022de94: PF :=
+           ~low:1[let $0 = R11 >> 4 ^ R11 in
+                  let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+ 0022de98: SF := high:1[R11]
+ 0022de9c: ZF := 0 = R11
+ 0022deaa: #12532215 := R14
+ 0022deae: RSP := RSP - 8
+ 0022deb4: mem := mem with [RSP, el]:u64 <- #12532215
+ 0022ded7: #12532214 := 2
+ 0022dedb: #12532213 := R11
+ 0022dee1: R11 := #12532213 - #12532214 + pad:64[CF]
+ 0022dee8: OF := high:1[(#12532214 ^ #12532213) & (#12532213 ^ R11)]
+ 0022def1: CF := #12532213 < #12532214 + pad:64[CF] | #12532214 + pad:64[CF] <
+           #12532214
+ 0022def7: AF := 0x10 = (0x10 & (R11 ^ #12532214 ^ #12532213))
+ 0022defc: PF :=
+           ~low:1[let $0 = R11 >> 4 ^ R11 in
+                  let $1 = $0 >> 2 ^ $0 in $1 >> 1 ^ $1]
+ 0022df00: SF := high:1[R11]
+ 0022df04: ZF := 0 = R11
+ 0022df12: #12532211 := RBX
+ *)
+let rec of_defs ?(idxst : Idx_calculator.t option = None)
+          ?(total = []) : def term list -> UcBapG.edge list =
+  function
   | f :: (s :: xs as nxt) ->
     let fst = Term.tid f in
     let snd = Term.tid s in
-    begin
-      match idxst with
-      | Some idxst ->
-        if Idx_calculator.is_part_of_idx_insn idxst fst
-        then of_defs ~total nxt
-        else if Idx_calculator.is_part_of_idx_insn idxst snd
-        then of_defs ~total (f :: xs)
-        else of_defs ~total:(nonjmpedge fst snd :: total) nxt
-      | None -> of_defs ~total:(nonjmpedge fst snd :: total) nxt
-    end
+    of_defs ~total:(nonjmpedge fst snd :: total) nxt
   | _ -> total
 
-let of_blk ?(idxst : Idx_calculator.t option = None) ?(interproc = false) blkmap tidtoeltsmap proj b =
-  let defs = Term.enum def_t b |> Seq.to_list in
-  let def_edges = of_defs ~idxst defs in
-  let last_def = List.last defs in
-  (* last_def is None <=> def_edges is [] <=> the basic block is empty of defs *)
-  let rec build_jmps ?(es = []) dt = function
+let of_blk ?(idxst : Idx_calculator.t option = None)
+      (blkmap : Blk.elt Tid.Map.t)
+      (tidtoeltsmap : Blk.elt Seq.t Tid.Map.t)
+      (proj : Project.t)
+      (b : blk term) : UcBapG.edge list =
+  let get_jmps (blk : Blk.t) : jmp term list =
+    (* rev:true ==> jmps first in reverse order *)
+    Blk.elts ~rev:true blk
+    |> Seq.fold
+         ~init:[]
+         ~f:(fun jmps -> function
+           | `Jmp j -> j :: jmps
+           | _ -> jmps)
+  in
+  let rec build_jmps ?(es : UcBapG.edges = [])
+            (dt : Tid.t) : jmp term list -> UcBapG.edges =
+    function
     | [] -> es
     | j :: js ->
-      let es = build_jmp_edge ~interproc blkmap tidtoeltsmap proj dt j @ es in
+      let es = build_jmp_edge
+                 blkmap
+                 tidtoeltsmap
+                 proj
+                 dt
+                 j @ es
+      in
       let cnd = Jmp.cond j in
       if jmp_always_taken cnd
       then es
       else build_jmps ~es dt js
   in
+  let defs = Term.enum def_t b |> Seq.to_list in
+  let def_edges = of_defs ~idxst defs in
+  let last_def = List.last defs in
+  (* last_def is None <=> def_edges is [] <=> the basic block is empty of defs *)
   match last_def with
   | None -> []
   | Some d ->
     let dt = Term.tid d in
-    let jmps = Term.enum jmp_t b |> Seq.to_list in
+    let jmps = get_jmps b in
     build_jmps dt jmps @ def_edges
 
+type edges = (Tid.t * Tid.t * ExpOpt.t) list
+
+module TidAndCond = struct
+  type t = Tid.t * ExpOpt.t
+  [@@deriving compare, sexp, equal]
+end
+
+module TCCmp = struct
+  include TidAndCond
+  include Comparable.Make(TidAndCond)
+end
+
+module TCSet = struct
+  include Set.Make_using_comparator(TCCmp)
+end
+                               
+(* 
+ * a node has 0 or more succesors and 0 or more predecessors
+ *)                               
+let remove_dead_defs (edges : edges)
+      (dead : Tid.Set.t) : edges =
+  let m_succs = Tid.Map.empty in
+  let m_preds = Tid.Map.empty in
+  let add_node (tm : TCSet.t Tid.Map.t)
+        (key : tid)
+        (data : tid)
+        (cnd : ExpOpt.t) : TCSet.t Tid.Map.t =
+    Tid.Map.update tm key ~f:(function
+      | Some prev -> TCSet.add prev (data, cnd)
+      | None -> TCSet.singleton (data, cnd))
+  in
+  let remove_node (tm : TCSet.t Tid.Map.t)
+        (key : tid) ~(other : tid) : TCSet.t Tid.Map.t =
+    Tid.Map.update tm key ~f:(function
+      | Some prev -> TCSet.filter prev ~f:(fun (t,_) ->
+        not @@ Tid.equal t other)
+      | None -> TCSet.empty)
+  in
+  let add_succs_and_preds ~m_succs ~m_preds edges =
+    List.fold edges
+      ~init:(m_succs, m_preds)
+      ~f:(fun (m_succs, m_preds) (from_, to_, cnd) ->
+        (add_node m_succs from_ to_ cnd,
+         add_node m_preds to_ from_ cnd))
+  in
+  let find (tm : TCSet.t Tid.Map.t)
+        (n : tid) : TidAndCond.t list =
+    Tid.Map.find tm n
+    |> Option.value ~default:TCSet.empty
+    |> TCSet.to_list
+  in
+  let combine (c1 : ExpOpt.t) (c2 : ExpOpt.t) : ExpOpt.t =
+    match c1, c2 with
+    | None, None -> None
+    | None, Some x -> Some x
+    | Some x, None -> Some x
+    | Some x, Some y -> Some (Bil.BinOp (Bil.AND, x, y))
+  in
+  let rec cart_prod ~(res : edges)
+            ~(succs : TidAndCond.t list)
+            ~(preds : TidAndCond.t list) : edges =
+    if List.is_empty succs || List.is_empty preds
+    then res
+    else match preds with
+    | [] -> []
+    | (predtid, predcnd) :: rst ->
+      let new_edges =
+        List.map succs
+          ~f:(fun (succtid,succcnd) ->
+            (predtid, succtid, combine predcnd succcnd))
+      in
+      cart_prod ~res:(new_edges @ res) ~succs ~preds:rst
+  in
+  let new_edges (n : tid)
+        (m_succs : TCSet.t Tid.Map.t)
+        (m_preds : TCSet.t Tid.Map.t)
+    : (edges * TCSet.t Tid.Map.t * TCSet.t Tid.Map.t) =
+    let succs = find m_succs n in
+    let preds = find m_preds n in
+    let edges = cart_prod ~res:[] ~succs ~preds in
+    (* remove node n from m_succs and m_preds *)
+    let m_succs = Tid.Map.remove m_succs n in
+    let m_preds = Tid.Map.remove m_preds n in
+    (* update succs and preds with new edge info *)
+    let m_succs, m_preds = add_succs_and_preds edges
+                             ~m_succs ~m_preds
+    in
+    (* remove old succ and pred info of n in m_succs and m_preds *)
+    let m_succs, m_preds =
+      List.fold edges
+        ~init:(m_succs, m_preds)
+        ~f:(fun (m_succs, m_preds) (from_, to_, _) ->
+          (remove_node m_succs from_ ~other:n,
+           remove_node m_preds to_ ~other:n))
+    in
+    (edges, m_succs, m_preds)
+  in
+  let remove_edges (n : tid) : edges -> edges =
+    List.filter ~f:(fun (from_, to_, _) ->
+      not (Tid.equal from_ n || Tid.equal to_ n))
+  in
+  let m_succs, m_preds = add_succs_and_preds edges
+                           ~m_succs ~m_preds
+  in
+  let edges, _m_succs, _m_preds =
+    Tid.Set.fold dead
+      ~init:(edges, m_succs, m_preds)
+      ~f:(fun (edges, m_succs, m_preds) deadtid ->
+        let edges', m_succs, m_preds =
+          new_edges deadtid m_succs m_preds
+        in
+        edges' @ remove_edges deadtid edges, m_succs, m_preds)
+  in
+  edges
+
 module IntraNoResolve : sig
-  val of_sub : ?idxst:Idx_calculator.t option -> Project.t -> sub term -> cedge list * Blk.elt Tid.Map.t
-  val of_sub_to_bapedges : ?idxst:Idx_calculator.t option -> Project.t -> sub term -> ExpOpt.t UcBapG.edges * Blk.elt Tid.Map.t
+  val of_sub : ?idxst:Idx_calculator.t option -> Project.t -> sub term -> UcBapG.edges * Blk.elt Tid.Map.t
 end = struct
   let log_prefix = sprintf "%s.IntraNoResolve" log_prefix
   module L = struct
@@ -291,14 +495,34 @@ end = struct
     let blks = Term.enum blk_t s in
     let blkmap = build_blk_map blks in
     let tidmap = build_tid_map blks
-                 |> Tid.Map.set ~key:false_node ~data:(`Def false_def) in
+                 |> Tid.Map.set
+                      ~key:false_node
+                      ~data:(`Def false_def)
+                 |> Tid.Map.set
+                      ~key:entrytid
+                      ~data:entry_blk_elt
+                 |> Tid.Map.set
+                      ~key:exittid
+                      ~data:exit_blk_elt
+    in
     let tidtoeltsmap = build_tidtoblkelts_map blks in
-    let edges = Seq.map blks ~f:(of_blk ~idxst blkmap tidtoeltsmap proj)
+    let edges = Seq.map blks
+                  ~f:(of_blk ~idxst blkmap tidtoeltsmap proj)
                 |> Seq.to_list
-                |> List.join in
+                |> List.join
+    in
+    let edges = match idxst with
+      | None -> edges
+      | Some idxst ->
+        let idx_insn_tids = Tid.Map.fold tidmap
+                              ~init:Tid.Set.empty
+                              ~f:(fun ~key ~data tids ->
+                                if Idx_calculator.is_part_of_idx_insn idxst key
+                                then Tid.Set.add tids key
+                                else tids)
+        in
+        let edges = remove_dead_defs edges idx_insn_tids in
+        edges
+    in
     edges, tidmap
-
-  let of_sub_to_bapedges ?(idxst : Idx_calculator.t option = None) proj s =
-    let edges, tidmap = of_sub ~idxst proj s in
-    List.map edges ~f:UcBapG.of_cedge, tidmap
 end

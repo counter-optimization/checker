@@ -212,7 +212,8 @@ let run_on_cfg (type g) (module G : Graph with type t = g and type node = Tid.t)
       | None -> failwith @@
         sprintf
           "in Reachingdefs.run_on_cfg, couldn't find tid %a in tidmap"
-          Tid.pps tid in
+          Tid.pps tid
+    in
     denote_elt elt
   in
   let merge = DefSet.union in
@@ -224,9 +225,11 @@ let run_on_cfg (type g) (module G : Graph with type t = g and type node = Tid.t)
              g
              ~step:widen_with_step
              ~init:init_sol
+             ~start:cfg_firstnode
              ~equal
              ~merge
-             ~f:interp_node in
+             ~f:interp_node
+  in
   let full_result = get_uses_and_users rd tidmap flagownership in
   full_result
 

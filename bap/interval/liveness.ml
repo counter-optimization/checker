@@ -82,15 +82,52 @@ let get_dead_defs ?(flagsonly : bool = true)
          then Tid.Set.add dead tid
          else dead)
 
-let denote_elt (elt : Blk.elt) (prev_env : env) =
+let denote_elt (tidmap : Blk.elt Tid.Map.t)
+      (flagst : Tid.Set.t Tid.Map.t)
+      (elt : Blk.elt)
+      (prev_env : env) : env =
   let not_let_local_binding (varname : string) : bool =
     not @@ String.is_prefix varname ~prefix:"$"
   in
+  let var_of_def : Blk.elt -> string = function
+    | `Def d -> Var.name @@ Def.lhs d
+    | _ -> failwith "not def in Liveness.denote_elt"
+  in
+  let is_def_of_flag (d : def term) : bool =
+    let var = Var.name @@ Def.lhs d in
+    String.Set.mem ABI.flag_names var
+  in
+  let var_of_deftid (tid : Tid.t) : string =
+    match Tid.Map.find tidmap tid with
+    | Some blkelt -> var_of_def blkelt
+    | None ->
+      failwith @@
+      sprintf "couldn't find %a in tidmap" Tid.pps tid
+  in
   match elt with
+  | `Def d when is_def_of_flag d ->
+    let tid = Term.tid d in
+    let definers_of_flag = match Tid.Map.find flagst tid with
+      | Some deftids -> Tid.Set.to_list deftids
+      | None ->
+        L.warn "No definer of flag %a" Tid.ppo tid;
+        []
+    in
+    let vars_of_flag = List.map definers_of_flag ~f:var_of_deftid
+                       |> String.Set.of_list
+    in
+    let gen = Var_name_collector.run @@ Def.rhs d
+              |> String.Set.filter ~f:not_let_local_binding
+    in
+    let gen = String.Set.diff gen vars_of_flag in
+    let kill = String.Set.singleton @@ assn_of_def d in
+    String.Set.diff prev_env kill
+    |> String.Set.union gen
   | `Def d ->
     let kill = String.Set.singleton @@ assn_of_def d in
-    let gen = Var_name_collector.run @@ Def.rhs d in
-    let gen = String.Set.filter gen ~f:not_let_local_binding in
+    let gen = Var_name_collector.run @@ Def.rhs d
+              |> String.Set.filter ~f:not_let_local_binding
+    in
     String.Set.diff prev_env kill
     |> String.Set.union gen
   | `Jmp j ->
@@ -105,6 +142,7 @@ let denote_elt (elt : Blk.elt) (prev_env : env) =
 module G = Uc_graph_builder.UcOcamlG.T
 module OcamlGraphAnalyzer(Data : sig
     val tidmap : Blk.elt Tid.Map.t
+    val flagst : Tid.Set.t Tid.Map.t
   end) = struct
   include Graph.Fixpoint.Make(G)(struct
       type vertex = G.V.t
@@ -117,7 +155,7 @@ module OcamlGraphAnalyzer(Data : sig
       let join = Env.merge
       let analyze ((from_, mexp, to_) : edge) (env : data) : data =
         let elt = Tid.Map.find_exn Data.tidmap from_ in
-        let res = denote_elt elt env in
+        let res = denote_elt Data.tidmap Data.flagst elt env in
         match mexp with
         | Some cond_exp ->
           Env.merge res @@ Var_name_collector.run cond_exp
@@ -148,7 +186,8 @@ let run_on_cfg (type g d)
       (module G : Graph with type t = g and type node = Tid.t)
       (g : G.t)
       ~(init : String.Set.t Tid.Map.t)
-      ~(tidmap : Blk.elt Tid.Map.t) : t =
+      ~(tidmap : Blk.elt Tid.Map.t)
+      ~(flagst : Tid.Set.t Tid.Map.t) : t =
   let interp_node (tid : Tid.t) (env : Env.t) : Env.t =
     let elt = match Tid_map.find tidmap tid with
       | Some elt -> elt
@@ -157,10 +196,11 @@ let run_on_cfg (type g d)
           "in Liveness.run_on_cfg, couldn't find tid %a in tidmap"
           Tid.pps tid
     in
-    denote_elt elt env
+    denote_elt tidmap flagst elt env
   in
   (* let init = Option.value init ~default:Tid.Map.empty in *)
   let init_sol = Solution.create init Env.empty in
+  (* TODO: ABI composition *)
   Graphlib.fixpoint
     (module G)
     g

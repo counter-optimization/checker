@@ -144,7 +144,7 @@ let sub_of_tid_exn tid proj : sub Term.t =
    this is really messy atm, but can be cleaned up later if
    separating callee getting of indirect and direct branches
 *)
-let should_skip_analysis (edges : Exp.t option Uc_graph_builder.UcBapG.edges)
+let should_skip_analysis (edges : Uc_graph_builder.UcBapG.edges)
       (tidmap : Blk.elt Tid_map.t)
       (sub : sub term)
       (prog : Program.t) : analysis_result option =
@@ -181,15 +181,6 @@ let should_skip_analysis (edges : Exp.t option Uc_graph_builder.UcBapG.edges)
       end
     | _ -> failwith "in should_skip_analysis, subroutine is single instruction but non jump instruction. this case is not yet handled." 
   else None
-
-let first_insn sub =
-  let open Option.Monad_infix in
-  let bbs = Term.enum blk_t sub in
-  Seq.hd bbs >>= fun bb ->
-  let elts = Blk.elts bb in
-  Seq.hd elts >>= fun first_elt ->
-  Option.some @@
-  Common.elt_to_tid first_elt
 
 let do_ (type a) ~(if_ : bool) ~(default : a) (f : unit -> a) : a =
   if if_ then f () else default
@@ -314,8 +305,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
     let module G = Graphlib.Make(Tid)(Uc_graph_builder.ExpOpt) in
     let edges = Uc_preanalyses.get_final_edges subname in
     let cfg = Graphlib.create (module G) ~edges () in
-    let first_node = Uc_preanalyses.get_first_node subname in
-    L.debug "First node is: %a" Tid.ppo first_node;
+    L.debug "First node is: %a" Tid.ppo Uc_graph_builder.entrytid;
 
     L.debug "Edges are:";
     List.iter edges ~f:(fun e ->
@@ -437,6 +427,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
     L.info "running trace part pre-analysis";
     let rpo_traversal = Graphlib.reverse_postorder_traverse
                           (module G)
+                          ~start:Uc_graph_builder.entrytid
                           cfg in
     let cond_scrape_st = Trace.ConditionFinder.init
                            ~rpo_traversal
@@ -486,7 +477,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
     let init_trace_env = TraceEnv.default_with_env final_env in
     let init_mapping = G.Node.Map.set
                          G.Node.Map.empty
-                         ~key:first_node
+                         ~key:Uc_graph_builder.entrytid
                          ~data:init_trace_env
                        |> G.Node.Map.set
                             ~key:Uc_graph_builder.false_node
@@ -539,7 +530,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
                              ~init:init_sol
                              ~equal:TraceEnv.equal
                              ~merge:TraceEnv.merge
-                             ~start:first_node
+                             ~start:Uc_graph_builder.entrytid
                              ~f:interp
     in
 
@@ -655,7 +646,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
 let check_config config ctxt proj : unit =
   Printexc.record_backtrace true;
   Random.self_init ();
-  
+
   let target_fns = Config.get_target_fns_exn config proj in
   Uc_inargs.TaintInState.config (module ABI) config;
   let worklist = Sub.Set.of_list @@ Sequence.to_list target_fns in
@@ -664,6 +655,13 @@ let check_config config ctxt proj : unit =
 
   Uc_preanalyses.register_preanalyses proj;
   Sub.Set.iter worklist ~f:Uc_preanalyses.init;
+
+  L.debug "Entry node is: %a -- %a"
+    Tid.ppo Uc_graph_builder.entrytid
+    Def.ppo Uc_graph_builder.entry;
+  L.debug "Exit node is: %a -- %a"
+    Tid.ppo Uc_graph_builder.exittid
+    Def.ppo Uc_graph_builder.exit;
   
   propagate_taint config ctxt proj;
 
@@ -672,7 +670,8 @@ let check_config config ctxt proj : unit =
       In_channel.with_file file ~f:(fun ch ->
         In_channel.input_lines ch
         |> String.Set.of_list)
-    | None -> String.Set.empty in
+    | None -> String.Set.empty
+  in
   
   let global_store_data = Global_function_pointers.Libsodium.Analysis.get_all_init_fn_ptr_data ctxt proj in
   L.debug "Global stores are:";

@@ -11,7 +11,8 @@ val sexp_of_t : t -> Sexp.t
 
 val equal : t -> t -> bool
   
-val run_on_cfg : 'a. (module Graph with type t = 'a and type node = Tid.t) -> 'a -> init:String.Set.t Tid.Map.t -> tidmap:Blk.elt Tid.Map.t -> t
+val run_on_cfg : 'a. (module Graph with type t = 'a and type node = Tid.t) ->
+  'a -> init:String.Set.t Tid.Map.t -> tidmap:Blk.elt Tid.Map.t -> flagst:Tid.Set.t Tid.Map.t -> t
 
 (* val run_on_cfg : Uc_graph_builder.UcOcamlG.T.t -> exits:Tid.Set.t -> tidmap:Blk.elt Tid.Map.t -> t *)
 

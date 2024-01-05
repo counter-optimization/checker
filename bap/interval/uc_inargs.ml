@@ -150,7 +150,8 @@ module TaintContext = struct
     let matches = Term.enum sub_t prog
                   |> Seq.filter ~f:(fun sub ->
                     let cur_name = Sub.name sub in
-                    String.Caseless.equal ctxt.subname cur_name) in
+                    String.Caseless.equal ctxt.subname cur_name)
+    in
     if Seq.is_empty matches
     then raise (SubNotFound ctxt.subname)
     else Seq.hd_exn matches
@@ -453,13 +454,12 @@ module Analyzer = struct
         (ctxt : TaintContext.t)
         (sub : sub term) : TaintSummary.t * InterprocState.t =
     let subname = Sub.name sub in
-    let first_node = Uc_preanalyses.get_first_node subname in
     let cfg = Uc_preanalyses.get_final_edges subname
               |> Uc_preanalyses.cfg_of_edges in
     let tidmap = Uc_preanalyses.get_tidmap subname in
     let init_map = Tid.Map.empty
                    |> Tid.Map.set
-                        ~key:first_node
+                        ~key:Uc_graph_builder.entrytid
                         ~data:ctxt.argvals in
     let init_sol = Solution.create init_map String.Set.empty in
     let st : InterprocState.t ref = ref st in
@@ -468,7 +468,7 @@ module Analyzer = struct
                              cfg
                              ~init:init_sol
                              ~equal:String.Set.equal
-                             ~start:first_node
+                             ~start:Uc_graph_builder.entrytid
                              ~merge:String.Set.union
                              ~f:(fun tid env ->
                                let elt = match Tid.Map.find tidmap tid with
@@ -480,15 +480,12 @@ module Analyzer = struct
                                st := st';
                                env')
     in
-    let exit_nodes = Uc_preanalyses.get_exit_nodes subname in
-    let final_state = Tid.Set.fold exit_nodes
-                        ~init:String.Set.empty
-                        ~f:(fun env exittid ->
-                          let exitres = Solution.get analysis_results exittid in
-                          String.Set.union exitres env) in
+    let final_state = Solution.get analysis_results Uc_graph_builder.exittid
+    in
     let result = TaintSummary.make
                    ~input:ctxt.argvals
-                   ~output:final_state in
+                   ~output:final_state
+    in
     result, !st
   and denote_jmp
         (proj : Project.t)

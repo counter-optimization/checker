@@ -124,9 +124,9 @@ let dmp_helper_slot = KB.Class.property ~public ~package
 
 let edges_dom = KB.Domain.flat
                   ~join:(fun l r -> Ok r)
-                  ~inspect:(Uc_graph_builder.UcBapG.sexp_of_edges Uc_graph_builder.ExpOpt.sexp_of_t)
+                  ~inspect:Uc_graph_builder.UcBapG.sexp_of_edges
                   ~empty:[]
-                  ~equal:(Uc_graph_builder.UcBapG.equal_edges Uc_graph_builder.ExpOpt.equal)
+                  ~equal:Uc_graph_builder.UcBapG.equal_edges
                   "edges-dom"
                   
 let init_edges_slot = KB.Class.property ~public ~package
@@ -160,20 +160,6 @@ let bool_dom = KB.Domain.total
 let should_analyze_slot = KB.Class.property ~public ~package
                             cls "should-analyze?"
                             bool_dom
-
-let first_node_slot = KB.Class.property ~public ~package
-                        cls "first-node"
-  @@ KB.Domain.optional ~equal:Tid.equal
-       "first-node"
-
-let tid_pset_dom = KB.Domain.powerset
-                     (module Tid)
-                     ~inspect:Tid.sexp_of_t
-                     "tid-pset-dom"
-
-let exit_nodes_slot = KB.Class.property ~public ~package
-                        cls "exit-nodes"
-                        tid_pset_dom
 
 let tainted_args_dom = KB.Domain.total
                          ~inspect:String.Set.sexp_of_t
@@ -235,12 +221,10 @@ let of_ (subname : string) : t KB.obj Bap_knowledge.knowledge =
     subname
     cls
 
-let get_final_edges (subname : string)
-  : Uc_graph_builder.ExpOpt.t Uc_graph_builder.UcBapG.edges =
+let get_final_edges (subname : string) : Uc_graph_builder.UcBapG.edges =
   Toplevel.eval final_edges_slot @@ of_ subname
 
-let get_init_edges (subname : string)
-  : Uc_graph_builder.ExpOpt.t Uc_graph_builder.UcBapG.edges =
+let get_init_edges (subname : string) : Uc_graph_builder.UcBapG.edges =
   Toplevel.eval init_edges_slot @@ of_ subname
 
 (* let og_cfg_of_edges ?(rev : bool = false) edges : OG.t = *)
@@ -297,16 +281,6 @@ let get_flagownership (subname : string) : Flag_ownership.t =
 let get_dmpst (subname : string) : Dmp_helpers.FindSafePtrBitTestPass.t =
   Toplevel.eval dmp_helper_slot @@ of_ subname
 
-let get_first_node (subname : string) : Tid.t =
-  match Toplevel.eval first_node_slot @@ of_ subname with
-  | Some fn -> fn
-  | None ->
-    failwith @@
-    sprintf "First node not computed yet for %s" subname
-
-let get_exit_nodes (subname : string) : Tid.Set.t =
-  Toplevel.eval exit_nodes_slot @@ of_ subname
-
 let get_tidmap (subname : string) : Blk.elt Tid.Map.t =
   Toplevel.eval tidmap_slot @@ of_ subname
 
@@ -336,26 +310,6 @@ let set_tainted_args
 
 let get_tainted_args (subname : string) : String.Set.t =
   Toplevel.eval tainted_args @@ of_ subname
-
-let fill_first_node proj =
-  let first_insn_tid sub =
-    let open Option.Monad_infix in
-    let bbs = Term.enum blk_t sub in
-    Seq.hd bbs >>= fun bb ->
-    let elts = Blk.elts bb in
-    Seq.hd elts >>= fun first_elt ->
-    Option.some @@ Common.elt_to_tid first_elt
-  in
-  KB.promise first_node_slot @@ fun obj ->
-  let* subname = obj-->nameslot in
-  L.info "Filling first node for %s" subname;
-  let* sub = obj-->subslot in
-  match sub with
-  | None -> failwith "subslot not filled for fill_first_node"
-  | Some s ->
-    let tid = first_insn_tid s in
-    L.info "Done filling first node";
-    KB.return tid
 
 let fill_single_shot_passes _proj =
   KB.promise idx_st_slot @@ fun obj ->
@@ -398,6 +352,18 @@ let fill_flagownership _proj =
   KB.return flagownership
 
 let fill_edges proj =
+  let get_entry_exit_nodes (edges : Uc_graph_builder.UcBapG.edges) : Tid.t list * Tid.t list =
+    let cfg = Graphlib.create (module G) ~edges () in
+    G.nodes cfg
+    |> Seq.fold
+         ~init:([], [])
+         ~f:(fun (entries, exits) n ->
+           if Seq.is_empty @@ G.Node.succs n cfg
+           then (entries, n :: exits)
+           else if Seq.is_empty @@ G.Node.preds n cfg
+           then (n :: entries, exits)
+           else (entries, exits))
+  in
   KB.promise init_edges_slot @@ fun obj ->
   let* subname = obj-->nameslot in
   L.info "Filling init edge and tidmap slots for %s" subname;
@@ -406,10 +372,22 @@ let fill_edges proj =
   let* idx_st = obj-->idx_st_slot in
   let sub = match sub with
     | Some s -> s
-    | None -> failwith "Sub not filled in fill_edges" in
-  let edges, tidmap = timed subname Edgebuilding @@ fun () ->
-    Uc_graph_builder.IntraNoResolve.of_sub_to_bapedges ~idxst:(Some idx_st) proj sub
+    | None -> failwith "Sub not filled in fill_edges"
   in
+  let edges, tidmap = timed subname Edgebuilding @@ fun () ->
+    Uc_graph_builder.IntraNoResolve.of_sub
+      ~idxst:(Some idx_st)
+      proj
+      sub
+  in
+  let entries, exits = get_entry_exit_nodes edges in
+  let entry_edges = List.map entries ~f:(fun n ->
+    Uc_graph_builder.(UcBapG.create ~from_:entrytid ~to_:n))
+  in
+  let exit_edges = List.map exits ~f:(fun n ->
+    Uc_graph_builder.(UcBapG.create ~from_:n ~to_:exittid))
+  in
+  let edges = entry_edges @ exit_edges @ edges in
   KB.provide tidmap_slot obj tidmap >>= fun () ->
   L.info "Done filling init edges";
   KB.return edges
@@ -452,139 +430,46 @@ let fill_should_analyze proj =
 let fill_init_liveness proj =
   KB.promise dfa_liveness_1_slot @@ fun obj ->
   let* subname = obj-->nameslot in
+  let* sub = obj-->subslot in
   L.info "Filling init liveness for %s" subname;
   let* tidmap = obj-->tidmap_slot in
+  let* flagst = obj-->flag_ownership_slot in
+  let flagst = Flag_ownership.defs_of_flags flagst in
   let* edges = obj-->init_edges_slot in
   let cfg = cfg_of_edges edges in
-  let edge_values = edge_values_of_cfg cfg in
+  (* TODO: ABI *)
+  let edge_values = edge_values_of_cfg cfg
+                    |> Tid.Map.set
+                         ~key:Uc_graph_builder.exittid
+                         ~data:(String.Set.singleton "RAX")
+  in
   let liveness = timed subname ClassicLivenessOne @@ fun () ->
-    Liveness.run_on_cfg (module G)
-      cfg
-      ~tidmap
-      ~init:edge_values
+    try
+      Liveness.run_on_cfg (module G)
+        cfg
+        ~tidmap
+        ~init:edge_values
+        ~flagst
+    with
+    | e ->
+      match sub with
+      | Some sub ->
+        (L.debug "%a" Sub.ppo sub;
+         raise e)
+      | None -> raise e
   in
   L.info "Done filling DFA init liveness";
   KB.return (Some liveness)
 
-
 module ExpOpt = Uc_graph_builder.ExpOpt
                   
-type edges = (Tid.t * Tid.t * ExpOpt.t) list
-
-module TidAndCond = struct
-  type t = Tid.t * ExpOpt.t
-  [@@deriving compare, sexp, equal]
-end
-
-module TCCmp = struct
-  include TidAndCond
-  include Comparable.Make(TidAndCond)
-end
-
-module TCSet = struct
-  include Set.Make_using_comparator(TCCmp)
-end
-                               
-(* 
- * a node has 0 or more succesors and 0 or more predecessors
- *)                               
-let remove_dead_defs (edges : edges)
-      (dead : Tid.Set.t) : edges =
-  let m_succs = Tid.Map.empty in
-  let m_preds = Tid.Map.empty in
-  let add_node (tm : TCSet.t Tid.Map.t)
-        (key : tid)
-        (data : tid)
-        (cnd : ExpOpt.t) : TCSet.t Tid.Map.t =
-    Tid.Map.update tm key ~f:(function
-      | Some prev -> TCSet.add prev (data, cnd)
-      | None -> TCSet.singleton (data, cnd))
-  in
-  let remove_node (tm : TCSet.t Tid.Map.t)
-        (key : tid) ~(other : tid) : TCSet.t Tid.Map.t =
-    Tid.Map.update tm key ~f:(function
-      | Some prev -> TCSet.filter prev ~f:(fun (t,_) ->
-        not @@ Tid.equal t other)
-      | None -> TCSet.empty)
-  in
-  let add_succs_and_preds ~m_succs ~m_preds edges =
-    List.fold edges
-      ~init:(m_succs, m_preds)
-      ~f:(fun (m_succs, m_preds) (from_, to_, cnd) ->
-        (add_node m_succs from_ to_ cnd,
-         add_node m_preds to_ from_ cnd))
-  in
-  let find (tm : TCSet.t Tid.Map.t)
-        (n : tid) : TidAndCond.t list =
-    Tid.Map.find tm n
-    |> Option.value ~default:TCSet.empty
-    |> TCSet.to_list
-  in
-  let combine (c1 : ExpOpt.t) (c2 : ExpOpt.t) : ExpOpt.t =
-    match c1, c2 with
-    | None, None -> None
-    | None, Some x -> Some x
-    | Some x, None -> Some x
-    | Some x, Some y -> Some (Bil.BinOp (Bil.AND, x, y))
-  in
-  let rec cart_prod ~(res : edges)
-            ~(succs : TidAndCond.t list)
-            ~(preds : TidAndCond.t list) : edges =
-    if List.is_empty succs || List.is_empty preds
-    then res
-    else match preds with
-    | [] -> []
-    | (predtid, predcnd) :: rst ->
-      let new_edges =
-        List.map succs
-          ~f:(fun (succtid,succcnd) ->
-            (predtid, succtid, combine predcnd succcnd))
-      in
-      cart_prod ~res:(new_edges @ res) ~succs ~preds:rst
-  in
-  let new_edges (n : tid)
-        (m_succs : TCSet.t Tid.Map.t)
-        (m_preds : TCSet.t Tid.Map.t)
-    : (edges * TCSet.t Tid.Map.t * TCSet.t Tid.Map.t) =
-    let succs = find m_succs n in
-    let preds = find m_preds n in
-    let edges = cart_prod ~res:[] ~succs ~preds in
-    (* remove node n from m_succs and m_preds *)
-    let m_succs = Tid.Map.remove m_succs n in
-    let m_preds = Tid.Map.remove m_preds n in
-    (* update succs and preds with new edge info *)
-    let m_succs, m_preds = add_succs_and_preds edges
-                             ~m_succs ~m_preds
-    in
-    (* remove old succ and pred info of n in m_succs and m_preds *)
-    let m_succs, m_preds =
-      List.fold edges
-        ~init:(m_succs, m_preds)
-        ~f:(fun (m_succs, m_preds) (from_, to_, _) ->
-          (remove_node m_succs from_ ~other:n,
-           remove_node m_preds to_ ~other:n))
-    in
-    (edges, m_succs, m_preds)
-  in
-  let remove_edges (n : tid) : edges -> edges =
-    List.filter ~f:(fun (from_, to_, _) ->
-      not (Tid.equal from_ n || Tid.equal to_ n))
-  in
-  let m_succs, m_preds = add_succs_and_preds edges
-                           ~m_succs ~m_preds
-  in
-  let edges, _m_succs, _m_preds =
-    Tid.Set.fold dead
-      ~init:(edges, m_succs, m_preds)
-      ~f:(fun (edges, m_succs, m_preds) deadtid ->
-        let edges', m_succs, m_preds =
-          new_edges deadtid m_succs m_preds
-        in
-        edges' @ remove_edges deadtid edges, m_succs, m_preds)
-  in
-  edges
-
 let fill_final_edges proj =
+  let print_edge (from_, to_, cnd) =
+    L.debug "\t(%a, %a, %s)"
+      Tid.ppo from_
+      Tid.ppo to_
+      @@ Sexp.to_string_hum @@ ExpOpt.sexp_of_t cnd
+  in
   KB.promise final_edges_slot @@ fun obj ->
   let* subname = obj-->nameslot in
   L.info "Filling final edges for %s" subname;
@@ -594,13 +479,9 @@ let fill_final_edges proj =
     | None -> failwith "init liveness not computed yet"
   in
   let* initedges = obj-->init_edges_slot in
+  L.debug "init edges are:";
+  List.iter initedges ~f:print_edge;
   let* tidmap = obj-->tidmap_slot in
-  obj-->first_node_slot >>= fun first_node ->
-  let first_node = match first_node with
-    | Some fn -> fn
-    | None -> failwith "first_node not computed yet"
-  in
-  L.debug "first_node is: %a" Tid.ppo first_node;
   (* todo: use succ/pred info that is already precomputed *)
   let remove_orphaned_nodes edges =
     let cfg = Graphlib.create (module G) ~edges () in
@@ -610,12 +491,10 @@ let fill_final_edges proj =
         let no_preds = G.Node.preds n cfg
                        |> Seq.is_empty
         in
-        let is_start = Tid.equal n first_node in
+        let is_start = Tid.equal n Uc_graph_builder.entrytid in
         no_preds && not is_start)
     in
-    Seq.iter orphaned_nodes ~f:(
-      L.warn "tid %a is orphaned" Tid.ppo
-    );
+    Seq.iter orphaned_nodes ~f:(L.warn "tid %a is orphaned" Tid.ppo);
     let orphaned_nodes = Seq.fold orphaned_nodes
                            ~init:Tid.Set.empty
                            ~f:(fun all n -> Tid.Set.add all n)
@@ -633,32 +512,26 @@ let fill_final_edges proj =
     then remove_all_orphans edges'
     else edges'
   in
-  let finaledges, exit_nodes = timed subname RemoveDeadFlagDefs @@ fun () ->
+  let finaledges = timed subname RemoveDeadFlagDefs @@ fun () ->
     let dead_defs = Liveness.get_dead_defs initliveness tidmap in
     L.debug "dead defs are:";
     Tid.Set.iter dead_defs ~f:(fun dt ->
       L.debug "\t%a" Tid.ppo dt
     );
-    let edges = remove_dead_defs initedges dead_defs
-                |> remove_all_orphans
+    let edges = Uc_graph_builder.remove_dead_defs
+                  initedges dead_defs
     in
-    let cfg = Graphlib.create (module G) ~edges () in
-    let exit_nodes = G.nodes cfg
-                     |> Seq.filter ~f:(fun n ->
-                       G.Node.succs n cfg |> Seq.is_empty)
-    in
-    
-    edges, exit_nodes
-  in
-  let exit_nodes = Seq.to_list exit_nodes
-                   |> List.map ~f:G.Node.label
-                   |> Tid.Set.of_list
+    L.debug "edges after dead def removal are:";
+    List.iter edges ~f:print_edge;
+    let edges = remove_all_orphans edges in
+    L.debug "edges after orphaned node removal are:";
+    List.iter edges ~f:print_edge;
+    edges
   in
   L.debug "final edges are:";
   List.iter finaledges ~f:(fun (from_, to_, _cnd) ->
     L.debug "\t(%a, %a)" Tid.ppo from_ Tid.ppo to_
   );
-  KB.provide exit_nodes_slot obj exit_nodes >>= fun () ->
   L.info "Done filling final edges";
   KB.return finaledges
 
@@ -667,6 +540,8 @@ let fill_final_liveness proj =
   let* subname = obj-->nameslot in
   L.info "Filling final DFA liveness analysis for %s" subname;
   let* tidmap = obj-->tidmap_slot in
+  let* flagst = obj-->flag_ownership_slot in
+  let flagst = Flag_ownership.defs_of_flags flagst in
   let* edges = obj-->final_edges_slot in
   let cfg = cfg_of_edges edges in
   let edge_values = edge_values_of_cfg cfg in
@@ -675,6 +550,7 @@ let fill_final_liveness proj =
       cfg
       ~tidmap
       ~init:edge_values
+      ~flagst
   in
   L.info "Done filling final DFA liveness analysis";
   KB.return (Some liveness2)
@@ -686,18 +562,21 @@ let fill_reachingdefs (_proj : Project.t) : unit =
   let* sub = obj-->subslot in
   let sub = match sub with
     | Some s -> s
-    | None -> failwith "sub slot not filled" in
+    | None -> failwith "sub slot not filled"
+  in
   let* tidmap = obj-->tidmap_slot in
   let* flagownership = obj-->flag_ownership_slot in
-  let* first_node = obj-->first_node_slot in
-  let first_node = match first_node with
-    | Some fn -> fn
-    | None -> failwith "first_node not filled" in
   let* final_edges = obj-->final_edges_slot in
   let cfg = cfg_of_edges final_edges in
   L.info "Running reaching defs and def-use analysis";
   let rds = timed subname ReachingDefs @@ fun () ->
-    Reachingdefs.run_on_cfg (module G) cfg sub tidmap flagownership first_node
+    Reachingdefs.run_on_cfg
+      (module G)
+      cfg
+      sub
+      tidmap
+      flagownership
+      Uc_graph_builder.entrytid
   in
   L.info "Done running reaching defs and def-use analysis";
   KB.return rds
@@ -706,7 +585,6 @@ let register_preanalyses (proj : Project.t) : unit =
   fill_single_shot_passes proj;
   fill_dmp_st proj;
   fill_flagownership proj;
-  fill_first_node proj;
   fill_edges proj;
   fill_tidmap proj;
   fill_should_analyze proj;

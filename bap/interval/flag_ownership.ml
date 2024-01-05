@@ -40,6 +40,16 @@ let get_flags_of_def_tid flagmap tid_of_def =
   | Some flagset -> flagset
   | None -> Tid.Set.empty
 
+let defs_of_flags (env : t) : Tid.Set.t Tid.Map.t =
+  Tid.Map.fold env
+    ~init:Tid.Map.empty
+    ~f:(fun ~key:def ~data:flags revmap ->
+      Tid.Set.fold flags ~init:revmap
+        ~f:(fun revmap flagtid ->
+          Tid.Map.update revmap flagtid ~f:(function
+            | Some prevdefs -> Tid.Set.add prevdefs def
+            | None -> Tid.Set.singleton def)))
+
 let get_flags (type a) (t : a Term.t) =
   let init = (Tid.Set.empty, Tid.Set.empty) in
   let flags_of_blk blk =
