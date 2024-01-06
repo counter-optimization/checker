@@ -510,18 +510,23 @@ module Analyzer = struct
       | Direct calleetid ->
         L.debug "Trying to find callee sub with tid: %a" Tid.ppo calleetid;
         let callee_sub = match Common.sub_of_tid proj calleetid with
-          | Some calleesub -> calleesub
+          | Some calleesub ->
+            L.debug "found sub: %s" @@ Sub.name calleesub;
+            calleesub
           | None -> raise (CalleeNotFound calleetid)
         in
+        Uc_preanalyses.init callee_sub;
         let callee_name = Sub.name callee_sub in
         let callee_ctxt = TaintContext.of_state callee_name env in
         let prev_res = match TaintContext.Map.find st.results callee_ctxt with
           | Some res -> res
-          | None -> TaintSummary.default in
+          | None -> TaintSummary.default
+        in
         let cur_res, st = results_for proj st callee_ctxt callee_sub in
         let st = add_caller st callee_ctxt in
         let env' = String.Set.union prev_res.output cur_res.output
-                 |> String.Set.union env in
+                   |> String.Set.union env
+        in
         env', st
       | Indirect exp -> env, st
     end

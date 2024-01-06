@@ -286,8 +286,10 @@ let rec build_jmp_edge
     match jmp_type jmp with
     | DJmp t -> jmptarget t cnd from_
     | IJmp e -> [(from_, false_node, cnd)]
-    | DCall (t, retto) -> (* get_ret_edge retto  *)
-    get_ret_edge retto @ [(from_, false_node, cnd)]
+    | DCall (t, retto) ->
+      (* get_ret_edge retto  *)
+      (* get_ret_edge retto @ [(from_, false_node, cnd)] *)
+      get_ret_edge retto @ [(from_, Term.tid jmp, None)]
     | ICall (e, retto) -> (* get_ret_edge retto *)
     get_ret_edge retto @ [(from_, false_node, cnd)]
     | DRet t -> [] (* todo *)

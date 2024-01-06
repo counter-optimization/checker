@@ -58,10 +58,20 @@ module Checker(N : Abstract.NumericDomain)
     let flags_live = SS.empty in
     let flags_live_in = SS.empty in
     let is_live = None in
-    { tid; desc; left_val; right_val; term;
-      reason; sub_name; problematic_operands;
-      opcode; addr; rpo_idx; flags_live_in;
-      flags_live; is_live }
+    { tid;
+      desc;
+      left_val;
+      right_val;
+      term;
+      reason;
+      sub_name;
+      problematic_operands;
+      opcode;
+      addr;
+      rpo_idx;
+      flags_live_in;
+      flags_live;
+      is_live }
 
   let defs_of_sub sub : def term list =
     Term.enum blk_t sub

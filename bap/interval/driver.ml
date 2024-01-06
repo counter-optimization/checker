@@ -30,6 +30,8 @@ module TraceAbsInt = Trace.AbsInt.Make(FinalDomain)(E)
 module TraceDir = Trace.Directives(FinalDomain)(E)
 module TraceEnv = Trace.Env(FinalDomain)(E)
 
+module HcCompute = Hc.Compute(FinalDomain)(E)
+
 module Narrower = Uc_fixpoint.SingleShotRoundRobinNarrow(FinalDomain)
 module WidenSetCompute = Uc_fixpoint.WidenSet
 
@@ -274,7 +276,9 @@ let propagate_taint config projctxt proj : unit =
 
 let run_analyses sub proj ~(is_toplevel : bool)
       ~(bss_init_stores : Global_function_pointers.global_const_store list)
-      ~(config : Config.t) ctxt dbgtids : analysis_result =
+      ~(config : Config.t)
+      (ctxt : Bap_main.ctxt)
+      (dbgtids : String.Set.t) : analysis_result =
   let open Analysis_profiling in
   
   let subname = Sub.name sub in
@@ -522,7 +526,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
           TraceEnv.pp st);
         TraceAbsInt.denote_elt directive_map elt st
     in
-    
+
     let analysis_results = Graphlib.fixpoint
                              (module G)
                              cfg
