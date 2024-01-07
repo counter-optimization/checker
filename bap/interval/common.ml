@@ -236,16 +236,20 @@ module AnalysisBlackList : sig
   val sub_is_blacklisted : sub term -> bool
   val sub_is_not_linked : sub term -> bool
 end = struct
-  let blacklisted_func_names = ["interrupt";
-                                "plt";
-                                "sodium_init";
+  let blacklisted_func_names = ["sodium_init";
                                 "get_cpu_features"]
                                @ Dmp_helpers.checker_blacklisted_fns
                                |> String.Set.of_list
 
+  let has_blacklisted_substring name =
+    let targets = ["plt"; "interrupt"] in
+    List.exists targets ~f:(fun substring ->
+      String.Caseless.is_substring name ~substring)
+
   let is_blacklisted name =
     String.Set.mem blacklisted_func_names name ||
-    Dmp_helpers.is_blacklisted name
+    Dmp_helpers.is_blacklisted name ||
+    has_blacklisted_substring name
 
   let sub_is_blacklisted sub =
     Sub.name sub |> is_blacklisted 

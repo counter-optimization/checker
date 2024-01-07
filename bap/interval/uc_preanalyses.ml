@@ -351,6 +351,26 @@ let fill_flagownership _proj =
   let* flagownership = obj-->flag_ownership_slot in
   KB.return flagownership
 
+let find_first_node (sub : sub term) : Tid.t Or_error.t =
+  let err_pre = sprintf "Uc_preanalyses.find_first_node (%s) : " @@
+                  Sub.name sub
+  in
+  let err (msg : string) : Tid.t Or_error.t =
+    Or_error.error_string (err_pre ^ "empty sub")
+  in
+  match Term.first blk_t sub with
+  | Some bb -> begin match Term.first def_t bb with
+    | Some def -> Ok (Term.tid def)
+    | None -> begin match Term.first jmp_t bb with
+      | Some j -> begin match Jmp.kind j with
+        | Call c -> Ok (Term.tid j)
+        | _ -> err @@ sprintf "unsupported jmp : %a" Jmp.pps j
+      end
+      | None -> err "couldn't find first jmp"
+    end
+  end
+  | None -> err "empty sub"
+
 let fill_edges proj =
   let get_entry_exit_nodes (edges : Uc_graph_builder.UcBapG.edges) : Tid.t list * Tid.t list =
     let cfg = Graphlib.create (module G) ~edges () in
@@ -380,17 +400,29 @@ let fill_edges proj =
       proj
       sub
   in
-  let entries, exits = get_entry_exit_nodes edges in
-  let entry_edges = List.map entries ~f:(fun n ->
-    Uc_graph_builder.(UcBapG.create ~from_:entrytid ~to_:n))
-  in
-  let exit_edges = List.map exits ~f:(fun n ->
-    Uc_graph_builder.(UcBapG.create ~from_:n ~to_:exittid))
-  in
-  let edges = entry_edges @ exit_edges @ edges in
   KB.provide tidmap_slot obj tidmap >>= fun () ->
+  let edges = match find_first_node sub with
+  (* let first_node = *) 
+    | Ok first_node ->
+      L.debug "In fill init edges, first_node is: %a" Tid.ppo first_node;
+      let _entries, exits = get_entry_exit_nodes edges in
+      let exit_edges = List.map exits ~f:(fun n ->
+        Uc_graph_builder.(UcBapG.create ~from_:n ~to_:exittid))
+      in
+      let edges = (Uc_graph_builder.entrytid, first_node, None) ::
+                  (exit_edges @ edges)
+      in
+      edges
+    | Error err ->
+      L.warn "%s" @@ Error.to_string_hum err;
+      edges
+  in
+  (* let _entries, exits = get_entry_exit_nodes edges in *)
   L.info "Done filling init edges";
   KB.return edges
+(* let entry_edges = List.map entries ~f:(fun n -> *)
+  (*   Uc_graph_builder.(UcBapG.create ~from_:entrytid ~to_:n)) *)
+  (* in *)
 
 (** This registers the dependency that init edges computation
     also fills the tidmap slot *)
@@ -580,7 +612,7 @@ let fill_reachingdefs (_proj : Project.t) : unit =
   in
   L.info "Done running reaching defs and def-use analysis";
   KB.return rds
-  
+
 let register_preanalyses (proj : Project.t) : unit =
   fill_single_shot_passes proj;
   fill_dmp_st proj;

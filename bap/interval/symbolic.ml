@@ -11,9 +11,15 @@ module Expr = Z3.Expr
 module Bool = Z3.Boolean
 module Solver = Z3.Solver
 
+let log_prefix = sprintf "%s.ss-symbolic" Common.package
+module L = struct
+  include Dolog.Log
+  let () = set_prefix log_prefix
+end
+
 let ctxt = Z3.mk_context [
   "model", "true";
-  "timeout", "50"
+  "timeout", "500"
   (* "timeout", "200" (* in unsigned ms *) *)
 ]
 
@@ -64,14 +70,31 @@ module Executor = struct
        else "")
 
   let debug_print_sym_env st : unit =
-    printf "var map is:\n%!";
+    L.debug "SS, symbolic state for target tid (%a):"
+      Tid.ppo st.target_tid;
+    
+    L.debug "\tvar map is:";
     List.iter st.symbolic_var_map ~f:(fun (varname, symname) ->
-      printf "(%s, %s)\n%!" varname symname);
-    printf "type info is:\n%!";
+      L.debug "\t\t(%s, %s)" varname symname
+    );
+    
+    L.debug "\ttype info is:";
     Type_determination.print st.type_info;
-    printf "env map is:\n%!";
+    
+    L.debug "\tdefs are:";
+    List.iter st.defs ~f:(
+      L.debug "\t\t%a" Def.ppo
+    );
+
+    L.debug "\tconstraints are:";
+    List.iter st.constraints ~f:(fun c ->
+      L.debug "\t\t%s" @@ Z3.Expr.to_string c
+    );
+      
+    L.debug "\tenv map is:";
     List.iter st.env ~f:(fun (symname, expr) ->
-      printf "(%s, %s)\n%!" symname (expr_to_str expr))
+      L.debug "\t\t(%s, %s)" symname (expr_to_str expr)
+    )
 
   let def_terms_as_string : string ST.t =
     ST.gets @@ fun st ->
@@ -450,29 +473,21 @@ module Executor = struct
     | Solver.UNKNOWN ->
       let reason = Solver.get_reason_unknown solver in
       if String.Caseless.equal reason "timeout"
-      then
-        let () = printf "[SilentStores] symbolic compilation timed out for tid: %a\n%!" Tid.ppo st.target_tid in
+      then begin
+        L.warn "symbolic timed out for tid: %a" Tid.ppo st.target_tid;
+        debug_print_sym_env st;
         ST.update onfail >>= fun () ->
-        ST.return false
-      else
+        ST.return false end
+      else begin
+        debug_print_sym_env st;
         failwith @@
-        Format.sprintf "in Symbolic.Executor.check_now, error checking constraints for solver: %s : %s"
+        sprintf "symbolic error checking constraints for solver: %s : %s"
           (Solver.to_string solver)
           reason
+      end
     | Solver.SATISFIABLE ->
-      let () = printf "[SilentStoresSymbolic] SAT\n%!" in
-      (* let model_str = match Solver.get_model solver with *)
-      (*   | Some m -> Model.to_string m *)
-      (*   | None -> "none" in *)
-      (* let reason = Solver.get_reason_unknown solver in *)
-      (* let constraints_string = get_solver_string st.constraints in *)
-      (* let () = printf "SAT: %s\n%!" reason; *)
-      (*          printf "=============Start debug info:=============\n%!"; *)
-      (*          printf "# MODEL:\n%s\n%!" model_str; *)
-      (*          debug_print_sym_env st; *)
-      (*          printf "# Constraints:\n%!"; *)
-      (*          printf "%s\n%!" constraints_string; *)
-      (*          printf "=============End debug info:=============\n%!" in *)
+      L.warn "SAT:";
+      debug_print_sym_env st;
       ST.update onfail >>= fun () ->
       ST.return false
 

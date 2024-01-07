@@ -489,24 +489,23 @@ let run_analyses sub proj ~(is_toplevel : bool)
     let init_sol = Solution.create init_mapping TraceEnv.empty in
 
     (* Compute the widening set *)
-    (* let module Dominators = Uc_graph_builder.OcamlG.Dominator.Make( *)
-    (*   Uc_graph_builder.UcOcamlG.T *)
-    (* ) in *)
-    (* let idomf = Dominators.compute_idom oc_graph @@ *)
-    (*   Calling_context.to_insn_tid first_node in *)
-    (* let domsf = Dominators.idom_to_dominators idomf in *)
+    let doms = Graphlib.dominators (module G) cfg Uc_graph_builder.entrytid
+    in
+    let is_sdomd (n : Tid.t) ~(by : Tid.t) : bool =
+      let n = G.Node.create n in
+      let by = G.Node.create by in
+      Tree.is_descendant_of doms ~parent:by n
+    in
     Abstract.widen_set := Tid.Set.empty;
     List.iter edges ~f:(fun (from_, to_, _cnd) ->
-      if Graphlib.is_reachable (module G) cfg to_ from_
+      if is_sdomd from_ ~by:to_
       then Abstract.widen_set := Tid.Set.add !Abstract.widen_set to_
     );
-    
-    (* Abstract.widen_set := WidenSetCompute.compute_wto oc_graph @@ *)
-    (*   Calling_context.to_insn_tid first_node; *)
     L.debug "Widening set:";
     Tid.Set.iter !Abstract.widen_set
       ~f:(L.debug "\t%a" Tid.ppo);
 
+    (* Run the main value-set analysis *)
     let interp =
       fun tid st ->
         let elt = match Tid_map.find tidmap tid with
