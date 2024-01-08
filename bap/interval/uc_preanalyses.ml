@@ -259,15 +259,6 @@ let get_init_edges (subname : string) : Uc_graph_builder.UcBapG.edges =
 let get_kill_after_vars (subname : string) : String.Set.t Tid.Map.t =
   Toplevel.eval kill_after_vars @@ of_ subname
 
-(* let og_cfg_of_edges ?(rev : bool = false) edges : OG.t = *)
-(*   let nedges = List.length edges in *)
-(*   let g = OG.create ~size:nedges () in *)
-(*   List.iter edges ~f:(fun (from_, to_, cnd) -> *)
-(*     if rev *)
-(*     then OG.add_edge_e g (to_, cnd, from_) *)
-(*     else OG.add_edge_e g (from_, cnd, to_)); *)
-(*   g *)
-
 let edge_values_of_cfg (cfg : G.t) : String.Set.t Tid.Map.t =
   let add_to_live (at : Tid.t)
         (cnd : Exp.t)
@@ -520,12 +511,12 @@ let fill_init_liveness proj =
 module ExpOpt = Uc_graph_builder.ExpOpt
                   
 let fill_final_edges proj =
-  let print_edge (from_, to_, cnd) =
-    L.debug "\t(%a, %a, %s)"
-      Tid.ppo from_
-      Tid.ppo to_
-      @@ Sexp.to_string_hum @@ ExpOpt.sexp_of_t cnd
-  in
+  (* let print_edge (from_, to_, cnd) = *)
+  (*   L.debug "\t(%a, %a, %s)" *)
+  (*     Tid.ppo from_ *)
+  (*     Tid.ppo to_ *)
+  (*     @@ Sexp.to_string_hum @@ ExpOpt.sexp_of_t cnd *)
+  (* in *)
   KB.promise final_edges_slot @@ fun obj ->
   let* subname = obj-->nameslot in
   L.info "Filling final edges for %s" subname;
@@ -535,8 +526,6 @@ let fill_final_edges proj =
     | None -> failwith "init liveness not computed yet"
   in
   let* initedges = obj-->init_edges_slot in
-  L.debug "init edges are:";
-  List.iter initedges ~f:print_edge;
   let* tidmap = obj-->tidmap_slot in
   (* todo: use succ/pred info that is already precomputed *)
   let remove_orphaned_nodes edges =
@@ -550,7 +539,6 @@ let fill_final_edges proj =
         let is_start = Tid.equal n Uc_graph_builder.entrytid in
         no_preds && not is_start)
     in
-    Seq.iter orphaned_nodes ~f:(L.warn "tid %a is orphaned" Tid.ppo);
     let orphaned_nodes = Seq.fold orphaned_nodes
                            ~init:Tid.Set.empty
                            ~f:(fun all n -> Tid.Set.add all n)
@@ -569,25 +557,10 @@ let fill_final_edges proj =
     else edges'
   in
   let finaledges = timed subname RemoveDeadFlagDefs @@ fun () ->
-    let dead_defs = Liveness.get_dead_defs initliveness tidmap in
-    L.debug "dead defs are:";
-    Tid.Set.iter dead_defs ~f:(fun dt ->
-      L.debug "\t%a" Tid.ppo dt
-    );
-    let edges = Uc_graph_builder.remove_dead_defs
-                  initedges dead_defs
-    in
-    L.debug "edges after dead def removal are:";
-    List.iter edges ~f:print_edge;
-    let edges = remove_all_orphans edges in
-    L.debug "edges after orphaned node removal are:";
-    List.iter edges ~f:print_edge;
-    edges
+    Liveness.get_dead_defs initliveness tidmap
+    |> Uc_graph_builder.remove_dead_defs initedges 
+    |> remove_all_orphans
   in
-  L.debug "final edges are:";
-  List.iter finaledges ~f:(fun (from_, to_, _cnd) ->
-    L.debug "\t(%a, %a)" Tid.ppo from_ Tid.ppo to_
-  );
   L.info "Done filling final edges";
   KB.return finaledges
 
@@ -771,8 +744,6 @@ let fill_sparseness_data (proj : Project.t) : unit =
           if def_of_concern tidmap tid
           then
             let users = get_users rds tid in
-            L.debug "users of %a are:" Tid.ppo tid;
-            Tid.Set.iter users ~f:(L.debug "\t%a" Tid.ppo);
             let removal_points =
               Tid.Set.fold users ~init:[]
                 ~f:(fun candidates user_tid ->
@@ -781,18 +752,9 @@ let fill_sparseness_data (proj : Project.t) : unit =
                     ~proposed:user_tid)
             in
             let removal_points = Tid.Set.of_list removal_points in
-            L.debug "removal points for %a are:" Tid.ppo tid;
-            Tid.Set.iter removal_points ~f:(L.debug "\t%a" Tid.ppo);
             Tid.Map.set map ~key:tid ~data:removal_points
           else map)
     in
-    L.debug "kill_after_map is:";
-    Tid.Map.iteri kill_after_map
-      ~f:(fun ~key:tid ~data:candidates ->
-        let candidates = Tid.Set.to_list candidates
-                         |> List.to_string ~f:Tid.to_string
-        in
-        L.debug "\t%a ~~> %s" Tid.ppo tid candidates);
     (* now invert the kill_after_map *)
     let kill_after_map =
       Tid.Map.fold kill_after_map ~init:Tid.Map.empty
@@ -808,12 +770,6 @@ let fill_sparseness_data (proj : Project.t) : unit =
         Set.map (module String.Set.Elt) removal_tids
           ~f:(var_of_deftid tidmap))
     in
-    L.debug "kill after vars for %s are:" subname;
-    Tid.Map.iteri kill_after_vars
-      ~f:(fun ~key:tid ~data:tokill ->
-        L.debug "\t%a ~~> %s" Tid.ppo tid @@
-        (String.Set.to_list tokill
-         |> List.to_string ~f:Fn.id));
     L.info "Done filling kill_after_vars";
     KB.return kill_after_vars
   )

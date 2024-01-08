@@ -315,11 +315,6 @@ let run_analyses sub proj ~(is_toplevel : bool)
     let cfg = Graphlib.create (module G) ~edges () in
     L.debug "First node is: %a" Tid.ppo Uc_graph_builder.entrytid;
 
-    L.debug "Edges are:";
-    List.iter edges ~f:(fun e ->
-      printf "\t%s\n" @@ Uc_graph_builder.string_of_bapedge e
-    );
-
     (* let oc_graph = Uc_graph_builder.UcOcamlG.of_bapg *)
     (*                  (module G) *)
     (*                  cfg *)
@@ -446,8 +441,8 @@ let run_analyses sub proj ~(is_toplevel : bool)
       Trace.ConditionFinder.FlagScraper.flag_used_in_cmov lf cond_scrape_st) in
 
     do_ ~if_:is_dbg ~default:() (fun () ->
-    List.iter cmov_cnd_flags ~f:(fun (tid, name) ->
-      L.debug "cmov_cnd_flag: %s (%a)" name Tid.ppo tid));
+      List.iter cmov_cnd_flags ~f:(fun (tid, name) ->
+        L.debug "cmov_cnd_flag: %s (%a)" name Tid.ppo tid));
   
     let cond_extractor_st = TraceDir.Extractor.init tidmap reachingdefs in
     let dirs = List.fold cmov_cnd_flags ~init:[] ~f:(fun dirs lf ->
@@ -506,9 +501,9 @@ let run_analyses sub proj ~(is_toplevel : bool)
       if is_sdomd from_ ~by:to_
       then Abstract.widen_set := Tid.Set.add !Abstract.widen_set to_
     );
-    L.debug "Widening set:";
-    Tid.Set.iter !Abstract.widen_set
-      ~f:(L.debug "\t%a" Tid.ppo);
+    (* L.debug "Widening set:"; *)
+    (* Tid.Set.iter !Abstract.widen_set *)
+    (*   ~f:(L.debug "\t%a" Tid.ppo); *)
 
     (* get the kill_after_vars map for a hacked up 
        sparse analysis *)
