@@ -11,9 +11,10 @@ open KB.Monad_infix
 type reason = CompSimp | SilentStores | Dmp | None
 [@@deriving sexp, bin_io, compare, equal]
 
-let log_prefix = sprintf "%s.alert" Common.package
+
 module L = struct
   include Dolog.Log
+  let log_prefix = sprintf "%s.alert" Common.package
   let () = set_prefix log_prefix
 end
 
@@ -616,17 +617,58 @@ module RemoveUnsupportedMirOpcodes = struct
         String.Caseless.is_prefix mir_opcode_str ~prefix)
     | _ -> false
 
+  (* let considered_addrs = ref Word.Set.empty *)
+  (* let guard_incr (alert : T.t) (incr : unit -> unit) : unit = *)
+  (*   let subname = match alert.sub_name with *)
+  (*     | Some s -> s *)
+  (*     | None -> failwith "err" *)
+  (*   in *)
+  (*   let tid = match alert.tid with *)
+  (*     | Some t -> t *)
+  (*     | None -> failwith "err" *)
+  (*   in *)
+  (*   let tidmap = Uc_preanalyses.get_tidmap subname in *)
+  (*   let term = match Tid.Map.find tidmap tid with *)
+  (*     | Some (`Def d) -> d *)
+  (*     | _ -> failwith "err" *)
+  (*   in *)
+  (*   let addr = match Term.get_attr term Disasm.insn with *)
+  (*     | Some sema -> *)
+  (*       KB.Value.get Sema_addrs.slot sema *)
+  (*       |> Bitvec.to_int *)
+  (*       |> Word.of_int ~width:64 *)
+  (*     | None -> *)
+  (*       failwith @@ *)
+  (*       sprintf "Couldn't get addr for %a" Tid.pps st.tid *)
+  (*   in *)
+  (*   let already_considered = Word.Set.mem !considered_addrs addr in *)
+  (*   if already_considered *)
+  (*   then () *)
+  (*   else (considered_addrs := Word.Set.add !considered_addrs addr; *)
+  (*         incr ()) *)
+
   let set_for_alert_set alerts _proj : t =
+    let considered_addrs = ref Word.Set.empty in
     let unsupported_count = ref 0 in
-    let is_supported = fun alert ->
+    
+    let guarded_incr (alert : T.t) : unit =
+      match alert.addr with
+      | Some addr when Word.Set.mem !considered_addrs addr -> ()
+      | Some addr ->
+        considered_addrs := Word.Set.add !considered_addrs addr;
+        Int.incr unsupported_count
+      | None -> ()
+    in
+    
+    let is_supported (alert : T.t) : bool =
       let not_supported = is_unsupported alert in
-      let () = if not_supported
-        then
-          let () = unsupported_count := !unsupported_count + 1 in
-          let alert_s = to_string alert in
-          printf "[AlertFilter] alert (%s) removed since it is for unsupported insn\n%!" alert_s
-        else () in
-      not not_supported in
+      if not_supported
+      then (guarded_incr alert;
+            let alert_s = to_string alert in
+            L.warn "alert (%s) removed - unsupported" alert_s);
+      not not_supported
+    in
+    
     { alerts = Set.filter alerts ~f:is_supported;
       num_removed = !unsupported_count }
 end
@@ -728,14 +770,10 @@ module RemoveSpuriousCompSimpAlerts = struct
 
   let do_check_with_log checkname check alert : bool =
     let result = check alert in
-    let () =
-      if result
-      then
-        (printf "Comp simp spurious alert pruner (%s) pruned alert:\n%!" checkname;
-         printf "%s\n%!" @@ to_string alert)
-      else
-        ()
-    in
+    if result
+    then
+      (printf "Comp simp spurious alert pruner (%s) pruned alert:\n%!" checkname;
+       printf "%s\n%!" @@ to_string alert);
     result
 
   let is_spurious alert =

@@ -11,6 +11,7 @@ module SS = Common.SS
 
 module Checker(N : Abstract.NumericDomain)
     (Interp : Common.CheckerInterp with type t := N.t) = struct
+  
   type st = {
     tid : tid;
     term : def term;
@@ -18,11 +19,37 @@ module Checker(N : Abstract.NumericDomain)
   }
   
   let emp = Alert.Set.empty
+              
   let init_st subname tid term = {tid;subname;term}
 
-  let estats_incr_total_considered st = Uc_stats.Eval.(incr cs_stats total)
-  let estats_incr_taint_pruned st = Uc_stats.Eval.(incr cs_stats taint_pruned)
-  let estats_incr_interval_pruned st = Uc_stats.Eval.(incr cs_stats interval_pruned)
+  let considered_addrs : Word.Set.t ref = ref Word.Set.empty
+  let guard_incr (st : st) (incr : unit -> unit) : unit =
+    let addr = match Term.get_attr st.term Disasm.insn with
+      | Some sema ->
+        KB.Value.get Sema_addrs.slot sema
+        |> Bitvec.to_int
+        |> Word.of_int ~width:64
+      | None ->
+        failwith @@
+        sprintf "Couldn't get addr for %a" Tid.pps st.tid
+    in
+    let already_considered = Word.Set.mem !considered_addrs addr in
+    if already_considered
+    then ()
+    else (considered_addrs := Word.Set.add !considered_addrs addr;
+          incr ())
+         
+  let estats_incr_total_considered st =
+    guard_incr st @@ fun () ->
+    Uc_stats.Eval.(incr cs_stats total)
+      
+  let estats_incr_taint_pruned st =
+    guard_incr st @@ fun () ->
+    Uc_stats.Eval.(incr cs_stats taint_pruned)
+      
+  let estats_incr_interval_pruned st =
+    guard_incr st @@ fun () ->
+    Uc_stats.Eval.(incr cs_stats interval_pruned)
                                          
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with
@@ -32,14 +59,15 @@ module Checker(N : Abstract.NumericDomain)
   let get_taint : N.t -> Checker_taint.Analysis.t =
     match N.get Checker_taint.Analysis.key with
     | Some f -> f
-    | None -> failwith "[CSChkr] Couldn't extract taint from product domain"
+    | None -> failwith "[CSChkr] Couldn't extract taint from product domain"  
 
   (* increment total considered *)
   let incr_total_considered binop st : unit =
     match binop with
     | Bil.EQ | Bil.NEQ | Bil.LT | Bil.LE | Bil.SLT
     | Bil.SLE | Bil.MOD | Bil.SMOD -> ()
-    | _ -> estats_incr_total_considered st
+    | _ -> guard_incr st @@ fun () ->
+      estats_incr_total_considered st
 
   (* 
      U N U N -> taint pruned

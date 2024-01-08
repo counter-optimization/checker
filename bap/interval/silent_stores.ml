@@ -29,10 +29,38 @@ module Checker(N : Abstract.NumericDomain)
     subname;
   }
 
-  let estats_incr_total_considered st = Uc_stats.Eval.(incr ss_stats total)
-  let estats_incr_taint_pruned st = Uc_stats.Eval.(incr ss_stats taint_pruned)
-  let estats_incr_interval_pruned st = Uc_stats.Eval.(incr ss_stats interval_pruned)
-  let estats_incr_symex_pruned st = Uc_stats.Eval.(incr ss_stats symex_pruned)
+  let considered_addrs : Word.Set.t ref = ref Word.Set.empty
+  let guard_incr (st : st) (incr : unit -> unit) : unit =
+    let addr = match Term.get_attr st.term Disasm.insn with
+      | Some sema ->
+        KB.Value.get Sema_addrs.slot sema
+        |> Bitvec.to_int
+        |> Word.of_int ~width:64
+      | None ->
+        failwith @@
+        sprintf "Couldn't get addr for %a" Tid.pps st.tid
+    in
+    let already_considered = Word.Set.mem !considered_addrs addr in
+    if already_considered
+    then ()
+    else (considered_addrs := Word.Set.add !considered_addrs addr;
+          incr ())
+
+  let estats_incr_total_considered st =
+    guard_incr st @@ fun () ->
+    Uc_stats.Eval.(incr ss_stats total)
+      
+  let estats_incr_taint_pruned st =
+    guard_incr st @@ fun () ->
+    Uc_stats.Eval.(incr ss_stats taint_pruned)
+      
+  let estats_incr_interval_pruned st =
+    guard_incr st @@ fun () ->
+    Uc_stats.Eval.(incr ss_stats interval_pruned)
+      
+  let estats_incr_symex_pruned st =
+    guard_incr st @@ fun () ->
+    Uc_stats.Eval.(incr ss_stats symex_pruned)
       
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with
