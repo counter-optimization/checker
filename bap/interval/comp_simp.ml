@@ -9,6 +9,12 @@ module WI = Wrapping_interval
 module ABI = Common.AMD64SystemVABI
 module SS = Common.SS
 
+module L = struct
+  include Dolog.Log
+  let log_prefix = sprintf "%s.comp-simp" Common.package
+  let () = set_prefix log_prefix
+end
+
 module Checker(N : Abstract.NumericDomain)
     (Interp : Common.CheckerInterp with type t := N.t) = struct
   
@@ -22,34 +28,38 @@ module Checker(N : Abstract.NumericDomain)
               
   let init_st subname tid term = {tid;subname;term}
 
-  let considered_addrs : Word.Set.t ref = ref Word.Set.empty
-  let guard_incr (st : st) (incr : unit -> unit) : unit =
+  let considered_addrs : Int.Set.t ref = ref Int.Set.empty
+  let guarded_incr (st : st)
+        (cat : Uc_stats.Eval.stat_category)
+        (typ : Uc_stats.Eval.stat_type) : unit =
     let addr = match Term.get_attr st.term Disasm.insn with
       | Some sema ->
         KB.Value.get Sema_addrs.slot sema
         |> Bitvec.to_int
-        |> Word.of_int ~width:64
       | None ->
         failwith @@
         sprintf "Couldn't get addr for %a" Tid.pps st.tid
     in
-    let already_considered = Word.Set.mem !considered_addrs addr in
-    if already_considered
-    then ()
-    else (considered_addrs := Word.Set.add !considered_addrs addr;
-          incr ())
+    let already_considered = Int.Set.mem !considered_addrs addr in
+    if not already_considered
+    then begin
+      considered_addrs := Int.Set.add !considered_addrs addr;
+      Uc_stats.Eval.incr cat typ
+      (* incr () *)
+    end
          
-  let estats_incr_total_considered st =
-    guard_incr st @@ fun () ->
-    Uc_stats.Eval.(incr cs_stats total)
+  let estats_incr_total_considered (st : st) : unit =
+    Uc_stats.Eval.(guarded_incr st cs_stats total)
       
-  let estats_incr_taint_pruned st =
-    guard_incr st @@ fun () ->
-    Uc_stats.Eval.(incr cs_stats taint_pruned)
+  let estats_incr_taint_pruned (st : st) : unit =
+    Uc_stats.Eval.(guarded_incr st cs_stats taint_pruned)
+    (* guarded_incr st (fun () -> *)
+    (*   Uc_stats.Eval.(incr cs_stats taint_pruned)) *)
       
-  let estats_incr_interval_pruned st =
-    guard_incr st @@ fun () ->
-    Uc_stats.Eval.(incr cs_stats interval_pruned)
+  let estats_incr_interval_pruned (st : st) : unit =
+    Uc_stats.Eval.(guarded_incr st cs_stats interval_pruned)
+    (* guarded_incr st (fun () -> *)
+    (*   Uc_stats.Eval.(incr cs_stats interval_pruned)) *)
                                          
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with
@@ -62,12 +72,11 @@ module Checker(N : Abstract.NumericDomain)
     | None -> failwith "[CSChkr] Couldn't extract taint from product domain"  
 
   (* increment total considered *)
-  let incr_total_considered binop st : unit =
+  let incr_total_considered (binop : Bil.binop) (st : st) : unit =
     match binop with
     | Bil.EQ | Bil.NEQ | Bil.LT | Bil.LE | Bil.SLT
     | Bil.SLE | Bil.MOD | Bil.SMOD -> ()
-    | _ -> guard_incr st @@ fun () ->
-      estats_incr_total_considered st
+    | _ -> estats_incr_interval_pruned st
 
   (* 
      U N U N -> taint pruned

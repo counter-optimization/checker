@@ -167,7 +167,7 @@ module Eval = struct
   let stat stats stattype =
     KB.Value.get stattype stats
 
-  let incr statcat (stattype : stat_type) =
+  let incr (statcat : stat_category) (stattype : stat_type) : unit =
     Toplevel.exec begin
       let* stats = get_obj statcat in
       let* count = stats-->stattype in
@@ -179,7 +179,7 @@ module Eval = struct
     let print_order = ["total_considered", total;
                        "bv_pruned", bv_pruned;
                        "taint_pruned", taint_pruned;
-                       "interval_pruend", interval_pruned;
+                       "interval_pruned", interval_pruned;
                        "interproc_pruned", interproc_pruned;
                        "symex_pruned", symex_pruned;
                        "unsupported_pruned", unsupported_pruned;

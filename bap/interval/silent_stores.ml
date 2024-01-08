@@ -29,38 +29,46 @@ module Checker(N : Abstract.NumericDomain)
     subname;
   }
 
-  let considered_addrs : Word.Set.t ref = ref Word.Set.empty
-  let guard_incr (st : st) (incr : unit -> unit) : unit =
+  let considered_addrs : Int.Set.t ref = ref Int.Set.empty
+  (* let guard_incr (st : st) (incr : unit -> unit) : unit = *)
+  let guarded_incr (st : st)
+        (cat : Uc_stats.Eval.stat_category)
+        (typ : Uc_stats.Eval.stat_type) : unit =
     let addr = match Term.get_attr st.term Disasm.insn with
       | Some sema ->
         KB.Value.get Sema_addrs.slot sema
         |> Bitvec.to_int
-        |> Word.of_int ~width:64
       | None ->
         failwith @@
         sprintf "Couldn't get addr for %a" Tid.pps st.tid
     in
-    let already_considered = Word.Set.mem !considered_addrs addr in
-    if already_considered
-    then ()
-    else (considered_addrs := Word.Set.add !considered_addrs addr;
-          incr ())
+    let already_considered = Int.Set.mem !considered_addrs addr in
+    if not already_considered
+    then begin
+      considered_addrs := Int.Set.add !considered_addrs addr;
+      Uc_stats.Eval.incr cat typ
+      (* incr () *)
+    end
 
   let estats_incr_total_considered st =
-    guard_incr st @@ fun () ->
-    Uc_stats.Eval.(incr ss_stats total)
+    Uc_stats.Eval.(guarded_incr st ss_stats total)
+      (* guarded_incr st (fun () -> *)
+      (* Uc_stats.Eval.(incr ss_stats total)) *)
       
   let estats_incr_taint_pruned st =
-    guard_incr st @@ fun () ->
-    Uc_stats.Eval.(incr ss_stats taint_pruned)
+    Uc_stats.Eval.(guarded_incr st ss_stats total)
+    (* guarded_incr st (fun () -> *)
+    (*   Uc_stats.Eval.(incr ss_stats taint_pruned)) *)
       
   let estats_incr_interval_pruned st =
-    guard_incr st @@ fun () ->
-    Uc_stats.Eval.(incr ss_stats interval_pruned)
+    Uc_stats.Eval.(guarded_incr st ss_stats total)
+    (* guarded_incr st (fun () -> *)
+    (*   Uc_stats.Eval.(incr ss_stats interval_pruned)) *)
       
   let estats_incr_symex_pruned st =
-    guard_incr st @@ fun () ->
-    Uc_stats.Eval.(incr ss_stats symex_pruned)
+    Uc_stats.Eval.(guarded_incr st ss_stats total)
+    (* guarded_incr st (fun () -> *)
+    (*   Uc_stats.Eval.(incr ss_stats symex_pruned)) *)
       
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with
@@ -217,7 +225,7 @@ module Checker(N : Abstract.NumericDomain)
         (tidmap : Blk.elt Tid_map.t)
         (elt : Blk.elt) : Alert.Set.t =
     let subname = Sub.name sub in
-    L.debug "checking tid: %a" Tid.ppo tid;
+    (* L.debug "checking tid: %a" Tid.ppo tid; *)
     let could_be_eq (old : N.t) (new_ : N.t) : bool =
       let new_intvl = get_intvl new_ in
       let old_intvl = get_intvl old in
@@ -245,7 +253,7 @@ module Checker(N : Abstract.NumericDomain)
               then
                 if do_symex
                 then begin
-                  L.debug "doing symex";
+                  (* L.debug "doing symex"; *)
                   let all_defs_of_sub =
                     if Option.is_none !all_defs_of_sub
                     then let defs = defs_of_sub sub in
@@ -272,8 +280,8 @@ module Checker(N : Abstract.NumericDomain)
                                ~rd
                                ~tidmap
                   in
-                  L.debug "deps are:";
-                  List.iter deps ~f:(L.debug "\t%a" Def.ppo);
+                  (* L.debug "deps are:"; *)
+                  (* List.iter deps ~f:(L.debug "\t%a" Def.ppo); *)
                   let type_info = Type_determination.run
                                     all_defs_of_sub
                                     Common.AMD64SystemVABI.size_of_var_name
