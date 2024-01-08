@@ -2,13 +2,14 @@ open Core_kernel
 open Bap.Std
 open Graphlib.Std
 open Monads.Std
+open Splay_tree.Std
 
 module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 
-let log_prefix = sprintf "%s.abstract" Common.package
 module L = struct
   include Dolog.Log
+  let log_prefix = sprintf "%s.abstract" Common.package
   let () = set_prefix log_prefix
 end
 
@@ -33,6 +34,8 @@ sig
   val empty : t
 
   val is_empty : t -> bool
+
+  val filter : t -> String.Set.t -> t
 
   val lookup : string -> t -> v
 
@@ -86,11 +89,13 @@ module NumericEnv(ValueDom : NumericDomain)
     | Some f -> f
     | None -> failwith "[Abstract] NumericEnv: couldn't extract wrapping interval"
 
-  module M = Map.Make_binable_using_comparator(String)
+  module M = String.Map
+    (* Splay_tree.Make_without_reduction(String)(ValueDom) *)
+    (* Map.Make_binable_using_comparator(String) *)
 
   module G = Graphlib.Make(Tid)(Unit)
 
-  type v = ValueDom.t
+  type v = ValueDom.t 
 
   type t = ValueDom.t M.t
 
@@ -109,6 +114,9 @@ module NumericEnv(ValueDom : NumericDomain)
   let x86_64_default_taint = ["RDI"; "RSI"; "RDX"; "RCX"; "R8"; "R9"]
 
   let holds_ptr var_name env = false
+
+  let filter (env : t) (filter : String.Set.t) : t =
+    M.filter_keys env ~f:(String.Set.mem filter)
 
   let lookup name env =
     match M.find env name with

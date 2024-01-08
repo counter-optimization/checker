@@ -12,9 +12,9 @@ module OG = Uc_graph_builder.UcOcamlG.T
 module ABI = Abi.AMD64SystemVABI
 
 (** Logging *)
-let log_prefix = sprintf "%s.uc_preanalyses" Common.package
 module L = struct
   include Dolog.Log
+  let log_prefix = sprintf "%s.uc_preanalyses" Common.package
   let () = set_prefix log_prefix
 end
 
@@ -188,6 +188,35 @@ let reachingdefs_dom = Reachingdefs.(KB.Domain.flat
 let reachingdefs = KB.Class.property ~public ~package
                      cls "reaching-defs" reachingdefs_dom
 
+(* let tidmap_tidset_dom = *)
+(*   KB.Domain.flat *)
+(*     (\* (module Tid.Set.Elt) *\) *)
+(*     ~inspect:(Tid.Map.sexp_of_t Tid.Set.sexp_of_t) *)
+(*     ~join:(fun l r -> *)
+(*       Ok (Tid.Map.merge l r ~f:(fun ~key:at_tid -> function *)
+(*         | `Left l -> Some l *)
+(*         | `Right r -> Some r *)
+(*         | `Both (l, r) -> Some (Tid.Set.union l r)))) *)
+(*     ~empty:Tid.Map.empty *)
+(*     ~equal:(Tid.Map.equal Tid.Set.equal) *)
+(*     "tidmap_tidset_dom" *)
+
+let tidmap_varset_dom =
+  KB.Domain.flat
+    (* (module String.Set.Elt) *)
+    ~inspect:(Tid.Map.sexp_of_t String.Set.sexp_of_t)
+    ~join:(fun l r ->
+      Ok (Tid.Map.merge l r ~f:(fun ~key:at_tid -> function
+        | `Left l -> Some l
+        | `Right r -> Some r
+        | `Both (l, r) -> Some (String.Set.union l r))))
+    ~empty:Tid.Map.empty
+    ~equal:(Tid.Map.equal String.Set.equal)
+    "tidmap_tidset_dom"
+
+let kill_after_vars = KB.Class.property ~public ~package
+                        cls "sparseness:kills" tidmap_varset_dom
+
 let elt_to_sexp e =
   let l x = Sexp.List x in
   let a x = Sexp.Atom x in
@@ -226,6 +255,9 @@ let get_final_edges (subname : string) : Uc_graph_builder.UcBapG.edges =
 
 let get_init_edges (subname : string) : Uc_graph_builder.UcBapG.edges =
   Toplevel.eval init_edges_slot @@ of_ subname
+
+let get_kill_after_vars (subname : string) : String.Set.t Tid.Map.t =
+  Toplevel.eval kill_after_vars @@ of_ subname
 
 (* let og_cfg_of_edges ?(rev : bool = false) edges : OG.t = *)
 (*   let nedges = List.length edges in *)
@@ -473,22 +505,14 @@ let fill_init_liveness proj =
   let edge_values = edge_values_of_cfg cfg
                     |> Tid.Map.set
                          ~key:Uc_graph_builder.exittid
-                         ~data:(String.Set.singleton "RAX")
+                         ~data:ABI.live_outs
   in
   let liveness = timed subname ClassicLivenessOne @@ fun () ->
-    try
-      Liveness.run_on_cfg (module G)
-        cfg
-        ~tidmap
-        ~init:edge_values
-        ~flagst
-    with
-    | e ->
-      match sub with
-      | Some sub ->
-        (L.debug "%a" Sub.ppo sub;
-         raise e)
-      | None -> raise e
+    Liveness.run_on_cfg (module G)
+      cfg
+      ~tidmap
+      ~init:edge_values
+      ~flagst
   in
   L.info "Done filling DFA init liveness";
   KB.return (Some liveness)
@@ -576,7 +600,12 @@ let fill_final_liveness proj =
   let flagst = Flag_ownership.defs_of_flags flagst in
   let* edges = obj-->final_edges_slot in
   let cfg = cfg_of_edges edges in
-  let edge_values = edge_values_of_cfg cfg in
+  (* TODO: ABI *)
+  let edge_values = edge_values_of_cfg cfg
+                    |> Tid.Map.set
+                         ~key:Uc_graph_builder.exittid
+                         ~data:ABI.live_outs
+  in
   let liveness2 = timed subname ClassicLivenessTwo @@ fun () ->
     Liveness.run_on_cfg (module G)
       cfg
@@ -613,6 +642,171 @@ let fill_reachingdefs (_proj : Project.t) : unit =
   L.info "Done running reaching defs and def-use analysis";
   KB.return rds
 
+type sparseness_node_cmp = Before | After | BiDir | NonCmp
+                           
+let fill_sparseness_data (proj : Project.t) : unit =
+  let gprs = ABI.gpr_names |> String.Set.of_list in
+  
+  let def_of_concern (tidmap : Blk.elt Tid.Map.t) (t : tid) : bool =
+    let is_def_of_gpr (d : def term) : bool =
+      String.Set.mem gprs @@ Var.name @@ Def.lhs d
+    in
+    let is_def_of_mem (d : def term) : bool =
+      String.Caseless.equal "mem" @@ Var.name @@ Def.lhs d
+    in
+    let should_care (d : def term) : bool =
+      not (is_def_of_mem d) && not (is_def_of_gpr d)
+    in
+    match Tid.Map.find tidmap t with
+    | Some (`Def d) when should_care d -> true
+    | _ -> false
+  in
+
+  let var_of_deftid (tidmap : Blk.elt Tid.Map.t)
+        (deftid : Tid.t) : string =
+    match Tid.Map.find tidmap deftid with
+    (* since kill_after map first filters by 
+     * def_of_concern above, deftid should always
+     * identify a def and not a phi and not a jmp
+     *)
+    | Some (`Def d) -> Var.name @@ Def.lhs d
+    | _ -> failwith "var_of_deftid precond violated"
+  in
+  
+  let get_users (rds : Reachingdefs.t) (t : tid) : Tid.Set.t =
+    Reachingdefs.get_users rds t 
+  in
+  
+  (* if BiDir, then can't remove any vars from env.
+   * if Before, then we can remove var from env after right
+   * if After, then we can remove var from env after left
+   * if NonCmp, then both left and right become candidates 
+   *)
+  let compare_users (cfg : G.t)
+        ~(left : tid)
+        ~(right : tid) : sparseness_node_cmp =
+    let left_bf_right = Graphlib.is_reachable (module G) cfg left right in
+    let right_bf_left = Graphlib.is_reachable (module G) cfg right left in
+    match left_bf_right, right_bf_left with
+    | true, true -> BiDir
+    | true, false -> Before
+    | false, true -> After
+    | false, false -> NonCmp
+  in
+  
+  let add_removal_candidate (cfg : G.t)
+        ~(candidates : Tid.t list)
+        ~(proposed : Tid.t) : Tid.t list =
+    (* returns: (is_safe * befores * noncmps) *)
+    let analyze_addability ~(candidates : Tid.t list)
+          ~(proposed : Tid.t) : (bool * Tid.Set.t * Tid.Set.t) =
+      let emp = Tid.Set.empty in
+      List.fold candidates
+        ~init:(true, emp, emp)
+        ~f:(fun ((is_safe, befores, noncmps) as prev) cand ->
+          if not is_safe
+          then prev
+          else
+            match compare_users cfg ~left:cand ~right:proposed with
+            | BiDir -> (false, befores, noncmps)
+            | After -> (false, befores, noncmps)
+            | Before -> (is_safe, Tid.Set.add befores cand, noncmps)
+            | NonCmp -> (is_safe, befores, Tid.Set.add noncmps cand))
+    in
+    let safe_to_add, befores, noncmps = analyze_addability
+                                          ~candidates
+                                          ~proposed
+    in
+    L.debug "in analyze_addability, candidates: %s, proposed: %a"
+      (List.to_string ~f:Tid.to_string candidates)
+      Tid.ppo proposed;
+    L.debug "safe_to_add: %B, befores: %s, noncmps: %s"
+      safe_to_add
+      (Tid.Set.to_list befores |> List.to_string ~f:Tid.to_string)
+      (Tid.Set.to_list noncmps |> List.to_string ~f:Tid.to_string);
+    if safe_to_add
+    then
+      let has_befores = not (Tid.Set.is_empty befores) in
+      let has_noncmps = not (Tid.Set.is_empty noncmps) in
+      match has_befores, has_noncmps with
+      | false, false -> proposed :: candidates
+      | false, true -> proposed :: candidates
+      | true, _ ->
+        let _, candidates =
+          List.fold candidates ~init:(false, [])
+            ~f:(fun (added, all) cand ->
+              if added
+              then
+                if Tid.Set.mem befores cand
+                then (added, all)
+                else (added, cand :: all)
+              else
+                if Tid.Set.mem befores cand
+                then (true, proposed :: all)
+                else (added, cand :: all))
+        in
+        candidates
+    else candidates
+  in
+  KB.promise kill_after_vars (fun obj ->
+    let* subname = obj-->nameslot in
+    L.info "Filling kill_after for %s" subname;
+    let* rds = obj-->reachingdefs in
+    let* edges = obj-->final_edges_slot in
+    let* tidmap = obj-->tidmap_slot in
+    let cfg = cfg_of_edges edges in
+    let tids = G.nodes cfg |> Seq.map ~f:G.Node.label in
+    let kill_after_map =
+      Seq.fold tids ~init:Tid.Map.empty
+        ~f:(fun map tid ->
+          if def_of_concern tidmap tid
+          then
+            let users = get_users rds tid in
+            L.debug "users of %a are:" Tid.ppo tid;
+            Tid.Set.iter users ~f:(L.debug "\t%a" Tid.ppo);
+            let removal_points =
+              Tid.Set.fold users ~init:[]
+                ~f:(fun candidates user_tid ->
+                  add_removal_candidate cfg
+                    ~candidates
+                    ~proposed:user_tid)
+            in
+            let removal_points = Tid.Set.of_list removal_points in
+            Tid.Map.set map ~key:tid ~data:removal_points
+          else map)
+    in
+    L.debug "kill_after_map is:";
+    Tid.Map.iteri kill_after_map
+      ~f:(fun ~key:tid ~data:candidates ->
+        let candidates = Tid.Set.to_list candidates
+                         |> List.to_string ~f:Tid.to_string
+        in
+        L.debug "\t%a ~~> %s" Tid.ppo tid candidates);
+    (* now invert the kill_after_map *)
+    let kill_after_map =
+      Tid.Map.fold kill_after_map ~init:Tid.Map.empty
+        ~f:(fun ~key:deftid ~data:killaftertids newmap ->
+          Tid.Set.fold killaftertids ~init:newmap
+            ~f:(fun newmap killaftertid ->
+              Tid.Map.update newmap killaftertid ~f:(function
+                | Some others -> Tid.Set.add others deftid
+                | None -> Tid.Set.singleton deftid)))
+    in
+    let kill_after_vars =
+      Tid.Map.map kill_after_map ~f:(fun removal_tids ->
+        Set.map (module String.Set.Elt) removal_tids
+          ~f:(var_of_deftid tidmap))
+    in
+    L.debug "kill after vars for %s are:" subname;
+    Tid.Map.iteri kill_after_vars
+      ~f:(fun ~key:tid ~data:tokill ->
+        L.debug "\t%a ~~> %s" Tid.ppo tid @@
+        (String.Set.to_list tokill
+         |> List.to_string ~f:Fn.id));
+    L.info "Done filling kill_after_vars";
+    KB.return kill_after_vars
+  )
+    
 let register_preanalyses (proj : Project.t) : unit =
   fill_single_shot_passes proj;
   fill_dmp_st proj;
@@ -623,4 +817,5 @@ let register_preanalyses (proj : Project.t) : unit =
   fill_init_liveness proj;
   fill_final_edges proj;
   fill_final_liveness proj;
-  fill_reachingdefs proj
+  fill_reachingdefs proj;
+  fill_sparseness_data proj

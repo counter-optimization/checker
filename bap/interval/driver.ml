@@ -95,9 +95,9 @@ end
 (** Single shot pass runner *)
 
 (** Logging *)
-let log_prefix = sprintf "%s.driver" Common.package
 module L = struct
   include Dolog.Log
+  let log_prefix = sprintf "%s.driver" Common.package
   let () = set_prefix log_prefix
 end
 
@@ -349,25 +349,30 @@ let run_analyses sub proj ~(is_toplevel : bool)
     let stack_addr = 0x7fff_fff0 in
     let free_vars = Sub.free_vars sub in
     let freenames = Set.to_list free_vars
-                    |> List.map ~f:Var.name in
+                    |> List.map ~f:Var.name
+    in
     let args = Term.enum arg_t sub in
     let argnames = Seq.map args
                      ~f:(fun a -> Arg.var a |> T.Var.name)
-                   |> Seq.to_list in
+                   |> Seq.to_list
+    in
     let taintedregs = Uc_preanalyses.get_tainted_args subname in
     let with_canary_set = E.set_stack_canary empty in
     let env_with_df_set = E.set "DF" FinalDomain.b0 with_canary_set in
     let env_with_rsp_set = match E.set_rsp stack_addr env_with_df_set with
       | Ok env' -> env'
-      | Error e -> failwith @@ Error.to_string_hum e in
+      | Error e -> failwith @@ Error.to_string_hum e
+    in
     (* e.g., filter out bap's 'mem' var and the result var
        commonly used in prog analysis *)
     let true_args = List.append argnames freenames
-                    |> List.filter ~f:ABI.var_name_is_arg in
+                    |> List.filter ~f:ABI.var_name_is_arg
+    in
     let args_initd = List.fold true_args
                       ~init:env_with_rsp_set
                       ~f:(fun mem argname ->
-                        E.init_arg ~name:argname config sub mem) in
+                        E.init_arg ~name:argname config sub mem)
+    in
     let true_args = String.Set.of_list true_args in
     let untaintregs = String.Set.diff true_args taintedregs in
     let final_env = String.Set.fold untaintregs
@@ -375,13 +380,15 @@ let run_analyses sub proj ~(is_toplevel : bool)
                       ~f:(fun env reg ->
                         let v' = E.lookup reg env
                                  |> unset_taint in
-                        E.set reg v' env) in
+                        E.set reg v' env)
+    in
     let final_env = String.Set.fold taintedregs
                       ~init:final_env
                       ~f:(fun env reg ->
                         let v' = E.lookup reg env
                                  |> set_taint in
-                        E.set reg v' env) in
+                        E.set reg v' env)
+    in
     
     let stop = Analysis_profiling.record_stop_time start in
     Analysis_profiling.record_duration_for subname InitEnvSetup stop;
@@ -505,10 +512,14 @@ let run_analyses sub proj ~(is_toplevel : bool)
     Tid.Set.iter !Abstract.widen_set
       ~f:(L.debug "\t%a" Tid.ppo);
 
+    (* get the kill_after_vars map for a hacked up 
+       sparse analysis *)
+    let kill_afters = Uc_preanalyses.get_kill_after_vars subname in
+
     (* Run the main value-set analysis *)
     let interp =
       fun tid st ->
-        let elt = match Tid_map.find tidmap tid with
+        let elt = match Tid.Map.find tidmap tid with
           | Some elt -> elt
           | None ->
             failwith @@
@@ -516,14 +527,33 @@ let run_analyses sub proj ~(is_toplevel : bool)
               "in calculating analysis_results, couldn't find tid %a in tidmap"
               Tid.pps tid
         in
+        L.debug "denoting elt %a" Tid.ppo tid;
+        L.debug "in env:"; TraceEnv.pp st;
         let st = dmp_bt_set tid st in
-        let tidstr = Format.sprintf "%a" Tid.pps tid in
-        let is_target = String.Set.mem dbgtids tidstr in
-        let is_target = true in
-        do_ ~if_:is_target ~default:() (fun () ->
-          L.debug "denoting elt %a%!" Tid.ppo tid;
-          TraceEnv.pp st);
-        TraceAbsInt.denote_elt directive_map elt st
+        (* let live_here = Liveness.liveness_at_tid dataflow_liveness tid in *)
+        (* L.debug "liveness is:"; *)
+        (* String.Set.iter live_here ~f:(L.debug "\t%s"); *)
+        (* let st = TraceEnv.map st ~f:(fun env -> *)
+        (*   E.filter env live_here) *)
+        (* in *)
+        (* L.debug "after liveness filter:"; *)
+        (* TraceEnv.pp st; *)
+        (* let () = *)
+        (*   let tidstr = Format.sprintf "%a" Tid.pps tid in *)
+        (*   let is_target = String.Set.mem dbgtids tidstr in *)
+        (*   let is_target = true in *)
+        (*   do_ ~if_:is_target ~default:() (fun () -> *)
+        (*     L.debug "denoting elt %a%!" Tid.ppo tid; *)
+        (*     TraceEnv.pp st); *)
+        (* in *)
+        let st = TraceAbsInt.denote_elt directive_map elt st in
+        let killvars = Tid.Map.find kill_afters tid
+                       |> Option.value ~default:String.Set.empty
+        in
+        String.Set.fold killvars ~init:st
+          ~f:(fun st kill ->
+            L.debug "unsetting %s" kill;
+            TraceEnv.map st ~f:(E.unset kill))
     in
 
     let analysis_results = Graphlib.fixpoint

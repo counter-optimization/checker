@@ -310,6 +310,9 @@ module Make(N : NumericDomain)
     bases = BaseSetMap.empty;
   }
 
+  let filter (({ env; _ }) as all : t) (filter : String.Set.t) : t =
+    { all with env = Env.filter env filter }
+
   let is_empty { cells; env; bases } : bool =
     Env.is_empty env &&
     C.Set.is_empty cells &&

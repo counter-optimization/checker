@@ -9,9 +9,9 @@ module Taint = Checker_taint.Analysis
 
 let package = Common.package
 
-let log_prefix = sprintf "%s.uc_inargs" package
 module L = struct
   include Dolog.Log
+  let log_prefix = sprintf "%s.uc_inargs" package
   let () = set_prefix log_prefix
 end
 
@@ -42,9 +42,9 @@ include T
 module TaintInState = struct
   type t = String.Set.t
 
-  let log_prefix = sprintf "%s.taint" log_prefix
   module L = struct
     include Dolog.Log
+    let log_prefix = sprintf "%s.taint" L.log_prefix
     let () = set_prefix log_prefix
   end
 

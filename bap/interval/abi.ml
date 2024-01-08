@@ -10,6 +10,8 @@ module type ABIDef = sig
 
   val flag_names : String.Set.t
 
+  val live_outs : String.Set.t
+
   val callee_clobbered_regs : String.Set.t
 
   val gpr_arg_names : string list
@@ -46,6 +48,9 @@ module AMD64SystemVABI = struct
   let gpr_names = ["RAX"; "RBX"; "RCX"; "RDX"; "RDI"; "RSI";
                    "R8"; "R9"; "R10"; "R11"; "R12"; "R13";
                    "R14"; "R15"; "RSP"; "RBP"]
+
+  let live_outs = String.Set.of_list ["RAX"; "RDX"; "mem"; "RBP"; "RSP"; "DF"]
+                  
 
   let vectorreg_arg_names_aliased = ["XMM0"; "XMM1"; "XMM2"; "XMM3"; "XMM4";
                                      "XMM5"; "XMM6"; "XMM7"]

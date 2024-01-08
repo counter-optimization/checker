@@ -8,9 +8,9 @@ module OcamlG = Graph
 module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 
-let log_prefix = sprintf "%s.uc_graph_builder" Common.package
 module L = struct
   include Dolog.Log
+  let log_prefix = sprintf "%s.uc_graph_builder" Common.package
   let () = set_prefix log_prefix
 end
 
@@ -462,9 +462,10 @@ let remove_dead_defs (edges : edges)
 module IntraNoResolve : sig
   val of_sub : ?idxst:Idx_calculator.t option -> Project.t -> sub term -> UcBapG.edges * Blk.elt Tid.Map.t
 end = struct
-  let log_prefix = sprintf "%s.IntraNoResolve" log_prefix
+  
   module L = struct
     include Dolog.Log
+    let log_prefix = sprintf "%s.IntraNoResolve" L.log_prefix
     let () = set_prefix log_prefix
   end
 

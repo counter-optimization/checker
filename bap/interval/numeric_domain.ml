@@ -65,4 +65,6 @@ module type Sig = sig
   val of_z : ?width:int -> Z.t -> t
   val bitwidth : t -> int
   val sexp_of_t : t -> Sexp.t
+                         
+  (* val t_of_sexp : Sexp.t -> t *)
 end

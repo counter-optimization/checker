@@ -38,6 +38,7 @@ module Executor = struct
     defs : def term list;
     target_tid : tid;
     do_check : bool;
+    target_tid_found : bool;
     do_ss : bool;
     do_cs : bool;
     do_cs_left : bool;
@@ -127,6 +128,7 @@ module Executor = struct
     env = [];
     constraints = [];
     do_check = false;
+    target_tid_found = false;
     do_ss;
     do_cs;
     do_cs_left;
@@ -319,10 +321,9 @@ module Executor = struct
   let get_last_loaded_symname : string option ST.t =
     ST.gets @@ fun st -> st.last_loaded_symname
 
-  let push_constraint ctr : unit ST.t =
+  let push_constraint (ctr : Z3.Expr.expr) : unit ST.t =
     ST.update @@ fun st ->
-    let cs' = st.constraints in
-    { st with constraints = ctr :: cs' }
+    { st with constraints = ctr :: st.constraints }
 
   let push_def_constraint lhs_symname rhs_symvalue : unit ST.t =
     get_value_in_env lhs_symname >>= fun lhs_symvalue ->
@@ -453,10 +454,10 @@ module Executor = struct
     let on_right_fail = fun st -> { st with failed_cs_right = true }
   end
 
-  let get_solver_string constraints : string =
-    let () = Solver.add solver constraints in
+  let get_solver_string (constraints : Z3.Expr.expr list) : string =
+    Solver.add solver constraints;
     let solver_state_string = Solver.to_string solver in
-    let () = Solver.reset solver in
+    Solver.reset solver;
     solver_state_string
 
   (* checkers use negative constraints -> this value should not
@@ -465,7 +466,7 @@ module Executor = struct
      an error somewhere. 
      @returns true = safe
      false = unsafe *)
-  let check_now onfail : bool ST.t =
+  let check_now (onfail : T.t -> T.t) : bool ST.t =
     ST.get () >>= fun st ->
     let status = Solver.check solver st.constraints in
     match status with
@@ -491,8 +492,7 @@ module Executor = struct
       ST.update onfail >>= fun () ->
       ST.return false
 
-  let rec supports_exp (exp : Bil.exp) : bool =
-    match exp with
+  let rec supports_exp : Bil.exp -> bool = function
     | Bil.Load (_, idx_exp, _, _) ->
       supports_exp idx_exp
     | Bil.Store (_, idx, v, _, _) ->
@@ -531,7 +531,7 @@ module Executor = struct
         ST.get () >>= fun st ->
         let mockload = Bil.Load (mem, idx, en, sz) in
         let memcellsymname = Common.exp_to_string mockload in
-        eval_exp idx >>= fun idx_val -> 
+        (* eval_exp idx >>= fun idx_val ->  *)
         eval_exp v >>= fun mcv ->
         let curval = match mcv with
           | Some curval -> curval
@@ -555,10 +555,17 @@ module Executor = struct
              let profiling_data_csv_row = sprintf ",1,%d,,,\"%s\",,\"%s\""
                                             chk_time
                                             silent_store_const_str
-                                            def_term_str in
+                                            def_term_str
+             in
              write_csv_profile_data profiling_data_csv_row >>= fun () ->
              ST.return None
-           else SilentStoreChecks.fail_ss >>= fun () ->
+           else
+             SilentStoreChecks.fail_ss >>= fun () ->
+             ST.get () >>= fun st ->
+             let tid = st.target_tid in
+             L.error "no previous store in dependencies for %a"
+               Tid.ppo tid;
+             debug_print_sym_env st;
              ST.return None
          else ST.return None) >>= fun res ->
         push_def_constraint memcellsymname curval >>= fun () ->
@@ -590,10 +597,8 @@ module Executor = struct
                 let end' = Time_ns.now () in
                 let left_chk_time =
                   if ini_st.do_cs_left
-                  then
-                    Time_ns.Span.to_int_ns @@ Time_ns.diff end' start'
-                  else
-                    0
+                  then Time_ns.Span.to_int_ns @@ Time_ns.diff end' start'
+                  else 0
                 in
                 ST.get () >>= fun with_left_const ->
                 let left_const_str = get_solver_string with_left_const.constraints in
@@ -606,14 +611,14 @@ module Executor = struct
                 let end' = Time_ns.now () in
                 let right_chk_time =
                   if ini_st.do_cs_right
-                  then
-                    Time_ns.Span.to_int_ns @@ Time_ns.diff end' start'
-                  else
-                    0
+                  then Time_ns.Span.to_int_ns @@ Time_ns.diff end' start'
+                  else 0
                 in
                 (* for profiling *)
                 ST.get () >>= fun with_right_const ->
-                let right_const_str = get_solver_string with_right_const.constraints in
+                let right_const_str =
+                  get_solver_string with_right_const.constraints
+                in
                 let failed_cs_right = with_right_const.failed_cs_right in
 
                 def_terms_as_string >>= fun def_term_str ->
@@ -629,15 +634,12 @@ module Executor = struct
                                                def_term_str
                 in
                 write_csv_profile_data profiling_data_csv_row >>= fun () ->
-                (* let () = printf "In symex checker, left check time is %d, right check time was %d\n%!" left_chk_time right_chk_time in *)
                 ST.update @@ fun st ->
                 { ini_st with failed_cs_left; failed_cs_right }
-              else
-                ST.return ()
+              else ST.return ()
             end >>= fun () ->
             ST.return @@ Some (binop op l r)
-          | _, _ ->
-            failwith "In Symbolic.Executor, unsupported ops of binop"
+          | _, _ -> failwith "In Symbolic.Executor, unsupported ops of binop"
         end
       | Bil.UnOp (op, x) ->
         eval_exp x >>= fun mx ->
@@ -664,7 +666,8 @@ module Executor = struct
               match ABI.size_of_var_name varname with
               | Some bw -> fresh_bv_for_symbolic symname bw
               | None ->
-                let () = printf "Couldn't get bitwidth for var %s in symex compile of var" varname in
+                printf "Couldn't get bitwidth for var %s in symex compile of var"
+                  varname;
                 fresh_bv_for_symbolic symname 64
             end
         end >>= fun symval ->
@@ -719,39 +722,55 @@ module Executor = struct
     res
 
   let eval_def dt : unit ST.t =
-    ST.return (Term.tid dt) >>= fun tid ->
-    ST.update (fun st -> 
-      { st with do_check = Tid.equal tid st.target_tid }) >>= fun () ->
+    let set_check (do_check : bool) (st : T.t) : T.t =
+      { st with do_check }
+    in
+    let set_found (target_tid_found : bool) (st : T.t) : T.t =
+      { st with target_tid_found }
+    in
+    ST.get () >>= fun st ->
+    let tid = Term.tid dt in
+    let is_target_tid = Tid.equal tid st.target_tid in
+    (* ST.return (Term.tid dt) >>= fun tid -> *)
+    ST.update (set_check is_target_tid) >>= fun () ->
+    ST.update (set_found is_target_tid) >>= fun () ->
+      (* { st with *)
+      (*   do_check = Tid.equal tid st.target_tid } *)
     let rhs = Def.rhs dt in
-    eval_exp rhs >>= fun mr ->
-    match mr with
+    eval_exp rhs >>= function
     | Some result ->
       let lhs = Def.lhs dt in
       let varname = Var.name lhs in
       new_symbolic varname >>= fun symname ->
       push_def_constraint symname result >>= fun () ->
       set_last_loaded_symname symname >>= fun () ->
-      ST.update (fun st -> { st with do_check = false }) >>= fun () ->
+      ST.update (set_check false) >>= fun () ->
       set_symbolic_val symname result
     | None ->
       ST.update @@ fun st -> { st with do_check = false }
 
   let eval_def_list defs : unit ST.t =
     let clear_old_constraints () : unit =
-      Solver.reset solver in
-    let rec loop defs : unit ST.t =
+      Solver.reset solver
+    in
+    let rec loop (defs : def term list) : unit ST.t =
       ST.get () >>= fun st ->
-      if not st.failed_ss && not st.failed_cs_left && not st.failed_cs_right
+      if not st.failed_ss &&
+         not st.failed_cs_left &&
+         not st.failed_cs_right &&
+         not st.target_tid_found
       then match defs with
-        | d :: defs' -> eval_def d >>= fun () ->
+        | d :: defs' ->
+          eval_def d >>= fun () ->
           loop defs'
         | [] -> ST.return ()
-      else ST.return () in
-    let () = clear_old_constraints () in 
+      else ST.return ()
+    in
+    clear_old_constraints ();
     set_free_vars >>= fun () ->
     loop defs
 
-  let eval_blk blk : unit ST.t =
+  let eval_blk (blk : blk term) : unit ST.t =
     Term.enum def_t blk
     |> Sequence.to_list
     |> eval_def_list

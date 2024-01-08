@@ -550,7 +550,7 @@ module Tree(N : Abstract.NumericDomain)
       | _, _ -> k false in
     loop left right (fun x -> x)
 
-  let map t ~(f : E.t -> E.t) : t =
+  let map (t : node) ~(f : E.t -> E.t) : t =
     let rec loop t k =
       match t with
       | Leaf node -> k @@ Leaf (f node)
@@ -785,6 +785,9 @@ module Env(N : Abstract.NumericDomain)
   end
 
   include T
+
+  let map ({tree : Tree.t} : T.t) ~(f : E.t -> E.t) : T.t =
+    { tree = Tree.map tree ~f }
 
   let empty : t = {
     tree = Tree.Leaf E.empty;

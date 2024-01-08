@@ -6,6 +6,12 @@ open Monads.Std
 
 open Abstract
 
+module L = struct
+  include Dolog.Log
+  let log_prefix = sprintf "%s.ss-checker" Common.package
+  let () = set_prefix log_prefix
+end
+
 module Checker(N : Abstract.NumericDomain)
     (Interp : Common.CheckerInterp with type t := N.t) = struct
   type st = {
@@ -100,20 +106,24 @@ module Checker(N : Abstract.NumericDomain)
     | _ -> false
 
   let get_up_to_n_dependent_insns ~(prev_store : def term option)
-        ~(n: int) ~(sub: sub term) ~(for_ : tid)
-        ~(rd : Reachingdefs.t) ~(tidmap : Blk.elt Tid_map.t)
-    : def term list =
+        ~(n: int)
+        ~(sub: sub term)
+        ~(for_ : tid)
+        ~(rd : Reachingdefs.t)
+        ~(tidmap : Blk.elt Tid_map.t) : def term list =
     let emp = Def.Set.empty in
     let dt_compare left right =
       let lefttid = Term.tid left in
       let righttid = Term.tid right in
-      Tid.compare lefttid righttid in
+      Tid.compare lefttid righttid
+    in
     let dt_only_lookup ~(tidmap : Blk.elt Tid_map.t) ~(tid: tid) : def term option =
       match Tid_map.find tidmap tid with
       | None -> None
       | Some elt -> (match elt with
         | `Def d -> Some d
-        | _ -> None) in
+        | _ -> None)
+    in
     let rec take_n ~(n : int) ~(to_ : Def.Set.t) from_ =
       if n = 0
       then to_
@@ -126,14 +136,16 @@ module Checker(N : Abstract.NumericDomain)
             let to_ = Def.Set.add to_ dt in
             let from_ = from_' in
             let n = n - 1 in
-            take_n ~n ~to_ from_ in
+            take_n ~n ~to_ from_
+    in
     let deps_of_dt (dt : def term) =
       let tid = Term.tid dt in
       let uses = Reachingdefs.get_uses rd tid in
       Tidset.fold uses ~init:emp ~f:(fun dts use_tid ->
         match dt_only_lookup ~tidmap ~tid:use_tid with
         | None -> dts
-        | Some defterm -> Def.Set.add dts defterm) in
+        | Some defterm -> Def.Set.add dts defterm)
+    in
     let rec loop ~(old: Def.Set.t)
               ~(added: Def.Set.t) : Def.Set.t =
       let newly_added = Def.Set.diff added old in
@@ -146,20 +158,23 @@ module Checker(N : Abstract.NumericDomain)
         if old_sz + added_sz >= n
         then
           let top_off_elts = Def.Set.to_list newly_added
-                             |> take_n ~n ~to_:old in
+                             |> take_n ~n ~to_:old
+          in
           Def.Set.union old top_off_elts
         else
           let old' = Def.Set.union old newly_added in
           let added' = Def.Set.fold newly_added
                          ~init:emp
                          ~f:(fun to_add dt ->
-                           Set.union to_add @@ deps_of_dt dt) in
+                           Set.union to_add @@ deps_of_dt dt)
+          in
           loop ~old:old' ~added:added' in
     let start_term = Option.value_exn (dt_only_lookup ~tidmap ~tid:for_) in
     let start = Def.Set.singleton start_term in
     let start = match prev_store with
       | Some prev_store -> Def.Set.add start prev_store
-      | None -> start in
+      | None -> start
+    in
     loop ~old:emp ~added:start
     |> Def.Set.to_list
     |> List.sort ~compare:dt_compare
@@ -174,11 +189,13 @@ module Checker(N : Abstract.NumericDomain)
         (tidmap : Blk.elt Tid_map.t)
         (elt : Blk.elt) : Alert.Set.t =
     let subname = Sub.name sub in
-    let could_be_eq old new_ =
+    L.debug "checking tid: %a" Tid.ppo tid;
+    let could_be_eq (old : N.t) (new_ : N.t) : bool =
       let new_intvl = get_intvl new_ in
       let old_intvl = get_intvl old in
       Wrapping_interval.could_be_true @@
-      Wrapping_interval.booleq old_intvl new_intvl in
+      Wrapping_interval.booleq old_intvl new_intvl
+    in
     match elt with
     | `Def d ->
       let st = init_st subname tid d in
@@ -199,20 +216,23 @@ module Checker(N : Abstract.NumericDomain)
               if could_be_eq prev_data new_data
               then
                 if do_symex
-                then
+                then begin
+                  L.debug "doing symex";
                   let all_defs_of_sub =
                     if Option.is_none !all_defs_of_sub
                     then let defs = defs_of_sub sub in
                       all_defs_of_sub := Some defs;
                       defs
-                    else Option.value_exn !all_defs_of_sub in
+                    else Option.value_exn !all_defs_of_sub
+                  in
                   let prev_def_term = get_prev_defterm
                                         ~of_:tid
                                         ~defs:all_defs_of_sub
                   in
                   let prev_store = match prev_def_term with
                     | None -> None
-                    | Some prev -> if store_depends_on ~target:d ~prev
+                    | Some prev ->
+                      if store_depends_on ~target:d ~prev
                       then Some prev
                       else None
                   in
@@ -224,6 +244,8 @@ module Checker(N : Abstract.NumericDomain)
                                ~rd
                                ~tidmap
                   in
+                  L.debug "deps are:";
+                  List.iter deps ~f:(L.debug "\t%a" Def.ppo);
                   let type_info = Type_determination.run
                                     all_defs_of_sub
                                     Common.AMD64SystemVABI.size_of_var_name
@@ -251,6 +273,7 @@ module Checker(N : Abstract.NumericDomain)
                     let alerts = Alert.Set.singleton alert in
                     alerts
                   else (estats_incr_symex_pruned st; emp)
+                end
                 else
                   let left_val = get_intvl prev_data in
                   let right_val = get_intvl new_data in
