@@ -703,6 +703,40 @@ module CombinedTransformFixerUpper : Pass = struct
     Set.map alerts ~f:transform_alert
 end
 
+module RemoveDuplicateAlerts = struct
+  let seen : Word.Set.t String.Map.t ref = ref String.Map.empty
+
+  let add_to_seen (alert : T.t) : unit =
+    match alert.addr with
+    | None -> ()
+    | Some addr ->
+      let reason_s = string_of_reason alert.reason in
+      let seen' = String.Map.update !seen reason_s ~f:(function
+        | Some seen_addrs -> Word.Set.add seen_addrs addr
+        | None -> Word.Set.singleton addr)
+      in
+      seen := seen'
+
+  let is_dupe (alert : T.t) : bool =
+    let already_seen = match alert.addr with
+      | None -> false
+      | Some addr ->
+        let reason_s = string_of_reason alert.reason in
+        match String.Map.find !seen reason_s with
+        | None -> false
+        | Some seen_addrs -> Word.Set.mem seen_addrs addr
+    in
+    if already_seen
+    then (L.info "Removing duplicate alert: %s" @@ to_string alert;
+          already_seen)
+    else (add_to_seen alert;
+          already_seen)
+
+  let set_for_alert_set (alerts : Set.t) (proj : Project.t) : Set.t =
+    seen := String.Map.empty;
+    Set.filter alerts ~f:(fun a -> not (is_dupe a))
+end
+
 module RemoveSpuriousCompSimpAlerts = struct
   let is_comp_simp_warn alert =
     match alert.reason with

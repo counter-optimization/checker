@@ -779,6 +779,7 @@ let check_config config ctxt proj : unit =
   in
 
   let all_alerts = Alert.CombinedTransformFixerUpper.set_for_alert_set all_alerts proj in
+  let all_alerts = Alert.RemoveDuplicateAlerts.set_for_alert_set all_alerts proj in
 
   let res = Alert.RemoveUnsupportedMirOpcodes.set_for_alert_set all_alerts proj in
   let all_alerts = res.alerts in
