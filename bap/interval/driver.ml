@@ -613,7 +613,6 @@ let run_analyses sub proj ~(is_toplevel : bool)
     let idx_st = Uc_preanalyses.get_idxst subname in
 
     L.info "Running checkers";
-    L.info "SS: %B, CS: %B, DMP: %B" do_ss do_cs do_dmp;
     let all_alerts = timed subname CsChecking @@ fun () ->
       List.fold edges ~init:emp ~f:(fun alerts (_, to_tid, _) ->
         let elt = elt_of_tid to_tid in

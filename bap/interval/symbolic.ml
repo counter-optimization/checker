@@ -643,13 +643,10 @@ module Executor = struct
           | _, _ -> failwith "In Symbolic.Executor, unsupported ops of binop"
         end
       | Bil.UnOp (op, x) ->
-        eval_exp x >>= fun mx ->
-        begin
-          match mx with
+        eval_exp x >>= (function
           | Some x -> ST.return @@ Some (unop op x)
           | None ->
-            failwith "In Symbolic.Executor, unsupported op of unop"
-        end
+            failwith "In Symbolic.Executor, unsupported op of unop")
       | Bil.Var v ->
         let varname = Var.name v in
         has_symbolic_name varname >>= fun namepresent ->
@@ -675,13 +672,10 @@ module Executor = struct
         ST.return @@ Some symval
       | Bil.Int w -> ST.return @@ Some (word w)
       | Bil.Cast (typ, sz, x) ->
-        eval_exp x >>= fun mx ->
-        begin
-          match mx with
-          | Some x -> ST.return @@ Some (cast typ sz x)
-          | None ->
-            failwith "In Symbolic.Executor, unsupported op of cast"
-        end
+        eval_exp x >>= (function
+        | Some x -> ST.return @@ Some (cast typ sz x)
+        | None ->
+          failwith "In Symbolic.Executor, unsupported op of cast")
       | Bil.Let (v, bind, body) ->
         let var = Var.name v in
         new_symbolic var >>= fun symname ->
@@ -709,13 +703,10 @@ module Executor = struct
             failwith "in Symbolic.Executor.eval_exp, unsupported op of ite"
         end
       | Bil.Extract (hi, lo, x) ->
-        eval_exp x >>= fun mx ->
-        begin
-          match mx with
+        eval_exp x >>= (function
           | Some x -> ST.return @@ Some (extract hi lo x)
           | None ->
-            failwith "in Symbolic.Executor.eval_exp, unsupported op of extract"
-        end
+            failwith "in Symbolic.Executor.eval_exp, unsupported op of extract")
       | Bil.Concat (x, y) ->
         eval_exp x >>= fun ml ->
         eval_exp y >>= fun mr ->
