@@ -76,7 +76,7 @@ module Checker(N : Abstract.NumericDomain)
     match binop with
     | Bil.EQ | Bil.NEQ | Bil.LT | Bil.LE | Bil.SLT
     | Bil.SLE | Bil.MOD | Bil.SMOD -> ()
-    | _ -> estats_incr_interval_pruned st
+    | _ -> estats_incr_total_considered st
 
   (* 
      U N U N -> taint pruned
@@ -123,6 +123,7 @@ module Checker(N : Abstract.NumericDomain)
      left tainted && left not bad && right not tainted && right bad
   *)
   let check_binop (binop : Bil.binop) (l : N.t) (r : N.t) (st : st) : Alert.Set.t =
+    incr_total_considered binop st;
     let safe_bitwidth : WI.t -> int = function
       | Bot -> 1
       | intvl -> WI.bitwidth intvl
@@ -135,17 +136,15 @@ module Checker(N : Abstract.NumericDomain)
     let right_zero = WI.of_int ~width:(safe_bitwidth wr) 0 in
     let left_one = WI.of_int ~width:(safe_bitwidth wl) 1 in
     let right_one = WI.of_int ~width:(safe_bitwidth wr) 1 in
-    let left_all_ones = begin
+    let left_all_ones = 
       let bw = safe_bitwidth wl in
       let ones = Word.ones bw in
       WI.of_word ones
-    end
     in
-    let right_all_ones = begin
+    let right_all_ones =
       let bw = safe_bitwidth wr in
       let ones = Word.ones bw in
       WI.of_word ones
-    end
     in
     let left_bad = ref false in
     let right_bad = ref false in
@@ -153,55 +152,56 @@ module Checker(N : Abstract.NumericDomain)
       | Bil.MINUS -> true
       | _ -> false
     in
-    incr_total_considered binop st;
     let untainted = (not binop_is_sub && not tl && not tr) ||
                     (binop_is_sub && not tr)
     in
     if untainted
-    then (estats_incr_taint_pruned st; emp)
-    else
-      let () = match binop with
-        | Bil.PLUS ->
-          left_bad := WI.contains left_zero wl;
-          right_bad := WI.contains right_zero wr
-        | Bil.MINUS ->
-          right_bad := WI.contains right_zero wr
-        | Bil.TIMES -> 
-          left_bad := WI.contains left_zero wl || WI.contains left_one wl;
-          right_bad := WI.contains right_zero wr || WI.contains right_one wr
-        | Bil.DIVIDE ->
-          left_bad := WI.contains left_zero wl;
-          right_bad := WI.contains right_one wr
-        | Bil.SDIVIDE ->
-          left_bad := WI.contains left_zero wl;
-          right_bad := WI.contains right_one wr
-        | Bil.LSHIFT ->
-          left_bad := WI.contains left_zero wl;
-          right_bad := WI.contains right_zero wr
-        | Bil.RSHIFT -> 
-          left_bad := WI.contains left_zero wl;
-          right_bad := WI.contains right_zero wr
-        | Bil.ARSHIFT ->
-          left_bad := WI.contains left_zero wl;
-          right_bad := WI.contains right_zero wr
-        | Bil.AND ->
-          left_bad := WI.contains left_zero wl || WI.contains left_all_ones wl;
-          right_bad := WI.contains right_zero wr || WI.contains right_all_ones wr
-        | Bil.OR ->
-          left_bad := WI.contains left_zero wl || WI.contains left_all_ones wl;
-          right_bad := WI.contains right_zero wr || WI.contains right_all_ones wr
-        | Bil.XOR ->
-          left_bad := WI.contains left_zero wl || WI.contains left_all_ones wl;
-          right_bad := WI.contains right_zero wr || WI.contains right_all_ones wr
-        | Bil.EQ -> ()
-        | Bil.NEQ -> ()
-        | Bil.LT -> ()
-        | Bil.LE -> ()
-        | Bil.SLT -> ()
-        | Bil.SLE -> ()
-        | Bil.MOD -> ()
-        | Bil.SMOD -> ()
-      in
+    then
+      (estats_incr_taint_pruned st;
+       emp)
+    else begin
+      (match binop with
+      | Bil.PLUS ->
+        left_bad := WI.contains left_zero wl;
+        right_bad := WI.contains right_zero wr
+      | Bil.MINUS ->
+        right_bad := WI.contains right_zero wr
+      | Bil.TIMES -> 
+        left_bad := WI.contains left_zero wl || WI.contains left_one wl;
+        right_bad := WI.contains right_zero wr || WI.contains right_one wr
+      | Bil.DIVIDE ->
+        left_bad := WI.contains left_zero wl;
+        right_bad := WI.contains right_one wr
+      | Bil.SDIVIDE ->
+        left_bad := WI.contains left_zero wl;
+        right_bad := WI.contains right_one wr
+      | Bil.LSHIFT ->
+        left_bad := WI.contains left_zero wl;
+        right_bad := WI.contains right_zero wr
+      | Bil.RSHIFT -> 
+        left_bad := WI.contains left_zero wl;
+        right_bad := WI.contains right_zero wr
+      | Bil.ARSHIFT ->
+        left_bad := WI.contains left_zero wl;
+        right_bad := WI.contains right_zero wr
+      | Bil.AND ->
+        left_bad := WI.contains left_zero wl || WI.contains left_all_ones wl;
+        right_bad := WI.contains right_zero wr || WI.contains right_all_ones wr
+      | Bil.OR ->
+        left_bad := WI.contains left_zero wl || WI.contains left_all_ones wl;
+        right_bad := WI.contains right_zero wr || WI.contains right_all_ones wr
+      | Bil.XOR ->
+        left_bad := WI.contains left_zero wl || WI.contains left_all_ones wl;
+        right_bad := WI.contains right_zero wr || WI.contains right_all_ones wr
+      | Bil.EQ -> ()
+      | Bil.NEQ -> ()
+      | Bil.LT -> ()
+      | Bil.LE -> ()
+      | Bil.SLT -> ()
+      | Bil.SLE -> ()
+      | Bil.MOD -> ()
+      | Bil.SMOD -> ()
+      );
       let interval_pruned = (binop_is_sub && tr && not !right_bad) ||
                             (not binop_is_sub &&
                              (tl || tr) &&
@@ -210,7 +210,9 @@ module Checker(N : Abstract.NumericDomain)
 
       in
       if interval_pruned
-      then (estats_incr_interval_pruned st; emp)
+      then
+        (estats_incr_interval_pruned st;
+         emp)
       else
         let problematic_operands = [] in
         let problematic_operands = List.append (if !left_bad then [0] else []) problematic_operands in
@@ -236,6 +238,7 @@ module Checker(N : Abstract.NumericDomain)
         }
         in
         Alert.Set.singleton alert
+    end
 
   let check_binop_nondet (binop : Bil.binop) (l : N.t list)
         (r : N.t list) (st : st) : Alert.Set.t =

@@ -70,7 +70,7 @@ module Executor = struct
        then sprintf "%d" @@ Bitv.get_size @@ Expr.get_sort e
        else "")
 
-  let debug_print_sym_env st : unit =
+  let debug_print_sym_env (st : state) : unit =
     L.debug "SS, symbolic state for target tid (%a):"
       Tid.ppo st.target_tid;
     
@@ -325,7 +325,8 @@ module Executor = struct
     ST.update @@ fun st ->
     { st with constraints = ctr :: st.constraints }
 
-  let push_def_constraint lhs_symname rhs_symvalue : unit ST.t =
+  let push_def_constraint (lhs_symname : string)
+        (rhs_symvalue : Z3.Expr.expr) : unit ST.t =
     get_value_in_env lhs_symname >>= fun lhs_symvalue ->
     (match lhs_symvalue with
      | Some lhs_symvalue -> ST.return lhs_symvalue
@@ -681,8 +682,16 @@ module Executor = struct
           | None ->
             failwith "In Symbolic.Executor, unsupported op of cast"
         end
-      | Bil.Let (_, _, _) ->
-        failwith "in Symbolic.Executor.eval_exp, no support for let"
+      | Bil.Let (v, bind, body) ->
+        let var = Var.name v in
+        new_symbolic var >>= fun symname ->
+        eval_exp bind >>= (function
+        | Some sym_expr ->
+          (* TODO: pop this binding off *)
+          push_def_constraint symname sym_expr >>= fun () ->
+          eval_exp body
+        | None ->
+          failwith "in Symbolic.Executor.eval_exp, couldn't eval binding")
       | Bil.Unknown (_, (Imm n)) ->
         make_fresh_symbolic >>= fun symname ->
         fresh_bv_for_symbolic symname n >>= fun bv ->
@@ -721,7 +730,7 @@ module Executor = struct
     ST.get () >>= fun _ ->
     res
 
-  let eval_def dt : unit ST.t =
+  let eval_def (dt : def term) : unit ST.t =
     let set_check (do_check : bool) (st : T.t) : T.t =
       { st with do_check }
     in
@@ -737,10 +746,12 @@ module Executor = struct
       (* { st with *)
       (*   do_check = Tid.equal tid st.target_tid } *)
     let rhs = Def.rhs dt in
-    eval_exp rhs >>= function
+    ST.get () >>= fun st ->
+    let lhs = Def.lhs dt in
+    let varname = Var.name lhs in
+    eval_exp rhs >>= fun result ->
+    match result with
     | Some result ->
-      let lhs = Def.lhs dt in
-      let varname = Var.name lhs in
       new_symbolic varname >>= fun symname ->
       push_def_constraint symname result >>= fun () ->
       set_last_loaded_symname symname >>= fun () ->
@@ -749,7 +760,7 @@ module Executor = struct
     | None ->
       ST.update @@ fun st -> { st with do_check = false }
 
-  let eval_def_list defs : unit ST.t =
+  let eval_def_list (defs : def term list) : unit ST.t =
     let clear_old_constraints () : unit =
       Solver.reset solver
     in
@@ -761,7 +772,15 @@ module Executor = struct
          not st.target_tid_found
       then match defs with
         | d :: defs' ->
-          eval_def d >>= fun () ->
+          (try
+             eval_def d
+           with
+           | e ->
+             debug_print_sym_env st;
+             L.error "%s" @@ Exn.to_string e;
+             L.error "eval term is: %a" Def.ppo d;
+             raise e
+          ) >>= fun () ->
           loop defs'
         | [] -> ST.return ()
       else ST.return ()

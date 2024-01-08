@@ -80,7 +80,7 @@ module Checker(N : Abstract.NumericDomain)
     | Some f -> f
     | None -> failwith "Couldn't extract taint information out of product domain, in module Silent_stores.Checker"
 
-  let is_tainted n =
+  let is_tainted (n : N.t) : bool =
     match get_taint n with
     | Checker_taint.Analysis.Notaint -> false
     | Checker_taint.Analysis.Taint -> true

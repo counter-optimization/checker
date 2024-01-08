@@ -188,9 +188,12 @@ module NumericEnv(ValueDom : NumericDomain)
     (* not is_widen_node --> merge
        is_widen_node && steps < widen_threshold --> merge
        is_widen_node && steps >= widen_threshold --> widen *)
-    let merge_fn = if not is_widen_node || (is_widen_node && steps < widen_threshold)
-      then (L.debug "merging at %a" Tid.ppo tid; merge)
-      else (L.debug "widening at %a" Tid.ppo tid; widen) in
+    let merge_fn =
+      if not is_widen_node ||
+         (is_widen_node && steps < widen_threshold)
+      then merge
+      else widen
+    in
     merge_fn prev_state new_state
 
   let differs = Common.map_diff ~equal:ValueDom.equal

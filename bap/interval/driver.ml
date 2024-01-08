@@ -265,12 +265,16 @@ let propagate_taint config projctxt proj : unit =
       let subtaints = run_analysis () in
       cache_taint_results projctxt subtaints;
       subtaints
-    | Some _ -> match get_cached_taint_results projctxt with
-      | Some cached_taint -> cached_taint
+    | Some path -> match get_cached_taint_results projctxt with
+      | Some cached_taint ->
+        L.info "loaded taint cache from %s" path;
+        cached_taint
       | None ->
+        L.info "no taint cache at %s" path;
         let subtaints = run_analysis () in
         cache_taint_results projctxt subtaints;
-        subtaints in
+        subtaints
+  in
   set_taint subtaints;
   L.info "Finished interproc taint propagation"
 
@@ -475,7 +479,8 @@ let run_analyses sub proj ~(is_toplevel : bool)
                         let top = FinalDomain.make_top sz false in
                         E.set reg top env
                       | None -> E.set reg FinalDomain.top env)
-                  |> TraceEnv.default_with_env in
+                  |> TraceEnv.default_with_env
+    in
 
     let init_trace_env = TraceEnv.default_with_env final_env in
     let init_mapping = G.Node.Map.set
@@ -484,7 +489,8 @@ let run_analyses sub proj ~(is_toplevel : bool)
                          ~data:init_trace_env
                        |> G.Node.Map.set
                             ~key:Uc_graph_builder.false_node
-                            ~data:top_env in
+                            ~data:top_env
+    in
     let init_sol = Solution.create init_mapping TraceEnv.empty in
 
     (* Compute the widening set *)
@@ -607,6 +613,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
     let idx_st = Uc_preanalyses.get_idxst subname in
 
     L.info "Running checkers";
+    L.info "SS: %B, CS: %B, DMP: %B" do_ss do_cs do_dmp;
     let all_alerts = timed subname CsChecking @@ fun () ->
       List.fold edges ~init:emp ~f:(fun alerts (_, to_tid, _) ->
         let elt = elt_of_tid to_tid in

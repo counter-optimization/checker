@@ -78,7 +78,7 @@ module UarchCheckerExtension = struct
                         Common.config_file_path_param in
     let config = Config.Parser.parse_config_file
                    ~path:config_path in
-    L.info "%s" "Configured\n";
+    L.info "%s" "Configured";
     put_addrs_in_sema ();
     Driver.check_config config ctxt proj
 

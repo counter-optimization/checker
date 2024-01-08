@@ -11,7 +11,6 @@ open KB.Monad_infix
 type reason = CompSimp | SilentStores | Dmp | None
 [@@deriving sexp, bin_io, compare, equal]
 
-
 module L = struct
   include Dolog.Log
   let log_prefix = sprintf "%s.alert" Common.package
@@ -692,12 +691,13 @@ module CombinedTransformFixerUpper : Pass = struct
     let equal = String.Caseless.equal in
     List.mem combined_transforms_opcodes mir_opcode ~equal
 
-  let transform_alert alert =
+  let transform_alert (alert : T.t) : T.t =
     match alert.opcode with
-    | Some opcode -> if is_combined_opcode opcode
-      then { alert with reason = SilentStores }
-      else alert
-    | None -> alert
+    | Some opcode when is_combined_opcode opcode ->
+      L.info "Alert %s transformed to SS as combined transform"
+        (to_string alert);
+      { alert with reason = SilentStores }
+    | _ -> alert
 
   let set_for_alert_set alerts _proj =
     Set.map alerts ~f:transform_alert
