@@ -654,8 +654,13 @@ let fill_sparseness_data (proj : Project.t) : unit =
     let is_def_of_mem (d : def term) : bool =
       String.Caseless.equal "mem" @@ Var.name @@ Def.lhs d
     in
+    let is_def_of_flag (d : def term) : bool =
+      String.Set.mem ABI.flag_names @@ Var.name @@ Def.lhs d
+    in
     let should_care (d : def term) : bool =
-      not (is_def_of_mem d) && not (is_def_of_gpr d)
+      not (is_def_of_mem d) &&
+      not (is_def_of_gpr d) &&
+      not (is_def_of_flag d)
     in
     match Tid.Map.find tidmap t with
     | Some (`Def d) when should_care d -> true
@@ -748,6 +753,7 @@ let fill_sparseness_data (proj : Project.t) : unit =
         candidates
     else candidates
   in
+  
   KB.promise kill_after_vars (fun obj ->
     let* subname = obj-->nameslot in
     L.info "Filling kill_after for %s" subname;
@@ -755,9 +761,12 @@ let fill_sparseness_data (proj : Project.t) : unit =
     let* edges = obj-->final_edges_slot in
     let* tidmap = obj-->tidmap_slot in
     let cfg = cfg_of_edges edges in
-    let tids = G.nodes cfg |> Seq.map ~f:G.Node.label in
+    let tids = List.fold edges ~init:Tid.Set.empty
+                 ~f:(fun all (from_, to_, _) ->
+                   Tid.Set.add (Tid.Set.add all from_) to_)
+    in
     let kill_after_map =
-      Seq.fold tids ~init:Tid.Map.empty
+      Tid.Set.fold tids ~init:Tid.Map.empty
         ~f:(fun map tid ->
           if def_of_concern tidmap tid
           then
@@ -772,6 +781,8 @@ let fill_sparseness_data (proj : Project.t) : unit =
                     ~proposed:user_tid)
             in
             let removal_points = Tid.Set.of_list removal_points in
+            L.debug "removal points for %a are:" Tid.ppo tid;
+            Tid.Set.iter removal_points ~f:(L.debug "\t%a" Tid.ppo);
             Tid.Map.set map ~key:tid ~data:removal_points
           else map)
     in

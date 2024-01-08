@@ -394,17 +394,9 @@ let run_analyses sub proj ~(is_toplevel : bool)
     Analysis_profiling.record_duration_for subname InitEnvSetup stop;
     L.debug "done setting up init env";
 
-    L.debug "getting flag ownership";
     let flagownership = Uc_preanalyses.get_flagownership subname in
-    L.debug "done getting flag ownership";
-
-    L.debug "getting reachingdefs";
     let reachingdefs = Uc_preanalyses.get_reachingdefs subname in
-    L.debug "done getting reachingdefs";
-
-    L.debug "getting dmp_st";
     let dmp_st = Uc_preanalyses.get_dmpst subname in
-    L.debug "done getting dmp_st";
 
     let dmp_bt_guards = do_ ~if_:do_dmp ~default:Dmp_helpers.default_gmap @@ fun () ->
       
@@ -415,7 +407,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
         Reachingdefs.users_transitive_closure
     in
     
-    let dmp_bt_set tid (st : TraceEnv.t) : TraceEnv.t =
+    let dmp_bt_set (tid : Tid.t) (st : TraceEnv.t) : TraceEnv.t =
       let open Abstract_bitvector in
       let tree = match Dmp_helpers.get_guard dmp_bt_guards tid with
         | Some guards ->
@@ -514,7 +506,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
 
     (* get the kill_after_vars map for a hacked up 
        sparse analysis *)
-    let kill_afters = Uc_preanalyses.get_kill_after_vars subname in
+    (* let kill_afters = Uc_preanalyses.get_kill_after_vars subname in *)
 
     (* Run the main value-set analysis *)
     let interp =
@@ -527,8 +519,8 @@ let run_analyses sub proj ~(is_toplevel : bool)
               "in calculating analysis_results, couldn't find tid %a in tidmap"
               Tid.pps tid
         in
-        L.debug "denoting elt %a" Tid.ppo tid;
-        L.debug "in env:"; TraceEnv.pp st;
+        (* L.debug "denoting elt %a" Tid.ppo tid; *)
+        (* L.debug "in env:"; TraceEnv.pp st; *)
         let st = dmp_bt_set tid st in
         (* let live_here = Liveness.liveness_at_tid dataflow_liveness tid in *)
         (* L.debug "liveness is:"; *)
@@ -546,14 +538,15 @@ let run_analyses sub proj ~(is_toplevel : bool)
         (*     L.debug "denoting elt %a%!" Tid.ppo tid; *)
         (*     TraceEnv.pp st); *)
         (* in *)
-        let st = TraceAbsInt.denote_elt directive_map elt st in
-        let killvars = Tid.Map.find kill_afters tid
-                       |> Option.value ~default:String.Set.empty
-        in
-        String.Set.fold killvars ~init:st
-          ~f:(fun st kill ->
-            L.debug "unsetting %s" kill;
-            TraceEnv.map st ~f:(E.unset kill))
+        TraceAbsInt.denote_elt directive_map elt st 
+        (* let st = TraceAbsInt.denote_elt directive_map elt st in *)
+        (* let killvars = Tid.Map.find kill_afters tid *)
+        (*                |> Option.value ~default:String.Set.empty *)
+        (* in *)
+        (* String.Set.fold killvars ~init:st *)
+        (*   ~f:(fun st kill -> *)
+        (*     L.debug "unsetting %s" kill; *)
+        (*     TraceEnv.map st ~f:(E.unset kill)) *)
     in
 
     let analysis_results = Graphlib.fixpoint
