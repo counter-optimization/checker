@@ -9,6 +9,7 @@ module Eval : sig
   val dmp_stats : stat_category
   val cs_stats : stat_category
   val ss_stats : stat_category
+  val stat_category_equal : stat_category -> stat_category -> bool
 
   type stat_type
   val total : stat_type
@@ -24,6 +25,7 @@ module Eval : sig
   type count = int
   val incr : stat_category -> stat_type -> unit
   val get : stat_category -> t
+  val get_count : stat_category -> stat_type -> int
   val stat : t -> stat_type -> count
   val to_json_string : t -> string
   val info_print : stat_category -> string -> unit

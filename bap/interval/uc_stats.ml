@@ -1,14 +1,12 @@
 open Core_kernel
 open Bap.Std
-
 module T = Bap_core_theory.Theory
 module KB = Bap_knowledge.Knowledge
-
 open KB.Syntax
 
-let log_prefix = sprintf "%s.uc_stats" Common.package
 module L = struct
   include Dolog.Log
+  let log_prefix = sprintf "%s.uc_stats" Common.package
   let () = set_prefix log_prefix
 end            
 
@@ -147,6 +145,9 @@ module Eval = struct
   let cs_stats = "cs-stats"
   let ss_stats = "ss-stats"
 
+  let stat_category_equal : stat_category -> stat_category -> bool =
+    String.equal
+
   (** stats updating *)
   open KB.Syntax
 
@@ -173,6 +174,9 @@ module Eval = struct
       let* count = stats-->stattype in
       KB.provide stattype stats (count + 1)
     end
+
+  let get_count (cat : stat_category) (typ : stat_type) : int =
+    Toplevel.eval typ @@ get_obj cat
 
   let to_json_string stats =
     let s n v = sprintf "\"%s\" : \"%d\"" n v in

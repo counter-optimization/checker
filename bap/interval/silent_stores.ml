@@ -47,28 +47,22 @@ module Checker(N : Abstract.NumericDomain)
     then begin
       considered_addrs := Int.Set.add !considered_addrs addr;
       Uc_stats.Eval.incr cat typ
-      (* incr () *)
     end
 
-  let estats_incr_total_considered st =
-    Uc_stats.Eval.(guarded_incr st ss_stats total)
-      (* guarded_incr st (fun () -> *)
-      (* Uc_stats.Eval.(incr ss_stats total)) *)
+  let estats_incr_total_considered _st =
+    Uc_stats.Eval.(incr ss_stats total)
       
   let estats_incr_taint_pruned st =
-    Uc_stats.Eval.(guarded_incr st ss_stats total)
-    (* guarded_incr st (fun () -> *)
-    (*   Uc_stats.Eval.(incr ss_stats taint_pruned)) *)
+    L.error "estats_incr_taint_pruned";
+    Uc_stats.Eval.(guarded_incr st ss_stats taint_pruned)
       
   let estats_incr_interval_pruned st =
-    Uc_stats.Eval.(guarded_incr st ss_stats total)
-    (* guarded_incr st (fun () -> *)
-    (*   Uc_stats.Eval.(incr ss_stats interval_pruned)) *)
+    L.error "estats_incr_interval_pruned";
+    Uc_stats.Eval.(guarded_incr st ss_stats interval_pruned)
       
   let estats_incr_symex_pruned st =
-    Uc_stats.Eval.(guarded_incr st ss_stats total)
-    (* guarded_incr st (fun () -> *)
-    (*   Uc_stats.Eval.(incr ss_stats symex_pruned)) *)
+    L.error "estats_incr_symex_pruned";
+    Uc_stats.Eval.(guarded_incr st ss_stats symex_pruned)
       
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with

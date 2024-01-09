@@ -45,21 +45,16 @@ module Checker(N : Abstract.NumericDomain)
     then begin
       considered_addrs := Int.Set.add !considered_addrs addr;
       Uc_stats.Eval.incr cat typ
-      (* incr () *)
     end
          
-  let estats_incr_total_considered (st : st) : unit =
-    Uc_stats.Eval.(guarded_incr st cs_stats total)
+  (* let estats_incr_total_considered (st : st) : unit = *)
+  (*   Uc_stats.Eval.(guarded_incr st cs_stats total) *)
       
   let estats_incr_taint_pruned (st : st) : unit =
     Uc_stats.Eval.(guarded_incr st cs_stats taint_pruned)
-    (* guarded_incr st (fun () -> *)
-    (*   Uc_stats.Eval.(incr cs_stats taint_pruned)) *)
       
   let estats_incr_interval_pruned (st : st) : unit =
     Uc_stats.Eval.(guarded_incr st cs_stats interval_pruned)
-    (* guarded_incr st (fun () -> *)
-    (*   Uc_stats.Eval.(incr cs_stats interval_pruned)) *)
                                          
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with
@@ -72,11 +67,12 @@ module Checker(N : Abstract.NumericDomain)
     | None -> failwith "[CSChkr] Couldn't extract taint from product domain"  
 
   (* increment total considered *)
-  let incr_total_considered (binop : Bil.binop) (st : st) : unit =
+  let incr_total_considered (binop : Bil.binop) (_st : st) : unit =
     match binop with
     | Bil.EQ | Bil.NEQ | Bil.LT | Bil.LE | Bil.SLT
     | Bil.SLE | Bil.MOD | Bil.SMOD -> ()
-    | _ -> estats_incr_total_considered st
+    | _ -> Uc_stats.Eval.(incr cs_stats total)
+      (* estats_incr_total_considered st *)
 
   (* 
      U N U N -> taint pruned

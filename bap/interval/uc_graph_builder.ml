@@ -106,6 +106,12 @@ module UcBapG = struct
 
   let create ~(from_ : Tid.t) ~(to_ : Tid.t) : edge =
     (from_, to_, None)
+
+  let print ((from_, to_, cnd) : edge) : unit =
+    L.debug "\t(%a, %a, %s)"
+      Tid.ppo from_
+      Tid.ppo to_
+      @@ Sexp.to_string_hum @@ ExpOpt.sexp_of_t cnd
 end
 
 module UcOcamlG = struct

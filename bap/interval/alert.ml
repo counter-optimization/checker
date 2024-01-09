@@ -570,7 +570,7 @@ module RemoveAndWarnEmptyInsnIdxAlerts : Pass = struct
 end
 
 (* these are not supported by us right now *)
-module RemoveAlertsForCallInsns : Pass = struct
+module RemoveAlertsForCallInsns = struct
   let call_insn_prefix = "call"
 
   let is_alert_on_call_insn alert : bool =
@@ -579,9 +579,19 @@ module RemoveAlertsForCallInsns : Pass = struct
       String.Caseless.is_prefix opcode_str ~prefix:call_insn_prefix
     | None -> false
 
-  let set_for_alert_set alerts _proj =
+  let set_for_alert_set (alerts : Set.t) (_proj : Project.t) : Set.t * int =
     let is_not_call_alert = fun alert -> not @@ is_alert_on_call_insn alert in
-    Set.filter alerts ~f:is_not_call_alert
+    let removed = ref Word.Set.empty in
+    let alerts = Set.filter alerts ~f:(fun alert ->
+      let take = is_not_call_alert alert in
+      (if not take
+       then match alert.addr with
+         | Some addr ->
+           removed := Word.Set.add !removed addr
+         | None -> ());
+      take)
+    in
+    alerts, Word.Set.length !removed
 end
 
 module RemoveUnsupportedMirOpcodes = struct
@@ -667,12 +677,11 @@ module RemoveUnsupportedMirOpcodes = struct
             L.warn "alert (%s) removed - unsupported" alert_s);
       not not_supported
     in
-    
     { alerts = Set.filter alerts ~f:is_supported;
       num_removed = !unsupported_count }
 end
 
-module CombinedTransformFixerUpper : Pass = struct
+module CombinedTransformFixerUpper = struct
   (** this alert transform pass changes CS warns
       on non-store opcodes whose destination is memory 
       to SS warns since these combined CS+SS transforms
@@ -691,16 +700,20 @@ module CombinedTransformFixerUpper : Pass = struct
     let equal = String.Caseless.equal in
     List.mem combined_transforms_opcodes mir_opcode ~equal
 
+  let changed = ref Word.Set.empty
   let transform_alert (alert : T.t) : T.t =
     match alert.opcode with
     | Some opcode when is_combined_opcode opcode ->
       L.info "Alert %s transformed to SS as combined transform"
         (to_string alert);
+      (match alert.addr with
+       | Some addr -> changed := Word.Set.add !changed addr
+       | None -> ());
       { alert with reason = SilentStores }
     | _ -> alert
 
-  let set_for_alert_set alerts _proj =
-    Set.map alerts ~f:transform_alert
+  let set_for_alert_set (alerts : Set.t) (_proj : Project.t) : Set.t * int =
+    Set.map alerts ~f:transform_alert, Word.Set.length !changed
 end
 
 module RemoveDuplicateAlerts = struct
@@ -732,9 +745,12 @@ module RemoveDuplicateAlerts = struct
     else (add_to_seen alert;
           already_seen)
 
-  let set_for_alert_set (alerts : Set.t) (proj : Project.t) : Set.t =
+  let set_for_alert_set (alerts : Set.t) (proj : Project.t) : Set.t * int =
+    let init_count = Set.length alerts in
     seen := String.Map.empty;
-    Set.filter alerts ~f:(fun a -> not (is_dupe a))
+    let alerts = Set.filter alerts ~f:(fun a -> not (is_dupe a)) in
+    let end_count = Set.length alerts in
+    alerts, init_count - end_count
 end
 
 module RemoveSpuriousCompSimpAlerts = struct
@@ -819,10 +835,20 @@ module RemoveSpuriousCompSimpAlerts = struct
   (** accept all alerts that:
       1) are not comp simp alerts OR
       2) are comp simp alerts that are not spurious *)
-  let set_for_alert_set alerts proj : Set.t =
-    let filter_condition alert =
+  let set_for_alert_set (alerts : Set.t) (proj : Project.t) : Set.t * int =
+    let filter_condition (alert : t) : bool =
       (is_comp_simp_warn alert && not (is_spurious alert)) ||
       not (is_comp_simp_warn alert)
     in
-    Set.filter alerts ~f:filter_condition
+    let removed_addrs = ref Word.Set.empty in
+    let alerts = Set.filter alerts ~f:(fun at ->
+      let take = filter_condition at in
+      (if not take
+       then match at.addr with
+         | Some addr ->
+           removed_addrs := Word.Set.add !removed_addrs addr
+         | None -> ());
+      take)
+    in
+    alerts, Word.Set.length !removed_addrs
 end

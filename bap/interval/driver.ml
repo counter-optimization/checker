@@ -307,6 +307,7 @@ let run_analyses sub proj ~(is_toplevel : bool)
     let do_cs = Extension.Configuration.get ctxt Common.do_cs_checks_param in
     let do_ss = Extension.Configuration.get ctxt Common.do_ss_checks_param in
     let do_dmp = Extension.Configuration.get ctxt Common.do_dmp_checks_param in
+    let dbg_prints = Extension.Configuration.get ctxt Common.dbg_print_envs in
     let is_dbg = Uc_log.is_dbg @@
       Extension.Configuration.get ctxt Common.global_log_level_param in
 
@@ -501,9 +502,15 @@ let run_analyses sub proj ~(is_toplevel : bool)
       if is_sdomd from_ ~by:to_
       then Abstract.widen_set := Tid.Set.add !Abstract.widen_set to_
     );
-    (* L.debug "Widening set:"; *)
-    (* Tid.Set.iter !Abstract.widen_set *)
-    (*   ~f:(L.debug "\t%a" Tid.ppo); *)
+     
+    do_ ~if_:dbg_prints ~default:() (fun () ->
+      L.debug "Edges are:";
+      List.iter edges ~f:Uc_graph_builder.UcBapG.print;
+      
+      L.debug "Widening set:";
+      Tid.Set.iter !Abstract.widen_set
+        ~f:(L.debug "\t%a" Tid.ppo);
+    );
 
     (* get the kill_after_vars map for a hacked up 
        sparse analysis *)
@@ -520,8 +527,11 @@ let run_analyses sub proj ~(is_toplevel : bool)
               "in calculating analysis_results, couldn't find tid %a in tidmap"
               Tid.pps tid
         in
-        (* L.debug "denoting elt %a" Tid.ppo tid; *)
-        (* L.debug "in env:"; TraceEnv.pp st; *)
+        do_ ~if_:dbg_prints ~default:() (fun () ->
+          L.debug "denoting elt %a" Tid.ppo tid;
+          L.debug "in env:";
+          TraceEnv.pp st
+        );
         let st = dmp_bt_set tid st in
         (* let live_here = Liveness.liveness_at_tid dataflow_liveness tid in *)
         (* L.debug "liveness is:"; *)
@@ -614,6 +624,12 @@ let run_analyses sub proj ~(is_toplevel : bool)
         let cs_chkr_res = do_ ~if_:do_cs ~default:emp (fun () ->
           CompSimpChecker.check_elt subname to_tid elt)
         in
+        do_ ~if_:dbg_prints ~default:() (fun () ->
+          L.debug "checking tid: %a" Tid.ppo to_tid;
+          L.debug "cs alerts are:";
+          Alert.Set.iter cs_chkr_res ~f:(fun alert ->
+            L.debug "\t%s" @@ Alert.to_string alert)
+        );
         let ss_chkr_res = do_ ~if_:do_ss ~default:emp (fun () ->
           SSChecker.check_elt use_symex sub to_tid idx_st
             defs symex_profiling_out_file reachingdefs tidmap elt) 
@@ -770,29 +786,45 @@ let check_config config ctxt proj : unit =
   let all_alerts = Alert.SubNameResolverFiller.resolve_sub_names all_alerts proj in
   let all_alerts = Alert.SubNameResolverFiller.set_for_alert_set all_alerts proj in
   let all_alerts = Alert.RemoveAllEmptySubName.set_for_alert_set all_alerts proj in
-  let all_alerts = Alert.RemoveSpuriousCompSimpAlerts.set_for_alert_set all_alerts proj in
-  let all_alerts = Alert.RemoveAlertsForCallInsns.set_for_alert_set all_alerts proj in
+  let all_alerts, num_spurious =
+    Alert.RemoveSpuriousCompSimpAlerts.set_for_alert_set all_alerts proj
+  in
+  let all_alerts, num_calls_warned =
+    Alert.RemoveAlertsForCallInsns.set_for_alert_set all_alerts proj
+  in
 
   let is_double_check = Extension.Configuration.get ctxt Common.is_double_check in
   let all_alerts = do_ ~if_:(not is_double_check) ~default:all_alerts (fun () ->
     Alert.RemoveAndWarnEmptyInsnIdxAlerts.set_for_alert_set all_alerts proj)
   in
 
-  let all_alerts = Alert.CombinedTransformFixerUpper.set_for_alert_set all_alerts proj in
-  let all_alerts = Alert.RemoveDuplicateAlerts.set_for_alert_set all_alerts proj in
+  let all_alerts, num_ss_added =
+    Alert.CombinedTransformFixerUpper.set_for_alert_set all_alerts proj
+  in
+  let all_alerts, num_dupes =
+    Alert.RemoveDuplicateAlerts.set_for_alert_set all_alerts proj
+  in
 
   let res = Alert.RemoveUnsupportedMirOpcodes.set_for_alert_set all_alerts proj in
-  let all_alerts = res.alerts in
+  let all_alerts, num_unsupported = res.alerts, res.num_removed in
   
-  L.info "Done processing all functions";
-  
+  L.info "Done processing all functions";  
   Uc_stats.Eval.(info_print cs_stats "cs stats");
   Uc_stats.Eval.(info_print ss_stats "ss stats");
   Uc_stats.Eval.(info_print dmp_stats "dmp stats");
 
-  let unsupported_count = res.num_removed in
-  L.info "num alerts removed due to unsupported MIR opcodes: %d"
-    unsupported_count;
+  (* print num alerts removed due to postprocessing *)
+  L.info "Spurious CS alerts removed: %d" num_spurious;
+  L.info "CS alerts on call insns removed: %d" num_calls_warned;
+  L.info "Num combined CS+SS transforms converted from CS alert to SS alert: %d"
+    num_ss_added;
+  L.info "Num duplicate alerts (multiple warns per virt addr in binary): %d"
+    num_dupes;
+  L.info "Num unsupported opcode alerts removed (to be implemented in compiler): %d"
+    num_unsupported;
+  L.info "In total, alert post-processing removed %d alerts and converted %d CS alerts to SS alerts"
+    (num_spurious + num_calls_warned + num_dupes + num_unsupported)
+    num_ss_added;
   
   let csv_out_file_name = Extension.Configuration.get ctxt Common.output_csv_file_param in
   L.info "writing checker alerts to file: %s" csv_out_file_name;

@@ -205,7 +205,7 @@ module Limits = struct
       let a = n - 1 in
       Z.(neg (pow (of_int 2) a))
 
-  let unsigned_truncate num width : Z.t =
+  let unsigned_truncate (num : Z.t) (width : int) : Z.t =
     let umax = width_to_umax width in
     let umax_plus_one = Z.succ umax in
     let rec loop n =
@@ -322,43 +322,51 @@ let binop ?(signed : bool = false) opname op left right : t =
       then width1, width1, width2
       else
         let bigwidth = Int.max width1 width2 in
-        (* let () = warn_width_mismatch bigwidth in *)
-        bigwidth, bigwidth, bigwidth in
+        bigwidth, bigwidth, bigwidth
+    in
     if signed
     then
       let lo1, hi1 = if signed1
         then lo1, hi1
-        else Limits.unsigned_to_signed lo1 hi1 target_width in
+        else Limits.unsigned_to_signed lo1 hi1 target_width
+      in
       let lo2, hi2 = if signed2
         then lo2, hi2
-        else Limits.unsigned_to_signed lo2 hi2 target_width in
+        else Limits.unsigned_to_signed lo2 hi2 target_width
+      in
       let x1 = Limits.signed_truncate (op lo1 lo2) target_width in
       let x2 = Limits.signed_truncate (op lo1 hi2) target_width in
       let x3 = Limits.signed_truncate (op hi1 lo2) target_width in
       let x4 = Limits.signed_truncate (op hi1 hi2) target_width in
       let new_lo = min4 x1 x2 x3 x4 in
       let new_hi = max4 x1 x2 x3 x4 in
-      Interval {lo = new_lo;
-                hi = new_hi;
-                width = target_width;
-                signed = true}
+      Interval {
+        lo = new_lo;
+        hi = new_hi;
+        width = target_width;
+        signed = true
+      }
     else (* unsigned *)
       let lo1, hi1 = if signed1
         then Limits.signed_to_unsigned lo1 hi1 target_width
-        else lo1, hi1 in
+        else lo1, hi1
+      in
       let lo2, hi2 = if signed2
         then Limits.signed_to_unsigned lo2 hi2 target_width
-        else lo2, hi2 in
+        else lo2, hi2
+      in
       let x1 = Limits.unsigned_truncate (op lo1 lo2) target_width in
       let x2 = Limits.unsigned_truncate (op lo1 hi2) target_width in
       let x3 = Limits.unsigned_truncate (op hi1 lo2) target_width in
       let x4 = Limits.unsigned_truncate (op hi1 hi2) target_width in
       let new_lo = min4 x1 x2 x3 x4 in
       let new_hi = max4 x1 x2 x3 x4 in
-      Interval {lo = new_lo;
-                hi = new_hi;
-                width = target_width;
-                signed = false}
+      Interval {
+        lo = new_lo;
+        hi = new_hi;
+        width = target_width;
+        signed = false
+      }
   | _, _ -> Bot
 
 (* we assume that the cryptographic code is correct and safe of

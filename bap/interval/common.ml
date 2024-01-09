@@ -44,6 +44,11 @@ let debug_tids_param = Extension.Configuration.parameter
                          (Extension.Type.some Extension.Type.non_dir_file)
                          "debug-tids"
 
+let dbg_print_envs = Extension.Configuration.flag
+                       ~doc:"Print input envs to each elt in main interpreter"
+                       ~aliases:["print-envs"]
+                       "dbg-print-envs"
+
 let global_log_level_param = Extension.Configuration.parameter
                                ~doc:"Global log level"
                                ~aliases:["log"]
