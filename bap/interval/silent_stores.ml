@@ -29,11 +29,13 @@ module Checker(N : Abstract.NumericDomain)
     subname;
   }
 
-  let considered_addrs : Int.Set.t ref = ref Int.Set.empty
+  let totaled_addrs = ref Int.Set.empty
+  let considered_addrs = ref Int.Set.empty
   (* let guard_incr (st : st) (incr : unit -> unit) : unit = *)
   let guarded_incr (st : st)
         (cat : Uc_stats.Eval.stat_category)
-        (typ : Uc_stats.Eval.stat_type) : unit =
+        (typ : Uc_stats.Eval.stat_type)
+        (seen : Int.Set.t ref) : unit =
     let addr = match Term.get_attr st.term Disasm.insn with
       | Some sema ->
         KB.Value.get Sema_addrs.slot sema
@@ -42,27 +44,27 @@ module Checker(N : Abstract.NumericDomain)
         failwith @@
         sprintf "Couldn't get addr for %a" Tid.pps st.tid
     in
-    let already_considered = Int.Set.mem !considered_addrs addr in
+    let already_considered = Int.Set.mem !seen addr in
     if not already_considered
     then begin
-      considered_addrs := Int.Set.add !considered_addrs addr;
+      seen := Int.Set.add !seen addr;
       Uc_stats.Eval.incr cat typ
     end
 
-  let estats_incr_total_considered _st =
-    Uc_stats.Eval.(incr ss_stats total)
+  let estats_incr_total_considered st =
+    Uc_stats.Eval.(guarded_incr st ss_stats total totaled_addrs)
       
   let estats_incr_taint_pruned st =
     L.error "estats_incr_taint_pruned";
-    Uc_stats.Eval.(guarded_incr st ss_stats taint_pruned)
+    Uc_stats.Eval.(guarded_incr st ss_stats taint_pruned considered_addrs)
       
   let estats_incr_interval_pruned st =
     L.error "estats_incr_interval_pruned";
-    Uc_stats.Eval.(guarded_incr st ss_stats interval_pruned)
+    Uc_stats.Eval.(guarded_incr st ss_stats interval_pruned considered_addrs)
       
   let estats_incr_symex_pruned st =
     L.error "estats_incr_symex_pruned";
-    Uc_stats.Eval.(guarded_incr st ss_stats symex_pruned)
+    Uc_stats.Eval.(guarded_incr st ss_stats symex_pruned considered_addrs)
       
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with

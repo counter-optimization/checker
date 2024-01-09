@@ -28,10 +28,12 @@ module Checker(N : Abstract.NumericDomain)
               
   let init_st subname tid term = {tid;subname;term}
 
-  let considered_addrs : Int.Set.t ref = ref Int.Set.empty
+  let totaled_addrs = ref Int.Set.empty
+  let considered_addrs = ref Int.Set.empty
   let guarded_incr (st : st)
         (cat : Uc_stats.Eval.stat_category)
-        (typ : Uc_stats.Eval.stat_type) : unit =
+        (typ : Uc_stats.Eval.stat_type)
+        (seen : Int.Set.t ref) : unit =
     let addr = match Term.get_attr st.term Disasm.insn with
       | Some sema ->
         KB.Value.get Sema_addrs.slot sema
@@ -40,21 +42,21 @@ module Checker(N : Abstract.NumericDomain)
         failwith @@
         sprintf "Couldn't get addr for %a" Tid.pps st.tid
     in
-    let already_considered = Int.Set.mem !considered_addrs addr in
+    let already_considered = Int.Set.mem !seen addr in
     if not already_considered
     then begin
-      considered_addrs := Int.Set.add !considered_addrs addr;
+      seen := Int.Set.add !seen addr;
       Uc_stats.Eval.incr cat typ
     end
          
-  (* let estats_incr_total_considered (st : st) : unit = *)
-  (*   Uc_stats.Eval.(guarded_incr st cs_stats total) *)
+  let estats_incr_total_considered (st : st) : unit =
+    Uc_stats.Eval.(guarded_incr st cs_stats total totaled_addrs)
       
   let estats_incr_taint_pruned (st : st) : unit =
-    Uc_stats.Eval.(guarded_incr st cs_stats taint_pruned)
+    Uc_stats.Eval.(guarded_incr st cs_stats taint_pruned considered_addrs)
       
   let estats_incr_interval_pruned (st : st) : unit =
-    Uc_stats.Eval.(guarded_incr st cs_stats interval_pruned)
+    Uc_stats.Eval.(guarded_incr st cs_stats interval_pruned considered_addrs)
                                          
   let get_intvl : N.t -> Wrapping_interval.t =
     match N.get Wrapping_interval.key with
@@ -67,15 +69,14 @@ module Checker(N : Abstract.NumericDomain)
     | None -> failwith "[CSChkr] Couldn't extract taint from product domain"  
 
   (* increment total considered *)
-  let incr_total_considered (binop : Bil.binop) (_st : st) : unit =
+  let incr_total_considered (binop : Bil.binop) (st : st) : unit =
     match binop with
     | Bil.EQ | Bil.NEQ | Bil.LT | Bil.LE | Bil.SLT
     | Bil.SLE | Bil.MOD | Bil.SMOD -> ()
-    | _ -> Uc_stats.Eval.(incr cs_stats total)
-      (* estats_incr_total_considered st *)
+    | _ -> estats_incr_total_considered st
 
   (* 
-     U N U N -> taint pruned
+     u N U N -> taint pruned
      U N U B -> taint pruned
      U N T N -> interval pruned
      U N T B -> flagged
