@@ -4,7 +4,7 @@ open Bap.Std
 module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
 
-let package = Common.package
+let package = "uarch-checker"
 
 open KB.Syntax
 

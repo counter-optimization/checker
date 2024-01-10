@@ -3,19 +3,17 @@ open Bap_main
 open Bap.Std
 open Graphlib.Std
 open Monads.Std
-
 module T = Bap_core_theory.Theory
 module KB = Bap_core_theory.KB
-
-module SS = struct
-  module T = struct
-    include Set.Make_binable_using_comparator(String)
-  end
-  include T
-  include Comparator.Make(T)
-end
+module SS = String.Set
 
 let package = "uarch-checker"
+
+module L = struct
+  include Dolog.Log
+  let log_prefix = sprintf "%s.common" package
+  let () = set_prefix log_prefix
+end
 
 let output_csv_file_param = Extension.Configuration.parameter
                               ~doc:"CSV file where checker results will be stored"
@@ -88,6 +86,30 @@ let cache_tainted_args = Extension.Configuration.parameter
                            (Extension.Type.some Extension.Type.path)
                            "taint-cache"
 
+let eval_prune_first = Extension.Configuration.parameter
+                         ~doc:"Eval for ASPLOS submission only: don't consider terms if virt addr is in this file"
+                         (Extension.Type.some Extension.Type.non_dir_file)
+                         "eval-elim-vaddrs"
+
+let skip_check (elt : Blk.elt) (skip_addrs : Int.Set.t ref) : bool =
+  let addr (type a) (term : a Term.t) : int =
+    match Term.get_attr term Disasm.insn with
+    | Some sema ->
+      KB.Value.get Sema_addrs.slot sema
+      |> Bitvec.to_int
+    | None ->
+      L.warn "skip_check: no addr for %a" Tid.ppo @@ Term.tid term;
+      0
+  in
+  if Int.Set.is_empty !skip_addrs
+  then false
+  else
+    let addr = match elt with
+      | `Def d -> addr d
+      | `Jmp j -> addr j
+      | `Phi p -> addr p
+    in
+    Int.Set.mem !skip_addrs addr
 
 let get_taint_cache
       (projctxt : Bap_main.ctxt) : string option =

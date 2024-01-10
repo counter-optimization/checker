@@ -23,6 +23,8 @@ let string_of_reason = function
   | Dmp -> "dmp"
   | None -> failwith "reason should be filled out"
 
+let global_removed = ref Word.Set.empty
+
 module T = struct
   (* flags_live: not computed or computed and true or false *)
   (* problematic_operands: doesn't apply or a list of operand indices *)
@@ -591,6 +593,7 @@ module RemoveAlertsForCallInsns = struct
          | None -> ());
       take)
     in
+    global_removed := Word.Set.union !removed !global_removed;
     alerts, Word.Set.length !removed
 end
 
@@ -713,7 +716,9 @@ module CombinedTransformFixerUpper = struct
     | _ -> alert
 
   let set_for_alert_set (alerts : Set.t) (_proj : Project.t) : Set.t * int =
-    Set.map alerts ~f:transform_alert, Word.Set.length !changed
+    let alerts = Set.map alerts ~f:transform_alert in
+    global_removed := Word.Set.union !changed !global_removed;
+    alerts, Word.Set.length !changed
 end
 
 module RemoveDuplicateAlerts = struct
@@ -850,5 +855,6 @@ module RemoveSpuriousCompSimpAlerts = struct
          | None -> ());
       take)
     in
+    global_removed := Word.Set.union !global_removed !removed_addrs;
     alerts, Word.Set.length !removed_addrs
 end

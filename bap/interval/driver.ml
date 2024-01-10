@@ -715,7 +715,20 @@ let check_config config ctxt proj : unit =
         |> String.Set.of_list)
     | None -> String.Set.empty
   in
-  
+
+  (* (match Extension.Configuration.get ctxt Common.eval_prune_first with *)
+  (*  | Some filepath ->  *)
+  (*    let lines = In_channel.read_lines filepath in *)
+  (*    if List.is_empty lines *)
+  (*    then () *)
+  (*    else *)
+  (*      List.map lines ~f:Int.of_string *)
+  (*      |> Int.Set.of_list *)
+  (*      |> (fun (addrs : Int.Set.t) -> *)
+  (*        Comp_simp.eval_ignore := addrs; *)
+  (*        Silent_stores.eval_ignore := addrs) *)
+  (*  | None -> ()); *)
+
   let global_store_data = Global_function_pointers.Libsodium.Analysis.get_all_init_fn_ptr_data ctxt proj in
   L.debug "Global stores are:";
   List.iter global_store_data ~f:(fun {data;addr} ->
@@ -807,6 +820,20 @@ let check_config config ctxt proj : unit =
 
   let res = Alert.RemoveUnsupportedMirOpcodes.set_for_alert_set all_alerts proj in
   let all_alerts, num_unsupported = res.alerts, res.num_removed in
+
+  (* let eval_save_prunings = *)
+  (*   Extension.Configuration.get ctxt Common.eval_prune_first *)
+  (* in *)
+  (* (match eval_save_prunings with *)
+  (*  | Some filepath -> *)
+  (*    Out_channel.with_file filepath ~f:(fun outch -> *)
+  (*      Set.map *)
+  (*        (module Int.Set.Elt) *)
+  (*        !Alert.global_removed *)
+  (*        ~f:Word.to_int_exn *)
+  (*      |> Int.Set.iter ~f:(fun (addr : int) -> *)
+  (*        Out_channel.output_string outch @@ sprintf "%d\n" addr)) *)
+  (*  | None -> ()); *)
   
   L.info "Done processing all functions";  
   Uc_stats.Eval.(info_print cs_stats "cs stats");

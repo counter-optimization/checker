@@ -15,6 +15,8 @@ module L = struct
   let () = set_prefix log_prefix
 end
 
+(* let eval_ignore = ref Int.Set.empty *)
+
 module Checker(N : Abstract.NumericDomain)
     (Interp : Common.CheckerInterp with type t := N.t) = struct
   
@@ -283,6 +285,9 @@ module Checker(N : Abstract.NumericDomain)
        Set.union (snd @@ check_exp l st) (snd @@ check_exp r st))
 
   let check_elt (subname : string) (tid : tid) (elt : Blk.elt) : Alert.Set.t =
+    (* if Common.skip_check elt eval_ignore *)
+    (* then Alert.Set.empty *)
+    (* else *)
     match elt with
     | `Def d ->
       let defining = Def.lhs d |> Var.name in

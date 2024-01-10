@@ -12,6 +12,8 @@ module L = struct
   let () = set_prefix log_prefix
 end
 
+(* let eval_ignore = ref Int.Set.empty *)
+
 module Checker(N : Abstract.NumericDomain)
     (Interp : Common.CheckerInterp with type t := N.t) = struct
   type st = {
@@ -55,15 +57,12 @@ module Checker(N : Abstract.NumericDomain)
     Uc_stats.Eval.(guarded_incr st ss_stats total totaled_addrs)
       
   let estats_incr_taint_pruned st =
-    L.error "estats_incr_taint_pruned";
     Uc_stats.Eval.(guarded_incr st ss_stats taint_pruned considered_addrs)
       
   let estats_incr_interval_pruned st =
-    L.error "estats_incr_interval_pruned";
     Uc_stats.Eval.(guarded_incr st ss_stats interval_pruned considered_addrs)
       
   let estats_incr_symex_pruned st =
-    L.error "estats_incr_symex_pruned";
     Uc_stats.Eval.(guarded_incr st ss_stats symex_pruned considered_addrs)
       
   let get_intvl : N.t -> Wrapping_interval.t =
@@ -228,6 +227,9 @@ module Checker(N : Abstract.NumericDomain)
       Wrapping_interval.could_be_true @@
       Wrapping_interval.booleq old_intvl new_intvl
     in
+    (* if Common.skip_check elt eval_ignore *)
+    (* then Alert.Set.empty *)
+    (* else *)
     match elt with
     | `Def d ->
       let st = init_st subname tid d in
